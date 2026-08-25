@@ -96,6 +96,18 @@
                             {% endif %}
                         </h5>
                         <p class="card-text text-muted small mb-2">{{ game.description }}</p>
+
+                        {% if game.capabilities.multiplayer %}
+                            <div
+                                class="experience-presence small text-muted mb-2"
+                                data-experience-id="{{ game.id }}"
+                                aria-live="polite"
+                            >
+                                <i class="fas fa-circle-notch fa-spin me-1" aria-hidden="true"></i>
+                                <span>Checking players...</span>
+                            </div>
+                        {% endif %}
+
                         <div class="d-flex justify-content-between align-items-center">
                             <small class="text-muted">
                                 {% if game.type == 'dosdoor' or game.type == 'nativedoor' %}
@@ -142,5 +154,113 @@
     text-decoration: underline;
 }
 </style>
+
+<script>
+(function () {
+    const presenceElements = document.querySelectorAll('.experience-presence');
+
+    if (!presenceElements.length) {
+        return;
+    }
+
+    function renderPresence(element, state) {
+        const playerCount = Number(state.player_count || 0);
+        const players = Array.isArray(state.players) ? state.players : [];
+        const label = element.querySelector('span');
+        const spinner = element.querySelector('.fa-circle-notch');
+
+        if (!label) {
+            return;
+        }
+
+        if (spinner) {
+            spinner.classList.remove('fa-spin');
+            spinner.classList.remove('fa-circle-notch');
+            spinner.classList.add('fa-circle');
+        }
+
+        if (playerCount === 0) {
+            label.textContent = 'No players online';
+            return;
+        }
+
+        if (playerCount === 1) {
+            const player = players[0];
+
+            if (player && player.username) {
+                const presence = player.presence || 'Playing';
+                label.textContent = player.username + ' — ' + presence;
+            } else {
+                label.textContent = '1 player online';
+            }
+
+            return;
+        }
+
+        label.textContent = playerCount + ' players online';
+    }
+
+    function renderUnavailable(element) {
+        const label = element.querySelector('span');
+        const spinner = element.querySelector('.fa-circle-notch');
+
+        if (spinner) {
+            spinner.classList.remove('fa-spin');
+            spinner.classList.remove('fa-circle-notch');
+            spinner.classList.add('fa-circle');
+        }
+
+        if (label) {
+            label.textContent = 'Unavailable';
+        }
+    }
+
+    async function refreshPresence(element) {
+        const experienceId = element.dataset.experienceId;
+
+        if (!experienceId) {
+            return;
+        }
+
+        try {
+            const response = await fetch(
+                '/api/experiences/' +
+                encodeURIComponent(experienceId) +
+                '/state',
+                {
+                    headers: {
+                        'Accept': 'application/json'
+                    }
+                }
+            );
+
+            if (!response.ok) {
+                renderUnavailable(element);
+                return;
+            }
+
+            const payload = await response.json();
+
+            if (!payload.success || !payload.state) {
+                renderUnavailable(element);
+                return;
+            }
+
+            renderPresence(element, payload.state);
+        } catch (error) {
+            renderUnavailable(element);
+        }
+    }
+
+    function refreshAllPresence() {
+        presenceElements.forEach(function (element) {
+            refreshPresence(element);
+        });
+    }
+
+    refreshAllPresence();
+    window.setInterval(refreshAllPresence, 15000);
+})();
+</script>
 {% endblock %}
 
