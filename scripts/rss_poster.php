@@ -18,6 +18,7 @@
 require_once __DIR__ . '/../vendor/autoload.php';
 require_once __DIR__ . '/../src/functions.php';
 
+use BinktermPHP\Config;
 use BinktermPHP\Database;
 use BinktermPHP\MessageHandler;
 
@@ -1213,7 +1214,7 @@ Configuration:
   Feeds are stored in the auto_feed_sources database table.
   Usenet feeds: set source_type='usenet' and feed_url to the bare
   newsgroup name (e.g. 'alt.folklore.computers'). NNTP credentials
-  are configured via constants at the top of this script.
+  are configured with the USENET_NNTP_* environment variables.
 
 Cron Example:
   */30 * * * * cd /path/to/binktest && php scripts/rss_poster.php >> data/logs/auto_feed.log 2>&1
