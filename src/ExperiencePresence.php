@@ -45,10 +45,10 @@ class ExperiencePresence
             return;
         }
 
-        $this->auth->updateSessionActivity(
-            $sessionId,
-            'Playing ' . $name
-        );
+        $activity = 'Playing ' . $name;
+
+        $this->auth->updateSessionActivity($sessionId, $activity);
+        $this->auth->updateSessionPublicActivity($sessionId, $activity);
     }
 
     /**
@@ -65,6 +65,7 @@ class ExperiencePresence
         }
 
         $this->auth->updateSessionActivity($sessionId, 'BBS');
+        $this->auth->updateSessionPublicActivity($sessionId, null);
     }
 
     /**

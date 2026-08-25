@@ -130,6 +130,27 @@ class Auth
         $stmt->execute([mb_substr($activity, 0, 255), $sessionId]);
     }
 
+    /**
+     * Publish or clear intentional public-facing presence for a session.
+     *
+     * Unlike activity, this value is safe to expose through Who's Online.
+     * Passing null or an empty string clears the public presence.
+     */
+    public function updateSessionPublicActivity(string $sessionId, ?string $activity): void
+    {
+        if ($sessionId === '') {
+            return;
+        }
+
+        $activity = trim((string)$activity);
+        $publicActivity = $activity !== '' ? mb_substr($activity, 0, 255) : null;
+
+        $stmt = $this->db->prepare(
+            'UPDATE user_sessions SET public_activity = ? WHERE session_id = ?'
+        );
+        $stmt->execute([$publicActivity, $sessionId]);
+    }
+
     public function createSession($userId, string $service = 'web')
     {
         return $this->createSessionForConnection(
@@ -305,6 +326,7 @@ class Auth
                 u.fidonet_address,
                 s.last_activity,
                 s.activity,
+                s.public_activity,
                 s.ip_address,
                 s.service
             FROM user_sessions s
@@ -336,6 +358,7 @@ class Auth
                 u.fidonet_address,
                 s.last_activity,
                 s.activity,
+                s.public_activity,
                 s.ip_address,
                 s.service
             FROM user_sessions s
