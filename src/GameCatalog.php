@@ -161,6 +161,10 @@ class GameCatalog
                 continue;
             }
 
+            if (!WebDoorSupport::requirementsSatisfied($manifest)) {
+                continue;
+            }
+
             $config = GameConfig::getGameConfig($id) ?? [];
 
             $name = !empty($config['display_name'])

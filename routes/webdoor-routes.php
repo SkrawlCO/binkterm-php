@@ -17,6 +17,7 @@ use BinktermPHP\JsdosDoorSupport;
 use BinktermPHP\Template;
 use BinktermPHP\WebDoorController;
 use BinktermPHP\WebDoorManifest;
+use BinktermPHP\WebDoorSupport;
 use Pecee\SimpleRouter\SimpleRouter;
 
 function webdoorApiError(string $errorCode, string $message, int $status = 400): void
@@ -27,49 +28,6 @@ function webdoorApiError(string $errorCode, string $message, int $status = 400):
         'error_code' => $errorCode,
         'error' => $message,
     ]);
-}
-
-/**
- * Helper function to get available WebDoor features
- */
-function getAvailableWebDoorFeatures(): array {
-    $features = [];
-
-    // Storage and leaderboard are always available via WebDoor API
-    $features[] = 'storage';
-    $features[] = 'leaderboard';
-
-    // Check if credits system is enabled
-    $bbsConfig = BbsConfig::getConfig();
-    $creditsConfig = $bbsConfig['credits'] ?? [];
-    if (!empty($creditsConfig['enabled'])) {
-        $features[] = 'credits';
-    }
-
-    return $features;
-}
-
-/**
- * Helper function to check if manifest requirements are met
- */
-function checkManifestRequirements(array $manifest): bool {
-    $requirements = $manifest['requirements'] ?? [];
-    $requiredFeatures = $requirements['features'] ?? [];
-
-    if (empty($requiredFeatures)) {
-        return true; // No requirements, always met
-    }
-
-    $availableFeatures = getAvailableWebDoorFeatures();
-
-    // Check if all required features are available
-    foreach ($requiredFeatures as $required) {
-        if (!in_array($required, $availableFeatures, true)) {
-            return false;
-        }
-    }
-
-    return true;
 }
 
 /**
@@ -161,91 +119,13 @@ SimpleRouter::get('/games', function() {
          exit;
      }
 
-    $games = [];
-
-    // Get Web Doors
-    foreach (WebDoorManifest::listManifests() as $entry) {
-        $manifest = $entry['manifest'];
-        if (!isset($manifest['game'])) {
-            continue;
-        }
-
-        // Check if all required features are available
-        if (!checkManifestRequirements($manifest)) {
-            continue;
-        }
-
-        $game = $manifest['game'];
-        $game['path'] = $entry['path'];
-        $game['icon_url'] = "/webdoors/{$entry['path']}/" . ($game['icon'] ?? 'icon.png');
-        $game['type'] = 'webdoor';
-
-        if(GameConfig::isEnabled($entry['id'])){
-            // Check for display_name and display_description overrides in configuration
-            $gameConfig = GameConfig::getGameConfig($entry['id']);
-            if ($gameConfig) {
-                // Check top level first (config/webdoors.json uses flat structure)
-                $displayName = $gameConfig['display_name'] ?? null;
-                $displayDesc = $gameConfig['display_description'] ?? null;
-
-                if (!empty($displayName)) {
-                    $game['name'] = $displayName;
-                }
-                if (!empty($displayDesc)) {
-                    $game['description'] = $displayDesc;
-                }
-            }
-            $games[] = $game;
-        }
-    }
-
-    // DEBUG TRACE
-    file_put_contents(
-        __DIR__ . '/../data/logs/games-debug.log',
-        date('c') . " reached catalog\n",
-        FILE_APPEND
-    );
-
-    // Get DOS and Native Doors from unified catalog
+    // Discover all enabled web experiences through the unified catalog.
+    //
+    // GameCatalog owns backend discovery and normalization. The route consumes
+    // the compatibility fields exposed by the Experience contract so rendering,
+    // leaderboard lookup, and launch URLs remain unchanged.
     $catalog = new \BinktermPHP\GameCatalog();
-
-    file_put_contents(
-        __DIR__ . '/../data/logs/games-debug.log',
-        date('c') . " catalog created\n",
-        FILE_APPEND
-    );
-
-    foreach ($catalog->getEnabledGames($user) as $game) {
-        $games[] = $game;
-    }
-
-    // Get JS-DOS Doors
-    if (JsdosDoorConfig::isConfigPresent()) {
-        foreach (JsdosDoorManifest::listManifests() as $entry) {
-            $manifest = $entry['manifest'];
-            $gameId = $entry['id'];
-
-            if (!JsdosDoorConfig::isEnabled($gameId)) {
-                continue;
-            }
-
-            $gameConfig = JsdosDoorConfig::getGameConfig($gameId);
-            $name = $gameConfig['display_name'] ?? $manifest['name'] ?? $gameId;
-            $description = $gameConfig['display_description'] ?? $manifest['description'] ?? '';
-            $iconUrl = "/jsdos-doors/{$entry['path']}/" . ($manifest['icon'] ?? 'icon.png');
-
-            $games[] = [
-                'id'          => $gameId,
-                'name'        => $name,
-                'description' => $description,
-                'author'      => $manifest['author'] ?? null,
-                'version'     => $manifest['version'] ?? null,
-                'path'        => $gameId,
-                'icon_url'    => $iconUrl,
-                'type'        => 'jsdosdoor',
-            ];
-        }
-    }
+    $games = array_values($catalog->getEnabledGames($user, 'web'));
 
     // Sort all games by name
     usort($games, function($a, $b) {
@@ -953,7 +833,7 @@ SimpleRouter::get('/games/{game}', function($game) {
     $manifest = json_decode(file_get_contents($manifestPath), true);
 
     // Check if all required features are available
-    if (!checkManifestRequirements($manifest)) {
+    if (!WebDoorSupport::requirementsSatisfied($manifest)) {
         $template = new Template();
         $template->renderResponse('error.twig', [
             'error_code' => 'ui.webdoors.errors.requirements_not_met'
