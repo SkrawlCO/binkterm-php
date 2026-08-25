@@ -6,6 +6,8 @@
  */
 
 use BinktermPHP\ActivityTracker;
+use BinktermPHP\ExperiencePresence;
+use BinktermPHP\GameCatalog;
 use BinktermPHP\DoorSessionManager;
 use BinktermPHP\DoorManager;
 use BinktermPHP\NativeDoorManager;
@@ -26,6 +28,39 @@ function getDoorLogger(): \BinktermPHP\Binkp\Logger
         );
     }
     return $logger;
+}
+
+/**
+ * Publish the authenticated user's current Experience presence.
+ *
+ * Presence is intentionally best-effort and must never break door launch.
+ */
+function publishDoorExperiencePresence(array $user, string $doorName): void
+{
+    try {
+        $authSessionId = $_COOKIE['binktermphp_session'] ?? null;
+        if (!is_string($authSessionId) || $authSessionId === '') {
+            return;
+        }
+
+        $catalog = new GameCatalog();
+        $experiences = $catalog->getEnabledGames($user, 'web');
+        $experience = $experiences[$doorName] ?? null;
+
+        if (!is_array($experience)) {
+            getDoorLogger()->warning(
+                "DOSDOOR: [Presence] Experience '$doorName' not found in normalized web catalog"
+            );
+            return;
+        }
+
+        $presence = new ExperiencePresence();
+        $presence->enter($authSessionId, $experience);
+    } catch (\Throwable $e) {
+        getDoorLogger()->warning(
+            "DOSDOOR: [Presence] Failed to publish presence for '$doorName': " . $e->getMessage()
+        );
+    }
 }
 
 function doorApiError(string $errorCode, string $message, int $status = 400, array $extra = []): void
@@ -125,6 +160,8 @@ SimpleRouter::post('/api/door/launch', function() {
                 $port = $existingSession['ws_port'];
                 $wsUrl = "{$protocol}://{$host}:{$port}";
             }
+
+            publishDoorExperiencePresence($user, $doorName);
 
             echo json_encode([
                 'success' => true,
@@ -242,6 +279,7 @@ SimpleRouter::post('/api/door/launch', function() {
         // Start new session
         $session = $sessionManager->startSession($userId, $doorName, $userData, $doorType);
 
+        publishDoorExperiencePresence($user, $doorName);
         ActivityTracker::track($userId, ActivityTracker::TYPE_DOSDOOR_PLAY, null, $doorName);
 
         // Build WebSocket URL for browser
