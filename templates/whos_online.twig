@@ -34,6 +34,9 @@
                             <tr>
                                 <td>
                                     <a href="/profile/{{ user.username|url_encode }}" class="text-decoration-none">{{ user.username }}</a>
+                                    {% if user.public_activity %}
+                                    <div class="small text-muted">{{ user.public_activity }}</div>
+                                    {% endif %}
                                 </td>
                                 <td>{{ user.location ?: t('ui.common.unknown', {}, locale, ['common']) }}</td>
                                 {% if current_user and current_user.is_admin %}
@@ -123,7 +126,10 @@
             onlineUsersBody.innerHTML = users.map(user => {
                 const location = user.location && user.location !== '' ? user.location : uiT('ui.common.unknown', 'Unknown');
                 const username = escapeHtml(user.username || '');
-                const usernameCell = `<a href="/profile/${encodeURIComponent(user.username)}" class="text-decoration-none">${username}</a>`;
+                const publicActivity = user.public_activity && user.public_activity !== ''
+                    ? `<div class="small text-muted">${escapeHtml(user.public_activity)}</div>`
+                    : '';
+                const usernameCell = `<a href="/profile/${encodeURIComponent(user.username)}" class="text-decoration-none">${username}</a>${publicActivity}`;
                 const ts = user.last_activity_ts || null;
                 const serviceCell = isAdmin ? `<td><span class="badge bg-secondary">${escapeHtml(user.service || 'web')}</span></td>` : '';
                 const activityCell = isAdmin ? `<td>${user.activity && user.activity !== '' ? escapeHtml(user.activity) : '-'}</td>` : '';

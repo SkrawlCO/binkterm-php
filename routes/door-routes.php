@@ -477,6 +477,23 @@ SimpleRouter::post('/api/door/end', function() {
         // End the session
         $success = $sessionManager->endSession($sessionId);
 
+        if ($success) {
+            try {
+                $authSessionId = $_COOKIE['binktermphp_session'] ?? null;
+                if (is_string($authSessionId) && $authSessionId !== '') {
+                    $presence = new ExperiencePresence();
+                    $presence->leave($authSessionId);
+                }
+            } catch (\Throwable $e) {
+                // Presence cleanup is best-effort and must never turn a
+                // successful door shutdown into an API failure.
+                getDoorLogger()->warning(
+                    "DOSDOOR: [Presence] Failed to clear Experience presence: "
+                    . $e->getMessage()
+                );
+            }
+        }
+
         echo json_encode([
             'success' => $success
         ]);

@@ -2290,18 +2290,33 @@ class BbsSession
         $response = $this->apiRequest('GET', '/api/whosonline', null, $session);
         $rawUsers = $response['data']['users']          ?? [];
         $minutes  = $response['data']['online_minutes'] ?? 15;
-        $users    = [];
-        $seenUserIds = [];
+        $users = [];
+        $userIndexes = [];
 
         foreach ($rawUsers as $user) {
             $userId = (int)($user['user_id'] ?? 0);
-            if ($userId > 0) {
-                if (isset($seenUserIds[$userId])) {
-                    continue;
-                }
-                $seenUserIds[$userId] = true;
+
+            if ($userId <= 0) {
+                $users[] = $user;
+                continue;
             }
-            $users[] = $user;
+
+            if (!isset($userIndexes[$userId])) {
+                $userIndexes[$userId] = count($users);
+                $users[] = $user;
+                continue;
+            }
+
+            $existingIndex = $userIndexes[$userId];
+            $existingHasPresence = !empty($users[$existingIndex]['public_activity']);
+            $candidateHasPresence = !empty($user['public_activity']);
+
+            // Raw sessions arrive newest-first for each user. Keep that newest
+            // session unless an older active session carries intentional public
+            // Experience presence and the newer one does not.
+            if (!$existingHasPresence && $candidateHasPresence) {
+                $users[$existingIndex] = $user;
+            }
         }
 
         if (!$users) {
@@ -2320,17 +2335,29 @@ class BbsSession
         $title = $this->t('ui.terminalserver.server.whos_online.title', "Who's Online (last {minutes} minutes)", ['minutes' => $minutes], $locale);
         $items = array_map(function(array $user) use ($isAdmin): string {
             $parts = [$user['username'] ?? 'Unknown'];
+
             if (!empty($user['location'])) {
                 $parts[] = $user['location'];
             }
+
+            if (!empty($user['public_activity'])) {
+                $parts[] = $user['public_activity'];
+            }
+
             if ($isAdmin) {
-                if (!empty($user['activity'])) {
+                // Avoid repeating the same semantic Experience activity twice.
+                if (
+                    !empty($user['activity'])
+                    && $user['activity'] !== ($user['public_activity'] ?? '')
+                ) {
                     $parts[] = $user['activity'];
                 }
+
                 if (!empty($user['service'])) {
                     $parts[] = $user['service'];
                 }
             }
+
             return implode(' | ', $parts);
         }, $users);
 

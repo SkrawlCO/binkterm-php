@@ -8709,7 +8709,8 @@ SimpleRouter::group(['prefix' => '/api'], function() {
             $entry = [
                 'user_id' => (int)$onlineUser['user_id'],
                 'username' => $onlineUser['username'],
-                'location' => $onlineUser['location'] ?? ''
+                'location' => $onlineUser['location'] ?? '',
+                'public_activity' => $onlineUser['public_activity'] ?? ''
             ];
             if ($isAdmin) {
                 $entry['activity'] = $onlineUser['activity'] ?? '';
