@@ -250,7 +250,50 @@ final class ExperienceStateTest extends TestCase
             $result['experience']['name']
         );
     }
-}
+
+    public function testUnavailableExperienceReturnsNull(): void
+    {
+        $db = new PDO('sqlite::memory:');
+
+        $db->exec("
+            CREATE TABLE users (
+                id INTEGER PRIMARY KEY,
+                username TEXT
+            );
+
+            CREATE TABLE door_sessions (
+                session_id TEXT,
+                user_id INTEGER,
+                door_id TEXT,
+                node_number INTEGER,
+                started_at TEXT,
+                ended_at TEXT,
+                expires_at TEXT
+            );
+
+            CREATE TABLE user_sessions (
+                user_id INTEGER,
+                public_activity TEXT,
+                last_activity TEXT,
+                expires_at TEXT
+            );
+        ");
+
+        $state = new ExperienceState(
+            $db,
+            new TestExperienceStateCatalog([])
+        );
+
+        self::assertNull(
+            $state->getExperienceState(
+                'usurper',
+                ['user_id' => 3],
+                'web'
+            )
+        );
+    }
+
+    }
 
 final class TestExperienceStateCatalog extends GameCatalog
 {

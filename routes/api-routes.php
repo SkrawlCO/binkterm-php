@@ -7,6 +7,7 @@ use BinktermPHP\Auth;
 use BinktermPHP\BulletinManager;
 use BinktermPHP\Config;
 use BinktermPHP\Database;
+use BinktermPHP\ExperienceState;
 use BinktermPHP\I18n\LocaleResolver;
 use BinktermPHP\I18n\Translator;
 use BinktermPHP\MessageHandler;
@@ -8693,6 +8694,47 @@ SimpleRouter::group(['prefix' => '/api'], function() {
         ]);
 
         echo json_encode(['success' => true]);
+    });
+
+    SimpleRouter::get('/experiences/{experienceId}/state', function(string $experienceId) {
+        $user = RouteHelper::requireAuth();
+
+        header('Content-Type: application/json');
+
+        $state = (new ExperienceState())->getExperienceState(
+            $experienceId,
+            $user,
+            'web'
+        );
+
+        if ($state === null) {
+            http_response_code(404);
+            apiError(
+                'errors.experience.not_found',
+                'Experience not found or unavailable',
+                $user
+            );
+            return;
+        }
+
+        $players = array_map(static function(array $player): array {
+            return [
+                'username' => (string)$player['username'],
+                'presence' => $player['presence'],
+                'node' => (int)$player['node'],
+            ];
+        }, $state['players']);
+
+        echo json_encode([
+            'success' => true,
+            'experience' => $experienceId,
+            'state' => [
+                'active' => (bool)$state['active'],
+                'session_count' => (int)$state['session_count'],
+                'player_count' => (int)$state['player_count'],
+                'players' => $players,
+            ],
+        ]);
     });
 
     SimpleRouter::get('/whosonline', function() {
