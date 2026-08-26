@@ -105,6 +105,11 @@ class GameCatalog
                     'message_players' => (bool)($experience['participant_messaging'] ?? false),
                 ],
 
+                'participant_actions' => [
+                    'profile' => true,
+                    'message' => (bool)($experience['participant_messaging'] ?? false),
+                ],
+
                 'capacity' => [
                     // max_nodes is the runtime concurrency limit enforced
                     // by the door launch/session machinery.
@@ -226,6 +231,11 @@ class GameCatalog
                     'message_players' => false,
                 ],
 
+                'participant_actions' => [
+                    'profile' => true,
+                    'message' => false,
+                ],
+
                 'capacity' => [
                     'max_sessions' => null,
                 ],
@@ -321,6 +331,11 @@ class GameCatalog
                         ],
                     ]),
                     'message_players' => false,
+                ],
+
+                'participant_actions' => [
+                    'profile' => true,
+                    'message' => false,
                 ],
 
                 'capacity' => [

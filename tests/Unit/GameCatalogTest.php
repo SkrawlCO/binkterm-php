@@ -145,6 +145,43 @@ final class GameCatalogTest extends TestCase
         );
     }
 
+    public function testExperiencesExposeNormalizedParticipantActions(): void
+    {
+        $games = $this->catalog->getEnabledGames(null, 'web');
+
+        foreach ($games as $game) {
+            self::assertArrayHasKey(
+                'participant_actions',
+                $game,
+                "Participant actions missing for {$game['id']}"
+            );
+
+            self::assertArrayHasKey(
+                'profile',
+                $game['participant_actions']
+            );
+
+            self::assertIsBool(
+                $game['participant_actions']['profile']
+            );
+
+            self::assertArrayHasKey(
+                'message',
+                $game['participant_actions']
+            );
+
+            self::assertIsBool(
+                $game['participant_actions']['message']
+            );
+
+            self::assertSame(
+                $game['capabilities']['participant_messaging'],
+                $game['participant_actions']['message'],
+                "Participant message action must follow messaging capability for {$game['id']}"
+            );
+        }
+    }
+
     public function testNormalizedBackendIdentityIsCanonical(): void
     {
         $games = $this->catalog->getEnabledGames(null, 'web');
