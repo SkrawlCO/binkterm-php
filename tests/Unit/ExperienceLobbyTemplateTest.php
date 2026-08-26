@@ -13,9 +13,13 @@ final class ExperienceLobbyTemplateTest extends TestCase
 {
     private function renderLobby(
         int $sessionCount,
-        int $maxSessions,
+        ?int $maxSessions,
         bool $launchEnabled = true,
-        ?string $screenshotUrl = null
+        ?string $screenshotUrl = null,
+        string $name = 'Usurper Reborn',
+        bool $multiplayer = true,
+        string $iconUrl = '/door-assets/usurper/icon',
+        string $launchUrl = '/games/nativedoors/usurper'
     ): string {
         $twig = new Environment(
             new FilesystemLoader(dirname(__DIR__, 2) . '/templates')
@@ -40,15 +44,15 @@ final class ExperienceLobbyTemplateTest extends TestCase
         return $twig->render('experience_lobby.twig', [
             'experience' => [
                 'id' => 'usurper',
-                'name' => 'Usurper Reborn',
+                'name' => $name,
                 'description' => 'Usurper Reborn fantasy RPG BBS door.',
                 'icon' => 'fas fa-dungeon',
                 'presentation' => [
-                    'icon_url' => '/door-assets/usurper/icon',
+                    'icon_url' => $iconUrl,
                     'screenshot_url' => $screenshotUrl,
                 ],
                 'capabilities' => [
-                    'multiplayer' => true,
+                    'multiplayer' => $multiplayer,
                 ],
                 'capacity' => [
                     'max_sessions' => $maxSessions,
@@ -69,7 +73,7 @@ final class ExperienceLobbyTemplateTest extends TestCase
             'launch' => $launchEnabled ? [
                 'type' => 'native',
                 'id' => 'usurper',
-                'url' => '/games/nativedoors/usurper',
+                'url' => $launchUrl,
             ] : null,
         ]);
     }
@@ -129,6 +133,39 @@ final class ExperienceLobbyTemplateTest extends TestCase
 
         self::assertStringNotContainsString('Quiet', $html);
         self::assertStringNotContainsString('0 active sessions', $html);
+        self::assertStringNotContainsString(
+            'aria-label="Experience capacity"',
+            $html
+        );
+    }
+
+    public function testWebExperienceUsesSameCanonicalLobbyAndLaunchAction(): void
+    {
+        $html = $this->renderLobby(
+            0,
+            null,
+            true,
+            null,
+            'Blackjack',
+            false,
+            '/webdoors/blackjack/icon.svg',
+            '/games/blackjack'
+        );
+
+        self::assertStringContainsString('Blackjack', $html);
+        self::assertStringContainsString('Single Player', $html);
+        self::assertStringContainsString('Free to play', $html);
+        self::assertStringContainsString(
+            'src="/webdoors/blackjack/icon.svg"',
+            $html
+        );
+        self::assertStringContainsString(
+            'href="/games/blackjack"',
+            $html
+        );
+        self::assertStringContainsString('Play Blackjack', $html);
+
+        self::assertStringNotContainsString('Capacity:', $html);
         self::assertStringNotContainsString(
             'aria-label="Experience capacity"',
             $html
