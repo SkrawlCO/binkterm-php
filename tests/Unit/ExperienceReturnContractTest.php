@@ -140,4 +140,33 @@ final class ExperienceReturnContractTest extends TestCase
             $player
         );
     }
+
+
+    public function testWebDoorWrapperReturnsToExperience(): void
+    {
+        $routes = file_get_contents(
+            dirname(__DIR__, 2) . '/routes/webdoor-routes.php'
+        );
+        $template = file_get_contents(
+            dirname(__DIR__, 2) . '/templates/webdoor_play.twig'
+        );
+
+        self::assertIsString($routes);
+        self::assertIsString($template);
+
+        self::assertStringContainsString(
+            "'return_url' => '/experiences/' . rawurlencode((string)\$game)",
+            $routes
+        );
+
+        self::assertStringContainsString(
+            'href="{{ return_url|default(\'/games\') }}"',
+            $template
+        );
+
+        self::assertStringNotContainsString(
+            'href="/games" class="btn btn-outline-secondary btn-sm me-3"',
+            $template
+        );
+    }
 }

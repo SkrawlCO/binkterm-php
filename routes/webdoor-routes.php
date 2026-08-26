@@ -888,7 +888,8 @@ SimpleRouter::get('/games/{game}', function($game) {
     $template->renderResponse('webdoor_play.twig', [
         'game' => $gameData,
         'game_url' => $gameUrl,
-        'game_id' => $game
+        'game_id' => $game,
+        'return_url' => '/experiences/' . rawurlencode((string)$game)
     ]);
 });
 
