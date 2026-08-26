@@ -586,14 +586,13 @@ if (empty($doorId)) {
         // End session button
         document.getElementById('endSessionBtn').addEventListener('click', endSession);
 
-        // Clean up on page unload
+        // Browser unload is only a client detach.
+        //
+        // Do not end the server-side door session here: refreshes,
+        // navigation, tab closes, and returns to the Experience lobby
+        // must remain reconnectable. The bridge owns process lifecycle;
+        // explicit End Session remains the user-requested termination path.
         window.addEventListener('beforeunload', () => {
-            if (sessionId) {
-                const data = new URLSearchParams();
-                data.append('session_id', sessionId);
-                navigator.sendBeacon('/api/door/end', data);
-            }
-
             if (socket) {
                 socket.close();
             }

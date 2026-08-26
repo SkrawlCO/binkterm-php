@@ -220,11 +220,13 @@
                                class="btn btn-fidonet{% if at_capacity %} disabled{% endif %}"
                                {% if at_capacity %}aria-disabled="true" tabindex="-1"{% endif %}>
                                 <i class="fas fa-play me-1" aria-hidden="true"></i>
-                                {% if at_capacity %}
-                                    At Capacity
-                                {% else %}
-                                    Play {{ experience.name }}
-                                {% endif %}
+                                <span id="experience-launch-label">
+                                    {% if at_capacity %}
+                                        At Capacity
+                                    {% else %}
+                                        Play {{ experience.name }}
+                                    {% endif %}
+                                </span>
                             </a>
                         {% endif %}
                     </div>
@@ -389,7 +391,8 @@ function updateExperienceLiveState(state, viewer = null) {
     }
 
     if (launchButton) {
-        const disabled = atCapacity || !launchSupported;
+        const disabled =
+            (atCapacity && !viewerParticipating) || !launchSupported;
         launchButton.classList.toggle('disabled', disabled);
         launchButton.setAttribute('aria-disabled', disabled ? 'true' : 'false');
         launchButton.tabIndex = disabled ? -1 : 0;
@@ -411,11 +414,12 @@ function updateExperienceLiveState(state, viewer = null) {
             launchButton.dataset.viewerParticipating =
                 viewerParticipating ? 'true' : 'false';
 
-            const textNode = Array.from(launchButton.childNodes)
-                .find(node => node.nodeType === Node.TEXT_NODE);
+            const labelElement = document.getElementById(
+                'experience-launch-label'
+            );
 
-            if (textNode) {
-                textNode.textContent = `\n                                ${label}\n                            `;
+            if (labelElement) {
+                labelElement.textContent = label;
             }
         }
     }

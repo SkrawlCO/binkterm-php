@@ -36,6 +36,26 @@ final class ExperienceReturnContractTest extends TestCase
         );
     }
 
+    public function testBrowserUnloadDetachesWithoutEndingDoorSession(): void
+    {
+        $player = file_get_contents(
+            dirname(__DIR__, 2)
+            . '/public_html/webdoors/dosdoors/index.php'
+        );
+
+        self::assertIsString($player);
+
+        self::assertStringContainsString(
+            "window.addEventListener('beforeunload', () => {",
+            $player
+        );
+
+        self::assertStringNotContainsString(
+            "navigator.sendBeacon('/api/door/end'",
+            $player
+        );
+    }
+
     public function testTerminalUsesReturnContractForCleanExitAndEndSession(): void
     {
         $player = file_get_contents(

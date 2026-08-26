@@ -520,6 +520,11 @@ final class ExperienceLobbyTemplateTest extends TestCase
         );
 
         self::assertStringContainsString(
+            '(atCapacity && !viewerParticipating) || !launchSupported;',
+            $source
+        );
+
+        self::assertStringContainsString(
             'const label = viewerParticipating',
             $source
         );
@@ -536,6 +541,26 @@ final class ExperienceLobbyTemplateTest extends TestCase
 
         self::assertStringContainsString(
             "launchButton.dataset.viewerParticipating =",
+            $source
+        );
+
+        self::assertStringContainsString(
+            'id="experience-launch-label"',
+            $source
+        );
+
+        self::assertStringContainsString(
+            "document.getElementById(\n                'experience-launch-label'\n            )",
+            $source
+        );
+
+        self::assertStringContainsString(
+            'labelElement.textContent = label;',
+            $source
+        );
+
+        self::assertStringNotContainsString(
+            'Array.from(launchButton.childNodes)',
             $source
         );
 
