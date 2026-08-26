@@ -162,16 +162,68 @@
                         {% endif %}
                     </div>
 
+                    {% set at_capacity = max_sessions and state.session_count >= max_sessions %}
+                    {% set launch_supported = experience.actions.launch and launch %}
+                    {% set credit_cost = experience.policy.credit_cost|default(0) %}
+
+                    <div class="border rounded p-3 mb-3">
+                        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+                            <div>
+                                <div class="fw-semibold">
+                                    <i class="fas fa-circle-info me-1" aria-hidden="true"></i>
+                                    Availability
+                                </div>
+                                <div class="text-muted small">
+                                    {% if at_capacity %}
+                                        This Experience is currently at capacity.
+                                    {% elseif launch_supported %}
+                                        Ready to launch.
+                                    {% else %}
+                                        Launch is not currently available from this surface.
+                                    {% endif %}
+                                </div>
+                            </div>
+
+                            <div class="d-flex flex-wrap gap-2 justify-content-end">
+                                {% if at_capacity %}
+                                    <span class="badge bg-warning text-dark">
+                                        At capacity
+                                    </span>
+                                {% elseif launch_supported %}
+                                    <span class="badge bg-success">
+                                        Available
+                                    </span>
+                                {% else %}
+                                    <span class="badge bg-secondary">
+                                        Unavailable
+                                    </span>
+                                {% endif %}
+
+                                {% if credit_cost > 0 %}
+                                    <span class="badge bg-secondary-subtle text-dark border">
+                                        {{ credit_cost }} credit{% if credit_cost != 1 %}s{% endif %} per launch
+                                    </span>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="d-flex justify-content-between align-items-center">
                         <a href="/games" class="btn btn-outline-secondary">
                             <i class="fas fa-arrow-left me-1" aria-hidden="true"></i>
                             Back to Games
                         </a>
 
-                        {% if experience.actions.launch and launch %}
-                            <a href="{{ launch.url }}" class="btn btn-primary">
+                        {% if launch_supported %}
+                            <a href="{{ launch.url }}"
+                               class="btn btn-primary{% if at_capacity %} disabled{% endif %}"
+                               {% if at_capacity %}aria-disabled="true" tabindex="-1"{% endif %}>
                                 <i class="fas fa-play me-1" aria-hidden="true"></i>
-                                Play {{ experience.name }}
+                                {% if at_capacity %}
+                                    At Capacity
+                                {% else %}
+                                    Play {{ experience.name }}
+                                {% endif %}
                             </a>
                         {% endif %}
                     </div>
