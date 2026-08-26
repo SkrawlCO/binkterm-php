@@ -453,7 +453,7 @@ function renderExperienceParticipants(state, actions) {
 
 function applyExperienceState(payload) {
     const state = payload.state || {};
-    const actions = payload.participant_actions || {};
+    const actions = state.participant_actions || {};
 
     updateExperiencePlayerSummary(state);
     updateExperienceLiveState(state);
