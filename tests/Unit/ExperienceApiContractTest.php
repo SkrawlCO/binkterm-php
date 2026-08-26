@@ -53,6 +53,29 @@ final class ExperienceApiContractTest extends TestCase
         );
     }
 
+    public function testExperienceApiPublishesViewerParticipationContract(): void
+    {
+        self::assertStringContainsString(
+            "'viewer' => [",
+            $this->source
+        );
+
+        self::assertStringContainsString(
+            "'participating' => \$viewerPlayer !== null",
+            $this->source
+        );
+
+        self::assertStringContainsString(
+            "'session_id' => \$viewerPlayer['session_id'] ?? null",
+            $this->source
+        );
+
+        self::assertStringContainsString(
+            "'node' => \$viewerPlayer !== null && \$viewerPlayer['node'] !== null",
+            $this->source
+        );
+    }
+
     public function testExperienceApiPreservesNullNode(): void
     {
         self::assertStringContainsString(

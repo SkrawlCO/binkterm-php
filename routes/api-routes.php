@@ -8748,6 +8748,18 @@ SimpleRouter::group(['prefix' => '/api'], function() {
             ];
         }, $state['players']);
 
+        $currentUserId = (int)($user['user_id'] ?? $user['id'] ?? 0);
+        $viewerPlayer = null;
+
+        if ($currentUserId > 0) {
+            foreach ($state['players'] as $player) {
+                if ((int)($player['user_id'] ?? 0) === $currentUserId) {
+                    $viewerPlayer = $player;
+                    break;
+                }
+            }
+        }
+
         echo json_encode([
             'success' => true,
             'experience' => $experienceId,
@@ -8760,6 +8772,13 @@ SimpleRouter::group(['prefix' => '/api'], function() {
                     'profile' => (bool)($participantActions['profile'] ?? false),
                     'message' => (bool)($participantActions['message'] ?? false),
                 ],
+            ],
+            'viewer' => [
+                'participating' => $viewerPlayer !== null,
+                'session_id' => $viewerPlayer['session_id'] ?? null,
+                'node' => $viewerPlayer !== null && $viewerPlayer['node'] !== null
+                    ? (int)$viewerPlayer['node']
+                    : null,
             ],
         ]);
     });
