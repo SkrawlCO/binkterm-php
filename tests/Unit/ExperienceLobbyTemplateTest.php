@@ -91,7 +91,7 @@ final class ExperienceLobbyTemplateTest extends TestCase
         ]);
     }
 
-    public function testExperienceRendersCanonicalScreenshotWhenPresent(): void
+    public function testExperienceDoesNotRenderScreenshotInLobby(): void
     {
         $html = $this->renderLobby(
             0,
@@ -100,14 +100,16 @@ final class ExperienceLobbyTemplateTest extends TestCase
             '/door-assets/usurper/screenshot'
         );
 
-        self::assertStringContainsString(
+        self::assertStringNotContainsString(
             'src="/door-assets/usurper/screenshot"',
             $html
         );
-        self::assertStringContainsString(
+
+        self::assertStringNotContainsString(
             'alt="Usurper Reborn screenshot"',
             $html
         );
+
         self::assertStringContainsString(
             'src="/door-assets/usurper/icon"',
             $html
@@ -929,5 +931,167 @@ final class ExperienceLobbyTemplateTest extends TestCase
             $source
         );
     }
+
+
+    public function testExperienceLobbyDefinesConversationSurface(): void
+    {
+        $source = file_get_contents(
+            __DIR__ . '/../../templates/experience_lobby.twig'
+        );
+
+        self::assertIsString($source);
+
+        self::assertStringContainsString(
+            'const EXPERIENCE_CAPABILITIES =',
+            $source
+        );
+
+        self::assertStringContainsString(
+            '{% if experience.capabilities.conversation %}',
+            $source
+        );
+
+        self::assertStringContainsString(
+            'id="experience-conversation"',
+            $source
+        );
+
+        self::assertStringContainsString(
+            'id="experience-conversation-messages"',
+            $source
+        );
+
+        self::assertStringContainsString(
+            'Conversation',
+            $source
+        );
+    }
+
+
+    public function testExperienceLobbyLoadsConversationFromExistingChatApi(): void
+    {
+        $source = file_get_contents(
+            __DIR__ . '/../../templates/experience_lobby.twig'
+        );
+
+        self::assertIsString($source);
+
+        self::assertStringContainsString(
+            'function getExperienceConversation()',
+            $source
+        );
+
+        self::assertStringContainsString(
+            "conversation.type !== 'chat_room'",
+            $source
+        );
+
+        self::assertStringContainsString(
+            'function refreshExperienceConversation()',
+            $source
+        );
+
+        self::assertStringContainsString(
+            '`/api/chat/messages?room_id=${encodeURIComponent(conversation.room_id)}&limit=10`',
+            $source
+        );
+
+        self::assertStringContainsString(
+            'renderExperienceConversation(payload.messages || []);',
+            $source
+        );
+    }
+
+    public function testExperienceLobbyRendersConversationMessages(): void
+    {
+        $source = file_get_contents(
+            __DIR__ . '/../../templates/experience_lobby.twig'
+        );
+
+        self::assertIsString($source);
+
+        self::assertStringContainsString(
+            'function renderExperienceConversation(messages = [])',
+            $source
+        );
+
+        self::assertStringContainsString(
+            "message.from_username || 'Unknown user'",
+            $source
+        );
+
+        self::assertStringContainsString(
+            'message.markup_html',
+            $source
+        );
+
+        self::assertStringContainsString(
+            "container.textContent = 'No conversation yet.';",
+            $source
+        );
+    }
+
+
+    public function testConversationHistoryIsNotPolledAsRoomEntry(): void
+    {
+        $source = file_get_contents(
+            __DIR__ . '/../../templates/experience_lobby.twig'
+        );
+
+        self::assertIsString($source);
+
+        self::assertSame(
+            2,
+            substr_count(
+                $source,
+                'refreshExperienceConversation()'
+            )
+        );
+
+        self::assertStringContainsString(
+            'refreshExperienceConversation()' . PHP_EOL
+                . '    .catch(() => {',
+            $source
+        );
+    }
+
+    public function testExperienceLobbyUsesCompactExperienceLayout(): void
+    {
+        $source = file_get_contents(
+            __DIR__ . '/../../templates/experience_lobby.twig'
+        );
+
+        self::assertStringContainsString(
+            'style="width: 120px; height: 120px; object-fit: cover;"',
+            $source
+        );
+
+        self::assertStringContainsString(
+            'id="experience-availability-badge"',
+            $source
+        );
+
+        self::assertStringContainsString(
+            'id="experience-availability-message"',
+            $source
+        );
+
+        self::assertStringNotContainsString(
+            '<i class="fas fa-circle-info me-1" aria-hidden="true"></i>',
+            $source
+        );
+
+        self::assertSame(
+            1,
+            substr_count($source, 'id="experience-availability-badge"')
+        );
+
+        self::assertSame(
+            1,
+            substr_count($source, 'id="experience-availability-message"')
+        );
+    }
+
+
 
 }

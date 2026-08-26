@@ -3,31 +3,21 @@
 {% block title %}{{ experience.name }} - {{ system_name }}{% endblock %}
 
 {% block content %}
-<div class="container py-4">
+<div class="container py-3">
 
     <div class="row justify-content-center">
         <div class="col-12 col-lg-9 col-xl-8">
 
             <div class="card shadow-sm">
-                <div class="card-body p-4">
+                <div class="card-body p-3 p-md-4">
 
-                    {% if experience.presentation.screenshot_url %}
-                        <div class="mb-4">
-                            <img
-                                src="{{ experience.presentation.screenshot_url }}"
-                                alt="{{ experience.name }} screenshot"
-                                class="img-fluid rounded border w-100"
-                                style="max-height: 520px; object-fit: contain;"
-                            >
-                        </div>
-                    {% endif %}
 
-                    <div class="d-flex align-items-start gap-3 mb-4">
+                    <div class="d-flex align-items-start gap-3 mb-3">
                         <img
                             src="{{ experience.presentation.icon_url|default('/favicon.svg') }}"
                             alt="{{ experience.name }}"
-                            class="rounded"
-                            style="width: 96px; height: 96px; object-fit: cover;"
+                            class="rounded flex-shrink-0"
+                            style="width: 120px; height: 120px; object-fit: cover;"
                             onerror="this.src='/favicon.svg'"
                         >
 
@@ -42,7 +32,7 @@
                                 </div>
                             {% endif %}
 
-                            <p class="text-muted mb-3">
+                            <p class="text-muted small mb-2">
                                 {{ experience.description }}
                             </p>
 
@@ -176,18 +166,59 @@
                         </div>
                     </div>
 
+                    {% if experience.capabilities.conversation %}
+                        <div
+                            id="experience-conversation"
+                            class="border rounded p-3 mb-3"
+                        >
+                            <div class="fw-semibold mb-2">
+                                <i class="fas fa-comments me-1" aria-hidden="true"></i>
+                                Conversation
+                            </div>
+
+                            <div
+                                id="experience-conversation-messages"
+                                class="small text-muted"
+                            >
+                                Loading conversation…
+                            </div>
+                        </div>
+                    {% endif %}
+
                     {% set at_capacity = max_sessions and state.session_count >= max_sessions %}
                     {% set launch_supported = experience.actions.launch and launch %}
                     {% set credit_cost = experience.policy.credit_cost|default(0) %}
 
-                    <div class="border rounded p-3 mb-3">
-                        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
-                            <div>
-                                <div class="fw-semibold">
-                                    <i class="fas fa-circle-info me-1" aria-hidden="true"></i>
-                                    Availability
+                    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
+                        <a href="/games" class="btn btn-outline-secondary">
+                            <i class="fas fa-arrow-left me-1" aria-hidden="true"></i>
+                            Back to Games
+                        </a>
+
+                        <div class="d-flex flex-wrap align-items-center justify-content-end gap-2">
+                            <div class="text-end me-1">
+                                <div class="d-flex align-items-center justify-content-end gap-2">
+                                    <span id="experience-availability-badge"
+                                          data-launch-supported="{{ launch_supported ? 'true' : 'false' }}"
+                                          class="badge {% if at_capacity %}bg-warning text-dark{% elseif launch_supported %}bg-success{% else %}bg-secondary{% endif %}">
+                                        {% if at_capacity %}
+                                            At capacity
+                                        {% elseif launch_supported %}
+                                            Available
+                                        {% else %}
+                                            Unavailable
+                                        {% endif %}
+                                    </span>
+
+                                    {% if credit_cost > 0 %}
+                                        <span class="badge bg-secondary-subtle text-dark border">
+                                            {{ credit_cost }} credit{% if credit_cost != 1 %}s{% endif %}
+                                        </span>
+                                    {% endif %}
                                 </div>
-                                <div id="experience-availability-message" class="text-muted small">
+
+                                <div id="experience-availability-message"
+                                     class="text-muted small mt-1">
                                     {% if at_capacity %}
                                         This Experience is currently at capacity.
                                     {% elseif launch_supported %}
@@ -198,35 +229,6 @@
                                 </div>
                             </div>
 
-                            <div class="d-flex flex-wrap gap-2 justify-content-end">
-                                <span id="experience-availability-badge"
-                                      data-launch-supported="{{ launch_supported ? 'true' : 'false' }}"
-                                      class="badge {% if at_capacity %}bg-warning text-dark{% elseif launch_supported %}bg-success{% else %}bg-secondary{% endif %}">
-                                    {% if at_capacity %}
-                                        At capacity
-                                    {% elseif launch_supported %}
-                                        Available
-                                    {% else %}
-                                        Unavailable
-                                    {% endif %}
-                                </span>
-
-                                {% if credit_cost > 0 %}
-                                    <span class="badge bg-secondary-subtle text-dark border">
-                                        {{ credit_cost }} credit{% if credit_cost != 1 %}s{% endif %} per launch
-                                    </span>
-                                {% endif %}
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="d-flex justify-content-between align-items-center">
-                        <a href="/games" class="btn btn-outline-secondary">
-                            <i class="fas fa-arrow-left me-1" aria-hidden="true"></i>
-                            Back to Games
-                        </a>
-
-                        <div class="d-flex align-items-center gap-2">
                             <button
                                 id="experience-end-button"
                                 type="button"
@@ -266,6 +268,8 @@
 <script>
 const EXPERIENCE_ID = {{ experience.id|json_encode|raw }};
 const EXPERIENCE_NAME = {{ experience.name|json_encode|raw }};
+const EXPERIENCE_CAPABILITIES =
+    {{ experience.capabilities|default({})|json_encode|raw }};
 
 async function refreshExperienceState() {
     const response = await fetch(
@@ -279,6 +283,7 @@ async function refreshExperienceState() {
 
     return response.json();
 }
+
 
 function updateExperiencePlayerSummary(state) {
     const summary = document.getElementById('experience-player-summary');
@@ -504,6 +509,87 @@ function renderExperienceParticipants(state, actions) {
     }).join('');
 }
 
+function getExperienceConversation() {
+    const conversation = EXPERIENCE_CAPABILITIES.conversation || null;
+
+    if (
+        !conversation
+        || conversation.type !== 'chat_room'
+        || !Number.isInteger(Number(conversation.room_id))
+        || Number(conversation.room_id) <= 0
+    ) {
+        return null;
+    }
+
+    return {
+        type: 'chat_room',
+        room_id: Number(conversation.room_id),
+    };
+}
+
+function renderExperienceConversation(messages = []) {
+    const container = document.getElementById(
+        'experience-conversation-messages'
+    );
+
+    if (!container) return;
+
+    if (!Array.isArray(messages) || messages.length === 0) {
+        container.textContent = 'No conversation yet.';
+        return;
+    }
+
+    container.innerHTML = messages.slice(-10).map(message => {
+        const username = escapeHtml(
+            message.from_username || 'Unknown user'
+        );
+
+        const body = message.markup_html
+            ? message.markup_html
+            : escapeHtml(message.body || '');
+
+        const occurredAt = formatExperienceActivityTime(
+            message.created_at || ''
+        );
+
+        const time = occurredAt
+            ? `<span class="text-muted text-nowrap">${escapeHtml(occurredAt)}</span>`
+            : '';
+
+        return `
+            <div class="py-2 border-bottom">
+                <div class="d-flex flex-wrap justify-content-between gap-2 mb-1">
+                    <strong>${username}</strong>
+                    ${time}
+                </div>
+                <div>${body}</div>
+            </div>
+        `;
+    }).join('');
+}
+
+async function refreshExperienceConversation() {
+    const conversation = getExperienceConversation();
+
+    if (!conversation) {
+        return;
+    }
+
+    const response = await fetch(
+        `/api/chat/messages?room_id=${encodeURIComponent(conversation.room_id)}&limit=10`
+    );
+
+    const payload = await response.json();
+
+    if (!response.ok) {
+        throw new Error(
+            payload.error || 'Unable to load conversation'
+        );
+    }
+
+    renderExperienceConversation(payload.messages || []);
+}
+
 function formatExperienceActivityTime(value) {
     const date = new Date(value);
 
@@ -652,6 +738,18 @@ if (experienceEndButton) {
 refreshExperienceState()
     .then(applyExperienceState)
     .catch(() => {});
+
+refreshExperienceConversation()
+    .catch(() => {
+        const container = document.getElementById(
+            'experience-conversation-messages'
+        );
+
+        if (container) {
+            container.textContent =
+                'Conversation is temporarily unavailable.';
+        }
+    });
 
 function scheduleExperienceRefresh() {
     if (document.hidden) {
