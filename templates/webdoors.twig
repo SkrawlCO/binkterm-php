@@ -140,8 +140,8 @@
                                     {{ t('ui.webdoors.version_by_author', {'version': game.version, 'author': game.author}, locale, ['common']) }}
                                 {% endif %}
                             </small>
-                            {% if game.actions.launch %}
-                                <a href="/games/{{ game.id }}" class="btn btn-primary btn-sm">
+                            {% if game.actions.launch and game.launch %}
+                                <a href="{{ game.launch.url }}" class="btn btn-primary btn-sm">
                                     <i class="fas fa-play"></i> {{ t('ui.webdoors.launch', {}, locale, ['common']) }}
                                 </a>
                             {% endif %}

@@ -127,6 +127,13 @@ SimpleRouter::get('/games', function() {
     $catalog = new \BinktermPHP\GameCatalog();
     $games = array_values($catalog->getEnabledGames($user, 'web'));
 
+    // Resolve each normalized Experience through the canonical launch
+    // contract. The template should not reconstruct backend URLs.
+    foreach ($games as &$game) {
+        $game['launch'] = \BinktermPHP\ExperienceLaunch::resolve($game);
+    }
+    unset($game);
+
     // Crossroads provides one collection-level live state read for the
     // discovery page. The existing browser presence polling remains in place
     // for live updates; this server-side snapshot gives the template a
