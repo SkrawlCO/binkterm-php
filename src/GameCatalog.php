@@ -48,6 +48,33 @@ class GameCatalog
     }
 
     /**
+     * Normalize an optional Experience conversation capability.
+     *
+     * @param mixed $conversation
+     * @return array{type:string,room_id:int}|null
+     */
+    private static function normalizeConversationCapability(
+        mixed $conversation
+    ): ?array {
+        if (!is_array($conversation)) {
+            return null;
+        }
+
+        $type = (string)($conversation['type'] ?? '');
+        $roomId = (int)($conversation['room_id'] ?? 0);
+
+        if ($type !== 'chat_room' || $roomId <= 0) {
+            return null;
+        }
+
+        return [
+            'type' => 'chat_room',
+            'room_id' => $roomId,
+        ];
+    }
+
+
+    /**
      * Add DOS/native manager-backed experiences.
      *
      * @param array<string, array<string, mixed>> $experiences
@@ -93,6 +120,9 @@ class GameCatalog
                 'capabilities' => [
                     'multiplayer' => (bool)($experience['multiplayer'] ?? false),
                     'participant_messaging' => (bool)($experience['participant_messaging'] ?? false),
+                    'conversation' => self::normalizeConversationCapability(
+                        $experience['conversation'] ?? null
+                    ),
                 ],
 
                 'actions' => [
@@ -219,6 +249,9 @@ class GameCatalog
                 'capabilities' => [
                     'multiplayer' => $multiplayer,
                     'participant_messaging' => false,
+                    'conversation' => self::normalizeConversationCapability(
+                        $manifest['experience']['conversation'] ?? null
+                    ),
                 ],
 
                 'actions' => [
@@ -321,6 +354,9 @@ class GameCatalog
                 'capabilities' => [
                     'multiplayer' => false,
                     'participant_messaging' => false,
+                    'conversation' => self::normalizeConversationCapability(
+                        $manifest['experience']['conversation'] ?? null
+                    ),
                 ],
 
                 'actions' => [

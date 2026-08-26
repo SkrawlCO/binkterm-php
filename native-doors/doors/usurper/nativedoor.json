@@ -8,7 +8,9 @@
     "version": "1.0.3",
     "release_year": 2026,
     "description": "Usurper Reborn fantasy RPG BBS door.",
-    "genre": ["RPG"],
+    "genre": [
+      "RPG"
+    ],
     "players": "Multiplayer",
     "icon": "icon.png",
     "screenshot": "screenshot.png"
@@ -34,6 +36,10 @@
     "category": "game",
     "featured": true,
     "multiplayer": true,
-    "participant_messaging": true
+    "participant_messaging": true,
+    "conversation": {
+      "type": "chat_room",
+      "room_id": 2
+    }
   }
 }

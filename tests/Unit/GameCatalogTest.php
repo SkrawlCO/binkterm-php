@@ -335,4 +335,68 @@ final class GameCatalogTest extends TestCase
             );
         }
     }
+
+    public function testExperiencesExposeNormalizedConversationCapability(): void
+    {
+        $games = (new GameCatalog())->getEnabledGames(
+            ['user_id' => 1, 'is_admin' => true],
+            'web'
+        );
+
+        foreach ($games as $game) {
+            self::assertArrayHasKey(
+                'conversation',
+                $game['capabilities']
+            );
+
+            $conversation = $game['capabilities']['conversation'];
+
+            self::assertTrue(
+                $conversation === null || is_array($conversation)
+            );
+
+            if ($conversation !== null) {
+                self::assertSame(
+                    'chat_room',
+                    $conversation['type']
+                );
+                self::assertIsInt(
+                    $conversation['room_id']
+                );
+                self::assertGreaterThan(
+                    0,
+                    $conversation['room_id']
+                );
+            }
+        }
+    }
+
+    public function testConversationCapabilityNormalizationIsBackendIndependent(): void
+    {
+        $source = file_get_contents(
+            __DIR__ . '/../../src/GameCatalog.php'
+        );
+
+        self::assertIsString($source);
+
+        self::assertSame(
+            3,
+            substr_count(
+                $source,
+                "'conversation' => self::normalizeConversationCapability("
+            )
+        );
+
+        self::assertStringContainsString(
+            "if (\$type !== 'chat_room' || \$roomId <= 0)",
+            $source
+        );
+
+        self::assertStringContainsString(
+            "'room_id' => \$roomId",
+            $source
+        );
+    }
+
+
 }
