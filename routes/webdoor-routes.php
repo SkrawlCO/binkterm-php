@@ -268,8 +268,9 @@ SimpleRouter::get('/games/dosdoors/{doorid}', function($doorid) {
         return;
     }
 
-    // Include the DOS door player
+    // Include the DOS door player.
     $doorId = $doorid; // For the player script
+    $returnUrl = '/games';
     require __DIR__ . '/../public_html/webdoors/dosdoors/index.php';
 });
 
@@ -313,8 +314,11 @@ SimpleRouter::get('/games/nativedoors/{doorid}', function($doorid) {
         return;
     }
 
-    // Reuse the DOS door terminal player (same WebSocket protocol)
+    // Reuse the DOS door terminal player (same WebSocket protocol).
+    // Native doors are canonical Experiences, so normal exit returns
+    // to that Experience rather than dropping the user at /games.
     $doorId = $doorid;
+    $returnUrl = '/experiences/' . rawurlencode((string)$doorid);
     require __DIR__ . '/../public_html/webdoors/dosdoors/index.php';
 });
 

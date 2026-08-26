@@ -212,6 +212,7 @@ if (empty($doorId)) {
         let wsPort = null;
         let wsToken = null;
         const doorId = <?php echo json_encode($doorId); ?>;
+        const returnUrl = <?php echo json_encode($returnUrl ?? '/games'); ?>;
         const I18N = <?php echo json_encode([
             'statusPrefix' => $t('ui.dosdoor_player.status_prefix', 'Status:'),
             'statusDisconnected' => $t('ui.dosdoor_player.status_disconnected', 'Disconnected'),
@@ -479,6 +480,16 @@ if (empty($doorId)) {
                         updateStatus(I18N.statusDisconnected, 'disconnected');
                         term.writeln('');
                         term.writeln('\x1b[1;31m' + I18N.connectionClosedLine + '\x1b[0m');
+
+                        // A normal bridge close means the door process exited
+                        // cleanly. Return to the route-provided destination.
+                        //
+                        // Do not redirect on abnormal disconnects: the bridge
+                        // intentionally supports reconnecting after refreshes
+                        // and transient WebSocket interruptions.
+                        if (event.code === 1000) {
+                            window.top.location.href = returnUrl;
+                        }
                     };
 
                     socket.onerror = (error) => {
@@ -518,7 +529,7 @@ if (empty($doorId)) {
                     if (socket) {
                         socket.close();
                     }
-                    window.top.location.href = '/games';
+                    window.top.location.href = returnUrl;
                 } else {
                     alert(resolveApiError(data, I18N.failedEndSession));
                 }
