@@ -106,10 +106,12 @@
                             Back to Games
                         </a>
 
-                        <a href="{{ launch_url }}" class="btn btn-primary">
-                            <i class="fas fa-play me-1" aria-hidden="true"></i>
-                            Play {{ experience.name }}
-                        </a>
+                        {% if experience.actions.launch %}
+                            <a href="{{ launch_url }}" class="btn btn-primary">
+                                <i class="fas fa-play me-1" aria-hidden="true"></i>
+                                Play {{ experience.name }}
+                            </a>
+                        {% endif %}
                     </div>
 
                 </div>
