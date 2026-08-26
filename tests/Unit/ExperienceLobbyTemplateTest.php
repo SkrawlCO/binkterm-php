@@ -146,6 +146,10 @@ final class ExperienceLobbyTemplateTest extends TestCase
             'href="/games/nativedoors/usurper"',
             $html
         );
+        self::assertStringContainsString(
+            'class="btn btn-fidonet"',
+            $html
+        );
         self::assertStringNotContainsString(
             'aria-disabled="true"',
             $html
