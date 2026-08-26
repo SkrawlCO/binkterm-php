@@ -115,22 +115,48 @@ final class GameCatalogTest extends TestCase
         }
     }
 
-    public function testCompatibilityFieldsRemainAvailable(): void
+    public function testCanonicalExperienceShapeDoesNotExposeRemovedCompatibilityFields(): void
     {
         $games = $this->catalog->getEnabledGames(null, 'web');
 
         foreach ($games as $game) {
-            self::assertArrayHasKey('type', $game);
-            self::assertArrayHasKey('path', $game);
-            self::assertArrayHasKey('icon', $game);
-            self::assertArrayHasKey('icon_url', $game);
-            self::assertArrayHasKey('players', $game);
-            self::assertArrayHasKey('genre', $game);
-            self::assertArrayHasKey('experience', $game);
+            foreach ([
+                'id',
+                'name',
+                'description',
+                'category',
+                'backend',
+                'author',
+                'version',
+                'capabilities',
+                'actions',
+                'capacity',
+                'surfaces',
+                'presentation',
+                'policy',
+                'source',
+            ] as $field) {
+                self::assertArrayHasKey(
+                    $field,
+                    $game,
+                    "Canonical Experience field '{$field}' missing for {$game['id']}"
+                );
+            }
 
-            self::assertArrayHasKey('category', $game['experience']);
-            self::assertArrayHasKey('featured', $game['experience']);
-            self::assertArrayHasKey('multiplayer', $game['experience']);
+            foreach ([
+                'type',
+                'path',
+                'icon',
+                'icon_url',
+                'genre',
+                'experience',
+            ] as $legacyField) {
+                self::assertArrayNotHasKey(
+                    $legacyField,
+                    $game,
+                    "Legacy field '{$legacyField}' must not exist for {$game['id']}"
+                );
+            }
         }
     }
 

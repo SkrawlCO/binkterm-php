@@ -128,18 +128,8 @@ class GameCatalog
                     'credit_cost' => (int)($door['config']['credit_cost'] ?? 0),
                 ],
 
-                // Compatibility fields for current consumers.
-                'type' => $backendType . 'door',
-                'path' => $id,
-                'icon' => $game['icon'] ?? null,
-                'icon_url' => "/door-assets/{$id}/icon",
+                // Compatibility field retained for the current Games UI.
                 'players' => $game['players'] ?? null,
-                'genre' => $game['genre'] ?? [],
-                'experience' => [
-                    'category' => $experience['category'] ?? 'game',
-                    'featured' => (bool)($experience['featured'] ?? false),
-                    'multiplayer' => (bool)($experience['multiplayer'] ?? false),
-                ],
 
                 'source' => [
                     'type' => $backendType,
@@ -250,18 +240,6 @@ class GameCatalog
                     'credit_cost' => (int)($config['credit_cost'] ?? 0),
                 ],
 
-                'type' => 'webdoor',
-                'path' => $path,
-                'icon' => $icon,
-                'icon_url' => "/webdoors/{$path}/{$icon}",
-                'players' => null,
-                'genre' => [],
-                'experience' => [
-                    'category' => 'game',
-                    'featured' => false,
-                    'multiplayer' => $multiplayer,
-                ],
-
                 'source' => [
                     'type' => 'web',
                     'manifest' => $manifest,
@@ -352,18 +330,6 @@ class GameCatalog
                     'enabled' => true,
                     'admin_only' => false,
                     'credit_cost' => (int)($config['credit_cost'] ?? 0),
-                ],
-
-                'type' => 'jsdosdoor',
-                'path' => $id,
-                'icon' => $icon,
-                'icon_url' => "/jsdos-doors/{$path}/{$icon}",
-                'players' => null,
-                'genre' => [],
-                'experience' => [
-                    'category' => 'game',
-                    'featured' => false,
-                    'multiplayer' => false,
                 ],
 
                 'source' => [
