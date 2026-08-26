@@ -98,18 +98,31 @@
                         <p class="card-text text-muted small mb-2">{{ game.description }}</p>
 
                         {% if game.capabilities.multiplayer %}
+                            {% set experience_state = experience_states[game.id]|default(null) %}
                             <a
                                 href="/experiences/{{ game.id }}"
                                 class="experience-presence-link text-decoration-none"
                                 aria-label="View {{ game.name }} Experience"
                             >
                                 <div
-                                    class="experience-presence small text-muted mb-2"
+                                    class="experience-presence small mb-2"
                                     data-experience-id="{{ game.id }}"
                                     aria-live="polite"
                                 >
-                                    <i class="fas fa-circle-notch fa-spin me-1" aria-hidden="true"></i>
-                                    <span>Checking players...</span>
+                                    {% if experience_state and experience_state.active %}
+                                        <i class="fas fa-circle text-success me-1" aria-hidden="true"></i>
+                                        <strong>LIVE</strong>
+                                        <span class="ms-1">
+                                            {% if experience_state.player_count == 1 and experience_state.players[0] is defined %}
+                                                {{ experience_state.players[0].username }}{% if experience_state.players[0].presence %} — {{ experience_state.players[0].presence }}{% endif %}
+                                            {% else %}
+                                                {{ experience_state.player_count }} players online
+                                            {% endif %}
+                                        </span>
+                                    {% else %}
+                                        <i class="far fa-circle me-1" aria-hidden="true"></i>
+                                        <span>No players online</span>
+                                    {% endif %}
                                 </div>
                             </a>
                         {% endif %}

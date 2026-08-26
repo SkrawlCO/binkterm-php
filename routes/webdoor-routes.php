@@ -127,6 +127,15 @@ SimpleRouter::get('/games', function() {
     $catalog = new \BinktermPHP\GameCatalog();
     $games = array_values($catalog->getEnabledGames($user, 'web'));
 
+    // Crossroads provides one collection-level live state read for the
+    // discovery page. The existing browser presence polling remains in place
+    // for live updates; this server-side snapshot gives the template a
+    // normalized initial state without one query per Experience.
+    $experienceStates = (new \BinktermPHP\ExperienceState())->getExperienceStates(
+        $user,
+        'web'
+    );
+
     // Sort all games by name
     usort($games, function($a, $b) {
         return strcasecmp($a['name'], $b['name']);
@@ -205,6 +214,7 @@ SimpleRouter::get('/games', function() {
     $template = new Template();
     $template->renderResponse('webdoors.twig', [
         'games' => $games,
+        'experience_states' => $experienceStates,
         'leaderboard' => $leaderboard,
         'leaderboard_month_label' => $leaderboardMonthLabel,
         'leaderboard_month_offset' => $monthOffset
