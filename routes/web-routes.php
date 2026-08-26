@@ -8,6 +8,8 @@ use BinktermPHP\Advertising;
 use BinktermPHP\BbsConfig;
 use BinktermPHP\BulletinManager;
 use BinktermPHP\Config;
+use BinktermPHP\ExperienceState;
+use BinktermPHP\GameCatalog;
 use BinktermPHP\I18n\LocaleResolver;
 use BinktermPHP\I18n\Translator;
 use BinktermPHP\MessageHandler;
@@ -176,6 +178,54 @@ if (!function_exists('pgpDiscoveryHostConfig')) {
         ];
     }
 }
+
+/**
+ * Experience lobby.
+ *
+ * This is a presentation surface around the normalized Experience contract.
+ * Launch behavior remains owned by /games/{game}.
+ */
+SimpleRouter::get('/experiences/{experienceId}', function(string $experienceId) {
+    $user = RouteHelper::requireAuth();
+
+    $catalog = new GameCatalog();
+    $experiences = $catalog->getEnabledGames($user, 'web');
+
+    if (!isset($experiences[$experienceId])) {
+        http_response_code(404);
+
+        $template = new Template();
+        $template->renderResponse('404.twig', [
+            'requested_url' => "/experiences/{$experienceId}",
+        ]);
+        return;
+    }
+
+    $experience = $experiences[$experienceId];
+
+    $state = (new ExperienceState())->getExperienceState(
+        $experienceId,
+        $user,
+        'web'
+    );
+
+    if ($state === null) {
+        http_response_code(404);
+
+        $template = new Template();
+        $template->renderResponse('404.twig', [
+            'requested_url' => "/experiences/{$experienceId}",
+        ]);
+        return;
+    }
+
+    $template = new Template();
+    $template->renderResponse('experience_lobby.twig', [
+        'experience' => $experience,
+        'state' => $state,
+        'launch_url' => "/games/{$experienceId}",
+    ]);
+});
 
 SimpleRouter::get('/', function() {
     $auth = new Auth();

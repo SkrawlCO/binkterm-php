@@ -1,0 +1,115 @@
+{% extends "base.twig" %}
+
+{% block title %}{{ experience.name }} - {{ system_name }}{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+
+    <div class="row justify-content-center">
+        <div class="col-12 col-lg-9 col-xl-8">
+
+            <div class="card shadow-sm">
+                <div class="card-body p-4">
+
+                    <div class="d-flex align-items-start gap-3 mb-4">
+                        <img
+                            src="{{ experience.icon_url|default('/favicon.svg') }}"
+                            alt="{{ experience.name }}"
+                            class="rounded"
+                            style="width: 96px; height: 96px; object-fit: cover;"
+                            onerror="this.src='/favicon.svg'"
+                        >
+
+                        <div class="flex-grow-1">
+                            <h1 class="h3 mb-1">{{ experience.name }}</h1>
+
+                            {% if experience.author or experience.version %}
+                                <div class="text-muted small mb-2">
+                                    {% if experience.version %}v{{ experience.version }}{% endif %}
+                                    {% if experience.version and experience.author %} · {% endif %}
+                                    {% if experience.author %}by {{ experience.author }}{% endif %}
+                                </div>
+                            {% endif %}
+
+                            <p class="text-muted mb-0">
+                                {{ experience.description }}
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="border rounded p-3 mb-4">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <div>
+                                <div class="fw-semibold">
+                                    <i class="fas fa-users me-1" aria-hidden="true"></i>
+                                    Live Players
+                                </div>
+                                <div class="text-muted small">
+                                    {% if state.player_count == 0 %}
+                                        No players are currently in the Experience.
+                                    {% elseif state.player_count == 1 %}
+                                        1 player is currently in the Experience.
+                                    {% else %}
+                                        {{ state.player_count }} players are currently in the Experience.
+                                    {% endif %}
+                                </div>
+                            </div>
+
+                            {% if state.active %}
+                                <span class="badge bg-success">
+                                    <i class="fas fa-circle me-1" aria-hidden="true"></i>
+                                    LIVE
+                                </span>
+                            {% else %}
+                                <span class="badge bg-secondary">
+                                    Offline
+                                </span>
+                            {% endif %}
+                        </div>
+
+                        {% if state.players|length > 0 %}
+                            <div class="list-group">
+                                {% for player in state.players %}
+                                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <div class="fw-semibold">{{ player.username }}</div>
+                                            {% if player.presence %}
+                                                <div class="text-muted small">
+                                                    {{ player.presence }}
+                                                </div>
+                                            {% endif %}
+                                        </div>
+
+                                        <span class="badge bg-secondary-subtle text-dark">
+                                            Node {{ player.node }}
+                                        </span>
+                                    </div>
+                                {% endfor %}
+                            </div>
+                        {% else %}
+                            <div class="text-muted small">
+                                Be the first player in.
+                            </div>
+                        {% endif %}
+                    </div>
+
+                    <div class="d-flex justify-content-between align-items-center">
+                        <a href="/games" class="btn btn-outline-secondary">
+                            <i class="fas fa-arrow-left me-1" aria-hidden="true"></i>
+                            Back to Games
+                        </a>
+
+                        <a href="{{ launch_url }}" class="btn btn-primary">
+                            <i class="fas fa-play me-1" aria-hidden="true"></i>
+                            Play {{ experience.name }}
+                        </a>
+                    </div>
+
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+</div>
+{% endblock %}

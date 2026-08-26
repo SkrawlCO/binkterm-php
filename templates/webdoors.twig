@@ -98,14 +98,20 @@
                         <p class="card-text text-muted small mb-2">{{ game.description }}</p>
 
                         {% if game.capabilities.multiplayer %}
-                            <div
-                                class="experience-presence small text-muted mb-2"
-                                data-experience-id="{{ game.id }}"
-                                aria-live="polite"
+                            <a
+                                href="/experiences/{{ game.id }}"
+                                class="experience-presence-link text-decoration-none"
+                                aria-label="View {{ game.name }} Experience"
                             >
-                                <i class="fas fa-circle-notch fa-spin me-1" aria-hidden="true"></i>
-                                <span>Checking players...</span>
-                            </div>
+                                <div
+                                    class="experience-presence small text-muted mb-2"
+                                    data-experience-id="{{ game.id }}"
+                                    aria-live="polite"
+                                >
+                                    <i class="fas fa-circle-notch fa-spin me-1" aria-hidden="true"></i>
+                                    <span>Checking players...</span>
+                                </div>
+                            </a>
                         {% endif %}
 
                         <div class="d-flex justify-content-between align-items-center">
@@ -145,6 +151,12 @@
 .game-card:hover {
     transform: translateY(-2px);
     box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+.experience-presence-link {
+    display: block;
+}
+.experience-presence-link:hover .experience-presence {
+    text-decoration: underline;
 }
 .leaderboard-link {
     color: inherit;
