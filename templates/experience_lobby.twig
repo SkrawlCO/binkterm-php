@@ -146,7 +146,7 @@
                                         player: player,
                                         experience: experience,
                                         current_user: current_user,
-                                        participant_messaging: experience.actions.message_players|default(false)
+                                        participant_actions: experience.participant_actions|default({})
                                     } %}
                                 {% endfor %}
                             </div>

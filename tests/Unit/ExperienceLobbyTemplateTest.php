@@ -59,6 +59,10 @@ final class ExperienceLobbyTemplateTest extends TestCase
                 'capabilities' => [
                     'multiplayer' => $multiplayer,
                 ],
+                'participant_actions' => [
+                    'profile' => true,
+                    'message' => $participantMessaging,
+                ],
                 'capacity' => [
                     'max_sessions' => $maxSessions,
                 ],
@@ -451,7 +455,29 @@ final class ExperienceLobbyTemplateTest extends TestCase
         );
 
         self::assertStringContainsString(
-            "participant_messaging: experience.actions.message_players|default(false)",
+            "participant_actions: experience.participant_actions|default({})",
+            $source
+        );
+    }
+
+    public function testParticipantPartialUsesNormalizedParticipantActions(): void
+    {
+        $source = file_get_contents(
+            __DIR__ . '/../../templates/partials/experience_participant.twig'
+        );
+
+        self::assertStringContainsString(
+            'participant_actions.profile',
+            $source
+        );
+
+        self::assertStringContainsString(
+            'participant_actions.message',
+            $source
+        );
+
+        self::assertStringNotContainsString(
+            'experience.actions.message_players',
             $source
         );
     }
