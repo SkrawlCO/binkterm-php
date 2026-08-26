@@ -169,4 +169,38 @@ final class ExperienceReturnContractTest extends TestCase
             $template
         );
     }
+
+    public function testDoorLaunchResumesBeforeCapacityCheck(): void
+    {
+        $routes = file_get_contents(
+            dirname(__DIR__, 2) . '/routes/door-routes.php'
+        );
+
+        self::assertIsString($routes);
+
+        $resume = strpos(
+            $routes,
+            '$existingSession = $sessionManager->getUserSession($userId, $doorName);'
+        );
+
+        $capacity = strpos(
+            $routes,
+            '$activeSessions >= $maxNodes'
+        );
+
+        self::assertNotFalse($resume);
+        self::assertNotFalse($capacity);
+
+        self::assertLessThan(
+            $capacity,
+            $resume,
+            'Existing participation must be resumed before capacity can reject a launch.'
+        );
+
+        self::assertStringContainsString(
+            'Resuming existing session:',
+            $routes
+        );
+    }
+
 }

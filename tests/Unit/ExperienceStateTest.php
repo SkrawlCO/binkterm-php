@@ -959,6 +959,138 @@ final class ExperienceStateTest extends TestCase
         );
     }
 
+    public function testEndedDoorSessionIsNotActiveParticipation(): void
+    {
+        $db = new PDO('sqlite::memory:');
+
+        $db->exec("
+            CREATE TABLE users (
+                id INTEGER PRIMARY KEY,
+                username TEXT
+            );
+
+            CREATE TABLE door_sessions (
+                session_id TEXT,
+                user_id INTEGER,
+                door_id TEXT,
+                node_number INTEGER,
+                started_at TEXT,
+                ended_at TEXT,
+                expires_at TEXT
+            );
+
+            CREATE TABLE user_sessions (
+                user_id INTEGER,
+                public_activity TEXT,
+                last_activity TEXT,
+                expires_at TEXT
+            );
+        ");
+
+        $db->exec("
+            INSERT INTO users (id, username)
+            VALUES (3, 'Skrawl');
+
+            INSERT INTO door_sessions (
+                session_id, user_id, door_id, node_number,
+                started_at, ended_at, expires_at
+            ) VALUES (
+                'door_3_ended_contract',
+                3,
+                'usurper',
+                1,
+                '2026-08-25 22:00:00',
+                '2026-08-25 22:30:00',
+                '2099-01-01 00:00:00'
+            );
+        ");
+
+        $state = new ExperienceState(
+            $db,
+            new TestExperienceStateCatalog([
+                'usurper' => [
+                    'id' => 'usurper',
+                    'name' => 'Usurper Reborn',
+                    'category' => 'game',
+                ],
+            ])
+        );
+
+        $result = $state->getExperienceState('usurper');
+
+        self::assertIsArray($result);
+        self::assertFalse($result['active']);
+        self::assertSame(0, $result['session_count']);
+        self::assertSame(0, $result['player_count']);
+        self::assertSame([], $result['players']);
+    }
+
+    public function testExpiredDoorSessionIsNotActiveParticipation(): void
+    {
+        $db = new PDO('sqlite::memory:');
+
+        $db->exec("
+            CREATE TABLE users (
+                id INTEGER PRIMARY KEY,
+                username TEXT
+            );
+
+            CREATE TABLE door_sessions (
+                session_id TEXT,
+                user_id INTEGER,
+                door_id TEXT,
+                node_number INTEGER,
+                started_at TEXT,
+                ended_at TEXT,
+                expires_at TEXT
+            );
+
+            CREATE TABLE user_sessions (
+                user_id INTEGER,
+                public_activity TEXT,
+                last_activity TEXT,
+                expires_at TEXT
+            );
+        ");
+
+        $db->exec("
+            INSERT INTO users (id, username)
+            VALUES (3, 'Skrawl');
+
+            INSERT INTO door_sessions (
+                session_id, user_id, door_id, node_number,
+                started_at, ended_at, expires_at
+            ) VALUES (
+                'door_3_expired_contract',
+                3,
+                'usurper',
+                1,
+                '2026-08-25 22:00:00',
+                NULL,
+                '2000-01-01 00:00:00'
+            );
+        ");
+
+        $state = new ExperienceState(
+            $db,
+            new TestExperienceStateCatalog([
+                'usurper' => [
+                    'id' => 'usurper',
+                    'name' => 'Usurper Reborn',
+                    'category' => 'game',
+                ],
+            ])
+        );
+
+        $result = $state->getExperienceState('usurper');
+
+        self::assertIsArray($result);
+        self::assertFalse($result['active']);
+        self::assertSame(0, $result['session_count']);
+        self::assertSame(0, $result['player_count']);
+        self::assertSame([], $result['players']);
+    }
+
     public function testUnavailableExperienceReturnsNull(): void
     {
         $db = new PDO('sqlite::memory:');
