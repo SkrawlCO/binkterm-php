@@ -115,6 +115,153 @@ final class ExperienceStateTest extends TestCase
         );
     }
 
+    public function testParticipantContractIncludesNodeAndStartedAtForDoorSessions(): void
+    {
+        $db = new PDO('sqlite::memory:');
+
+        $db->exec("
+            CREATE TABLE users (
+                id INTEGER PRIMARY KEY,
+                username TEXT
+            );
+
+            CREATE TABLE door_sessions (
+                session_id TEXT,
+                user_id INTEGER,
+                door_id TEXT,
+                node_number INTEGER,
+                started_at TEXT,
+                ended_at TEXT,
+                expires_at TEXT
+            );
+
+            CREATE TABLE user_sessions (
+                user_id INTEGER,
+                public_activity TEXT,
+                last_activity TEXT,
+                expires_at TEXT
+            );
+        ");
+
+        $db->exec("
+            INSERT INTO users (id, username)
+            VALUES (3, 'Skrawl');
+
+            INSERT INTO door_sessions (
+                session_id, user_id, door_id, node_number,
+                started_at, ended_at, expires_at
+            ) VALUES (
+                'door_3_node2_contract',
+                3,
+                'usurper',
+                2,
+                '2026-08-25 22:00:00',
+                NULL,
+                '2099-01-01 00:00:00'
+            );
+        ");
+
+        $state = new ExperienceState(
+            $db,
+            new TestExperienceStateCatalog([
+                'usurper' => [
+                    'id' => 'usurper',
+                    'name' => 'Usurper Reborn',
+                    'category' => 'game',
+                ],
+            ])
+        );
+
+        $result = $state->getExperienceState('usurper');
+
+        self::assertIsArray($result);
+        self::assertCount(1, $result['players']);
+
+        $player = $result['players'][0];
+
+        self::assertSame(3, $player['user_id']);
+        self::assertSame('Skrawl', $player['username']);
+        self::assertSame('door_3_node2_contract', $player['session_id']);
+        self::assertNull($player['presence']);
+        self::assertSame(2, $player['node']);
+        self::assertIsInt($player['started_at']);
+        self::assertGreaterThan(0, $player['started_at']);
+    }
+
+    public function testWebExperienceParticipantHasNullNode(): void
+    {
+        $db = new PDO('sqlite::memory:');
+
+        $db->exec("
+            CREATE TABLE users (
+                id INTEGER PRIMARY KEY,
+                username TEXT
+            );
+
+            CREATE TABLE webdoor_sessions (
+                session_id TEXT,
+                user_id INTEGER,
+                game_id TEXT,
+                created_at TEXT,
+                ended_at TEXT,
+                expires_at TEXT
+            );
+
+            CREATE TABLE user_sessions (
+                user_id INTEGER,
+                public_activity TEXT,
+                last_activity TEXT,
+                expires_at TEXT
+            );
+        ");
+
+        $db->exec("
+            INSERT INTO users (id, username)
+            VALUES (4, 'WebPlayer');
+
+            INSERT INTO webdoor_sessions (
+                session_id, user_id, game_id,
+                created_at, ended_at, expires_at
+            ) VALUES (
+                'web_4_contract',
+                4,
+                'webgame',
+                '2026-08-25 22:00:00',
+                NULL,
+                '2099-01-01 00:00:00'
+            );
+        ");
+
+        $state = new ExperienceState(
+            $db,
+            new TestExperienceStateCatalog([
+                'webgame' => [
+                    'id' => 'webgame',
+                    'name' => 'Web Game',
+                    'category' => 'game',
+                    'backend' => [
+                        'type' => 'web',
+                    ],
+                ],
+            ])
+        );
+
+        $result = $state->getExperienceState('webgame');
+
+        self::assertIsArray($result);
+        self::assertCount(1, $result['players']);
+
+        $player = $result['players'][0];
+
+        self::assertSame(4, $player['user_id']);
+        self::assertSame('WebPlayer', $player['username']);
+        self::assertSame('web_4_contract', $player['session_id']);
+        self::assertNull($player['presence']);
+        self::assertNull($player['node']);
+        self::assertIsInt($player['started_at']);
+        self::assertGreaterThan(0, $player['started_at']);
+    }
+
     public function testMultipleSessionsForOneUserCountAsOnePlayer(): void
     {
         $db = new PDO('sqlite::memory:');
