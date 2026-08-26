@@ -836,6 +836,7 @@ SimpleRouter::get('/games/{game}', function($game) {
             'secondary_url' => $secondaryUrl,
             'secondary_label_key' => $secondaryLabelKey,
             'show_fullscreen_button' => false,
+            'return_url' => '/experiences/' . rawurlencode((string)$game),
         ]);
         return;
     }

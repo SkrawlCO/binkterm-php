@@ -113,4 +113,31 @@ final class ExperienceReturnContractTest extends TestCase
     }
 
 
+    public function testJsdosWrapperReturnsToExperience(): void
+    {
+        $routes = file_get_contents(
+            dirname(__DIR__, 2) . '/routes/webdoor-routes.php'
+        );
+        $player = file_get_contents(
+            dirname(__DIR__, 2) . '/templates/jsdosdoor_play.twig'
+        );
+
+        self::assertIsString($routes);
+        self::assertIsString($player);
+
+        self::assertStringContainsString(
+            "'return_url' => '/experiences/' . rawurlencode((string)\$game)",
+            $routes
+        );
+
+        self::assertStringContainsString(
+            "window.parent.postMessage({type: 'jsdos-exit'}, window.location.origin);",
+            $player
+        );
+
+        self::assertStringNotContainsString(
+            "window.top.location.href = '/games';",
+            $player
+        );
+    }
 }

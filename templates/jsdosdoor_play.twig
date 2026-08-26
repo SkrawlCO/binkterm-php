@@ -300,15 +300,6 @@
     }
 
     function notifyParentExit() {
-        try {
-            if (window.top && window.top !== window && window.top.location.origin === window.location.origin) {
-                window.top.location.href = '/games';
-                return true;
-            }
-        } catch (error) {
-            // Fall back to postMessage below if direct top navigation is not available.
-        }
-
         if (window.parent && window.parent !== window) {
             window.parent.postMessage({type: 'jsdos-exit'}, window.location.origin);
             return true;
