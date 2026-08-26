@@ -6,6 +6,7 @@
  */
 
 use BinktermPHP\ActivityTracker;
+use BinktermPHP\DoorContext;
 use BinktermPHP\ExperiencePresence;
 use BinktermPHP\GameCatalog;
 use BinktermPHP\DoorSessionManager;
@@ -116,6 +117,13 @@ SimpleRouter::post('/api/door/launch', function() {
         return;
     }
 
+    $doorContext = DoorContext::fromUser(
+        $user,
+        (string)$doorName,
+        'web',
+        $_COOKIE['binktermphp_session'] ?? null
+    );
+
     try {
         // Get BBS configuration for system name and sysop
         $binkpConfig = \BinktermPHP\Binkp\Config\BinkpConfig::getInstance();
@@ -146,7 +154,7 @@ SimpleRouter::post('/api/door/launch', function() {
         $sessionManager = new DoorSessionManager(null, true);
 
         // Check if user already has an active session for this door
-        $existingSession = $sessionManager->getUserSession($userId, $doorName);
+        $existingSession = $sessionManager->getUserSession($doorContext->userId, $doorName);
         if ($existingSession) {
             // User already has an active session for this door - return it
             // Bridge v3 owns the lifecycle, so if it's in DB, it's active
@@ -277,10 +285,10 @@ SimpleRouter::post('/api/door/launch', function() {
         }
 
         // Start new session
-        $session = $sessionManager->startSession($userId, $doorName, $userData, $doorType);
+        $session = $sessionManager->startSession($doorContext->userId, $doorName, $userData, $doorType);
 
         publishDoorExperiencePresence($user, $doorName);
-        ActivityTracker::track($userId, ActivityTracker::TYPE_DOSDOOR_PLAY, null, $doorName);
+        ActivityTracker::track($doorContext->userId, ActivityTracker::TYPE_DOSDOOR_PLAY, null, $doorName);
 
         // Build WebSocket URL for browser
         $wsUrl = \BinktermPHP\Config::env('DOSDOOR_WS_URL');
