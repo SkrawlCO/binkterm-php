@@ -154,11 +154,13 @@
                                             </div>
                                         </div>
 
-                                        <div class="text-end flex-shrink-0">
-                                            <span class="badge bg-secondary-subtle text-dark border">
-                                                Node {{ player.node }}
-                                            </span>
-                                        </div>
+                                        {% if player.node is not null %}
+                                            <div class="text-end flex-shrink-0">
+                                                <span class="badge bg-secondary-subtle text-dark border">
+                                                    Node {{ player.node }}
+                                                </span>
+                                            </div>
+                                        {% endif %}
                                     </div>
                                 {% endfor %}
                             </div>

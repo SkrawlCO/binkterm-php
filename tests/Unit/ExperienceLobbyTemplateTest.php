@@ -21,7 +21,8 @@ final class ExperienceLobbyTemplateTest extends TestCase
         string $iconUrl = '/door-assets/usurper/icon',
         string $launchUrl = '/games/nativedoors/usurper',
         string $launchType = 'native',
-        string $launchId = 'usurper'
+        string $launchId = 'usurper',
+        array $players = []
     ): string {
         $twig = new Environment(
             new FilesystemLoader(dirname(__DIR__, 2) . '/templates')
@@ -69,8 +70,8 @@ final class ExperienceLobbyTemplateTest extends TestCase
             'state' => [
                 'active' => $sessionCount > 0,
                 'session_count' => $sessionCount,
-                'player_count' => 0,
-                'players' => [],
+                'player_count' => count($players),
+                'players' => $players,
             ],
             'launch' => $launchEnabled ? [
                 'type' => $launchType,
@@ -206,6 +207,64 @@ final class ExperienceLobbyTemplateTest extends TestCase
         self::assertStringNotContainsString(
             'aria-label="Experience capacity"',
             $html
+        );
+    }
+
+    public function testPlayerNodeIsShownOnlyWhenRuntimeProvidesOne(): void
+    {
+        $nativeHtml = $this->renderLobby(
+            1,
+            10,
+            true,
+            null,
+            'Usurper Reborn',
+            true,
+            '/door-assets/usurper/icon',
+            '/games/nativedoors/usurper',
+            'native',
+            'usurper',
+            [[
+                'user_id' => 3,
+                'username' => 'Skrawl',
+                'session_id' => 'native-usurper-test',
+                'presence' => 'Playing Usurper Reborn',
+                'node' => 3,
+                'started_at' => time(),
+            ]]
+        );
+
+        self::assertStringContainsString('Skrawl', $nativeHtml);
+        self::assertMatchesRegularExpression(
+            '/<span class="badge bg-secondary-subtle text-dark border">\s*Node 3\s*<\/span>/',
+            $nativeHtml
+        );
+
+        $webHtml = $this->renderLobby(
+            1,
+            null,
+            true,
+            null,
+            'Blackjack',
+            false,
+            '/webdoors/blackjack/icon.svg',
+            '/games/blackjack',
+            'web',
+            'blackjack',
+            [[
+                'user_id' => 3,
+                'username' => 'Skrawl',
+                'session_id' => 'webdoor-blackjack-test',
+                'presence' => 'Playing Blackjack',
+                'node' => null,
+                'started_at' => time(),
+            ]]
+        );
+
+        self::assertStringContainsString('Skrawl', $webHtml);
+        self::assertStringContainsString('Playing Blackjack', $webHtml);
+        self::assertDoesNotMatchRegularExpression(
+            '/<span class="badge bg-secondary-subtle text-dark border">\s*Node \d+\s*<\/span>/',
+            $webHtml
         );
     }
 

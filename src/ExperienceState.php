@@ -63,27 +63,100 @@ class ExperienceState
         $now = gmdate('Y-m-d H:i:s');
         $presenceSince = gmdate('Y-m-d H:i:s', time() - (15 * 60));
 
-        $placeholders = implode(',', array_fill(0, count($experienceIds), '?'));
+        $doorExperienceIds = [];
+        $webExperienceIds = [];
 
-        $stmt = $this->db->prepare("
-            SELECT
-                ds.session_id,
-                ds.user_id,
-                ds.door_id,
-                ds.node_number,
-                ds.started_at,
-                u.username
-            FROM door_sessions ds
-            JOIN users u
-                ON u.id = ds.user_id
-            WHERE ds.door_id IN ($placeholders)
-              AND ds.ended_at IS NULL
-              AND ds.expires_at > ?
-            ORDER BY ds.door_id ASC, ds.started_at ASC
-        ");
+        foreach ($experiences as $experienceId => $experience) {
+            $backendType = (string)($experience['backend']['type'] ?? '');
 
-        $stmt->execute([...$experienceIds, $now]);
-        $sessions = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            if ($backendType === 'web') {
+                $webExperienceIds[] = (string)$experienceId;
+            } else {
+                // Native, DOS, and JS-DOS all use door_sessions today.
+                // Compatibility fixtures without backend metadata also
+                // retain the historical door_sessions behavior.
+                $doorExperienceIds[] = (string)$experienceId;
+            }
+        }
+
+        $sessions = [];
+
+        if (!empty($doorExperienceIds)) {
+            $placeholders = implode(
+                ',',
+                array_fill(0, count($doorExperienceIds), '?')
+            );
+
+            $stmt = $this->db->prepare("
+                SELECT
+                    ds.session_id,
+                    ds.user_id,
+                    ds.door_id AS experience_id,
+                    ds.node_number,
+                    ds.started_at,
+                    u.username
+                FROM door_sessions ds
+                JOIN users u
+                    ON u.id = ds.user_id
+                WHERE ds.door_id IN ($placeholders)
+                  AND ds.ended_at IS NULL
+                  AND ds.expires_at > ?
+                ORDER BY ds.door_id ASC, ds.started_at ASC
+            ");
+
+            $stmt->execute([...$doorExperienceIds, $now]);
+            $sessions = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        }
+
+        if (!empty($webExperienceIds)) {
+            $placeholders = implode(
+                ',',
+                array_fill(0, count($webExperienceIds), '?')
+            );
+
+            $stmt = $this->db->prepare("
+                SELECT
+                    ws.session_id,
+                    ws.user_id,
+                    ws.game_id AS experience_id,
+                    NULL AS node_number,
+                    ws.created_at AS started_at,
+                    u.username
+                FROM webdoor_sessions ws
+                JOIN users u
+                    ON u.id = ws.user_id
+                WHERE ws.game_id IN ($placeholders)
+                  AND ws.ended_at IS NULL
+                  AND ws.expires_at > ?
+                ORDER BY ws.game_id ASC, ws.created_at ASC
+            ");
+
+            $stmt->execute([...$webExperienceIds, $now]);
+
+            $sessions = array_merge(
+                $sessions,
+                $stmt->fetchAll(PDO::FETCH_ASSOC)
+            );
+        }
+
+        usort(
+            $sessions,
+            static function (array $a, array $b): int {
+                $experienceCompare = strcmp(
+                    (string)$a['experience_id'],
+                    (string)$b['experience_id']
+                );
+
+                if ($experienceCompare !== 0) {
+                    return $experienceCompare;
+                }
+
+                return strcmp(
+                    (string)$a['started_at'],
+                    (string)$b['started_at']
+                );
+            }
+        );
 
         $userIds = array_values(array_unique(array_map(
             static fn(array $session): int => (int)$session['user_id'],
@@ -140,7 +213,7 @@ class ExperienceState
         $seenUsersByExperience = [];
 
         foreach ($sessions as $session) {
-            $experienceId = (string)$session['door_id'];
+            $experienceId = (string)$session['experience_id'];
 
             if (!isset($states[$experienceId])) {
                 continue;
@@ -156,7 +229,9 @@ class ExperienceState
                 'username' => $session['username'],
                 'session_id' => $session['session_id'],
                 'presence' => $presenceByUser[$userId] ?? null,
-                'node' => (int)$session['node_number'],
+                'node' => $session['node_number'] !== null
+                    ? (int)$session['node_number']
+                    : null,
                 'started_at' => strtotime($session['started_at']),
             ];
 
@@ -202,22 +277,43 @@ class ExperienceState
         $now = gmdate('Y-m-d H:i:s');
         $presenceSince = gmdate('Y-m-d H:i:s', time() - (15 * 60));
 
-        $stmt = $this->db->prepare("
-            SELECT
-                ds.session_id,
-                ds.user_id,
-                ds.door_id,
-                ds.node_number,
-                ds.started_at,
-                u.username
-            FROM door_sessions ds
-            JOIN users u
-                ON u.id = ds.user_id
-            WHERE ds.door_id = ?
-              AND ds.ended_at IS NULL
-              AND ds.expires_at > ?
-            ORDER BY ds.started_at ASC
-        ");
+        $backendType = (string)($experience['backend']['type'] ?? '');
+
+        if ($backendType === 'web') {
+            $stmt = $this->db->prepare("
+                SELECT
+                    ws.session_id,
+                    ws.user_id,
+                    ws.game_id AS experience_id,
+                    NULL AS node_number,
+                    ws.created_at AS started_at,
+                    u.username
+                FROM webdoor_sessions ws
+                JOIN users u
+                    ON u.id = ws.user_id
+                WHERE ws.game_id = ?
+                  AND ws.ended_at IS NULL
+                  AND ws.expires_at > ?
+                ORDER BY ws.created_at ASC
+            ");
+        } else {
+            $stmt = $this->db->prepare("
+                SELECT
+                    ds.session_id,
+                    ds.user_id,
+                    ds.door_id AS experience_id,
+                    ds.node_number,
+                    ds.started_at,
+                    u.username
+                FROM door_sessions ds
+                JOIN users u
+                    ON u.id = ds.user_id
+                WHERE ds.door_id = ?
+                  AND ds.ended_at IS NULL
+                  AND ds.expires_at > ?
+                ORDER BY ds.started_at ASC
+            ");
+        }
 
         $stmt->execute([$experienceId, $now]);
         $sessions = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -253,7 +349,9 @@ class ExperienceState
                 'username' => $session['username'],
                 'session_id' => $session['session_id'],
                 'presence' => $presence !== false ? $presence : null,
-                'node' => (int)$session['node_number'],
+                'node' => $session['node_number'] !== null
+                    ? (int)$session['node_number']
+                    : null,
                 'started_at' => strtotime($session['started_at']),
             ];
 
