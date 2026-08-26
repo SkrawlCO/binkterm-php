@@ -1,0 +1,131 @@
+<?php
+
+declare(strict_types=1);
+
+namespace BinktermPHP\Tests\Unit;
+
+use PHPUnit\Framework\TestCase;
+use Twig\Environment;
+use Twig\Loader\FilesystemLoader;
+use Twig\TwigFunction;
+
+final class ExperienceLobbyTemplateTest extends TestCase
+{
+    private function renderLobby(
+        int $sessionCount,
+        int $maxSessions,
+        bool $launchEnabled = true
+    ): string {
+        $twig = new Environment(
+            new FilesystemLoader(dirname(__DIR__, 2) . '/templates')
+        );
+
+        // The production Template environment provides t(). These tests
+        // exercise Experience lobby behavior, so translation itself is
+        // intentionally stubbed with a deterministic value.
+        $twig->addFunction(new TwigFunction(
+            't',
+            static fn(string $key, array $params = [], ...$args): string => $key
+        ));
+
+        // base.twig also relies on this production Twig helper. The lobby
+        // behavior under test does not depend on feature flags, so keep the
+        // synthetic test environment deterministic.
+        $twig->addFunction(new TwigFunction(
+            'bbs_feature_enabled',
+            static fn(string $feature): bool => false
+        ));
+
+        return $twig->render('experience_lobby.twig', [
+            'experience' => [
+                'id' => 'usurper',
+                'name' => 'Usurper Reborn',
+                'description' => 'Usurper Reborn fantasy RPG BBS door.',
+                'icon' => 'fas fa-dungeon',
+                'capabilities' => [
+                    'multiplayer' => true,
+                ],
+                'capacity' => [
+                    'max_sessions' => $maxSessions,
+                ],
+                'policy' => [
+                    'credit_cost' => 0,
+                ],
+                'actions' => [
+                    'launch' => $launchEnabled,
+                ],
+            ],
+            'state' => [
+                'active' => $sessionCount > 0,
+                'session_count' => $sessionCount,
+                'player_count' => 0,
+                'players' => [],
+            ],
+            'launch' => $launchEnabled ? [
+                'type' => 'native',
+                'id' => 'usurper',
+                'url' => '/games/nativedoors/usurper',
+            ] : null,
+        ]);
+    }
+
+    public function testAvailableExperiencePresentsPlayableLaunch(): void
+    {
+        $html = $this->renderLobby(0, 10);
+
+        self::assertStringContainsString('Ready to launch.', $html);
+        self::assertStringContainsString('Available', $html);
+        self::assertStringContainsString('Play Usurper Reborn', $html);
+        self::assertStringContainsString(
+            'href="/games/nativedoors/usurper"',
+            $html
+        );
+        self::assertStringNotContainsString(
+            'aria-disabled="true"',
+            $html
+        );
+    }
+
+    public function testExperienceAtCapacityDisablesLaunch(): void
+    {
+        $html = $this->renderLobby(10, 10);
+
+        self::assertStringContainsString(
+            'This Experience is currently at capacity.',
+            $html
+        );
+        self::assertStringContainsString('At capacity', $html);
+        self::assertStringContainsString('At Capacity', $html);
+        self::assertStringContainsString(
+            'aria-disabled="true"',
+            $html
+        );
+        self::assertStringContainsString(
+            'tabindex="-1"',
+            $html
+        );
+        self::assertStringNotContainsString(
+            'Play Usurper Reborn',
+            $html
+        );
+    }
+
+    public function testUnavailableLaunchDoesNotRenderPlayAction(): void
+    {
+        $html = $this->renderLobby(0, 10, false);
+
+        self::assertStringContainsString(
+            'Launch is not currently available from this surface.',
+            $html
+        );
+        self::assertStringContainsString('Unavailable', $html);
+        self::assertStringNotContainsString(
+            'Play Usurper Reborn',
+            $html
+        );
+        self::assertStringNotContainsString(
+            'href="/games/nativedoors/usurper"',
+            $html
+        );
+    }
+}
