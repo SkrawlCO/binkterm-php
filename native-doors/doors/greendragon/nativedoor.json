@@ -13,7 +13,7 @@
             "Multiplayer"
         ],
         "players": "Multiplayer",
-        "icon": null,
+        "icon": "icon.png",
         "screenshot": null
     },
     "experience": {
