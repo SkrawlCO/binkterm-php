@@ -220,12 +220,15 @@ class DoorHandler
 
         $this->relayLoop($conn, $state, $wsSock, $terminalMode);
 
+        // Notify the API before closing the WebSocket so the active door
+        // session still exists when /api/door/end performs authorization
+        // and lifecycle cleanup. The bridge remains a safety-net cleanup
+        // path when the WebSocket closes unexpectedly.
+        $this->callDoorEndApi($session, $sessionId, $state['csrf_token'] ?? null);
+
         // Send WebSocket close frame and release the socket
         $this->wsSendClose($wsSock);
         @fclose($wsSock);
-
-        // Notify the API the session ended (best-effort; bridge also cleans up on disconnect)
-        $this->callDoorEndApi($session, $sessionId, $state['csrf_token'] ?? null);
 
         // Restore echo state
         $this->server->safeWrite($conn, chr(255) . chr(251) . chr(1)); // IAC WILL ECHO

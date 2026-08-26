@@ -485,9 +485,11 @@ SimpleRouter::post('/api/door/end', function() {
         $sessionManager = new DoorSessionManager(null, true);
         $session = $sessionManager->getSession($sessionId);
 
-        // Verify session belongs to current user
-        $userId = $user['user_id'] ?? $user['id'];
-        if (!$session || $session['user_id'] !== $userId) {
+        // Verify session belongs to current user.
+        // Normalize DB/user IDs to integers before strict comparison because
+        // PDO may return PostgreSQL integer columns as strings.
+        $userId = (int)($user['user_id'] ?? $user['id']);
+        if (!$session || (int)$session['user_id'] !== $userId) {
             doorApiError('errors.door.session_unauthorized', 'Unauthorized', 403);
             return;
         }
