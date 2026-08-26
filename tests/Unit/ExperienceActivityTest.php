@@ -71,7 +71,7 @@ final class ExperienceActivityTest extends TestCase
 
         self::assertCount(2, $activity);
 
-        self::assertSame('play', $activity[0]['type']);
+        self::assertSame('first_play', $activity[0]['type']);
         self::assertSame(3, $activity[0]['user_id']);
         self::assertSame('Skrawl', $activity[0]['username']);
         self::assertSame(
@@ -81,6 +81,7 @@ final class ExperienceActivityTest extends TestCase
 
         self::assertSame(7, $activity[1]['user_id']);
         self::assertSame('PlayerTwo', $activity[1]['username']);
+        self::assertSame('first_play', $activity[1]['type']);
     }
 
     public function testRecentActivityAcceptsWebDoorPlayEvents(): void
@@ -112,7 +113,7 @@ final class ExperienceActivityTest extends TestCase
         ]);
 
         self::assertCount(1, $activity);
-        self::assertSame('play', $activity[0]['type']);
+        self::assertSame('first_play', $activity[0]['type']);
         self::assertSame('Skrawl', $activity[0]['username']);
     }
 
@@ -209,4 +210,53 @@ final class ExperienceActivityTest extends TestCase
             (new ExperienceActivity($db))->recent([])
         );
     }
+
+    public function testOnlyEarliestPlayIsFirstPlay(): void
+    {
+        $db = $this->database();
+
+        $db->exec("
+            INSERT INTO users (id, username)
+            VALUES (3, 'Skrawl');
+
+            INSERT INTO user_activity_log (
+                user_id,
+                activity_type_id,
+                object_name,
+                created_at
+            ) VALUES
+                (
+                    3,
+                    " . ActivityTracker::TYPE_DOSDOOR_PLAY . ",
+                    'usurper',
+                    '2026-08-21 09:05:58+00'
+                ),
+                (
+                    3,
+                    " . ActivityTracker::TYPE_DOSDOOR_PLAY . ",
+                    'usurper',
+                    '2026-08-26 16:18:28+00'
+                );
+        ");
+
+        $activity = (new ExperienceActivity($db))->recent([
+            'backend' => [
+                'type' => 'native',
+                'id' => 'usurper',
+            ],
+        ]);
+
+        self::assertCount(2, $activity);
+
+        self::assertSame(
+            'play',
+            $activity[0]['type']
+        );
+
+        self::assertSame(
+            'first_play',
+            $activity[1]['type']
+        );
+    }
+
 }

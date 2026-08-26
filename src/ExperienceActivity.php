@@ -42,19 +42,33 @@ final class ExperienceActivity
         $limit = max(1, min($limit, 50));
 
         $stmt = $this->db->prepare("
+            WITH experience_plays AS (
+                SELECT
+                    al.id,
+                    al.user_id,
+                    al.activity_type_id,
+                    al.object_name,
+                    al.created_at,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY al.user_id
+                        ORDER BY al.created_at ASC, al.id ASC
+                    ) AS play_number
+                FROM user_activity_log al
+                WHERE al.activity_type_id IN (?, ?)
+                  AND al.object_name = ?
+            )
             SELECT
-                al.id,
-                al.user_id,
+                ep.id,
+                ep.user_id,
                 u.username,
-                al.activity_type_id,
-                al.object_name,
-                al.created_at
-            FROM user_activity_log al
+                ep.activity_type_id,
+                ep.object_name,
+                ep.created_at,
+                ep.play_number
+            FROM experience_plays ep
             LEFT JOIN users u
-              ON u.id = al.user_id
-            WHERE al.activity_type_id IN (?, ?)
-              AND al.object_name = ?
-            ORDER BY al.created_at DESC, al.id DESC
+              ON u.id = ep.user_id
+            ORDER BY ep.created_at DESC, ep.id DESC
             LIMIT {$limit}
         ");
 
@@ -69,7 +83,10 @@ final class ExperienceActivity
         foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
             $activity[] = [
                 'id' => (int)$row['id'],
-                'type' => 'play',
+                'type' => $row['user_id'] !== null
+                    && (int)$row['play_number'] === 1
+                        ? 'first_play'
+                        : 'play',
                 'user_id' => $row['user_id'] !== null
                     ? (int)$row['user_id']
                     : null,

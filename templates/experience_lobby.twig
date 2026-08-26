@@ -539,11 +539,15 @@ function renderExperienceActivity(activity = []) {
             ? `<span class="text-nowrap">${escapeHtml(occurredAt)}</span>`
             : '';
 
+        const activityLabel = entry.type === 'first_play'
+            ? 'played for the first time'
+            : 'played';
+
         return `
             <div class="d-flex flex-wrap justify-content-between gap-2 py-1">
                 <span>
                     <i class="fas fa-gamepad me-1" aria-hidden="true"></i>
-                    <strong>${username}</strong> played
+                    <strong>${username}</strong> ${activityLabel}
                 </span>
                 ${time}
             </div>

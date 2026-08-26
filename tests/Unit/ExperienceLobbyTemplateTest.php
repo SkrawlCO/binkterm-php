@@ -910,4 +910,24 @@ final class ExperienceLobbyTemplateTest extends TestCase
         );
     }
 
+
+    public function testExperienceLobbyDistinguishesFirstPlayActivity(): void
+    {
+        $source = file_get_contents(
+            __DIR__ . '/../../templates/experience_lobby.twig'
+        );
+
+        self::assertIsString($source);
+
+        self::assertStringContainsString(
+            "entry.type === 'first_play'",
+            $source
+        );
+
+        self::assertStringContainsString(
+            "'played for the first time'",
+            $source
+        );
+    }
+
 }
