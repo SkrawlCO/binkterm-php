@@ -77,6 +77,44 @@ final class GameCatalogTest extends TestCase
         }
     }
 
+    public function testNormalizedActionsAndCapabilitiesHaveStableTypes(): void
+    {
+        $games = $this->catalog->getEnabledGames(null, 'web');
+
+        foreach ($games as $game) {
+            self::assertIsArray($game['capabilities']);
+            self::assertIsBool(
+                $game['capabilities']['multiplayer'],
+                "Multiplayer capability must be boolean for {$game['id']}"
+            );
+
+            self::assertIsArray($game['actions']);
+            self::assertTrue(
+                $game['actions']['launch'],
+                "Launch action must be available for {$game['id']}"
+            );
+        }
+    }
+
+    public function testNormalizedBackendIdentityIsCanonical(): void
+    {
+        $games = $this->catalog->getEnabledGames(null, 'web');
+
+        foreach ($games as $game) {
+            self::assertSame(
+                $game['backend']['id'],
+                $game['id'],
+                "Backend identity mismatch for {$game['id']}"
+            );
+
+            self::assertSame(
+                $game['backend']['type'],
+                $game['source']['type'],
+                "Backend/source type mismatch for {$game['id']}"
+            );
+        }
+    }
+
     public function testCompatibilityFieldsRemainAvailable(): void
     {
         $games = $this->catalog->getEnabledGames(null, 'web');
