@@ -94,6 +94,10 @@ class GameCatalog
                     'multiplayer' => (bool)($experience['multiplayer'] ?? false),
                 ],
 
+                'actions' => [
+                    'launch' => true,
+                ],
+
                 'capacity' => [
                     // max_nodes is the runtime concurrency limit enforced
                     // by the door launch/session machinery.
@@ -211,6 +215,10 @@ class GameCatalog
                     'multiplayer' => $multiplayer,
                 ],
 
+                'actions' => [
+                    'launch' => true,
+                ],
+
                 'capacity' => [
                     'max_sessions' => null,
                 ],
@@ -304,6 +312,10 @@ class GameCatalog
 
                 'capabilities' => [
                     'multiplayer' => false,
+                ],
+
+                'actions' => [
+                    'launch' => true,
                 ],
 
                 'capacity' => [

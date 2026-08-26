@@ -46,6 +46,10 @@ final class GameCatalogTest extends TestCase
             self::assertArrayHasKey('multiplayer', $game['capabilities']);
             self::assertIsBool($game['capabilities']['multiplayer']);
 
+            self::assertArrayHasKey('actions', $game);
+            self::assertArrayHasKey('launch', $game['actions']);
+            self::assertIsBool($game['actions']['launch']);
+
             self::assertArrayHasKey('surfaces', $game);
             self::assertArrayHasKey('web', $game['surfaces']);
             self::assertArrayHasKey('telnet', $game['surfaces']);
