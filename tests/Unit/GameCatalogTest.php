@@ -187,6 +187,24 @@ final class GameCatalogTest extends TestCase
         }
     }
 
+    public function testUsurperExposesCanonicalScreenshotUrlWhenDeclared(): void
+    {
+        $games = (new \BinktermPHP\GameCatalog())->getEnabledGames(
+            ['id' => 3, 'user_id' => 3, 'is_admin' => true],
+            'web'
+        );
+
+        self::assertArrayHasKey('usurper', $games);
+        self::assertSame(
+            'screenshot.png',
+            $games['usurper']['presentation']['screenshot']
+        );
+        self::assertSame(
+            '/door-assets/usurper/screenshot',
+            $games['usurper']['presentation']['screenshot_url']
+        );
+    }
+
     public function testWebCatalogContainsMultipleBackendFamiliesWhenConfigured(): void
     {
         $games = $this->catalog->getEnabledGames(null, 'web');

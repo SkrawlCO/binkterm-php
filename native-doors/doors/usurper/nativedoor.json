@@ -11,7 +11,7 @@
     "genre": ["RPG"],
     "players": "Multiplayer",
     "icon": "icon.png",
-    "screenshot": null
+    "screenshot": "screenshot.png"
   },
   "door": {
     "executable": "UsurperReborn",
