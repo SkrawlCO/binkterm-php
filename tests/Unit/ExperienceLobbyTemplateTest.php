@@ -436,7 +436,7 @@ final class ExperienceLobbyTemplateTest extends TestCase
         );
 
         self::assertStringContainsString(
-            '<span class="badge bg-success me-1">Playing</span>',
+            '<span class="badge bg-success me-1" aria-label="Currently playing">Playing</span>',
             $html
         );
 
