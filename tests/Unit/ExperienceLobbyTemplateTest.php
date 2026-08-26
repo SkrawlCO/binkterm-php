@@ -19,7 +19,9 @@ final class ExperienceLobbyTemplateTest extends TestCase
         string $name = 'Usurper Reborn',
         bool $multiplayer = true,
         string $iconUrl = '/door-assets/usurper/icon',
-        string $launchUrl = '/games/nativedoors/usurper'
+        string $launchUrl = '/games/nativedoors/usurper',
+        string $launchType = 'native',
+        string $launchId = 'usurper'
     ): string {
         $twig = new Environment(
             new FilesystemLoader(dirname(__DIR__, 2) . '/templates')
@@ -71,8 +73,8 @@ final class ExperienceLobbyTemplateTest extends TestCase
                 'players' => [],
             ],
             'launch' => $launchEnabled ? [
-                'type' => 'native',
-                'id' => 'usurper',
+                'type' => $launchType,
+                'id' => $launchId,
                 'url' => $launchUrl,
             ] : null,
         ]);
@@ -164,6 +166,41 @@ final class ExperienceLobbyTemplateTest extends TestCase
             $html
         );
         self::assertStringContainsString('Play Blackjack', $html);
+
+        self::assertStringNotContainsString('Capacity:', $html);
+        self::assertStringNotContainsString(
+            'aria-label="Experience capacity"',
+            $html
+        );
+    }
+
+    public function testJsdosExperienceUsesSameCanonicalLobbyAndLaunchAction(): void
+    {
+        $html = $this->renderLobby(
+            0,
+            null,
+            true,
+            null,
+            'Doom',
+            false,
+            '/jsdos-doors/doomsw/icon-v2.png',
+            '/games/jsdos/doomsw',
+            'jsdos',
+            'doomsw'
+        );
+
+        self::assertStringContainsString('Doom', $html);
+        self::assertStringContainsString('Single Player', $html);
+        self::assertStringContainsString('Free to play', $html);
+        self::assertStringContainsString(
+            'src="/jsdos-doors/doomsw/icon-v2.png"',
+            $html
+        );
+        self::assertStringContainsString(
+            'href="/games/jsdos/doomsw"',
+            $html
+        );
+        self::assertStringContainsString('Play Doom', $html);
 
         self::assertStringNotContainsString('Capacity:', $html);
         self::assertStringNotContainsString(
