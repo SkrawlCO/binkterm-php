@@ -298,6 +298,8 @@ const EXPERIENCE_CAPABILITIES =
     {{ experience.capabilities|default({})|json_encode|raw }};
 
 let experienceConversationCursor = 0;
+let experienceCurrentPlayers = [];
+let experienceConversationMessages = [];
 
 async function refreshExperienceState() {
     const response = await fetch(
@@ -314,6 +316,10 @@ async function refreshExperienceState() {
 
 
 function updateExperiencePlayerSummary(state) {
+    experienceCurrentPlayers = Array.isArray(state.players)
+        ? state.players
+        : [];
+
     const summary = document.getElementById('experience-player-summary');
     if (!summary) return;
 
@@ -555,6 +561,36 @@ function getExperienceConversation() {
     };
 }
 
+function renderExperienceConversationIdentity(message) {
+    const username = String(
+        message.from_username || 'Unknown user'
+    );
+    const escapedUsername = escapeHtml(username);
+
+    const userId = Number(message.from_user_id || 0);
+
+    const player = experienceCurrentPlayers.find(candidate => {
+        if (userId > 0 && Number(candidate.user_id) === userId) {
+            return true;
+        }
+
+        return username !== 'Unknown user'
+            && String(candidate.username || '').toLowerCase()
+                === username.toLowerCase();
+    });
+
+    const identity = username === 'Unknown user'
+        ? escapedUsername
+        : `<a href="/profile/${encodeURIComponent(username)}"
+              class="text-decoration-none">${escapedUsername}</a>`;
+
+    const playing = player
+        ? '<span class="badge bg-success ms-2">Playing</span>'
+        : '';
+
+    return `<strong>${identity}</strong>${playing}`;
+}
+
 function renderExperienceConversation(messages = []) {
     const container = document.getElementById(
         'experience-conversation-messages'
@@ -568,9 +604,8 @@ function renderExperienceConversation(messages = []) {
     }
 
     container.innerHTML = messages.slice(-10).map(message => {
-        const username = escapeHtml(
-            message.from_username || 'Unknown user'
-        );
+        const identity =
+            renderExperienceConversationIdentity(message);
 
         const body = message.markup_html
             ? message.markup_html
@@ -586,9 +621,9 @@ function renderExperienceConversation(messages = []) {
 
         return `
             <div class="py-2 border-bottom"
-                 data-experience-chat-message="${escapeHtml(message.id || '')}">
+                 data-experience-chat-message="${escapeHtml(String(message.id || ''))}">
                 <div class="d-flex flex-wrap justify-content-between gap-2 mb-1">
-                    <strong>${username}</strong>
+                    <span>${identity}</span>
                     ${time}
                 </div>
                 <div>${body}</div>
@@ -615,9 +650,8 @@ function appendExperienceConversationMessage(message) {
         container.classList.remove('text-muted');
     }
 
-    const username = escapeHtml(
-        message.from_username || 'Unknown user'
-    );
+    const identity =
+        renderExperienceConversationIdentity(message);
 
     const body = message.markup_html
         ? message.markup_html
@@ -639,7 +673,7 @@ function appendExperienceConversationMessage(message) {
 
     row.innerHTML = `
         <div class="d-flex flex-wrap justify-content-between gap-2 mb-1">
-            <strong>${username}</strong>
+            <span>${identity}</span>
             ${time}
         </div>
         <div>${body}</div>
@@ -689,6 +723,10 @@ async function pollExperienceConversation() {
             message.type === 'room'
             && Number(message.room_id) === conversation.room_id
         ) {
+            experienceConversationMessages.push(message);
+            experienceConversationMessages =
+                experienceConversationMessages.slice(-10);
+
             appendExperienceConversationMessage(message);
         }
     });
@@ -752,6 +790,12 @@ async function sendExperienceConversationMessage() {
         input.value = '';
 
         if (result.local_message) {
+            experienceConversationMessages.push(
+                result.local_message
+            );
+            experienceConversationMessages =
+                experienceConversationMessages.slice(-10);
+
             appendExperienceConversationMessage(
                 result.local_message
             );
@@ -812,7 +856,8 @@ async function refreshExperienceConversation() {
 
     const messages = payload.messages || [];
 
-    renderExperienceConversation(messages);
+    experienceConversationMessages = messages.slice(-10);
+    renderExperienceConversation(experienceConversationMessages);
 }
 
 function formatExperienceActivityTime(value) {
@@ -891,6 +936,7 @@ function applyExperienceState(payload) {
     updateExperienceViewerActions(viewer);
     renderExperienceParticipants(state, actions);
     renderExperienceActivity(recentActivity);
+    renderExperienceConversation(experienceConversationMessages);
 }
 
 async function endExperienceParticipation() {

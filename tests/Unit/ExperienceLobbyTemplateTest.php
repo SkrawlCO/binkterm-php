@@ -1002,7 +1002,12 @@ final class ExperienceLobbyTemplateTest extends TestCase
         );
 
         self::assertStringContainsString(
-            'renderExperienceConversation(messages);',
+            'experienceConversationMessages = messages.slice(-10);',
+            $source
+        );
+
+        self::assertStringContainsString(
+            'renderExperienceConversation(experienceConversationMessages);',
             $source
         );
 
@@ -1173,6 +1178,90 @@ final class ExperienceLobbyTemplateTest extends TestCase
         );
     }
 
+    public function testExperienceConversationCachesMessagesForPresenceRerender(): void
+    {
+        $source = file_get_contents(
+            __DIR__ . '/../../templates/experience_lobby.twig'
+        );
+
+        self::assertIsString($source);
+
+        self::assertStringContainsString(
+            'let experienceConversationMessages = [];',
+            $source
+        );
+
+        self::assertStringContainsString(
+            'experienceConversationMessages = messages.slice(-10);',
+            $source
+        );
+
+        self::assertStringContainsString(
+            'renderExperienceConversation(experienceConversationMessages);',
+            $source
+        );
+    }
+
+    public function testExperienceConversationCachesNewMessages(): void
+    {
+        $source = file_get_contents(
+            __DIR__ . '/../../templates/experience_lobby.twig'
+        );
+
+        self::assertIsString($source);
+
+        self::assertStringContainsString(
+            'experienceConversationMessages.push(message);',
+            $source
+        );
+
+        self::assertStringContainsString(
+            'experienceConversationMessages.push(' . PHP_EOL
+                . '                result.local_message',
+            $source
+        );
+    }
+
+    public function testExperienceStateRerendersConversationAfterPresenceUpdate(): void
+    {
+        $source = file_get_contents(
+            __DIR__ . '/../../templates/experience_lobby.twig'
+        );
+
+        self::assertIsString($source);
+
+        $applyStart = strpos(
+            $source,
+            'function applyExperienceState(payload)'
+        );
+
+        self::assertNotFalse($applyStart);
+
+        $applyEnd = strpos(
+            $source,
+            "\n}\n",
+            $applyStart
+        );
+
+        self::assertNotFalse($applyEnd);
+
+        $applyFunction = substr(
+            $source,
+            $applyStart,
+            $applyEnd - $applyStart
+        );
+
+        self::assertStringContainsString(
+            'updateExperiencePlayerSummary(state);',
+            $applyFunction
+        );
+
+        self::assertStringContainsString(
+            'renderExperienceConversation(experienceConversationMessages);',
+            $applyFunction
+        );
+    }
+
     public function testExperienceConversationDoesNotReloadHistoryAfterSend(): void
     {
         $source = file_get_contents(
@@ -1208,6 +1297,49 @@ final class ExperienceLobbyTemplateTest extends TestCase
         self::assertStringContainsString(
             'result.local_message',
             $sendFunction
+        );
+    }
+
+
+    public function testConversationIdentityLinksProfilesAndShowsPlayingState(): void
+    {
+        $source = file_get_contents(
+            __DIR__ . '/../../templates/experience_lobby.twig'
+        );
+
+        self::assertIsString($source);
+
+        self::assertStringContainsString(
+            'let experienceCurrentPlayers = [];',
+            $source
+        );
+
+        self::assertStringContainsString(
+            'experienceCurrentPlayers = Array.isArray(state.players)',
+            $source
+        );
+
+        self::assertStringContainsString(
+            'function renderExperienceConversationIdentity(message)',
+            $source
+        );
+
+        self::assertStringContainsString(
+            '`<a href="/profile/${encodeURIComponent(username)}"',
+            $source
+        );
+
+        self::assertStringContainsString(
+            "badge bg-success ms-2\">Playing</span>",
+            $source
+        );
+
+        self::assertSame(
+            2,
+            substr_count(
+                $source,
+                'renderExperienceConversationIdentity(message);'
+            )
         );
     }
 
