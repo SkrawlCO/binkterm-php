@@ -268,6 +268,68 @@ final class ExperienceLobbyTemplateTest extends TestCase
         );
     }
 
+    public function testLivePlayerLinksToCanonicalBinkTermProfile(): void
+    {
+        $html = $this->renderLobby(
+            1,
+            10,
+            true,
+            null,
+            'Usurper Reborn',
+            true,
+            '/door-assets/usurper/icon',
+            '/games/nativedoors/usurper',
+            'native',
+            'usurper',
+            [[
+                'user_id' => 3,
+                'username' => 'Skrawl',
+                'session_id' => 'native-usurper-test',
+                'presence' => 'Playing Usurper Reborn',
+                'node' => 1,
+                'started_at' => time(),
+            ]]
+        );
+
+        self::assertStringContainsString(
+            'href="/profile/Skrawl"',
+            $html
+        );
+        self::assertMatchesRegularExpression(
+            '/<a[^>]+href="\/profile\/Skrawl"[^>]*>\s*Skrawl\s*<\/a>/',
+            $html
+        );
+    }
+
+    public function testLivePlayerProfileLinkUrlEncodesUsername(): void
+    {
+        $html = $this->renderLobby(
+            1,
+            10,
+            true,
+            null,
+            'Usurper Reborn',
+            true,
+            '/door-assets/usurper/icon',
+            '/games/nativedoors/usurper',
+            'native',
+            'usurper',
+            [[
+                'user_id' => 3,
+                'username' => 'Test User',
+                'session_id' => 'native-usurper-test',
+                'presence' => 'Playing Usurper Reborn',
+                'node' => 1,
+                'started_at' => time(),
+            ]]
+        );
+
+        self::assertStringContainsString(
+            'href="/profile/Test%20User"',
+            $html
+        );
+    }
+
     public function testAvailableExperiencePresentsPlayableLaunch(): void
     {
         $html = $this->renderLobby(0, 10);

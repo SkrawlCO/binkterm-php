@@ -1,0 +1,50 @@
+<?php
+
+declare(strict_types=1);
+
+use PHPUnit\Framework\TestCase;
+
+final class ExperienceApiContractTest extends TestCase
+{
+    private string $source;
+
+    protected function setUp(): void
+    {
+        $this->source = file_get_contents(
+            dirname(__DIR__, 2) . '/routes/api-routes.php'
+        );
+
+        self::assertIsString($this->source);
+    }
+
+    public function testExperienceApiPublishesCanonicalPlayerIdentity(): void
+    {
+        self::assertStringContainsString(
+            "'user_id' => (int)\$player['user_id']",
+            $this->source
+        );
+
+        self::assertStringContainsString(
+            "'username' => (string)\$player['username']",
+            $this->source
+        );
+    }
+
+    public function testExperienceApiPreservesNullNode(): void
+    {
+        self::assertStringContainsString(
+            "\$player['node'] !== null",
+            $this->source
+        );
+
+        self::assertStringContainsString(
+            "? (int)\$player['node']",
+            $this->source
+        );
+
+        self::assertStringNotContainsString(
+            "'node' => (int)\$player['node'],",
+            $this->source
+        );
+    }
+}

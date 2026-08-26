@@ -8719,9 +8719,12 @@ SimpleRouter::group(['prefix' => '/api'], function() {
 
         $players = array_map(static function(array $player): array {
             return [
+                'user_id' => (int)$player['user_id'],
                 'username' => (string)$player['username'],
                 'presence' => $player['presence'],
-                'node' => (int)$player['node'],
+                'node' => $player['node'] !== null
+                    ? (int)$player['node']
+                    : null,
             ];
         }, $state['players']);
 
