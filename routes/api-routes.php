@@ -8749,16 +8749,14 @@ SimpleRouter::group(['prefix' => '/api'], function() {
         }, $state['players']);
 
         $currentUserId = (int)($user['user_id'] ?? $user['id'] ?? 0);
-        $viewerPlayer = null;
-
-        if ($currentUserId > 0) {
-            foreach ($state['players'] as $player) {
-                if ((int)($player['user_id'] ?? 0) === $currentUserId) {
-                    $viewerPlayer = $player;
-                    break;
-                }
-            }
-        }
+        $viewerPlayer = \BinktermPHP\ExperienceParticipation::findViewerPlayer(
+            $state,
+            $currentUserId
+        );
+        $viewerActions = \BinktermPHP\ExperienceParticipation::viewerActions(
+            $experience,
+            $viewerPlayer
+        );
 
         echo json_encode([
             'success' => true,
@@ -8779,7 +8777,88 @@ SimpleRouter::group(['prefix' => '/api'], function() {
                 'node' => $viewerPlayer !== null && $viewerPlayer['node'] !== null
                     ? (int)$viewerPlayer['node']
                     : null,
+                'actions' => $viewerActions,
             ],
+        ]);
+    });
+
+    SimpleRouter::post('/experiences/{experienceId}/end', function(string $experienceId) {
+        header('Content-Type: application/json');
+
+        $user = RouteHelper::requireAuth();
+
+        $catalog = (new GameCatalog())->getEnabledGames($user, 'web');
+        $experience = $catalog[$experienceId] ?? null;
+
+        if ($experience === null) {
+            http_response_code(404);
+            apiError(
+                'errors.experience.not_found',
+                'Experience not found or unavailable',
+                $user
+            );
+            return;
+        }
+
+        $state = (new ExperienceState())->getExperienceState(
+            $experienceId,
+            $user,
+            'web'
+        );
+
+        if ($state === null) {
+            http_response_code(404);
+            apiError(
+                'errors.experience.not_found',
+                'Experience not found or unavailable',
+                $user
+            );
+            return;
+        }
+
+        $userId = (int)($user['user_id'] ?? $user['id'] ?? 0);
+        $viewerPlayer = \BinktermPHP\ExperienceParticipation::findViewerPlayer(
+            $state,
+            $userId
+        );
+
+        if ($viewerPlayer === null) {
+            http_response_code(409);
+            echo json_encode([
+                'success' => false,
+                'error' => 'No active participation to end',
+            ]);
+            return;
+        }
+
+        $participation = new \BinktermPHP\ExperienceParticipation();
+
+        if (!$participation->end($experience, $user, $viewerPlayer)) {
+            http_response_code(409);
+            echo json_encode([
+                'success' => false,
+                'error' => 'Unable to end active participation',
+            ]);
+            return;
+        }
+
+        try {
+            $authSessionId = $_COOKIE['binktermphp_session'] ?? null;
+
+            if (is_string($authSessionId) && $authSessionId !== '') {
+                (new \BinktermPHP\ExperiencePresence())->leave(
+                    $authSessionId
+                );
+            }
+        } catch (\Throwable $e) {
+            // Participation termination is authoritative. Presence cleanup
+            // remains best-effort and must not turn success into failure.
+        }
+
+        echo json_encode([
+            'success' => true,
+            'experience' => $experienceId,
+            'participating' => false,
         ]);
     });
 

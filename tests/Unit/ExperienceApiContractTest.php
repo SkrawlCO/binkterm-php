@@ -93,4 +93,36 @@ final class ExperienceApiContractTest extends TestCase
             $this->source
         );
     }
+
+    public function testExperienceApiPublishesNormalizedViewerActions(): void
+    {
+        self::assertStringContainsString(
+            '\\BinktermPHP\\ExperienceParticipation::viewerActions(',
+            $this->source
+        );
+
+        self::assertStringContainsString(
+            "'actions' => \$viewerActions",
+            $this->source
+        );
+    }
+
+    public function testExperienceApiDefinesNormalizedEndParticipationEndpoint(): void
+    {
+        self::assertStringContainsString(
+            "SimpleRouter::post('/experiences/{experienceId}/end'",
+            $this->source
+        );
+
+        self::assertStringContainsString(
+            'new \\BinktermPHP\\ExperienceParticipation()',
+            $this->source
+        );
+
+        self::assertStringContainsString(
+            '$participation->end($experience, $user, $viewerPlayer)',
+            $this->source
+        );
+    }
+
 }

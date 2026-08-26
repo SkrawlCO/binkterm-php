@@ -215,20 +215,31 @@
                             Back to Games
                         </a>
 
-                        {% if launch_supported %}
-                            <a id="experience-launch-button" href="{{ launch.url }}"
-                               class="btn btn-fidonet{% if at_capacity %} disabled{% endif %}"
-                               {% if at_capacity %}aria-disabled="true" tabindex="-1"{% endif %}>
-                                <i class="fas fa-play me-1" aria-hidden="true"></i>
-                                <span id="experience-launch-label">
-                                    {% if at_capacity %}
-                                        At Capacity
-                                    {% else %}
-                                        Play {{ experience.name }}
-                                    {% endif %}
-                                </span>
-                            </a>
-                        {% endif %}
+                        <div class="d-flex align-items-center gap-2">
+                            <button
+                                id="experience-end-button"
+                                type="button"
+                                class="btn btn-outline-danger d-none"
+                            >
+                                <i class="fas fa-stop me-1" aria-hidden="true"></i>
+                                End Participation
+                            </button>
+
+                            {% if launch_supported %}
+                                <a id="experience-launch-button" href="{{ launch.url }}"
+                                   class="btn btn-fidonet{% if at_capacity %} disabled{% endif %}"
+                                   {% if at_capacity %}aria-disabled="true" tabindex="-1"{% endif %}>
+                                    <i class="fas fa-play me-1" aria-hidden="true"></i>
+                                    <span id="experience-launch-label">
+                                        {% if at_capacity %}
+                                            At Capacity
+                                        {% else %}
+                                            Play {{ experience.name }}
+                                        {% endif %}
+                                    </span>
+                                </a>
+                            {% endif %}
+                        </div>
                     </div>
 
                 </div>
@@ -482,6 +493,20 @@ function renderExperienceParticipants(state, actions) {
     }).join('');
 }
 
+function updateExperienceViewerActions(viewer = null) {
+    const endButton = document.getElementById('experience-end-button');
+    if (!endButton) return;
+
+    const viewerActions = viewer && viewer.actions
+        ? viewer.actions
+        : {};
+
+    const canEnd = viewerActions.end === true;
+
+    endButton.classList.toggle('d-none', !canEnd);
+    endButton.disabled = !canEnd;
+}
+
 function applyExperienceState(payload) {
     const state = payload.state || {};
     const viewer = payload.viewer || null;
@@ -489,7 +514,75 @@ function applyExperienceState(payload) {
 
     updateExperiencePlayerSummary(state);
     updateExperienceLiveState(state, viewer);
+    updateExperienceViewerActions(viewer);
     renderExperienceParticipants(state, actions);
+}
+
+async function endExperienceParticipation() {
+    const endButton = document.getElementById('experience-end-button');
+    if (!endButton || endButton.disabled) {
+        return;
+    }
+
+    if (!window.confirm(
+        `End your active participation in ${EXPERIENCE_NAME}?`
+    )) {
+        return;
+    }
+
+    endButton.disabled = true;
+
+    try {
+        const csrfToken = document.querySelector(
+            'meta[name="csrf-token"]'
+        )?.content || '';
+
+        const response = await fetch(
+            `/api/experiences/${encodeURIComponent(EXPERIENCE_ID)}/end`,
+            {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': csrfToken,
+                },
+            }
+        );
+
+        const result = await response.json();
+
+        if (!response.ok || !result.success) {
+            throw new Error(
+                result.error || 'Unable to end active participation'
+            );
+        }
+
+        const payload = await refreshExperienceState();
+        applyExperienceState(payload);
+    } catch (error) {
+        window.alert(
+            error instanceof Error
+                ? error.message
+                : 'Unable to end active participation'
+        );
+
+        try {
+            const payload = await refreshExperienceState();
+            applyExperienceState(payload);
+        } catch (_) {
+            endButton.disabled = false;
+        }
+    }
+}
+
+const experienceEndButton = document.getElementById(
+    'experience-end-button'
+);
+
+if (experienceEndButton) {
+    experienceEndButton.addEventListener(
+        'click',
+        endExperienceParticipation
+    );
 }
 
 refreshExperienceState()

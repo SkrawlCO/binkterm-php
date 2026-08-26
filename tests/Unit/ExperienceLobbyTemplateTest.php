@@ -745,4 +745,110 @@ final class ExperienceLobbyTemplateTest extends TestCase
         );
     }
 
+
+    public function testExperienceLobbyDefinesNormalizedEndParticipationControl(): void
+    {
+        $source = file_get_contents(
+            __DIR__ . '/../../templates/experience_lobby.twig'
+        );
+
+        self::assertStringContainsString(
+            'id="experience-end-button"',
+            $source
+        );
+
+        self::assertStringContainsString(
+            'End Participation',
+            $source
+        );
+
+        self::assertStringContainsString(
+            'viewerActions.end === true',
+            $source
+        );
+
+        self::assertStringContainsString(
+            "endButton.classList.toggle('d-none', !canEnd)",
+            $source
+        );
+    }
+
+    public function testExperienceLobbyEndsParticipationThroughNormalizedApi(): void
+    {
+        $source = file_get_contents(
+            __DIR__ . '/../../templates/experience_lobby.twig'
+        );
+
+        self::assertStringContainsString(
+            'async function endExperienceParticipation()',
+            $source
+        );
+
+        self::assertStringContainsString(
+            '/api/experiences/${encodeURIComponent(EXPERIENCE_ID)}/end',
+            $source
+        );
+
+        self::assertStringContainsString(
+            "method: 'POST'",
+            $source
+        );
+
+        self::assertStringContainsString(
+            'const payload = await refreshExperienceState();',
+            $source
+        );
+
+        self::assertStringContainsString(
+            'applyExperienceState(payload);',
+            $source
+        );
+    }
+
+    public function testExperienceLobbyDoesNotExposeBackendSessionTermination(): void
+    {
+        $source = file_get_contents(
+            __DIR__ . '/../../templates/experience_lobby.twig'
+        );
+
+        self::assertStringNotContainsString(
+            '/api/door/end',
+            $source
+        );
+
+        self::assertStringNotContainsString(
+            '/api/jsdoor/session/',
+            $source
+        );
+
+        self::assertStringNotContainsString(
+            'webdoor_sessions',
+            $source
+        );
+    }
+
+    public function testEndParticipationSendsCsrfHeader(): void
+    {
+        $source = file_get_contents(
+            __DIR__ . '/../../templates/experience_lobby.twig'
+        );
+
+        self::assertIsString($source);
+
+        self::assertStringContainsString(
+            "meta[name=\"csrf-token\"]",
+            $source
+        );
+
+        self::assertStringContainsString(
+            "'X-CSRF-Token': csrfToken",
+            $source
+        );
+
+        self::assertStringContainsString(
+            "`/api/experiences/\${encodeURIComponent(EXPERIENCE_ID)}/end`",
+            $source
+        );
+    }
+
 }
