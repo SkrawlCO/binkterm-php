@@ -754,7 +754,8 @@ SimpleRouter::get('/games/{game}', function($game) {
         $template->renderResponse('dosdoor_play.twig', [
             'door' => $door,
             'door_id' => $game,
-            'player_url' => "/games/dosdoors/{$game}"
+            'player_url' => "/games/dosdoors/{$game}",
+            'return_url' => '/games'
         ]);
         return;
     }
@@ -779,7 +780,8 @@ SimpleRouter::get('/games/{game}', function($game) {
         $template->renderResponse('dosdoor_play.twig', [
             'door' => $nativeDoor,
             'door_id' => $game,
-            'player_url' => "/games/nativedoors/{$game}"
+            'player_url' => "/games/nativedoors/{$game}",
+            'return_url' => '/experiences/' . rawurlencode((string)$game)
         ]);
         return;
     }
