@@ -393,4 +393,38 @@ final class ExperienceLobbyTemplateTest extends TestCase
             $html
         );
     }
+
+    public function testLivePlayerOffersCanonicalChatDmLink(): void
+    {
+        $source = file_get_contents(__DIR__ . '/../../templates/experience_lobby.twig');
+
+        self::assertStringContainsString(
+            'href="/chat?dm_user_id={{ player.user_id }}"',
+            $source
+        );
+        self::assertStringContainsString(
+            'player.user_id != (current_user.user_id ?? current_user.id)',
+            $source
+        );
+        self::assertStringContainsString('Message', $source);
+    }
+
+    public function testChatSupportsCanonicalDmDeepLink(): void
+    {
+        $source = file_get_contents(__DIR__ . '/../../public_html/js/chat-page.js');
+
+        self::assertStringContainsString(
+            "params.get('dm_user_id')",
+            $source
+        );
+        self::assertStringContainsString(
+            "setActiveThread({ type: 'dm', id: deepLinkedDmUserId })",
+            $source
+        );
+        self::assertStringContainsString(
+            'userId === currentUserId',
+            $source
+        );
+    }
+
 }

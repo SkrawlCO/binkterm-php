@@ -565,7 +565,7 @@
             .then(res => res.json())
             .then(data => {
                 state.rooms = data.rooms || [];
-                if (!state.active.id) {
+                if (!state.active.id && !requestedDmUserId()) {
                     const lobby = state.rooms.find(room => room.name === 'Lobby') || state.rooms[0];
                     if (lobby) {
                         // Use setActiveThread() so the default room's unread count is cleared
@@ -579,13 +579,29 @@
             });
     }
 
+    function requestedDmUserId() {
+        const params = new URLSearchParams(window.location.search);
+        const raw = params.get('dm_user_id');
+        if (!raw) return null;
+
+        const userId = parseInt(raw, 10);
+        const currentUserId = parseInt(window.currentUserId, 10);
+
+        if (!Number.isInteger(userId) || userId <= 0 || userId === currentUserId) {
+            return null;
+        }
+
+        return userId;
+    }
+
     function refreshUsers() {
-        fetch('/api/chat/online')
+        return fetch('/api/chat/online')
             .then(res => res.json())
             .then(data => {
                 state.users = data.users || [];
                 renderUsers();
                 renderThreadHeader();
+                return state.users;
             });
     }
 
@@ -720,7 +736,17 @@
     }
 
     async function init() {
+        const deepLinkedDmUserId = requestedDmUserId();
+
         await loadState();
+
+        // An explicit DM URL is authoritative over persisted Chat state.
+        // This allows Experience "Message" links to open the requested
+        // conversation even when Chat previously remembered another thread.
+        if (deepLinkedDmUserId) {
+            state.active = { type: 'dm', id: deepLinkedDmUserId };
+        }
+
         // Clear the active thread's unread count immediately — its messages load on init,
         // so any persisted unread count from a previous session is stale.
         if (state.active.id) {
@@ -733,9 +759,16 @@
             loadOlderBtn.addEventListener('click', loadOlderMessages);
         }
         refreshRooms();
-        refreshUsers();
+
+        const usersPromise = refreshUsers();
+
         renderUnreadBadge();
-        if (state.active.id) {
+
+        if (deepLinkedDmUserId) {
+            usersPromise.then(() => {
+                setActiveThread({ type: 'dm', id: deepLinkedDmUserId });
+            });
+        } else if (state.active.id) {
             loadMessages();
         }
         setInterval(refreshUsers, 15000);

@@ -154,13 +154,21 @@
                                             </div>
                                         </div>
 
-                                        {% if player.node is not null %}
-                                            <div class="text-end flex-shrink-0">
+                                        <div class="d-flex align-items-center gap-2 flex-shrink-0">
+                                            {% if current_user and player.user_id != (current_user.user_id ?? current_user.id) %}
+                                                <a href="/chat?dm_user_id={{ player.user_id }}"
+                                                   class="btn btn-sm btn-outline-secondary">
+                                                    <i class="fas fa-comment me-1" aria-hidden="true"></i>
+                                                    Message
+                                                </a>
+                                            {% endif %}
+
+                                            {% if player.node is not null %}
                                                 <span class="badge bg-secondary-subtle text-dark border">
                                                     Node {{ player.node }}
                                                 </span>
-                                            </div>
-                                        {% endif %}
+                                            {% endif %}
+                                        </div>
                                     </div>
                                 {% endfor %}
                             </div>
