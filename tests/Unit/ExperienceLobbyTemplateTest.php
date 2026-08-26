@@ -851,4 +851,63 @@ final class ExperienceLobbyTemplateTest extends TestCase
         );
     }
 
+
+    public function testExperienceLobbyDefinesRecentActivitySurface(): void
+    {
+        $source = file_get_contents(
+            __DIR__ . '/../../templates/experience_lobby.twig'
+        );
+
+        self::assertIsString($source);
+
+        self::assertStringContainsString(
+            'id="experience-recent-activity"',
+            $source
+        );
+
+        self::assertStringContainsString(
+            'Recent Activity',
+            $source
+        );
+
+        self::assertStringContainsString(
+            'function renderExperienceActivity(activity = [])',
+            $source
+        );
+    }
+
+    public function testExperienceLobbyConsumesNormalizedRecentActivity(): void
+    {
+        $source = file_get_contents(
+            __DIR__ . '/../../templates/experience_lobby.twig'
+        );
+
+        self::assertIsString($source);
+
+        self::assertStringContainsString(
+            'const recentActivity = payload.recent_activity || [];',
+            $source
+        );
+
+        self::assertStringContainsString(
+            'renderExperienceActivity(recentActivity);',
+            $source
+        );
+
+        self::assertStringContainsString(
+            'activity.slice(0, 5).map(entry => {',
+            $source
+        );
+
+        self::assertStringContainsString(
+            'entry.username || \'Unknown user\'',
+            $source
+        );
+
+        self::assertStringContainsString(
+            'entry.occurred_at || \'\'',
+            $source
+        );
+    }
+
 }

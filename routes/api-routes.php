@@ -8758,6 +8758,9 @@ SimpleRouter::group(['prefix' => '/api'], function() {
             $viewerPlayer
         );
 
+        $recentActivity = (new \BinktermPHP\ExperienceActivity())
+            ->recent($experience, 10);
+
         echo json_encode([
             'success' => true,
             'experience' => $experienceId,
@@ -8771,6 +8774,7 @@ SimpleRouter::group(['prefix' => '/api'], function() {
                     'message' => (bool)($participantActions['message'] ?? false),
                 ],
             ],
+            'recent_activity' => $recentActivity,
             'viewer' => [
                 'participating' => $viewerPlayer !== null,
                 'session_id' => $viewerPlayer['session_id'] ?? null,

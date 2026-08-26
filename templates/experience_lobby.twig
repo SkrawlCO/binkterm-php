@@ -165,6 +165,17 @@
                         </div>
                     </div>
 
+                    <div class="border rounded p-3 mb-3">
+                        <div class="fw-semibold mb-2">
+                            <i class="fas fa-clock-rotate-left me-1" aria-hidden="true"></i>
+                            Recent Activity
+                        </div>
+
+                        <div id="experience-recent-activity" class="small text-muted">
+                            No recent activity yet.
+                        </div>
+                    </div>
+
                     {% set at_capacity = max_sessions and state.session_count >= max_sessions %}
                     {% set launch_supported = experience.actions.launch and launch %}
                     {% set credit_cost = experience.policy.credit_cost|default(0) %}
@@ -493,6 +504,53 @@ function renderExperienceParticipants(state, actions) {
     }).join('');
 }
 
+function formatExperienceActivityTime(value) {
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) {
+        return '';
+    }
+
+    return date.toLocaleString();
+}
+
+function renderExperienceActivity(activity = []) {
+    const container = document.getElementById(
+        'experience-recent-activity'
+    );
+
+    if (!container) return;
+
+    if (!Array.isArray(activity) || activity.length === 0) {
+        container.textContent = 'No recent activity yet.';
+        return;
+    }
+
+    container.innerHTML = activity.slice(0, 5).map(entry => {
+        const username = escapeHtml(
+            entry.username || 'Unknown user'
+        );
+
+        const occurredAt = formatExperienceActivityTime(
+            entry.occurred_at || ''
+        );
+
+        const time = occurredAt
+            ? `<span class="text-nowrap">${escapeHtml(occurredAt)}</span>`
+            : '';
+
+        return `
+            <div class="d-flex flex-wrap justify-content-between gap-2 py-1">
+                <span>
+                    <i class="fas fa-gamepad me-1" aria-hidden="true"></i>
+                    <strong>${username}</strong> played
+                </span>
+                ${time}
+            </div>
+        `;
+    }).join('');
+}
+
 function updateExperienceViewerActions(viewer = null) {
     const endButton = document.getElementById('experience-end-button');
     if (!endButton) return;
@@ -511,11 +569,13 @@ function applyExperienceState(payload) {
     const state = payload.state || {};
     const viewer = payload.viewer || null;
     const actions = state.participant_actions || {};
+    const recentActivity = payload.recent_activity || [];
 
     updateExperiencePlayerSummary(state);
     updateExperienceLiveState(state, viewer);
     updateExperienceViewerActions(viewer);
     renderExperienceParticipants(state, actions);
+    renderExperienceActivity(recentActivity);
 }
 
 async function endExperienceParticipation() {

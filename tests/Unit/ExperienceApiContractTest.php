@@ -125,4 +125,23 @@ final class ExperienceApiContractTest extends TestCase
         );
     }
 
+
+    public function testExperienceApiPublishesRecentActivity(): void
+    {
+        self::assertStringContainsString(
+            'new \\BinktermPHP\\ExperienceActivity()',
+            $this->source
+        );
+
+        self::assertStringContainsString(
+            '->recent($experience, 10)',
+            $this->source
+        );
+
+        self::assertStringContainsString(
+            "'recent_activity' => \$recentActivity",
+            $this->source
+        );
+    }
+
 }
