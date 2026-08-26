@@ -94,6 +94,12 @@ class GameCatalog
                     'multiplayer' => (bool)($experience['multiplayer'] ?? false),
                 ],
 
+                'capacity' => [
+                    'max_sessions' => isset($door['config']['max_sessions'])
+                        ? (int)$door['config']['max_sessions']
+                        : null,
+                ],
+
                 'surfaces' => [
                     'web' => empty($door['config']['hide_from_web']) ? 'full' : 'unavailable',
                     'telnet' => 'full',
@@ -203,6 +209,10 @@ class GameCatalog
                     'multiplayer' => $multiplayer,
                 ],
 
+                'capacity' => [
+                    'max_sessions' => null,
+                ],
+
                 'surfaces' => [
                     'web' => 'full',
                     'telnet' => 'planned',
@@ -292,6 +302,10 @@ class GameCatalog
 
                 'capabilities' => [
                     'multiplayer' => false,
+                ],
+
+                'capacity' => [
+                    'max_sessions' => null,
                 ],
 
                 'surfaces' => [

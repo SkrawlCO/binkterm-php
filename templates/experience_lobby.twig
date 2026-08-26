@@ -65,6 +65,13 @@
                                     Offline
                                 </span>
                             {% endif %}
+
+                            {% set max_sessions = experience.capacity.max_sessions|default(null) %}
+                            {% if max_sessions %}
+                                <span class="badge bg-secondary text-light border">
+                                    {{ state.session_count }} / {{ max_sessions }} slots
+                                </span>
+                            {% endif %}
                         </div>
 
                         {% if state.players|length > 0 %}
