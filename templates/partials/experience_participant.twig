@@ -13,7 +13,7 @@
     </div>
 
     <div class="d-flex align-items-center gap-2 flex-shrink-0">
-        {% if current_user and player.user_id != (current_user.user_id ?? current_user.id) %}
+        {% if participant_messaging and current_user and player.user_id != (current_user.user_id ?? current_user.id) %}
             <a href="/chat?dm_user_id={{ player.user_id }}"
                class="btn btn-sm btn-outline-secondary">
                 <i class="fas fa-comment me-1" aria-hidden="true"></i>

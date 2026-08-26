@@ -142,7 +142,12 @@
                         {% if state.players|length > 0 %}
                             <div class="list-group">
                                 {% for player in state.players %}
-                                    {% include 'partials/experience_participant.twig' %}
+                                    {% include 'partials/experience_participant.twig' with {
+                                        player: player,
+                                        experience: experience,
+                                        current_user: current_user,
+                                        participant_messaging: experience.actions.message_players|default(false)
+                                    } %}
                                 {% endfor %}
                             </div>
                         {% else %}

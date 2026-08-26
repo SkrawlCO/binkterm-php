@@ -23,7 +23,8 @@ final class ExperienceLobbyTemplateTest extends TestCase
         string $launchType = 'native',
         string $launchId = 'usurper',
         array $players = [],
-        ?int $currentUserId = null
+        ?int $currentUserId = null,
+        bool $participantMessaging = false
     ): string {
         $twig = new Environment(
             new FilesystemLoader(dirname(__DIR__, 2) . '/templates')
@@ -66,6 +67,7 @@ final class ExperienceLobbyTemplateTest extends TestCase
                 ],
                 'actions' => [
                     'launch' => $launchEnabled,
+                    'message_players' => $participantMessaging,
                 ],
             ],
             'state' => [
@@ -419,7 +421,8 @@ final class ExperienceLobbyTemplateTest extends TestCase
                 'node' => 2,
                 'started_at' => time(),
             ]],
-            3
+            3,
+            true
         );
 
         self::assertStringContainsString(
@@ -443,7 +446,12 @@ final class ExperienceLobbyTemplateTest extends TestCase
         );
 
         self::assertStringContainsString(
-            "{% include 'partials/experience_participant.twig' %}",
+            "{% include 'partials/experience_participant.twig' with {",
+            $source
+        );
+
+        self::assertStringContainsString(
+            "participant_messaging: experience.actions.message_players|default(false)",
             $source
         );
     }
