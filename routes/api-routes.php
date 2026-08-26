@@ -8,6 +8,7 @@ use BinktermPHP\BulletinManager;
 use BinktermPHP\Config;
 use BinktermPHP\Database;
 use BinktermPHP\ExperienceState;
+use BinktermPHP\GameCatalog;
 use BinktermPHP\I18n\LocaleResolver;
 use BinktermPHP\I18n\Translator;
 use BinktermPHP\MessageHandler;
@@ -8717,11 +8718,30 @@ SimpleRouter::group(['prefix' => '/api'], function() {
             return;
         }
 
+        $catalog = (new GameCatalog())->getEnabledGames($user, 'web');
+        $experience = $catalog[$experienceId] ?? null;
+
+        if ($experience === null) {
+            http_response_code(404);
+            apiError(
+                'errors.experience.not_found',
+                'Experience not found or unavailable',
+                $user
+            );
+            return;
+        }
+
+        $participantActions = $experience['participant_actions'] ?? [
+            'profile' => true,
+            'message' => false,
+        ];
+
         $players = array_map(static function(array $player): array {
             return [
                 'user_id' => (int)$player['user_id'],
                 'username' => (string)$player['username'],
                 'presence' => $player['presence'],
+                'presence_state' => $player['presence_state'],
                 'node' => $player['node'] !== null
                     ? (int)$player['node']
                     : null,
@@ -8736,6 +8756,10 @@ SimpleRouter::group(['prefix' => '/api'], function() {
                 'session_count' => (int)$state['session_count'],
                 'player_count' => (int)$state['player_count'],
                 'players' => $players,
+                'participant_actions' => [
+                    'profile' => (bool)($participantActions['profile'] ?? false),
+                    'message' => (bool)($participantActions['message'] ?? false),
+                ],
             ],
         ]);
     });

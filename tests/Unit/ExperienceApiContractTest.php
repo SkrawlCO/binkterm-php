@@ -30,6 +30,29 @@ final class ExperienceApiContractTest extends TestCase
         );
     }
 
+    public function testExperienceApiPublishesNormalizedParticipantContract(): void
+    {
+        self::assertStringContainsString(
+            "'presence_state' => \$player['presence_state']",
+            $this->source
+        );
+
+        self::assertStringContainsString(
+            "'participant_actions' =>",
+            $this->source
+        );
+
+        self::assertStringContainsString(
+            "'profile' =>",
+            $this->source
+        );
+
+        self::assertStringContainsString(
+            "'message' =>",
+            $this->source
+        );
+    }
+
     public function testExperienceApiPreservesNullNode(): void
     {
         self::assertStringContainsString(
