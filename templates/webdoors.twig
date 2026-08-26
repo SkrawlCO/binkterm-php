@@ -55,7 +55,7 @@
                         <td>{{ entry.display_name }}</td>
                         <td>
                             {% if entry.game_launch %}
-                                <a href="{{ entry.game_launch.url }}" class="leaderboard-link">{{ entry.game_name }}</a>
+                                <a href="/experiences/{{ entry.game_id }}" class="leaderboard-link">{{ entry.game_name }}</a>
                             {% else %}
                                 {{ entry.game_name }}
                             {% endif %}
@@ -144,7 +144,7 @@
                                 {% endif %}
                             </small>
                             {% if game.actions.launch and game.launch %}
-                                <a href="{{ game.launch.url }}" class="btn btn-primary btn-sm">
+                                <a href="/experiences/{{ game.id }}" class="btn btn-primary btn-sm">
                                     <i class="fas fa-play"></i> {{ t('ui.webdoors.launch', {}, locale, ['common']) }}
                                 </a>
                             {% endif %}

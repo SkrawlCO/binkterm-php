@@ -58,7 +58,20 @@ final class GamesHubTemplateTest extends TestCase
             'experience_states' => [
                 'usurper' => $state,
             ],
-            'leaderboard' => [],
+            'leaderboard' => [[
+                'rank' => 1,
+                'display_name' => 'Skrawl',
+                'score' => 1000,
+                'game_id' => 'usurper',
+                'game_name' => 'Usurper Reborn',
+                'game_launch' => [
+                    'type' => 'native',
+                    'id' => 'usurper',
+                    'url' => '/games/nativedoors/usurper',
+                ],
+                'board' => 'default',
+                'date' => '2026-08-26',
+            ]],
             'leaderboard_month_label' => 'August 2026',
             'leaderboard_month_offset' => 0,
         ]);
@@ -154,6 +167,44 @@ final class GamesHubTemplateTest extends TestCase
         self::assertStringContainsString(
             'setPresenceVisible(element, true);',
             $template
+        );
+    }
+    public function testLeaderboardGameEntersExperienceBeforeBackendPlayer(): void
+    {
+        $html = $this->renderHub([
+            'active' => false,
+            'session_count' => 0,
+            'player_count' => 0,
+            'players' => [],
+        ]);
+
+        self::assertStringContainsString(
+            'href="/experiences/usurper" class="leaderboard-link"',
+            $html
+        );
+
+        self::assertStringNotContainsString(
+            'href="/games/nativedoors/usurper" class="leaderboard-link"',
+            $html
+        );
+    }
+
+    public function testLaunchButtonEntersExperienceBeforeBackendPlayer(): void
+    {
+        $source = file_get_contents(
+            dirname(__DIR__, 2) . '/templates/webdoors.twig'
+        );
+
+        self::assertIsString($source);
+
+        self::assertStringContainsString(
+            'href="/experiences/{{ game.id }}" class="btn btn-primary btn-sm"',
+            $source
+        );
+
+        self::assertStringNotContainsString(
+            'href="{{ game.launch.url }}" class="btn btn-primary btn-sm"',
+            $source
         );
     }
 }
