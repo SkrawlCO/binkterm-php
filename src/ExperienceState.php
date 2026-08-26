@@ -229,6 +229,7 @@ class ExperienceState
                 'username' => $session['username'],
                 'session_id' => $session['session_id'],
                 'presence' => $presenceByUser[$userId] ?? null,
+                'presence_state' => 'playing',
                 'node' => $session['node_number'] !== null
                     ? (int)$session['node_number']
                     : null,
@@ -349,6 +350,7 @@ class ExperienceState
                 'username' => $session['username'],
                 'session_id' => $session['session_id'],
                 'presence' => $presence !== false ? $presence : null,
+                'presence_state' => 'playing',
                 'node' => $session['node_number'] !== null
                     ? (int)$session['node_number']
                     : null,
