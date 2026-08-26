@@ -122,10 +122,15 @@ SimpleRouter::post('/api/door/launch', function() {
         return;
     }
 
+    $surface = (string)($_POST['surface'] ?? 'web');
+    if (!in_array($surface, ['web', 'terminal'], true)) {
+        $surface = 'web';
+    }
+
     $doorContext = DoorContext::fromUser(
         $user,
         (string)$doorName,
-        'web',
+        $surface,
         $_COOKIE['binktermphp_session'] ?? null
     );
 

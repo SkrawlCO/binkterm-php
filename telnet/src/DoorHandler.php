@@ -1156,7 +1156,10 @@ class DoorHandler
         curl_setopt_array($ch, [
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_POST           => true,
-            CURLOPT_POSTFIELDS     => http_build_query(['door' => $doorId]),
+            CURLOPT_POSTFIELDS     => http_build_query([
+                'door' => $doorId,
+                'surface' => 'terminal',
+            ]),
             CURLOPT_HTTPHEADER     => $headers,
             CURLOPT_COOKIE         => 'binktermphp_session=' . $session,
             CURLOPT_TIMEOUT        => 15,

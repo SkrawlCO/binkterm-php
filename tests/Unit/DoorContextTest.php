@@ -139,6 +139,40 @@ class DoorContextTest extends TestCase
         );
     }
 
+    public function testTerminalLaunchRequestsTerminalSurface(): void
+    {
+        $handler = file_get_contents(
+            __DIR__ . '/../../telnet/src/DoorHandler.php'
+        );
+
+        $routes = file_get_contents(
+            __DIR__ . '/../../routes/door-routes.php'
+        );
+
+        self::assertIsString($handler);
+        self::assertIsString($routes);
+
+        self::assertStringContainsString(
+            "'door' => \$doorId",
+            $handler
+        );
+
+        self::assertStringContainsString(
+            "'surface' => 'terminal'",
+            $handler
+        );
+
+        self::assertStringContainsString(
+            "(\$_POST['surface'] ?? 'web')",
+            $routes
+        );
+
+        self::assertStringContainsString(
+            "'terminal'",
+            $routes
+        );
+    }
+
     public function testAuthenticatedWebLaunchContextUsesWebSurface(): void
     {
         $source = file_get_contents(
