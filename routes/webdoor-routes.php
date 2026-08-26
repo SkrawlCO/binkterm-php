@@ -153,7 +153,6 @@ SimpleRouter::get('/games', function() {
     foreach ($games as $game) {
         $gameLookup[$game['id']] = [
             'name' => $game['name'],  // Already has display_name override applied if configured
-            'path' => $game['path'],
             'launch' => $game['launch'] ?? null
         ];
     }
@@ -210,7 +209,6 @@ SimpleRouter::get('/games', function() {
                 'score' => (int)$row['score'],
                 'game_id' => $row['game_id'],
                 'game_name' => $gameInfo['name'] ?? ucfirst($row['game_id']),
-                'game_path' => $gameInfo['path'] ?? null,
                 'game_launch' => $gameInfo['launch'] ?? null,
                 'board' => $row['board'],
                 'date' => substr($row['created_at'], 0, 10)
