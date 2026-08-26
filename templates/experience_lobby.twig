@@ -11,6 +11,17 @@
             <div class="card shadow-sm">
                 <div class="card-body p-4">
 
+                    {% if experience.presentation.screenshot_url %}
+                        <div class="mb-4">
+                            <img
+                                src="{{ experience.presentation.screenshot_url }}"
+                                alt="{{ experience.name }} screenshot"
+                                class="img-fluid rounded border w-100"
+                                style="max-height: 520px; object-fit: contain;"
+                            >
+                        </div>
+                    {% endif %}
+
                     <div class="d-flex align-items-start gap-3 mb-4">
                         <img
                             src="{{ experience.presentation.icon_url|default('/favicon.svg') }}"

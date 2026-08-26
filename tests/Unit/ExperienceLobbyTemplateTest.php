@@ -14,7 +14,8 @@ final class ExperienceLobbyTemplateTest extends TestCase
     private function renderLobby(
         int $sessionCount,
         int $maxSessions,
-        bool $launchEnabled = true
+        bool $launchEnabled = true,
+        ?string $screenshotUrl = null
     ): string {
         $twig = new Environment(
             new FilesystemLoader(dirname(__DIR__, 2) . '/templates')
@@ -42,6 +43,10 @@ final class ExperienceLobbyTemplateTest extends TestCase
                 'name' => 'Usurper Reborn',
                 'description' => 'Usurper Reborn fantasy RPG BBS door.',
                 'icon' => 'fas fa-dungeon',
+                'presentation' => [
+                    'icon_url' => '/door-assets/usurper/icon',
+                    'screenshot_url' => $screenshotUrl,
+                ],
                 'capabilities' => [
                     'multiplayer' => true,
                 ],
@@ -67,6 +72,47 @@ final class ExperienceLobbyTemplateTest extends TestCase
                 'url' => '/games/nativedoors/usurper',
             ] : null,
         ]);
+    }
+
+    public function testExperienceRendersCanonicalScreenshotWhenPresent(): void
+    {
+        $html = $this->renderLobby(
+            0,
+            10,
+            true,
+            '/door-assets/usurper/screenshot'
+        );
+
+        self::assertStringContainsString(
+            'src="/door-assets/usurper/screenshot"',
+            $html
+        );
+        self::assertStringContainsString(
+            'alt="Usurper Reborn screenshot"',
+            $html
+        );
+        self::assertStringContainsString(
+            'src="/door-assets/usurper/icon"',
+            $html
+        );
+    }
+
+    public function testExperienceOmitsScreenshotHeroWhenAbsent(): void
+    {
+        $html = $this->renderLobby(0, 10);
+
+        self::assertStringNotContainsString(
+            'alt="Usurper Reborn screenshot"',
+            $html
+        );
+        self::assertStringNotContainsString(
+            'src="/door-assets/usurper/screenshot"',
+            $html
+        );
+        self::assertStringContainsString(
+            'src="/door-assets/usurper/icon"',
+            $html
+        );
     }
 
     public function testAvailableExperiencePresentsPlayableLaunch(): void
