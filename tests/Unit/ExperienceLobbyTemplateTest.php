@@ -22,7 +22,8 @@ final class ExperienceLobbyTemplateTest extends TestCase
         string $launchUrl = '/games/nativedoors/usurper',
         string $launchType = 'native',
         string $launchId = 'usurper',
-        array $players = []
+        array $players = [],
+        ?int $currentUserId = null
     ): string {
         $twig = new Environment(
             new FilesystemLoader(dirname(__DIR__, 2) . '/templates')
@@ -77,6 +78,9 @@ final class ExperienceLobbyTemplateTest extends TestCase
                 'type' => $launchType,
                 'id' => $launchId,
                 'url' => $launchUrl,
+            ] : null,
+            'current_user' => $currentUserId !== null ? [
+                'user_id' => $currentUserId,
             ] : null,
         ]);
     }
@@ -392,6 +396,44 @@ final class ExperienceLobbyTemplateTest extends TestCase
             'href="/games/nativedoors/usurper"',
             $html
         );
+    }
+
+    public function testLivePlayerOffersUniversalParticipantActions(): void
+    {
+        $html = $this->renderLobby(
+            1,
+            10,
+            true,
+            null,
+            'Usurper Reborn',
+            true,
+            '/door-assets/usurper/icon',
+            '/games/nativedoors/usurper',
+            'native',
+            'usurper',
+            [[
+                'user_id' => 7,
+                'username' => 'Bard',
+                'session_id' => 'native-usurper-bard',
+                'presence' => 'Playing Usurper Reborn',
+                'node' => 2,
+                'started_at' => time(),
+            ]],
+            3
+        );
+
+        self::assertStringContainsString(
+            'href="/profile/Bard"',
+            $html
+        );
+
+        self::assertStringContainsString(
+            'href="/chat?dm_user_id=7"',
+            $html
+        );
+
+        self::assertStringContainsString('Message', $html);
+        self::assertStringContainsString('Node 2', $html);
     }
 
     public function testLivePlayerOffersCanonicalChatDmLink(): void
