@@ -85,11 +85,11 @@
                     <div class="flex-grow-1">
                         <h5 class="card-title mb-1">
                             {{ game.name }}
-                            {% if game.type == 'dosdoor' %}
+                            {% if game.backend.type == 'dos' %}
                                 <span class="badge bg-info text-white" style="font-size: 0.65rem;">DOS</span>
-                            {% elseif game.type == 'nativedoor' %}
+                            {% elseif game.backend.type == 'native' %}
                                 <span class="badge bg-warning text-dark" style="font-size: 0.65rem;">NATIVE</span>
-                            {% elseif game.type == 'jsdosdoor' %}
+                            {% elseif game.backend.type == 'jsdos' %}
                                 <span class="badge bg-primary text-white" style="font-size: 0.65rem;">{{ t('ui.webdoors.type_jsdos', {}, locale, ['common']) }}</span>
                             {% else %}
                                 <span class="badge bg-success text-white" style="font-size: 0.65rem;">WEB</span>
@@ -129,7 +129,7 @@
 
                         <div class="d-flex justify-content-between align-items-center">
                             <small class="text-muted">
-                                {% if game.type == 'dosdoor' or game.type == 'nativedoor' %}
+                                {% if game.backend.type == 'dos' or game.backend.type == 'native' %}
                                     {% if game.players %}{{ t('ui.webdoors.players_count', {'count': game.players}, locale, ['common']) }}{% endif %}
                                     {% if game.version or game.author %}
                                         {% if game.players %} | {% endif %}
