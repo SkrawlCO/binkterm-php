@@ -73,7 +73,9 @@
                     </div>
 
                     <div class="border rounded p-3 mb-4">
-                        <div class="d-flex justify-content-between align-items-center mb-3">
+                        {% set max_sessions = experience.capacity.max_sessions|default(null) %}
+
+                        <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
                             <div>
                                 <div class="fw-semibold">
                                     <i class="fas fa-users me-1" aria-hidden="true"></i>
@@ -81,56 +83,81 @@
                                 </div>
                                 <div class="text-muted small">
                                     {% if state.player_count == 0 %}
-                                        No players are currently in the Experience.
+                                        No one is playing right now.
                                     {% elseif state.player_count == 1 %}
-                                        1 player is currently in the Experience.
+                                        1 player is in this Experience.
                                     {% else %}
-                                        {{ state.player_count }} players are currently in the Experience.
+                                        {{ state.player_count }} players are in this Experience.
                                     {% endif %}
                                 </div>
                             </div>
 
-                            {% if state.active %}
-                                <span class="badge bg-success">
-                                    <i class="fas fa-circle me-1" aria-hidden="true"></i>
-                                    LIVE
-                                </span>
-                            {% else %}
-                                <span class="badge bg-secondary">
-                                    Offline
-                                </span>
-                            {% endif %}
+                            <div class="d-flex flex-wrap gap-2 justify-content-end">
+                                {% if state.active %}
+                                    <span class="badge bg-success">
+                                        <i class="fas fa-circle me-1" aria-hidden="true"></i>
+                                        Live
+                                    </span>
+                                {% else %}
+                                    <span class="badge bg-secondary">
+                                        Quiet
+                                    </span>
+                                {% endif %}
 
-                            {% set max_sessions = experience.capacity.max_sessions|default(null) %}
-                            {% if max_sessions %}
-                                <span class="badge bg-secondary text-light border">
-                                    {{ state.session_count }} / {{ max_sessions }} slots
+                                <span class="badge bg-secondary-subtle text-dark border">
+                                    {{ state.session_count }}
+                                    active session{% if state.session_count != 1 %}s{% endif %}
                                 </span>
-                            {% endif %}
+
+                                {% if max_sessions %}
+                                    <span class="badge bg-secondary-subtle text-dark border">
+                                        {{ state.session_count }} / {{ max_sessions }} capacity
+                                    </span>
+                                {% endif %}
+                            </div>
                         </div>
+
+                        {% if max_sessions and max_sessions > 0 %}
+                            {% set occupancy_percent = ((state.session_count / max_sessions) * 100)|round %}
+                            <div class="progress mb-3"
+                                 role="progressbar"
+                                 aria-label="Experience capacity"
+                                 aria-valuenow="{{ state.session_count }}"
+                                 aria-valuemin="0"
+                                 aria-valuemax="{{ max_sessions }}"
+                                 style="height: 6px;">
+                                <div class="progress-bar"
+                                     style="width: {{ occupancy_percent > 100 ? 100 : occupancy_percent }}%;">
+                                </div>
+                            </div>
+                        {% endif %}
 
                         {% if state.players|length > 0 %}
                             <div class="list-group">
                                 {% for player in state.players %}
-                                    <div class="list-group-item d-flex justify-content-between align-items-center">
-                                        <div>
+                                    <div class="list-group-item d-flex justify-content-between align-items-center gap-3">
+                                        <div class="min-w-0">
                                             <div class="fw-semibold">{{ player.username }}</div>
-                                            {% if player.presence %}
-                                                <div class="text-muted small">
+                                            <div class="text-muted small">
+                                                {% if player.presence %}
                                                     {{ player.presence }}
-                                                </div>
-                                            {% endif %}
+                                                {% else %}
+                                                    Playing {{ experience.name }}
+                                                {% endif %}
+                                            </div>
                                         </div>
 
-                                        <span class="badge bg-secondary-subtle text-dark">
-                                            Node {{ player.node }}
-                                        </span>
+                                        <div class="text-end flex-shrink-0">
+                                            <span class="badge bg-secondary-subtle text-dark border">
+                                                Node {{ player.node }}
+                                            </span>
+                                        </div>
                                     </div>
                                 {% endfor %}
                             </div>
                         {% else %}
                             <div class="text-muted small">
-                                Be the first player in.
+                                Be the first one in.
                             </div>
                         {% endif %}
                     </div>
