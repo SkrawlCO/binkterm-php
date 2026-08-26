@@ -46,9 +46,29 @@ final class GameCatalogTest extends TestCase
             self::assertArrayHasKey('multiplayer', $game['capabilities']);
             self::assertIsBool($game['capabilities']['multiplayer']);
 
+            self::assertArrayHasKey(
+                'participant_messaging',
+                $game['capabilities']
+            );
+            self::assertIsBool(
+                $game['capabilities']['participant_messaging']
+            );
+
             self::assertArrayHasKey('actions', $game);
             self::assertArrayHasKey('launch', $game['actions']);
             self::assertIsBool($game['actions']['launch']);
+
+            self::assertArrayHasKey(
+                'message_players',
+                $game['actions']
+            );
+            self::assertIsBool($game['actions']['message_players']);
+
+            self::assertSame(
+                $game['capabilities']['participant_messaging'],
+                $game['actions']['message_players'],
+                "Participant messaging action must follow capability for {$game['id']}"
+            );
 
             self::assertArrayHasKey('surfaces', $game);
             self::assertArrayHasKey('web', $game['surfaces']);
@@ -108,6 +128,21 @@ final class GameCatalogTest extends TestCase
                 "Launch action must be available for {$game['id']}"
             );
         }
+    }
+
+    public function testUsurperExplicitlySupportsParticipantMessaging(): void
+    {
+        $games = $this->catalog->getEnabledGames(null, 'web');
+
+        self::assertArrayHasKey('usurper', $games);
+
+        self::assertTrue(
+            $games['usurper']['capabilities']['participant_messaging']
+        );
+
+        self::assertTrue(
+            $games['usurper']['actions']['message_players']
+        );
     }
 
     public function testNormalizedBackendIdentityIsCanonical(): void

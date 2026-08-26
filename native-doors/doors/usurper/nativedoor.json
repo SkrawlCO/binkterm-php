@@ -33,6 +33,7 @@
   "experience": {
     "category": "game",
     "featured": true,
-    "multiplayer": true
+    "multiplayer": true,
+    "participant_messaging": true
   }
 }

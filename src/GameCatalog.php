@@ -92,6 +92,7 @@ class GameCatalog
 
                 'capabilities' => [
                     'multiplayer' => (bool)($experience['multiplayer'] ?? false),
+                    'participant_messaging' => (bool)($experience['participant_messaging'] ?? false),
                 ],
 
                 'actions' => [
@@ -101,6 +102,7 @@ class GameCatalog
                             'id' => $id,
                         ],
                     ]),
+                    'message_players' => (bool)($experience['participant_messaging'] ?? false),
                 ],
 
                 'capacity' => [
@@ -211,6 +213,7 @@ class GameCatalog
 
                 'capabilities' => [
                     'multiplayer' => $multiplayer,
+                    'participant_messaging' => false,
                 ],
 
                 'actions' => [
@@ -220,6 +223,7 @@ class GameCatalog
                             'id' => $id,
                         ],
                     ]),
+                    'message_players' => false,
                 ],
 
                 'capacity' => [
@@ -306,6 +310,7 @@ class GameCatalog
 
                 'capabilities' => [
                     'multiplayer' => false,
+                    'participant_messaging' => false,
                 ],
 
                 'actions' => [
@@ -315,6 +320,7 @@ class GameCatalog
                             'id' => $id,
                         ],
                     ]),
+                    'message_players' => false,
                 ],
 
                 'capacity' => [
