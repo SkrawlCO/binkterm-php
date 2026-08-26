@@ -65,6 +65,20 @@ final class GameCatalogTest extends TestCase
             self::assertArrayHasKey('icon', $game['presentation']);
             self::assertArrayHasKey('icon_url', $game['presentation']);
             self::assertArrayHasKey('screenshot', $game['presentation']);
+            self::assertArrayHasKey('screenshot_url', $game['presentation']);
+
+            self::assertIsString($game['presentation']['icon_url']);
+            self::assertNotSame('', trim($game['presentation']['icon_url']));
+
+            if ($game['presentation']['screenshot'] === null) {
+                self::assertNull($game['presentation']['screenshot_url']);
+            } else {
+                self::assertIsString($game['presentation']['screenshot_url']);
+                self::assertNotSame(
+                    '',
+                    trim($game['presentation']['screenshot_url'])
+                );
+            }
 
             self::assertArrayHasKey('policy', $game);
             self::assertArrayHasKey('enabled', $game['policy']);

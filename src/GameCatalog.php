@@ -120,6 +120,9 @@ class GameCatalog
                     'icon' => $game['icon'] ?? null,
                     'icon_url' => "/door-assets/{$id}/icon",
                     'screenshot' => $game['screenshot'] ?? null,
+                    'screenshot_url' => !empty($game['screenshot'])
+                        ? "/door-assets/{$id}/screenshot"
+                        : null,
                 ],
 
                 'policy' => [
@@ -232,6 +235,9 @@ class GameCatalog
                     'icon' => $icon,
                     'icon_url' => "/webdoors/{$path}/{$icon}",
                     'screenshot' => $game['screenshot'] ?? null,
+                    'screenshot_url' => !empty($game['screenshot'])
+                        ? "/webdoors/{$path}/{$game['screenshot']}"
+                        : null,
                 ],
 
                 'policy' => [
@@ -324,6 +330,9 @@ class GameCatalog
                     'icon' => $icon,
                     'icon_url' => "/jsdos-doors/{$path}/{$icon}",
                     'screenshot' => $manifest['screenshot'] ?? null,
+                    'screenshot_url' => !empty($manifest['screenshot'])
+                        ? "/jsdos-doors/{$path}/{$manifest['screenshot']}"
+                        : null,
                 ],
 
                 'policy' => [
