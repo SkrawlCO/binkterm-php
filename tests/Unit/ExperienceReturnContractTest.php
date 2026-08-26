@@ -180,7 +180,7 @@ final class ExperienceReturnContractTest extends TestCase
 
         $resume = strpos(
             $routes,
-            '$existingSession = $sessionManager->getUserSession($userId, $doorName);'
+            '$existingSession = $sessionManager->getUserSession($doorContext->userId, $doorName);'
         );
 
         $capacity = strpos(
