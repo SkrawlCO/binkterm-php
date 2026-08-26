@@ -1,0 +1,30 @@
+<div class="list-group-item d-flex justify-content-between align-items-center gap-3">
+    <div class="min-w-0">
+        <div class="fw-semibold">
+            <a href="/profile/{{ player.username|url_encode }}" class="text-decoration-none">{{ player.username }}</a>
+        </div>
+        <div class="text-muted small">
+            {% if player.presence %}
+                {{ player.presence }}
+            {% else %}
+                Playing {{ experience.name }}
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="d-flex align-items-center gap-2 flex-shrink-0">
+        {% if current_user and player.user_id != (current_user.user_id ?? current_user.id) %}
+            <a href="/chat?dm_user_id={{ player.user_id }}"
+               class="btn btn-sm btn-outline-secondary">
+                <i class="fas fa-comment me-1" aria-hidden="true"></i>
+                Message
+            </a>
+        {% endif %}
+
+        {% if player.node is not null %}
+            <span class="badge bg-secondary-subtle text-dark border">
+                Node {{ player.node }}
+            </span>
+        {% endif %}
+    </div>
+</div>

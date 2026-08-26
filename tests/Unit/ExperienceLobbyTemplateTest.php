@@ -436,18 +436,34 @@ final class ExperienceLobbyTemplateTest extends TestCase
         self::assertStringContainsString('Node 2', $html);
     }
 
-    public function testLivePlayerOffersCanonicalChatDmLink(): void
+    public function testExperienceLobbyIncludesParticipantPartial(): void
     {
-        $source = file_get_contents(__DIR__ . '/../../templates/experience_lobby.twig');
+        $source = file_get_contents(
+            __DIR__ . '/../../templates/experience_lobby.twig'
+        );
+
+        self::assertStringContainsString(
+            "{% include 'partials/experience_participant.twig' %}",
+            $source
+        );
+    }
+
+    public function testParticipantPartialProvidesCanonicalChatDmLink(): void
+    {
+        $source = file_get_contents(
+            __DIR__ . '/../../templates/partials/experience_participant.twig'
+        );
 
         self::assertStringContainsString(
             'href="/chat?dm_user_id={{ player.user_id }}"',
             $source
         );
+
         self::assertStringContainsString(
             'player.user_id != (current_user.user_id ?? current_user.id)',
             $source
         );
+
         self::assertStringContainsString('Message', $source);
     }
 
