@@ -1094,4 +1094,106 @@ final class ExperienceLobbyTemplateTest extends TestCase
 
 
 
+
+    public function testExperienceConversationProvidesMessageComposer(): void
+    {
+        $source = file_get_contents(
+            __DIR__ . '/../../templates/experience_lobby.twig'
+        );
+
+        self::assertIsString($source);
+
+        self::assertStringContainsString(
+            'id="experience-conversation-input"',
+            $source
+        );
+
+        self::assertStringContainsString(
+            'maxlength="1000"',
+            $source
+        );
+
+        self::assertStringContainsString(
+            'id="experience-conversation-send"',
+            $source
+        );
+
+        self::assertStringContainsString(
+            'id="experience-conversation-error"',
+            $source
+        );
+    }
+
+    public function testExperienceConversationUsesExistingChatSendApi(): void
+    {
+        $source = file_get_contents(
+            __DIR__ . '/../../templates/experience_lobby.twig'
+        );
+
+        self::assertIsString($source);
+
+        self::assertStringContainsString(
+            "async function sendExperienceConversationMessage()",
+            $source
+        );
+
+        self::assertStringContainsString(
+            "fetch('/api/chat/send'",
+            $source
+        );
+
+        self::assertStringContainsString(
+            "'X-CSRF-Token': csrfToken",
+            $source
+        );
+
+        self::assertStringContainsString(
+            'room_id: conversation.room_id',
+            $source
+        );
+
+        self::assertStringContainsString(
+            'appendExperienceConversationMessage(',
+            $source
+        );
+    }
+
+    public function testExperienceConversationDoesNotReloadHistoryAfterSend(): void
+    {
+        $source = file_get_contents(
+            __DIR__ . '/../../templates/experience_lobby.twig'
+        );
+
+        self::assertIsString($source);
+
+        $sendStart = strpos(
+            $source,
+            'async function sendExperienceConversationMessage()'
+        );
+
+        $refreshStart = strpos(
+            $source,
+            'async function refreshExperienceConversation()'
+        );
+
+        self::assertNotFalse($sendStart);
+        self::assertNotFalse($refreshStart);
+
+        $sendFunction = substr(
+            $source,
+            $sendStart,
+            $refreshStart - $sendStart
+        );
+
+        self::assertStringNotContainsString(
+            'refreshExperienceConversation()',
+            $sendFunction
+        );
+
+        self::assertStringContainsString(
+            'result.local_message',
+            $sendFunction
+        );
+    }
+
 }

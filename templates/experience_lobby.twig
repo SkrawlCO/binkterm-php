@@ -178,10 +178,36 @@
 
                             <div
                                 id="experience-conversation-messages"
-                                class="small text-muted"
+                                class="small text-muted mb-3"
                             >
                                 Loading conversation…
                             </div>
+
+                            <div class="d-flex gap-2 align-items-end">
+                                <textarea
+                                    id="experience-conversation-input"
+                                    class="form-control"
+                                    rows="2"
+                                    maxlength="1000"
+                                    placeholder="Join the conversation…"
+                                    aria-label="Conversation message"
+                                ></textarea>
+
+                                <button
+                                    id="experience-conversation-send"
+                                    type="button"
+                                    class="btn btn-primary flex-shrink-0"
+                                >
+                                    <i class="fas fa-paper-plane me-1" aria-hidden="true"></i>
+                                    Send
+                                </button>
+                            </div>
+
+                            <div
+                                id="experience-conversation-error"
+                                class="small text-danger mt-2 d-none"
+                                role="alert"
+                            ></div>
                         </div>
                     {% endif %}
 
@@ -557,7 +583,8 @@ function renderExperienceConversation(messages = []) {
             : '';
 
         return `
-            <div class="py-2 border-bottom">
+            <div class="py-2 border-bottom"
+                 data-experience-chat-message="${escapeHtml(message.id || '')}">
                 <div class="d-flex flex-wrap justify-content-between gap-2 mb-1">
                     <strong>${username}</strong>
                     ${time}
@@ -566,6 +593,145 @@ function renderExperienceConversation(messages = []) {
             </div>
         `;
     }).join('');
+}
+
+function appendExperienceConversationMessage(message) {
+    const container = document.getElementById(
+        'experience-conversation-messages'
+    );
+
+    if (!container || !message) {
+        return;
+    }
+
+    const existing = container.querySelectorAll(
+        '[data-experience-chat-message]'
+    );
+
+    if (existing.length === 0) {
+        container.innerHTML = '';
+        container.classList.remove('text-muted');
+    }
+
+    const username = escapeHtml(
+        message.from_username || 'Unknown user'
+    );
+
+    const body = message.markup_html
+        ? message.markup_html
+        : escapeHtml(message.body || '');
+
+    const occurredAt = formatExperienceActivityTime(
+        message.created_at || ''
+    );
+
+    const time = occurredAt
+        ? `<span class="text-muted text-nowrap">${escapeHtml(occurredAt)}</span>`
+        : '';
+
+    const row = document.createElement('div');
+    row.className = 'py-2 border-bottom';
+    row.dataset.experienceChatMessage = String(
+        message.id || ''
+    );
+
+    row.innerHTML = `
+        <div class="d-flex flex-wrap justify-content-between gap-2 mb-1">
+            <strong>${username}</strong>
+            ${time}
+        </div>
+        <div>${body}</div>
+    `;
+
+    container.appendChild(row);
+
+    while (
+        container.querySelectorAll(
+            '[data-experience-chat-message]'
+        ).length > 10
+    ) {
+        container.querySelector(
+            '[data-experience-chat-message]'
+        )?.remove();
+    }
+}
+
+async function sendExperienceConversationMessage() {
+    const conversation = getExperienceConversation();
+    const input = document.getElementById(
+        'experience-conversation-input'
+    );
+    const sendButton = document.getElementById(
+        'experience-conversation-send'
+    );
+    const errorElement = document.getElementById(
+        'experience-conversation-error'
+    );
+
+    if (!conversation || !input || !sendButton) {
+        return;
+    }
+
+    const body = input.value.trim();
+
+    if (!body) {
+        return;
+    }
+
+    if (errorElement) {
+        errorElement.textContent = '';
+        errorElement.classList.add('d-none');
+    }
+
+    sendButton.disabled = true;
+    input.disabled = true;
+
+    try {
+        const csrfToken = document.querySelector(
+            'meta[name="csrf-token"]'
+        )?.content || '';
+
+        const response = await fetch('/api/chat/send', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-Token': csrfToken,
+            },
+            body: JSON.stringify({
+                room_id: conversation.room_id,
+                body,
+            }),
+        });
+
+        const result = await response.json();
+
+        if (!response.ok || !result.success) {
+            throw new Error(
+                result.error || 'Unable to send message'
+            );
+        }
+
+        input.value = '';
+
+        if (result.local_message) {
+            appendExperienceConversationMessage(
+                result.local_message
+            );
+        }
+    } catch (error) {
+        if (errorElement) {
+            errorElement.textContent =
+                error instanceof Error
+                    ? error.message
+                    : 'Unable to send message';
+
+            errorElement.classList.remove('d-none');
+        }
+    } finally {
+        input.disabled = false;
+        sendButton.disabled = false;
+        input.focus();
+    }
 }
 
 async function refreshExperienceConversation() {
@@ -722,6 +888,35 @@ async function endExperienceParticipation() {
             endButton.disabled = false;
         }
     }
+}
+
+const experienceConversationInput = document.getElementById(
+    'experience-conversation-input'
+);
+const experienceConversationSend = document.getElementById(
+    'experience-conversation-send'
+);
+
+if (experienceConversationSend) {
+    experienceConversationSend.addEventListener(
+        'click',
+        sendExperienceConversationMessage
+    );
+}
+
+if (experienceConversationInput) {
+    experienceConversationInput.addEventListener(
+        'keydown',
+        (event) => {
+            if (
+                event.key === 'Enter'
+                && (event.ctrlKey || event.metaKey)
+            ) {
+                event.preventDefault();
+                sendExperienceConversationMessage();
+            }
+        }
+    );
 }
 
 const experienceEndButton = document.getElementById(
