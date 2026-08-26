@@ -540,6 +540,58 @@ final class ExperienceLobbyTemplateTest extends TestCase
         );
     }
 
+    public function testExperienceLobbyDefinesLiveStateUpdaterContract(): void
+    {
+        $source = file_get_contents(
+            __DIR__ . '/../../templates/experience_lobby.twig'
+        );
+
+        self::assertStringContainsString(
+            'function updateExperienceLiveState(state)',
+            $source
+        );
+
+        self::assertStringContainsString(
+            "document.getElementById('experience-live-status')",
+            $source
+        );
+
+        self::assertStringContainsString(
+            "document.getElementById('experience-session-count')",
+            $source
+        );
+
+        self::assertStringContainsString(
+            "document.getElementById('experience-capacity')",
+            $source
+        );
+
+        self::assertStringContainsString(
+            "document.getElementById(\n        'experience-occupancy-container'\n    )",
+            $source
+        );
+
+        self::assertStringContainsString(
+            "document.getElementById('experience-availability-message')",
+            $source
+        );
+
+        self::assertStringContainsString(
+            "document.getElementById('experience-availability-badge')",
+            $source
+        );
+
+        self::assertStringContainsString(
+            "liveOccupancy.remove()",
+            $source
+        );
+
+        self::assertStringContainsString(
+            "liveOccupancy = document.createElement('div')",
+            $source
+        );
+    }
+
     public function testParticipantPartialUsesNormalizedParticipantActions(): void
     {
         $source = file_get_contents(

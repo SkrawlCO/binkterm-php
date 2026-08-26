@@ -104,43 +104,51 @@
                             </div>
 
                             <div class="d-flex flex-wrap gap-2 justify-content-end">
-                                {% if state.session_count > 0 %}
-                                    <span class="badge bg-success">
-                                        <i class="fas fa-circle me-1" aria-hidden="true"></i>
-                                        Live
-                                    </span>
+                                <span id="experience-live-status"
+                                      class="badge bg-success{% if state.session_count <= 0 %} d-none{% endif %}">
+                                    <i class="fas fa-circle me-1" aria-hidden="true"></i>
+                                    Live
+                                </span>
 
-                                    <span id="experience-session-count" class="badge bg-secondary-subtle text-dark border">
-                                        {{ state.session_count }}
-                                        active session{% if state.session_count != 1 %}s{% endif %}
-                                    </span>
-                                {% endif %}
+                                <span id="experience-session-count"
+                                      class="badge bg-secondary-subtle text-dark border">
+                                    {{ state.session_count }}
+                                    active session{% if state.session_count != 1 %}s{% endif %}
+                                </span>
 
                                 {% if max_sessions %}
-                                    <span class="badge bg-secondary-subtle text-dark border">
+                                    <span id="experience-capacity"
+                                          data-max-sessions="{{ max_sessions|default(0) }}"
+                                          class="badge bg-secondary-subtle text-dark border">
                                         {{ state.session_count }} / {{ max_sessions }} capacity
                                     </span>
                                 {% endif %}
                             </div>
                         </div>
 
-                        {% if max_sessions and max_sessions > 0 and state.session_count > 0 %}
-                            {% set occupancy_percent = ((state.session_count / max_sessions) * 100)|round %}
-                            <div class="progress mb-3"
-                                 role="progressbar"
-                                 aria-label="Experience capacity"
-                                 aria-valuenow="{{ state.session_count }}"
-                                 aria-valuemin="0"
-                                 aria-valuemax="{{ max_sessions }}"
-                                 style="height: 6px;">
-                                <div class="progress-bar"
-                                     style="width: {{ occupancy_percent > 100 ? 100 : occupancy_percent }}%;">
-                                </div>
+                        {% if max_sessions and max_sessions > 0 %}
+                            <div id="experience-occupancy-container">
+                                {% if state.session_count > 0 %}
+                                    {% set occupancy_percent = ((state.session_count / max_sessions) * 100)|round %}
+                                    <div id="experience-occupancy"
+                                         class="progress mb-3"
+                                         role="progressbar"
+                                         aria-label="Experience capacity"
+                                         aria-valuenow="{{ state.session_count }}"
+                                         aria-valuemin="0"
+                                         aria-valuemax="{{ max_sessions }}"
+                                         style="height: 6px;">
+                                        <div class="progress-bar"
+                                             style="width: {{ occupancy_percent > 100 ? 100 : occupancy_percent }}%;">
+                                        </div>
+                                    </div>
+                                {% endif %}
                             </div>
                         {% endif %}
 
-                        {% if state.players|length > 0 %}
-                            <div id="experience-participants" class="list-group">
+                        <div id="experience-participants"
+                             class="{% if state.players|length > 0 %}list-group{% else %}text-muted small{% endif %}">
+                            {% if state.players|length > 0 %}
                                 {% for player in state.players %}
                                     {% include 'partials/experience_participant.twig' with {
                                         player: player,
@@ -148,13 +156,13 @@
                                         current_user: current_user,
                                         participant_actions: experience.participant_actions|default({})
                                     } %}
+                                {% else %}
+                                    No one is playing right now. Be the first one in.
                                 {% endfor %}
-                            </div>
-                        {% else %}
-                            <div class="text-muted small">
+                            {% else %}
                                 No one is playing right now. Be the first one in.
-                            </div>
-                        {% endif %}
+                            {% endif %}
+                        </div>
                     </div>
 
                     {% set at_capacity = max_sessions and state.session_count >= max_sessions %}
@@ -168,7 +176,7 @@
                                     <i class="fas fa-circle-info me-1" aria-hidden="true"></i>
                                     Availability
                                 </div>
-                                <div class="text-muted small">
+                                <div id="experience-availability-message" class="text-muted small">
                                     {% if at_capacity %}
                                         This Experience is currently at capacity.
                                     {% elseif launch_supported %}
@@ -180,19 +188,17 @@
                             </div>
 
                             <div class="d-flex flex-wrap gap-2 justify-content-end">
-                                {% if at_capacity %}
-                                    <span class="badge bg-warning text-dark">
+                                <span id="experience-availability-badge"
+                                      data-launch-supported="{{ launch_supported ? 'true' : 'false' }}"
+                                      class="badge {% if at_capacity %}bg-warning text-dark{% elseif launch_supported %}bg-success{% else %}bg-secondary{% endif %}">
+                                    {% if at_capacity %}
                                         At capacity
-                                    </span>
-                                {% elseif launch_supported %}
-                                    <span class="badge bg-success">
+                                    {% elseif launch_supported %}
                                         Available
-                                    </span>
-                                {% else %}
-                                    <span class="badge bg-secondary">
+                                    {% else %}
                                         Unavailable
-                                    </span>
-                                {% endif %}
+                                    {% endif %}
+                                </span>
 
                                 {% if credit_cost > 0 %}
                                     <span class="badge bg-secondary-subtle text-dark border">
@@ -210,7 +216,7 @@
                         </a>
 
                         {% if launch_supported %}
-                            <a href="{{ launch.url }}"
+                            <a id="experience-launch-button" href="{{ launch.url }}"
                                class="btn btn-fidonet{% if at_capacity %} disabled{% endif %}"
                                {% if at_capacity %}aria-disabled="true" tabindex="-1"{% endif %}>
                                 <i class="fas fa-play me-1" aria-hidden="true"></i>
@@ -268,6 +274,124 @@ function escapeExperienceHtml(value) {
     const div = document.createElement('div');
     div.textContent = String(value ?? '');
     return div.innerHTML;
+}
+
+function updateExperienceLiveState(state) {
+    const sessionCount = Number(state.session_count || 0);
+
+    const liveStatus = document.getElementById('experience-live-status');
+    const sessionBadge = document.getElementById('experience-session-count');
+    const capacityBadge = document.getElementById('experience-capacity');
+    const availabilityMessage = document.getElementById('experience-availability-message');
+    const availabilityBadge = document.getElementById('experience-availability-badge');
+    const launchButton = document.getElementById('experience-launch-button');
+
+    if (liveStatus) {
+        liveStatus.classList.toggle('d-none', sessionCount <= 0);
+    }
+
+    if (sessionBadge) {
+        sessionBadge.textContent =
+            `${sessionCount} active session${sessionCount === 1 ? '' : 's'}`;
+    }
+
+    if (capacityBadge) {
+        const maxSessions = Number(capacityBadge.dataset.maxSessions || 0);
+
+        if (maxSessions > 0) {
+            capacityBadge.textContent =
+                `${sessionCount} / ${maxSessions} capacity`;
+        }
+    }
+
+    const maxSessions = capacityBadge
+        ? Number(capacityBadge.dataset.maxSessions || 0)
+        : 0;
+
+    const occupancyContainer = document.getElementById(
+        'experience-occupancy-container'
+    );
+
+    let liveOccupancy = document.getElementById('experience-occupancy');
+
+    if (occupancyContainer && maxSessions > 0) {
+        if (sessionCount > 0) {
+            const percent = Math.min(
+                100,
+                Math.round((sessionCount / maxSessions) * 100)
+            );
+
+            if (!liveOccupancy) {
+                liveOccupancy = document.createElement('div');
+                liveOccupancy.id = 'experience-occupancy';
+                liveOccupancy.className = 'progress mb-3';
+                liveOccupancy.setAttribute('role', 'progressbar');
+                liveOccupancy.setAttribute(
+                    'aria-label',
+                    'Experience capacity'
+                );
+                liveOccupancy.setAttribute('aria-valuemin', '0');
+                liveOccupancy.setAttribute(
+                    'aria-valuemax',
+                    String(maxSessions)
+                );
+
+                const bar = document.createElement('div');
+                bar.className = 'progress-bar';
+                liveOccupancy.appendChild(bar);
+                occupancyContainer.appendChild(liveOccupancy);
+            }
+
+            liveOccupancy.setAttribute(
+                'aria-valuenow',
+                String(sessionCount)
+            );
+
+            const bar = liveOccupancy.querySelector('.progress-bar');
+            if (bar) {
+                bar.style.width = `${percent}%`;
+            }
+        } else if (liveOccupancy) {
+            liveOccupancy.remove();
+        }
+    }
+
+    const atCapacity = maxSessions > 0 && sessionCount >= maxSessions;
+    const launchSupported = availabilityBadge &&
+        availabilityBadge.dataset.launchSupported === 'true';
+
+    if (availabilityMessage) {
+        if (atCapacity) {
+            availabilityMessage.textContent =
+                'This Experience is currently at capacity.';
+        } else if (launchSupported) {
+            availabilityMessage.textContent =
+                'Ready to launch.';
+        } else {
+            availabilityMessage.textContent =
+                'Launch is not currently available from this surface.';
+        }
+    }
+
+    if (availabilityBadge) {
+        if (atCapacity) {
+            availabilityBadge.className = 'badge bg-warning text-dark';
+            availabilityBadge.textContent = 'At capacity';
+        } else if (launchSupported) {
+            availabilityBadge.className = 'badge bg-success';
+            availabilityBadge.textContent = 'Available';
+        } else {
+            availabilityBadge.className = 'badge bg-secondary';
+            availabilityBadge.textContent = 'Unavailable';
+        }
+    }
+
+    if (launchButton) {
+        const disabled = atCapacity || !launchSupported;
+        launchButton.classList.toggle('disabled', disabled);
+        launchButton.setAttribute('aria-disabled', disabled ? 'true' : 'false');
+        launchButton.tabIndex = disabled ? -1 : 0;
+    }
 }
 
 function renderExperienceParticipants(state, actions) {
@@ -332,6 +456,7 @@ function applyExperienceState(payload) {
     const actions = payload.participant_actions || {};
 
     updateExperiencePlayerSummary(state);
+    updateExperienceLiveState(state);
     renderExperienceParticipants(state, actions);
 }
 
