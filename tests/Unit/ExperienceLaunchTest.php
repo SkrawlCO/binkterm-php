@@ -27,17 +27,17 @@ final class ExperienceLaunchTest extends TestCase
     public function testResolvesDosExperience(): void
     {
         $result = ExperienceLaunch::resolve([
-            'id' => 'doorparty',
+            'id' => 'example-dos',
             'backend' => [
                 'type' => 'dos',
-                'id' => 'doorparty',
+                'id' => 'example-dos',
             ],
         ]);
 
         self::assertSame([
             'type' => 'dos',
-            'id' => 'doorparty',
-            'url' => '/games/dosdoors/doorparty',
+            'id' => 'example-dos',
+            'url' => '/games/dosdoors/example-dos',
         ], $result);
     }
 
@@ -87,7 +87,7 @@ final class ExperienceLaunchTest extends TestCase
             [
                 'backend' => [
                     'type' => 'dos',
-                    'id' => 'doorparty',
+                    'id' => 'example-dos',
                 ],
             ],
             [
