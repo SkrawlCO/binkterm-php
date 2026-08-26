@@ -36,16 +36,21 @@ function getDoorLogger(): \BinktermPHP\Binkp\Logger
  *
  * Presence is intentionally best-effort and must never break door launch.
  */
-function publishDoorExperiencePresence(array $user, string $doorName): void
+function publishDoorExperiencePresence(
+    DoorContext $doorContext,
+    array $user
+): void
 {
     try {
-        $authSessionId = $_COOKIE['binktermphp_session'] ?? null;
-        if (!is_string($authSessionId) || $authSessionId === '') {
+        $authSessionId = $doorContext->authSessionId;
+        if ($authSessionId === null || $authSessionId === '') {
             return;
         }
 
+        $doorName = $doorContext->doorId;
+
         $catalog = new GameCatalog();
-        $experiences = $catalog->getEnabledGames($user, 'web');
+        $experiences = $catalog->getEnabledGames($user, $doorContext->surface);
         $experience = $experiences[$doorName] ?? null;
 
         if (!is_array($experience)) {
@@ -169,7 +174,7 @@ SimpleRouter::post('/api/door/launch', function() {
                 $wsUrl = "{$protocol}://{$host}:{$port}";
             }
 
-            publishDoorExperiencePresence($user, $doorName);
+            publishDoorExperiencePresence($doorContext, $user);
 
             echo json_encode([
                 'success' => true,
@@ -287,7 +292,7 @@ SimpleRouter::post('/api/door/launch', function() {
         // Start new session
         $session = $sessionManager->startSession($doorContext->userId, $doorName, $userData, $doorType);
 
-        publishDoorExperiencePresence($user, $doorName);
+        publishDoorExperiencePresence($doorContext, $user);
         ActivityTracker::track($doorContext->userId, ActivityTracker::TYPE_DOSDOOR_PLAY, null, $doorName);
 
         // Build WebSocket URL for browser

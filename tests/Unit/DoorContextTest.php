@@ -67,6 +67,54 @@ class DoorContextTest extends TestCase
 
 
 
+
+    public function testDoorLaunchPresenceReceivesCanonicalContext(): void
+    {
+        $source = file_get_contents(
+            __DIR__ . '/../../routes/door-routes.php'
+        );
+
+        self::assertIsString($source);
+
+        self::assertStringContainsString(
+            'publishDoorExperiencePresence($doorContext, $user);',
+            $source
+        );
+
+        self::assertSame(
+            2,
+            substr_count(
+                $source,
+                'publishDoorExperiencePresence($doorContext, $user);'
+            )
+        );
+
+        $helperStart = strpos(
+            $source,
+            'function publishDoorExperiencePresence'
+        );
+
+        $helperEnd = strpos(
+            $source,
+            'function doorApiError',
+            $helperStart
+        );
+
+        self::assertNotFalse($helperStart);
+        self::assertNotFalse($helperEnd);
+
+        $helper = substr(
+            $source,
+            $helperStart,
+            $helperEnd - $helperStart
+        );
+
+        self::assertStringNotContainsString(
+            '$_COOKIE[\'binktermphp_session\']',
+            $helper
+        );
+    }
+
     public function testAuthenticatedLaunchUsesDoorContextIdentity(): void
     {
         $source = file_get_contents(
