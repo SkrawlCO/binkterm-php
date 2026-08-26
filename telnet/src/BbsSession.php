@@ -207,19 +207,17 @@ class BbsSession
                 if ($this->debug) { $this->log('TLS startup: ANSI enabled; charset deferred to saved settings'); }
                 // Defer active Sixel probing until after the login banner.
             } else {
-                // Probe ANSI support before showing the banner by doing the TTYPE
-                // handshake properly: send TTYPE SEND only after receiving WILL TTYPE,
-                // then use the IS response to determine color capability.
-                // Default to no color until confirmed; SSH clients are assumed ANSI.
-                $this->ansiColorEnabled = false;
-                TelnetUtils::setAnsiColorEnabled(false);
-                if ($this->probeAnsiSupport($conn, $state)) {
-                    $this->ansiColorEnabled = true;
-                    TelnetUtils::setAnsiColorEnabled(true);
-                    if ($this->debug) { $this->log('ANSI auto-detect: ANSI color enabled'); }
-                    // Defer active Sixel probing until after the login banner.
-                } else {
-                    if ($this->debug) { $this->log('ANSI auto-detect: TTYPE absent or dumb terminal, defaulting to plain ASCII'); }
+                // Do not block the connection waiting for terminal capability
+                // negotiation. The login banner must be visible even when a
+                // Telnet client does not answer TTYPE immediately.
+                //
+                // Start conservatively with ANSI enabled; saved terminal
+                // preferences are applied after authentication. TTYPE/NAWS
+                // responses are still processed by the normal input path.
+                $this->ansiColorEnabled = true;
+                TelnetUtils::setAnsiColorEnabled(true);
+                if ($this->debug) {
+                    $this->log('Telnet startup: skipping blocking ANSI/TTYPE probe; using ANSI until terminal settings are known');
                 }
             }
         } else {
