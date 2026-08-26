@@ -54,8 +54,8 @@
                         <td class="text-muted">#{{ entry.rank }}</td>
                         <td>{{ entry.display_name }}</td>
                         <td>
-                            {% if entry.game_path %}
-                                <a href="/games/{{ entry.game_path }}" class="leaderboard-link">{{ entry.game_name }}</a>
+                            {% if entry.game_launch %}
+                                <a href="{{ entry.game_launch.url }}" class="leaderboard-link">{{ entry.game_name }}</a>
                             {% else %}
                                 {{ entry.game_name }}
                             {% endif %}
