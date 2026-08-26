@@ -422,6 +422,7 @@ final class ExperienceLobbyTemplateTest extends TestCase
                 'username' => 'Bard',
                 'session_id' => 'native-usurper-bard',
                 'presence' => 'Playing Usurper Reborn',
+                'presence_state' => 'playing',
                 'node' => 2,
                 'started_at' => time(),
             ]],
@@ -431,6 +432,11 @@ final class ExperienceLobbyTemplateTest extends TestCase
 
         self::assertStringContainsString(
             'href="/profile/Bard"',
+            $html
+        );
+
+        self::assertStringContainsString(
+            '<span class="badge bg-success me-1">Playing</span>',
             $html
         );
 
@@ -478,6 +484,33 @@ final class ExperienceLobbyTemplateTest extends TestCase
 
         self::assertStringNotContainsString(
             'experience.actions.message_players',
+            $source
+        );
+    }
+
+    public function testParticipantPartialUsesNormalizedPresenceState(): void
+    {
+        $source = file_get_contents(
+            __DIR__ . '/../../templates/partials/experience_participant.twig'
+        );
+
+        self::assertStringContainsString(
+            'player.presence_state',
+            $source
+        );
+
+        self::assertStringContainsString(
+            'bg-success',
+            $source
+        );
+
+        self::assertStringContainsString(
+            'playing',
+            $source
+        );
+
+        self::assertStringNotContainsString(
+            "presence == 'Playing'",
             $source
         );
     }

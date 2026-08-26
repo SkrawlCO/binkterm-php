@@ -8,6 +8,10 @@
             <div class="fw-semibold">{{ player.username }}</div>
         {% endif %}
         <div class="text-muted small">
+            {% if player.presence_state|default(null) == 'playing' %}
+                <span class="badge bg-success me-1">Playing</span>
+            {% endif %}
+
             {% if player.presence %}
                 {{ player.presence }}
             {% else %}
