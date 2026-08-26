@@ -92,7 +92,7 @@
                                     <i class="fas fa-users me-1" aria-hidden="true"></i>
                                     Live Players
                                 </div>
-                                <div class="text-muted small">
+                                <div id="experience-player-summary" class="text-muted small">
                                     {% if state.player_count == 0 %}
                                         Waiting for players.
                                     {% elseif state.player_count == 1 %}
@@ -110,7 +110,7 @@
                                         Live
                                     </span>
 
-                                    <span class="badge bg-secondary-subtle text-dark border">
+                                    <span id="experience-session-count" class="badge bg-secondary-subtle text-dark border">
                                         {{ state.session_count }}
                                         active session{% if state.session_count != 1 %}s{% endif %}
                                     </span>
@@ -140,7 +140,7 @@
                         {% endif %}
 
                         {% if state.players|length > 0 %}
-                            <div class="list-group">
+                            <div id="experience-participants" class="list-group">
                                 {% for player in state.players %}
                                     {% include 'partials/experience_participant.twig' with {
                                         player: player,
@@ -230,4 +230,126 @@
     </div>
 
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const EXPERIENCE_ID = {{ experience.id|json_encode|raw }};
+
+async function refreshExperienceState() {
+    const response = await fetch(
+        `/api/experiences/${encodeURIComponent(EXPERIENCE_ID)}/state`,
+        { headers: { 'Accept': 'application/json' } }
+    );
+
+    if (!response.ok) {
+        throw new Error(`Experience state request failed: ${response.status}`);
+    }
+
+    return response.json();
+}
+
+function updateExperiencePlayerSummary(state) {
+    const summary = document.getElementById('experience-player-summary');
+    if (!summary) return;
+
+    const count = Number(state.player_count || 0);
+
+    if (count === 0) {
+        summary.textContent = 'Waiting for players.';
+    } else if (count === 1) {
+        summary.textContent = '1 player is in this Experience.';
+    } else {
+        summary.textContent = `${count} players are in this Experience.`;
+    }
+}
+
+function escapeExperienceHtml(value) {
+    const div = document.createElement('div');
+    div.textContent = String(value ?? '');
+    return div.innerHTML;
+}
+
+function renderExperienceParticipants(state, actions) {
+    const container = document.getElementById('experience-participants');
+    if (!container) return;
+
+    const players = Array.isArray(state.players) ? state.players : [];
+    const profileEnabled = !!(actions && actions.profile);
+    const messageEnabled = !!(actions && actions.message);
+
+    if (players.length === 0) {
+        container.className = 'text-muted small';
+        container.textContent = 'No one is playing right now. Be the first one in.';
+        return;
+    }
+
+    container.className = 'list-group';
+
+    container.innerHTML = players.map(player => {
+        const userId = Number(player.user_id || 0);
+        const username = escapeExperienceHtml(player.username);
+        const presence = player.presence
+            ? escapeExperienceHtml(player.presence)
+            : `Playing ${escapeExperienceHtml({{ experience.name|json_encode|raw }})}`;
+
+        const identity = profileEnabled
+            ? `<div class="fw-semibold"><a href="/profile/${encodeURIComponent(String(player.username || ''))}" class="text-decoration-none">${username}</a></div>`
+            : `<div class="fw-semibold">${username}</div>`;
+
+        const playingBadge = player.presence_state === 'playing'
+            ? '<span class="badge bg-success me-1" aria-label="Currently playing">Playing</span>'
+            : '';
+
+        const message = messageEnabled &&
+            window.currentUserId &&
+            userId !== Number(window.currentUserId)
+            ? `<a href="/chat?dm_user_id=${encodeURIComponent(String(userId))}" class="btn btn-sm btn-outline-secondary"><i class="fas fa-comment me-1" aria-hidden="true"></i>Message</a>`
+            : '';
+
+        const node = player.node !== null && player.node !== undefined
+            ? `<span class="badge bg-secondary-subtle text-dark border">Node ${Number(player.node)}</span>`
+            : '';
+
+        return `<div class="list-group-item d-flex justify-content-between align-items-center gap-3">
+    <div class="min-w-0">
+        ${identity}
+        <div class="text-muted small">
+            ${playingBadge}
+            ${presence}
+        </div>
+    </div>
+    <div class="d-flex align-items-center gap-2 flex-shrink-0">
+        ${message}
+        ${node}
+    </div>
+</div>`;
+    }).join('');
+}
+
+function applyExperienceState(payload) {
+    const state = payload.state || {};
+    const actions = payload.participant_actions || {};
+
+    updateExperiencePlayerSummary(state);
+    renderExperienceParticipants(state, actions);
+}
+
+refreshExperienceState()
+    .then(applyExperienceState)
+    .catch(() => {});
+
+function scheduleExperienceRefresh() {
+    if (document.hidden) {
+        return;
+    }
+
+    refreshExperienceState()
+        .then(applyExperienceState)
+        .catch(() => {});
+}
+
+setInterval(scheduleExperienceRefresh, 30000);
+document.addEventListener('visibilitychange', scheduleExperienceRefresh);
+</script>
 {% endblock %}

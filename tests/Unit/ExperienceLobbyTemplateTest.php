@@ -464,6 +464,80 @@ final class ExperienceLobbyTemplateTest extends TestCase
             "participant_actions: experience.participant_actions|default({})",
             $source
         );
+        self::assertStringContainsString(
+            'id="experience-player-summary"',
+            $source
+        );
+
+        self::assertStringContainsString(
+            'id="experience-session-count"',
+            $source
+        );
+
+        self::assertStringContainsString(
+            'id="experience-participants"',
+            $source
+        );
+
+    }
+
+    public function testExperienceLobbyDefinesLiveStateRefreshContract(): void
+    {
+        $source = file_get_contents(
+            __DIR__ . '/../../templates/experience_lobby.twig'
+        );
+
+        self::assertStringContainsString(
+            'const EXPERIENCE_ID = {{ experience.id|json_encode|raw }};',
+            $source
+        );
+
+        self::assertStringContainsString(
+            'async function refreshExperienceState()',
+            $source
+        );
+
+        self::assertStringContainsString(
+            '/api/experiences/${encodeURIComponent(EXPERIENCE_ID)}/state',
+            $source
+        );
+    }
+
+    public function testExperienceLobbyDefinesParticipantRendererContract(): void
+    {
+        $source = file_get_contents(
+            __DIR__ . '/../../templates/experience_lobby.twig'
+        );
+
+        self::assertStringContainsString(
+            'function renderExperienceParticipants(state, actions)',
+            $source
+        );
+
+        self::assertStringContainsString(
+            "document.getElementById('experience-participants')",
+            $source
+        );
+
+        self::assertStringContainsString(
+            "player.presence_state === 'playing'",
+            $source
+        );
+
+        self::assertStringContainsString(
+            'participant_actions',
+            $source
+        );
+
+        self::assertStringContainsString(
+            'window.currentUserId',
+            $source
+        );
+
+        self::assertStringContainsString(
+            '/chat?dm_user_id=',
+            $source
+        );
     }
 
     public function testParticipantPartialUsesNormalizedParticipantActions(): void
