@@ -997,7 +997,17 @@ final class ExperienceLobbyTemplateTest extends TestCase
         );
 
         self::assertStringContainsString(
-            'renderExperienceConversation(payload.messages || []);',
+            'const messages = payload.messages || [];',
+            $source
+        );
+
+        self::assertStringContainsString(
+            'renderExperienceConversation(messages);',
+            $source
+        );
+
+        self::assertStringContainsString(
+            'experienceConversationCursor = id;',
             $source
         );
     }
@@ -1049,8 +1059,13 @@ final class ExperienceLobbyTemplateTest extends TestCase
         );
 
         self::assertStringContainsString(
-            'refreshExperienceConversation()' . PHP_EOL
+            'initializeExperienceConversation()' . PHP_EOL
                 . '    .catch(() => {',
+            $source
+        );
+
+        self::assertStringContainsString(
+            "fetch('/api/chat/cursor')",
             $source
         );
     }
@@ -1171,18 +1186,18 @@ final class ExperienceLobbyTemplateTest extends TestCase
             'async function sendExperienceConversationMessage()'
         );
 
-        $refreshStart = strpos(
+        $initializeStart = strpos(
             $source,
-            'async function refreshExperienceConversation()'
+            'async function initializeExperienceConversation()'
         );
 
         self::assertNotFalse($sendStart);
-        self::assertNotFalse($refreshStart);
+        self::assertNotFalse($initializeStart);
 
         $sendFunction = substr(
             $source,
             $sendStart,
-            $refreshStart - $sendStart
+            $initializeStart - $sendStart
         );
 
         self::assertStringNotContainsString(

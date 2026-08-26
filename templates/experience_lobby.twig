@@ -297,6 +297,8 @@ const EXPERIENCE_NAME = {{ experience.name|json_encode|raw }};
 const EXPERIENCE_CAPABILITIES =
     {{ experience.capabilities|default({})|json_encode|raw }};
 
+let experienceConversationCursor = 0;
+
 async function refreshExperienceState() {
     const response = await fetch(
         `/api/experiences/${encodeURIComponent(EXPERIENCE_ID)}/state`,
@@ -656,6 +658,42 @@ function appendExperienceConversationMessage(message) {
     }
 }
 
+async function pollExperienceConversation() {
+    const conversation = getExperienceConversation();
+
+    if (!conversation || document.hidden) {
+        return;
+    }
+
+    const response = await fetch(
+        `/api/chat/poll?since_id=${encodeURIComponent(experienceConversationCursor)}`
+    );
+
+    if (!response.ok) {
+        return;
+    }
+
+    const payload = await response.json();
+    const messages = Array.isArray(payload.messages)
+        ? payload.messages
+        : [];
+
+    messages.forEach(message => {
+        const id = Number(message.id || 0);
+
+        if (id > experienceConversationCursor) {
+            experienceConversationCursor = id;
+        }
+
+        if (
+            message.type === 'room'
+            && Number(message.room_id) === conversation.room_id
+        ) {
+            appendExperienceConversationMessage(message);
+        }
+    });
+}
+
 async function sendExperienceConversationMessage() {
     const conversation = getExperienceConversation();
     const input = document.getElementById(
@@ -734,6 +772,25 @@ async function sendExperienceConversationMessage() {
     }
 }
 
+async function initializeExperienceConversation() {
+    const conversation = getExperienceConversation();
+
+    if (!conversation) {
+        return;
+    }
+
+    const cursorResponse = await fetch('/api/chat/cursor');
+
+    if (cursorResponse.ok) {
+        const cursorPayload = await cursorResponse.json();
+        experienceConversationCursor = Number(
+            cursorPayload.max_id || 0
+        );
+    }
+
+    await refreshExperienceConversation();
+}
+
 async function refreshExperienceConversation() {
     const conversation = getExperienceConversation();
 
@@ -753,7 +810,9 @@ async function refreshExperienceConversation() {
         );
     }
 
-    renderExperienceConversation(payload.messages || []);
+    const messages = payload.messages || [];
+
+    renderExperienceConversation(messages);
 }
 
 function formatExperienceActivityTime(value) {
@@ -934,7 +993,7 @@ refreshExperienceState()
     .then(applyExperienceState)
     .catch(() => {});
 
-refreshExperienceConversation()
+initializeExperienceConversation()
     .catch(() => {
         const container = document.getElementById(
             'experience-conversation-messages'
@@ -957,6 +1016,11 @@ function scheduleExperienceRefresh() {
 }
 
 setInterval(scheduleExperienceRefresh, 30000);
-document.addEventListener('visibilitychange', scheduleExperienceRefresh);
+setInterval(pollExperienceConversation, 5000);
+
+document.addEventListener('visibilitychange', () => {
+    scheduleExperienceRefresh();
+    pollExperienceConversation();
+});
 </script>
 {% endblock %}
