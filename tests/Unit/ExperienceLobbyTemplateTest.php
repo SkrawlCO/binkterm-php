@@ -115,6 +115,26 @@ final class ExperienceLobbyTemplateTest extends TestCase
         );
     }
 
+    public function testEmptyExperienceUsesCompactOccupancyState(): void
+    {
+        $html = $this->renderLobby(0, 10);
+
+        self::assertStringContainsString('Capacity: 10', $html);
+        self::assertStringContainsString('Waiting for players.', $html);
+        self::assertStringContainsString('0 / 10 capacity', $html);
+        self::assertStringContainsString(
+            'No one is playing right now. Be the first one in.',
+            $html
+        );
+
+        self::assertStringNotContainsString('Quiet', $html);
+        self::assertStringNotContainsString('0 active sessions', $html);
+        self::assertStringNotContainsString(
+            'aria-label="Experience capacity"',
+            $html
+        );
+    }
+
     public function testAvailableExperiencePresentsPlayableLaunch(): void
     {
         $html = $this->renderLobby(0, 10);
