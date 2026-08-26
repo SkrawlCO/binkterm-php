@@ -95,8 +95,10 @@ class GameCatalog
                 ],
 
                 'capacity' => [
-                    'max_sessions' => isset($door['config']['max_sessions'])
-                        ? (int)$door['config']['max_sessions']
+                    // max_nodes is the runtime concurrency limit enforced
+                    // by the door launch/session machinery.
+                    'max_sessions' => isset($door['max_nodes'])
+                        ? (int)$door['max_nodes']
                         : null,
                 ],
 
