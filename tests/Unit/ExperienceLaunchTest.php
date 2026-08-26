@@ -75,6 +75,58 @@ final class ExperienceLaunchTest extends TestCase
         ], $result);
     }
 
+    public function testCanLaunchSupportedBackends(): void
+    {
+        foreach ([
+            [
+                'backend' => [
+                    'type' => 'native',
+                    'id' => 'usurper',
+                ],
+            ],
+            [
+                'backend' => [
+                    'type' => 'dos',
+                    'id' => 'doorparty',
+                ],
+            ],
+            [
+                'backend' => [
+                    'type' => 'jsdos',
+                    'id' => 'example-jsdos',
+                ],
+            ],
+            [
+                'backend' => [
+                    'type' => 'web',
+                    'id' => 'blackjack',
+                ],
+            ],
+        ] as $experience) {
+            self::assertTrue(ExperienceLaunch::canLaunch($experience));
+        }
+    }
+
+    public function testCannotLaunchUnsupportedOrIncompleteExperience(): void
+    {
+        self::assertFalse(ExperienceLaunch::canLaunch([
+            'id' => 'broken',
+        ]));
+
+        self::assertFalse(ExperienceLaunch::canLaunch([
+            'backend' => [
+                'type' => 'native',
+            ],
+        ]));
+
+        self::assertFalse(ExperienceLaunch::canLaunch([
+            'backend' => [
+                'type' => 'future',
+                'id' => 'future-game',
+            ],
+        ]));
+    }
+
     public function testRejectsMissingBackend(): void
     {
         self::assertNull(ExperienceLaunch::resolve([

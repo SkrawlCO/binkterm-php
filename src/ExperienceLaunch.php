@@ -12,6 +12,20 @@ namespace BinktermPHP;
 final class ExperienceLaunch
 {
     /**
+     * Determine whether a normalized Experience has a canonical launch target.
+     *
+     * This is intentionally derived from the same resolver used to produce
+     * the launch target, so action availability cannot drift from launch
+     * resolution.
+     *
+     * @param array<string,mixed> $experience
+     */
+    public static function canLaunch(array $experience): bool
+    {
+        return self::resolve($experience) !== null;
+    }
+
+    /**
      * Resolve the canonical launch target for a normalized Experience.
      *
      * @param array<string,mixed> $experience

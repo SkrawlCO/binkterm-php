@@ -95,7 +95,12 @@ class GameCatalog
                 ],
 
                 'actions' => [
-                    'launch' => true,
+                    'launch' => ExperienceLaunch::canLaunch([
+                        'backend' => [
+                            'type' => $backendType,
+                            'id' => $id,
+                        ],
+                    ]),
                 ],
 
                 'capacity' => [
@@ -216,7 +221,12 @@ class GameCatalog
                 ],
 
                 'actions' => [
-                    'launch' => true,
+                    'launch' => ExperienceLaunch::canLaunch([
+                        'backend' => [
+                            'type' => 'web',
+                            'id' => $id,
+                        ],
+                    ]),
                 ],
 
                 'capacity' => [
@@ -315,7 +325,12 @@ class GameCatalog
                 ],
 
                 'actions' => [
-                    'launch' => true,
+                    'launch' => ExperienceLaunch::canLaunch([
+                        'backend' => [
+                            'type' => 'jsdos',
+                            'id' => $id,
+                        ],
+                    ]),
                 ],
 
                 'capacity' => [
