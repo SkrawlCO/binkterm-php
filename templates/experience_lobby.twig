@@ -241,6 +241,7 @@
 {% block scripts %}
 <script>
 const EXPERIENCE_ID = {{ experience.id|json_encode|raw }};
+const EXPERIENCE_NAME = {{ experience.name|json_encode|raw }};
 
 async function refreshExperienceState() {
     const response = await fetch(
@@ -276,8 +277,9 @@ function escapeExperienceHtml(value) {
     return div.innerHTML;
 }
 
-function updateExperienceLiveState(state) {
+function updateExperienceLiveState(state, viewer = null) {
     const sessionCount = Number(state.session_count || 0);
+    const viewerParticipating = !!(viewer && viewer.participating);
 
     const liveStatus = document.getElementById('experience-live-status');
     const sessionBadge = document.getElementById('experience-session-count');
@@ -391,6 +393,31 @@ function updateExperienceLiveState(state) {
         launchButton.classList.toggle('disabled', disabled);
         launchButton.setAttribute('aria-disabled', disabled ? 'true' : 'false');
         launchButton.tabIndex = disabled ? -1 : 0;
+
+        if (!disabled) {
+            const icon = launchButton.querySelector('i');
+
+            if (icon) {
+                icon.className = viewerParticipating
+                    ? 'fas fa-sign-in-alt me-1'
+                    : 'fas fa-play me-1';
+            }
+
+            const label = viewerParticipating
+                ? `Return to ${EXPERIENCE_NAME}`
+                : `Play ${EXPERIENCE_NAME}`;
+
+            launchButton.setAttribute('aria-label', label);
+            launchButton.dataset.viewerParticipating =
+                viewerParticipating ? 'true' : 'false';
+
+            const textNode = Array.from(launchButton.childNodes)
+                .find(node => node.nodeType === Node.TEXT_NODE);
+
+            if (textNode) {
+                textNode.textContent = `\n                                ${label}\n                            `;
+            }
+        }
     }
 }
 
@@ -453,10 +480,11 @@ function renderExperienceParticipants(state, actions) {
 
 function applyExperienceState(payload) {
     const state = payload.state || {};
+    const viewer = payload.viewer || null;
     const actions = state.participant_actions || {};
 
     updateExperiencePlayerSummary(state);
-    updateExperienceLiveState(state);
+    updateExperienceLiveState(state, viewer);
     renderExperienceParticipants(state, actions);
 }
 

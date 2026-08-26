@@ -503,6 +503,48 @@ final class ExperienceLobbyTemplateTest extends TestCase
         );
     }
 
+    public function testExperienceLobbyLaunchActionReflectsViewerParticipation(): void
+    {
+        $source = file_get_contents(
+            __DIR__ . '/../../templates/experience_lobby.twig'
+        );
+
+        self::assertStringContainsString(
+            'function updateExperienceLiveState(state, viewer = null)',
+            $source
+        );
+
+        self::assertStringContainsString(
+            'const viewerParticipating = !!(viewer && viewer.participating);',
+            $source
+        );
+
+        self::assertStringContainsString(
+            'const label = viewerParticipating',
+            $source
+        );
+
+        self::assertStringContainsString(
+            '`Return to ${EXPERIENCE_NAME}`',
+            $source
+        );
+
+        self::assertStringContainsString(
+            '`Play ${EXPERIENCE_NAME}`',
+            $source
+        );
+
+        self::assertStringContainsString(
+            "launchButton.dataset.viewerParticipating =",
+            $source
+        );
+
+        self::assertStringContainsString(
+            'updateExperienceLiveState(state, viewer);',
+            $source
+        );
+    }
+
     public function testExperienceLobbyDefinesParticipantRendererContract(): void
     {
         $source = file_get_contents(
@@ -547,7 +589,7 @@ final class ExperienceLobbyTemplateTest extends TestCase
         );
 
         self::assertStringContainsString(
-            'function updateExperienceLiveState(state)',
+            'function updateExperienceLiveState(state, viewer = null)',
             $source
         );
 
