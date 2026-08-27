@@ -1184,7 +1184,11 @@ function logout() {
 }
 
 function updateSessionActivity() {
-    if (!window.currentUserId) {
+    if (
+        !window.currentUserId ||
+        window.isExperiencePage ||
+        document.querySelector('[data-experience-lobby]')
+    ) {
         return;
     }
     const activity = document.title || '';

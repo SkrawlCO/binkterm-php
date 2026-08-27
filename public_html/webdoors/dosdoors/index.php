@@ -213,6 +213,8 @@ if (empty($doorId)) {
         let wsToken = null;
         const doorId = <?php echo json_encode($doorId); ?>;
         const returnUrl = <?php echo json_encode($returnUrl ?? '/games'); ?>;
+        const isExperienceLaunch = <?php echo !empty($_GET['experience']) ? 'true' : 'false'; ?>;
+        window.isExperiencePage = isExperienceLaunch;
         const I18N = <?php echo json_encode([
             'statusPrefix' => $t('ui.dosdoor_player.status_prefix', 'Status:'),
             'statusDisconnected' => $t('ui.dosdoor_player.status_disconnected', 'Disconnected'),
@@ -448,7 +450,11 @@ if (empty($doorId)) {
                     const doorTitle = document.getElementById('doorTitle');
                     if (doorTitle && data.session.door_name) {
                         doorTitle.textContent = data.session.door_name;
-                        document.title = data.session.door_name + ' - ' + I18N.documentTitleSuffix;
+
+                        if (!isExperienceLaunch) {
+                            document.title =
+                                data.session.door_name + ' - ' + I18N.documentTitleSuffix;
+                        }
                     }
 
                     // Clear terminal initialization artifacts
