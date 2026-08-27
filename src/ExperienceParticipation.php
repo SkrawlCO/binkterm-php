@@ -63,7 +63,7 @@ final class ExperienceParticipation
         ?array $viewerPlayer
     ): array {
         $participating = $viewerPlayer !== null;
-        $launchable = ExperienceLaunch::canLaunch($experience);
+        $launchable = ExperienceLaunch::canLaunch($experience, 'web');
 
         return [
             'play' => !$participating && $launchable,

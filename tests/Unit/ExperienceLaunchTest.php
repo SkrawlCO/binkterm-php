@@ -107,6 +107,138 @@ final class ExperienceLaunchTest extends TestCase
         }
     }
 
+    public function testPlannedSurfaceIsDiscoverableButNotLaunchable(): void
+    {
+        $experience = [
+            'backend' => [
+                'type' => 'web',
+                'id' => 'planned-example',
+            ],
+            'surfaces' => [
+                'web' => 'full',
+                'telnet' => 'planned',
+            ],
+            'policy' => [
+                'enabled' => true,
+            ],
+        ];
+
+        self::assertTrue(ExperienceLaunch::canLaunch($experience, 'web'));
+        self::assertFalse(ExperienceLaunch::canLaunch($experience, 'telnet'));
+        self::assertFalse(ExperienceLaunch::canLaunch($experience, 'terminal'));
+        self::assertNull(ExperienceLaunch::resolve($experience, 'telnet'));
+    }
+
+    public function testFullTelnetSurfaceResolvesForTelnetAndTerminalAlias(): void
+    {
+        $experience = [
+            'backend' => [
+                'type' => 'native',
+                'id' => 'full-native',
+            ],
+            'surfaces' => [
+                'web' => 'unavailable',
+                'telnet' => 'full',
+            ],
+            'policy' => [
+                'enabled' => true,
+            ],
+        ];
+
+        self::assertSame(
+            ExperienceLaunch::resolve($experience, 'telnet'),
+            ExperienceLaunch::resolve($experience, 'terminal')
+        );
+        self::assertNotNull(ExperienceLaunch::resolve($experience, 'telnet'));
+        self::assertNull(ExperienceLaunch::resolve($experience, 'web'));
+    }
+
+    public function testPlannedWebSurfaceDoesNotResolveLaunchTarget(): void
+    {
+        $experience = [
+            'backend' => [
+                'type' => 'native',
+                'id' => 'terminal-only',
+            ],
+            'surfaces' => [
+                'web' => 'planned',
+                'telnet' => 'full',
+            ],
+            'policy' => [
+                'enabled' => true,
+            ],
+        ];
+
+        self::assertFalse(ExperienceLaunch::canLaunch($experience, 'web'));
+        self::assertNull(ExperienceLaunch::resolve($experience, 'web'));
+        self::assertTrue(ExperienceLaunch::canLaunch($experience, 'telnet'));
+    }
+
+    public function testFullSurfaceDoesNotBypassDisabledPolicy(): void
+    {
+        $experience = [
+            'backend' => [
+                'type' => 'native',
+                'id' => 'disabled-native',
+            ],
+            'surfaces' => [
+                'web' => 'full',
+                'telnet' => 'full',
+            ],
+            'policy' => [
+                'enabled' => false,
+            ],
+        ];
+
+        self::assertFalse(ExperienceLaunch::canLaunch($experience, 'web'));
+        self::assertFalse(ExperienceLaunch::canLaunch($experience, 'telnet'));
+        self::assertNull(ExperienceLaunch::resolve($experience, 'web'));
+    }
+
+    public function testUnknownSurfaceDoesNotResolveDeclaredExperience(): void
+    {
+        self::assertNull(ExperienceLaunch::resolve([
+            'backend' => [
+                'type' => 'web',
+                'id' => 'known-surfaces-only',
+            ],
+            'surfaces' => [
+                'web' => 'full',
+                'telnet' => 'planned',
+            ],
+            'policy' => [
+                'enabled' => true,
+            ],
+        ], 'unknown'));
+    }
+
+    public function testNullSurfaceCannotBypassNormalizedSurfaceState(): void
+    {
+        self::assertNull(ExperienceLaunch::resolve([
+            'backend' => [
+                'type' => 'web',
+                'id' => 'planned-without-context',
+            ],
+            'surfaces' => [
+                'web' => 'full',
+                'telnet' => 'planned',
+            ],
+            'policy' => [
+                'enabled' => true,
+            ],
+        ]));
+    }
+
+    public function testLegacyFixtureWithoutSurfacesRetainsCompatibility(): void
+    {
+        self::assertNotNull(ExperienceLaunch::resolve([
+            'backend' => [
+                'type' => 'dos',
+                'id' => 'legacy-fixture',
+            ],
+        ]));
+    }
+
     public function testCannotLaunchUnsupportedOrIncompleteExperience(): void
     {
         self::assertFalse(ExperienceLaunch::canLaunch([

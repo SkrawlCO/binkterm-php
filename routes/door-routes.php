@@ -8,6 +8,7 @@
 use BinktermPHP\ActivityTracker;
 use BinktermPHP\DoorContext;
 use BinktermPHP\ExperiencePresence;
+use BinktermPHP\ExperienceLaunch;
 use BinktermPHP\GameCatalog;
 use BinktermPHP\DoorSessionManager;
 use BinktermPHP\DoorManager;
@@ -122,9 +123,52 @@ SimpleRouter::post('/api/door/launch', function() {
         return;
     }
 
-    $surface = (string)($_POST['surface'] ?? 'web');
-    if (!in_array($surface, ['web', 'terminal'], true)) {
-        $surface = 'web';
+    $surface = strtolower(trim((string)($_POST['surface'] ?? 'web')));
+    if (!in_array($surface, ['web', 'telnet', 'terminal'], true)) {
+        doorApiError(
+            'errors.door.launch_failed',
+            'Experience is not available on this surface',
+            403
+        );
+        return;
+    }
+
+    // Static discovery/surface eligibility supplements the authoritative
+    // backend checks below. It must run before resume so a direct API request
+    // cannot revive a session on a hidden or unsupported surface.
+    try {
+        $catalog = new GameCatalog();
+        $catalogSurface = $surface === 'terminal' ? 'telnet' : $surface;
+        $experiences = $catalog->getEnabledGames($user, $catalogSurface);
+        $launchExperience = $experiences[$doorName] ?? null;
+    } catch (\Throwable $e) {
+        getDoorLogger()->error(
+            'DOSDOOR: [API] Failed to evaluate Experience launch eligibility: '
+            . $e->getMessage()
+        );
+        doorApiError(
+            'errors.door.launch_failed',
+            'Failed to evaluate Experience launch eligibility',
+            500
+        );
+        return;
+    }
+
+    $launchBackend = is_array($launchExperience)
+        ? (string)($launchExperience['backend']['type'] ?? '')
+        : '';
+
+    if (
+        !is_array($launchExperience)
+        || !in_array($launchBackend, ['dos', 'native'], true)
+        || !ExperienceLaunch::canLaunch($launchExperience, $surface)
+    ) {
+        doorApiError(
+            'errors.door.launch_failed',
+            'Experience is not available on this surface',
+            403
+        );
+        return;
     }
 
     $doorContext = DoorContext::fromUser(

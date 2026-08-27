@@ -94,6 +94,17 @@ The initial presentation surfaces are:
 Additional surfaces may be represented in the future without changing the
 identity of the underlying Experience.
 
+Catalog discovery is distinct from surface runnability. The catalog includes
+only Experiences that are enabled, satisfy backend requirements, and are
+authorized for the current user. An included Experience may still declare its
+requested surface as `planned` or `unavailable`; only `full` produces a static
+launch action for that surface. Backend launch paths remain authoritative for
+dynamic rules such as credits, capacity, and active-session handling.
+
+Explicit discovery controls remain authoritative over cross-surface parity.
+For example, a managed door configured with `hide_from_web` is omitted from the
+web catalog entirely rather than disclosed as an unavailable Experience.
+
 ## Web and Classic BBS Parity
 
 BinkTerm Modern is intended to expand what a BBS can provide without abandoning

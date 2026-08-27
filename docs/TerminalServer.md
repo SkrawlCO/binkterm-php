@@ -208,6 +208,9 @@ Stats are refreshed from the API after returning from netmail, echomail, or bull
   experiences configured for raw terminal handling preserve modern terminal
   input, ANSI output, and resize behavior; traditional doors continue to use
   Doorway-compatible handling.
+- The shared catalog can describe browser-only Experiences as planned for the
+  terminal surface. The current launch menu continues to list only Experiences
+  that can run in the terminal.
 - Colorized prompts and status messages
 - Welcome message with BBS website URL
 - Goodbye message on logout with reminder to visit website

@@ -122,10 +122,19 @@ class GameCatalog
         string $surface
     ): void {
         foreach ($doors as $id => $door) {
+            // Managers already return enabled doors, but retain this boundary
+            // check so normalization cannot expose a disabled fixture/caller.
+            if (empty($door['config']['enabled'])) {
+                continue;
+            }
+
             if (!empty($door['admin_only']) && empty($user['is_admin'])) {
                 continue;
             }
 
+            // This is an explicit operator visibility control, not merely a
+            // non-runnable surface state. Do not disclose managed door
+            // metadata through ordinary web discovery when it is set.
             if ($surface === 'web' && !empty($door['config']['hide_from_web'])) {
                 continue;
             }
@@ -135,6 +144,25 @@ class GameCatalog
                 : $door;
 
             $experience = $door['experience'] ?? [];
+            $surfaces = [
+                'web' => empty($door['config']['hide_from_web'])
+                    ? 'full'
+                    : 'unavailable',
+                'telnet' => 'full',
+            ];
+            $policy = [
+                'enabled' => true,
+                'admin_only' => !empty($door['admin_only']),
+                'credit_cost' => (int)($door['config']['credit_cost'] ?? 0),
+            ];
+            $launchIdentity = [
+                'backend' => [
+                    'type' => $backendType,
+                    'id' => $id,
+                ],
+                'surfaces' => $surfaces,
+                'policy' => $policy,
+            ];
 
             $experiences[$id] = [
                 'id' => $id,
@@ -159,12 +187,10 @@ class GameCatalog
                 ],
 
                 'actions' => [
-                    'launch' => ExperienceLaunch::canLaunch([
-                        'backend' => [
-                            'type' => $backendType,
-                            'id' => $id,
-                        ],
-                    ]),
+                    'launch' => ExperienceLaunch::canLaunch(
+                        $launchIdentity,
+                        $surface
+                    ),
                     'message_players' => (bool)($experience['participant_messaging'] ?? false),
                 ],
 
@@ -190,10 +216,7 @@ class GameCatalog
                         : 'doorway',
                 ],
 
-                'surfaces' => [
-                    'web' => empty($door['config']['hide_from_web']) ? 'full' : 'unavailable',
-                    'telnet' => 'full',
-                ],
+                'surfaces' => $surfaces,
 
                 'presentation' => [
                     'icon' => $game['icon'] ?? null,
@@ -204,11 +227,7 @@ class GameCatalog
                         : null,
                 ],
 
-                'policy' => [
-                    'enabled' => !empty($door['config']['enabled']),
-                    'admin_only' => !empty($door['admin_only']),
-                    'credit_cost' => (int)($door['config']['credit_cost'] ?? 0),
-                ],
+                'policy' => $policy,
 
                 // Compatibility field retained for the current Games UI.
                 'players' => $game['players'] ?? null,
@@ -232,7 +251,7 @@ class GameCatalog
         ?array $user,
         string $surface
     ): void {
-        if ($surface !== 'web' || !GameConfig::isGameSystemEnabled()) {
+        if (!GameConfig::isGameSystemEnabled()) {
             return;
         }
 
@@ -246,11 +265,7 @@ class GameCatalog
 
             $id = (string)($entry['id'] ?? $game['id'] ?? $entry['path']);
 
-            if (!GameConfig::isEnabled($id)) {
-                continue;
-            }
-
-            if (!WebDoorSupport::requirementsSatisfied($manifest)) {
+            if (!$this->isWebDoorDiscoverable($id, $manifest)) {
                 continue;
             }
 
@@ -273,6 +288,23 @@ class GameCatalog
 
             $icon = $game['icon'] ?? 'icon.png';
             $path = (string)$entry['path'];
+            $surfaces = [
+                'web' => 'full',
+                'telnet' => 'planned',
+            ];
+            $policy = [
+                'enabled' => true,
+                'admin_only' => false,
+                'credit_cost' => (int)($config['credit_cost'] ?? 0),
+            ];
+            $launchIdentity = [
+                'backend' => [
+                    'type' => 'web',
+                    'id' => $id,
+                ],
+                'surfaces' => $surfaces,
+                'policy' => $policy,
+            ];
 
             $experiences[$id] = [
                 'id' => $id,
@@ -297,12 +329,10 @@ class GameCatalog
                 ],
 
                 'actions' => [
-                    'launch' => ExperienceLaunch::canLaunch([
-                        'backend' => [
-                            'type' => 'web',
-                            'id' => $id,
-                        ],
-                    ]),
+                    'launch' => ExperienceLaunch::canLaunch(
+                        $launchIdentity,
+                        $surface
+                    ),
                     'message_players' => false,
                 ],
 
@@ -315,10 +345,7 @@ class GameCatalog
                     'max_sessions' => null,
                 ],
 
-                'surfaces' => [
-                    'web' => 'full',
-                    'telnet' => 'planned',
-                ],
+                'surfaces' => $surfaces,
 
                 'presentation' => [
                     'icon' => $icon,
@@ -329,11 +356,7 @@ class GameCatalog
                         : null,
                 ],
 
-                'policy' => [
-                    'enabled' => true,
-                    'admin_only' => false,
-                    'credit_cost' => (int)($config['credit_cost'] ?? 0),
-                ],
+                'policy' => $policy,
 
                 'source' => [
                     'type' => 'web',
@@ -341,6 +364,16 @@ class GameCatalog
                 ],
             ];
         }
+    }
+
+    /**
+     * Keep WebDoor enablement and platform requirements as discovery gates on
+     * every presentation surface.
+     */
+    private function isWebDoorDiscoverable(string $id, array $manifest): bool
+    {
+        return GameConfig::isEnabled($id)
+            && WebDoorSupport::requirementsSatisfied($manifest);
     }
 
     /**
@@ -354,7 +387,7 @@ class GameCatalog
         ?array $user,
         string $surface
     ): void {
-        if ($surface !== 'web' || !JsdosDoorConfig::isConfigPresent()) {
+        if (!JsdosDoorConfig::isConfigPresent()) {
             return;
         }
 
@@ -378,6 +411,23 @@ class GameCatalog
                 : ($manifest['description'] ?? '');
 
             $icon = $manifest['icon'] ?? 'icon.png';
+            $surfaces = [
+                'web' => 'full',
+                'telnet' => 'planned',
+            ];
+            $policy = [
+                'enabled' => true,
+                'admin_only' => false,
+                'credit_cost' => (int)($config['credit_cost'] ?? 0),
+            ];
+            $launchIdentity = [
+                'backend' => [
+                    'type' => 'jsdos',
+                    'id' => $id,
+                ],
+                'surfaces' => $surfaces,
+                'policy' => $policy,
+            ];
 
             $experiences[$id] = [
                 'id' => $id,
@@ -402,12 +452,10 @@ class GameCatalog
                 ],
 
                 'actions' => [
-                    'launch' => ExperienceLaunch::canLaunch([
-                        'backend' => [
-                            'type' => 'jsdos',
-                            'id' => $id,
-                        ],
-                    ]),
+                    'launch' => ExperienceLaunch::canLaunch(
+                        $launchIdentity,
+                        $surface
+                    ),
                     'message_players' => false,
                 ],
 
@@ -420,10 +468,7 @@ class GameCatalog
                     'max_sessions' => null,
                 ],
 
-                'surfaces' => [
-                    'web' => 'full',
-                    'telnet' => 'planned',
-                ],
+                'surfaces' => $surfaces,
 
                 'presentation' => [
                     'icon' => $icon,
@@ -434,11 +479,7 @@ class GameCatalog
                         : null,
                 ],
 
-                'policy' => [
-                    'enabled' => true,
-                    'admin_only' => false,
-                    'credit_cost' => (int)($config['credit_cost'] ?? 0),
-                ],
+                'policy' => $policy,
 
                 'source' => [
                     'type' => 'jsdos',

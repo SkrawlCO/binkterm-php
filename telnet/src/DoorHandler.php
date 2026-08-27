@@ -74,9 +74,14 @@ class DoorHandler
         }
 
         // Convert associative catalog entries to the indexed list expected
-        // by the terminal chooser, preserving game IDs.
+        // by the terminal chooser, preserving game IDs. Planned/unavailable
+        // entries remain discoverable through GameCatalog but are deferred
+        // from this launch-only chooser until the terminal detail slice.
         $doorList = [];
         foreach ($allDoors as $doorId => $game) {
+            if (empty($game['actions']['launch'])) {
+                continue;
+            }
             $doorList[] = ['id' => $doorId, 'data' => $game];
         }
 

@@ -41,6 +41,36 @@ final class ExperienceParticipationTest extends TestCase
         );
     }
 
+    public function testViewerCannotPlayOrReturnOnUnsupportedWebSurface(): void
+    {
+        $experience = [
+            'backend' => [
+                'type' => 'native',
+                'id' => 'terminal-only',
+            ],
+            'surfaces' => [
+                'web' => 'unavailable',
+                'telnet' => 'full',
+            ],
+            'policy' => [
+                'enabled' => true,
+            ],
+        ];
+
+        self::assertSame(
+            ['play' => false, 'return' => false, 'end' => false],
+            ExperienceParticipation::viewerActions($experience, null)
+        );
+
+        self::assertSame(
+            ['play' => false, 'return' => false, 'end' => true],
+            ExperienceParticipation::viewerActions($experience, [
+                'user_id' => 3,
+                'session_id' => 'terminal-session',
+            ])
+        );
+    }
+
     public function testViewerLookupReturnsOnlyCurrentUserParticipation(): void
     {
         $state = [

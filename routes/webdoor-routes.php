@@ -130,7 +130,7 @@ SimpleRouter::get('/games', function() {
     // Resolve each normalized Experience through the canonical launch
     // contract. The template should not reconstruct backend URLs.
     foreach ($games as &$game) {
-        $game['launch'] = \BinktermPHP\ExperienceLaunch::resolve($game);
+        $game['launch'] = \BinktermPHP\ExperienceLaunch::resolve($game, 'web');
     }
     unset($game);
 
@@ -738,6 +738,13 @@ SimpleRouter::get('/games/{game}', function($game) {
     $door = $doorManager->getDoor($game);
 
     if ($door && !empty($door['config']['enabled'])) {
+        if (!empty($door['config']['hide_from_web'])) {
+            http_response_code(404);
+            $template = new Template();
+            $template->renderResponse('404.twig');
+            return;
+        }
+
         // Block admin-only doors for non-admins
         if (!empty($door['admin_only']) && empty($user['is_admin'])) {
             http_response_code(403);
@@ -765,6 +772,13 @@ SimpleRouter::get('/games/{game}', function($game) {
     $nativeDoor = $nativeDoorManager->getDoor($game);
 
     if ($nativeDoor && !empty($nativeDoor['config']['enabled'])) {
+        if (!empty($nativeDoor['config']['hide_from_web'])) {
+            http_response_code(404);
+            $template = new Template();
+            $template->renderResponse('404.twig');
+            return;
+        }
+
         // Block admin-only doors for non-admins
         if (!empty($nativeDoor['admin_only']) && empty($user['is_admin'])) {
             http_response_code(403);
@@ -842,6 +856,15 @@ SimpleRouter::get('/games/{game}', function($game) {
     }
 
     // Check if this is a web door
+    if (!GameConfig::isEnabled((string)$game)) {
+        http_response_code(404);
+        $template = new Template();
+        $template->renderResponse('404.twig', [
+            'requested_url' => "/games/{$game}"
+        ]);
+        return;
+    }
+
     $gameDir = __DIR__ . '/../public_html/webdoors/' . basename($game);
     $manifestPath = $gameDir . '/webdoor.json';
 

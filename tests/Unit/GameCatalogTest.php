@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use BinktermPHP\GameCatalog;
+use BinktermPHP\ExperienceLaunch;
 use PHPUnit\Framework\TestCase;
 
 final class GameCatalogTest extends TestCase
@@ -132,9 +133,10 @@ final class GameCatalogTest extends TestCase
             );
 
             self::assertIsArray($game['actions']);
-            self::assertTrue(
+            self::assertSame(
+                $game['surfaces']['web'] === 'full',
                 $game['actions']['launch'],
-                "Launch action must be available for {$game['id']}"
+                "Launch action must follow web surface state for {$game['id']}"
             );
         }
     }
@@ -305,18 +307,145 @@ final class GameCatalogTest extends TestCase
         }
     }
 
-    public function testTelnetCatalogContainsOnlyCurrentlyRunnableTelnetBackends(): void
+    public function testTelnetCatalogSeparatesDiscoveryFromRunnability(): void
     {
         $games = $this->catalog->getEnabledGames(null, 'telnet');
+        $runnableManaged = [];
 
         foreach ($games as $game) {
-            self::assertContains(
-                $game['backend']['type'],
-                ['dos', 'native']
-            );
+            $runnable = $game['surfaces']['telnet'] === 'full';
+            self::assertSame($runnable, $game['actions']['launch']);
 
-            self::assertSame('full', $game['surfaces']['telnet']);
+            if (in_array($game['backend']['type'], ['dos', 'native'], true)) {
+                $runnableManaged[] = $game['id'];
+                self::assertSame('full', $game['surfaces']['telnet']);
+                self::assertTrue($game['actions']['launch']);
+            }
+
+            if (in_array($game['backend']['type'], ['web', 'jsdos'], true)) {
+                self::assertSame('planned', $game['surfaces']['telnet']);
+                self::assertFalse($game['actions']['launch']);
+            }
         }
+
+        self::assertNotEmpty(
+            $runnableManaged,
+            'Expected configured runnable DOS or native fixtures'
+        );
+    }
+
+    public function testAuthorizedWebOnlyExperiencesAreDiscoveredAcrossSurfaces(): void
+    {
+        $web = $this->catalog->getEnabledGames(null, 'web');
+        $telnet = $this->catalog->getEnabledGames(null, 'telnet');
+        $webOnlyIds = [];
+        $webOnlyTypes = [];
+
+        foreach ($web as $id => $experience) {
+            if (!in_array($experience['backend']['type'], ['web', 'jsdos'], true)) {
+                continue;
+            }
+
+            $webOnlyIds[] = $id;
+            $webOnlyTypes[$experience['backend']['type']] = true;
+            self::assertArrayHasKey($id, $telnet);
+            self::assertSame('full', $experience['surfaces']['web']);
+            self::assertTrue($experience['actions']['launch']);
+            self::assertSame('planned', $telnet[$id]['surfaces']['telnet']);
+            self::assertFalse($telnet[$id]['actions']['launch']);
+            self::assertNull(ExperienceLaunch::resolve($telnet[$id], 'telnet'));
+        }
+
+        self::assertNotEmpty(
+            $webOnlyIds,
+            'Expected configured WebDoor or JS-DOS fixtures'
+        );
+        self::assertArrayHasKey('web', $webOnlyTypes);
+        self::assertArrayHasKey('jsdos', $webOnlyTypes);
+    }
+
+    public function testManagedDiscoveryPreservesEnablementAndAuthorizationBoundaries(): void
+    {
+        $method = new ReflectionMethod(GameCatalog::class, 'addManagedDoors');
+        $doors = [
+            'disabled' => [
+                'config' => ['enabled' => false],
+            ],
+            'admin-only' => [
+                'admin_only' => true,
+                'config' => ['enabled' => true],
+            ],
+            'available' => [
+                'config' => ['enabled' => true],
+            ],
+        ];
+        $experiences = [];
+
+        $method->invokeArgs($this->catalog, [
+            &$experiences,
+            'native',
+            $doors,
+            ['is_admin' => false],
+            'web',
+        ]);
+
+        self::assertArrayNotHasKey('disabled', $experiences);
+        self::assertArrayNotHasKey('admin-only', $experiences);
+        self::assertArrayHasKey('available', $experiences);
+    }
+
+    public function testHideFromWebManagedExperiencePreservesVisibilityBoundary(): void
+    {
+        $method = new ReflectionMethod(GameCatalog::class, 'addManagedDoors');
+        $door = [
+            'config' => [
+                'enabled' => true,
+                'hide_from_web' => true,
+            ],
+        ];
+        $webExperiences = [];
+        $telnetExperiences = [];
+
+        $method->invokeArgs($this->catalog, [
+            &$webExperiences,
+            'native',
+            ['terminal-only' => $door],
+            ['is_admin' => false],
+            'web',
+        ]);
+
+        $method->invokeArgs($this->catalog, [
+            &$telnetExperiences,
+            'native',
+            ['terminal-only' => $door],
+            ['is_admin' => false],
+            'telnet',
+        ]);
+
+        self::assertArrayNotHasKey('terminal-only', $webExperiences);
+        self::assertArrayHasKey('terminal-only', $telnetExperiences);
+        self::assertTrue($telnetExperiences['terminal-only']['actions']['launch']);
+        self::assertTrue(
+            ExperienceLaunch::canLaunch(
+                $telnetExperiences['terminal-only'],
+                'telnet'
+            )
+        );
+    }
+
+    public function testRequirementsFailingWebDoorIsNotDiscoverable(): void
+    {
+        $method = new ReflectionMethod(GameCatalog::class, 'isWebDoorDiscoverable');
+
+        self::assertFalse($method->invoke(
+            $this->catalog,
+            'blackjack',
+            [
+                'requirements' => [
+                    'features' => ['definitely-not-a-real-feature'],
+                ],
+            ]
+        ));
     }
 
     public function testRawManagedDoorTerminalModeIsNormalized(): void

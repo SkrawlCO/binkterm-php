@@ -20,9 +20,12 @@ final class ExperienceLaunch
      *
      * @param array<string,mixed> $experience
      */
-    public static function canLaunch(array $experience): bool
+    public static function canLaunch(
+        array $experience,
+        ?string $surface = null
+    ): bool
     {
-        return self::resolve($experience) !== null;
+        return self::resolve($experience, $surface) !== null;
     }
 
     /**
@@ -31,8 +34,27 @@ final class ExperienceLaunch
      * @param array<string,mixed> $experience
      * @return array<string,string>|null
      */
-    public static function resolve(array $experience): ?array
+    public static function resolve(
+        array $experience,
+        ?string $surface = null
+    ): ?array
     {
+        if (($experience['policy']['enabled'] ?? true) !== true) {
+            return null;
+        }
+
+        if (isset($experience['surfaces']) && is_array($experience['surfaces'])) {
+            if ($surface === null) {
+                return null;
+            }
+
+            $surface = self::normalizeSurface($surface);
+
+            if (($experience['surfaces'][$surface] ?? null) !== 'full') {
+                return null;
+            }
+        }
+
         $backend = $experience['backend'] ?? null;
 
         if (!is_array($backend)) {
@@ -69,5 +91,12 @@ final class ExperienceLaunch
             ],
             default => null,
         };
+    }
+
+    private static function normalizeSurface(string $surface): string
+    {
+        $surface = strtolower(trim($surface));
+
+        return $surface === 'terminal' ? 'telnet' : $surface;
     }
 }

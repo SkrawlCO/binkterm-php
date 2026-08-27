@@ -220,7 +220,7 @@ SimpleRouter::get('/experiences/{experienceId}', function(string $experienceId) 
         return;
     }
 
-    $launch = ExperienceLaunch::resolve($experience);
+    $launch = ExperienceLaunch::resolve($experience, 'web');
 
     $template = new Template();
     $template->renderResponse('experience_lobby.twig', [

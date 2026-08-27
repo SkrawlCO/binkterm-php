@@ -37,6 +37,12 @@ display metadata and launch behavior. Managed doors publish `terminal.mode` as
 either `doorway` or `raw`; `DoorHandler` must use that field so raw native
 terminal sessions bypass legacy Doorway key and CP437 conversion.
 
+`GameCatalog` discovery includes authorized WebDoor and JS-DOS Experiences on
+the terminal surface with their normalized `planned` state. The current
+launch-only `DoorHandler` chooser filters on `actions.launch`, so those entries
+remain non-runnable until a later terminal discovery/detail interface presents
+non-launchable Experiences explicitly.
+
 ---
 
 ## Session Flow
