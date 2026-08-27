@@ -83,44 +83,10 @@ class DoorHandler
         while (true) {
             $items = [];
             foreach ($doorList as $entry) {
-                $door = $entry['data'];
-                $name = $door['name'] ?? $entry['id'];
-                $desc = trim((string)($door['description'] ?? ''));
-                $creditCost = (int)($door['source']['config']['credit_cost'] ?? 0);
-
-                $experience = $door['experience'] ?? [];
-                $category = strtolower((string)($experience['category'] ?? 'game'));
-                $categoryLabel = match ($category) {
-                    'gateway' => 'Gateway',
-                    'game' => 'Game',
-                    default => ucfirst($category),
-                };
-
-                $meta = [$categoryLabel];
-
-                $genre = $door['genre'] ?? [];
-                if (is_array($genre) && !empty($genre)) {
-                    $meta[] = implode('/', $genre);
-                }
-
-                // Multiplayer is useful metadata for actual games. Gateway
-                // descriptions already make their multiplayer purpose clear.
-                if ($category === 'game' && !empty($experience['multiplayer'])) {
-                    $meta[] = 'Multiplayer';
-                }
-
-                $detailParts = [];
-                if ($desc !== '') {
-                    $detailParts[] = $desc;
-                }
-                if (!empty($meta)) {
-                    $detailParts[] = '[' . implode(' / ', $meta) . ']';
-                }
-
-                $items[] = [
-                    'label' => trim($name . ($creditCost > 0 ? " [{$creditCost} credits]" : '')),
-                    'detail' => implode(' ', $detailParts),
-                ];
+                $items[] = self::buildExperienceListItem(
+                    $entry['id'],
+                    $entry['data']
+                );
             }
 
             $selected = $shell->chooseFromList(
@@ -139,12 +105,73 @@ class DoorHandler
 
             $entry = $doorList[$selected];
             $doorName = $entry['data']['name'] ?? $entry['id'];
-            $terminalMode = (string)($entry['data']['source']['terminal_mode'] ?? 'doorway');
+            $terminalMode = self::resolveTerminalMode($entry['data']);
             $this->server->logAction($state['username'] ?? 'unknown', "Doors: launched \"{$doorName}\"");
             $this->launchDoor($conn, $state, $session, $entry['id'], $doorName, $terminalMode);
             // Return to the door menu so users can launch another door or back out explicitly.
             continue;
         }
+    }
+
+    /**
+     * Build a terminal chooser item from the normalized Experience contract.
+     *
+     * Genre is intentionally omitted until GameCatalog defines a normalized
+     * genre or tags field.
+     *
+     * @param string $experienceId Canonical Experience identifier
+     * @param array<string, mixed> $experience Normalized catalog entry
+     * @return array{label: string, detail: string}
+     */
+    public static function buildExperienceListItem(
+        string $experienceId,
+        array $experience
+    ): array {
+        $name = trim((string)($experience['name'] ?? ''));
+        if ($name === '') {
+            $name = $experienceId;
+        }
+
+        $description = trim((string)($experience['description'] ?? ''));
+        $creditCost = max(0, (int)($experience['policy']['credit_cost'] ?? 0));
+        $category = strtolower(trim((string)($experience['category'] ?? '')));
+        if ($category === '') {
+            $category = 'game';
+        }
+
+        $categoryLabel = match ($category) {
+            'gateway' => 'Gateway',
+            'game' => 'Game',
+            default => ucfirst($category),
+        };
+
+        $metadata = [$categoryLabel];
+        if ($category === 'game' && !empty($experience['capabilities']['multiplayer'])) {
+            $metadata[] = 'Multiplayer';
+        }
+
+        $detailParts = [];
+        if ($description !== '') {
+            $detailParts[] = $description;
+        }
+        $detailParts[] = '[' . implode(' / ', $metadata) . ']';
+
+        return [
+            'label' => $name . ($creditCost > 0 ? " [{$creditCost} credits]" : ''),
+            'detail' => implode(' ', $detailParts),
+        ];
+    }
+
+    /**
+     * Resolve the normalized terminal relay mode with a legacy-safe fallback.
+     *
+     * @param array<string, mixed> $experience Normalized catalog entry
+     */
+    public static function resolveTerminalMode(array $experience): string
+    {
+        return ($experience['terminal']['mode'] ?? null) === 'raw'
+            ? 'raw'
+            : 'doorway';
     }
 
     /**

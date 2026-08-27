@@ -32,6 +32,11 @@ Terminal-side bulletin rendering in `telnet/src/BulletinsHandler.php` follows th
 
 Both daemon entry points manually `require_once` every `telnet/src/` class they use. New classes added under `telnet/src/` must be registered in both `telnet/telnet_daemon.php` and `ssh/ssh_daemon.php` — they are not Composer-autoloaded. See also `telnet/CLAUDE.md` for the include-list rule.
 
+The Games & Experiences handler consumes normalized `GameCatalog` fields for
+display metadata and launch behavior. Managed doors publish `terminal.mode` as
+either `doorway` or `raw`; `DoorHandler` must use that field so raw native
+terminal sessions bypass legacy Doorway key and CP437 conversion.
+
 ---
 
 ## Session Flow

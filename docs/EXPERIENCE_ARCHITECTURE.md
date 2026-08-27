@@ -58,7 +58,14 @@ The normalized Experience representation includes common information such as:
 - presentation surfaces
 - presentation metadata
 - policy
+- terminal relay mode for managed doors
 - source metadata
+
+Managed DOS and native Experiences expose terminal relay behavior through the
+normalized `terminal.mode` field. Its value is `raw` only when the managed door
+manifest explicitly requests raw terminal handling; otherwise it is `doorway`.
+Presentation clients must consume this normalized field rather than reaching
+into backend manifest structure.
 
 Compatibility fields are also currently retained where existing BinkTerm code
 still expects the older game/door representation.

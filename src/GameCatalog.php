@@ -181,6 +181,15 @@ class GameCatalog
                         : null,
                 ],
 
+                'terminal' => [
+                    // Managed door manifests own the runtime mode. Normalize
+                    // it here so terminal clients do not depend on manifest
+                    // nesting or pass unknown modes into the relay path.
+                    'mode' => strtolower((string)($door['door']['terminal_mode'] ?? '')) === 'raw'
+                        ? 'raw'
+                        : 'doorway',
+                ],
+
                 'surfaces' => [
                     'web' => empty($door['config']['hide_from_web']) ? 'full' : 'unavailable',
                     'telnet' => 'full',

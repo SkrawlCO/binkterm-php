@@ -105,6 +105,15 @@ final class GameCatalogTest extends TestCase
             self::assertArrayHasKey('admin_only', $game['policy']);
             self::assertArrayHasKey('credit_cost', $game['policy']);
 
+            if (in_array($game['backend']['type'], ['dos', 'native'], true)) {
+                self::assertArrayHasKey('terminal', $game);
+                self::assertArrayHasKey('mode', $game['terminal']);
+                self::assertContains(
+                    $game['terminal']['mode'],
+                    ['doorway', 'raw']
+                );
+            }
+
             self::assertArrayHasKey('source', $game);
             self::assertArrayHasKey('type', $game['source']);
             self::assertArrayHasKey('manifest', $game['source']);
@@ -308,6 +317,42 @@ final class GameCatalogTest extends TestCase
 
             self::assertSame('full', $game['surfaces']['telnet']);
         }
+    }
+
+    public function testRawManagedDoorTerminalModeIsNormalized(): void
+    {
+        $method = new ReflectionMethod(GameCatalog::class, 'addManagedDoors');
+        $experiences = [];
+        $sourceDoor = [
+            'game' => [
+                'name' => 'Raw Native Door',
+                'description' => 'Raw terminal regression fixture.',
+            ],
+            'door' => [
+                'terminal_mode' => 'raw',
+            ],
+            'config' => [
+                'enabled' => true,
+                'credit_cost' => 3,
+            ],
+            'experience' => [
+                'category' => 'game',
+                'multiplayer' => true,
+            ],
+        ];
+
+        $method->invokeArgs($this->catalog, [
+            &$experiences,
+            'native',
+            ['raw-native' => $sourceDoor],
+            null,
+            'telnet',
+        ]);
+
+        self::assertSame('raw', $experiences['raw-native']['terminal']['mode']);
+        self::assertSame('game', $experiences['raw-native']['category']);
+        self::assertTrue($experiences['raw-native']['capabilities']['multiplayer']);
+        self::assertSame(3, $experiences['raw-native']['policy']['credit_cost']);
     }
 
     public function testWebOnlyBackendsDescribeTelnetAsPlanned(): void

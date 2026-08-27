@@ -203,6 +203,11 @@ Stats are refreshed from the API after returning from netmail, echomail, or bull
 
 ### User Experience
 
+- The **Games & Experiences** menu uses shared catalog metadata for door names,
+  descriptions, categories, multiplayer status, and credit costs. Native
+  experiences configured for raw terminal handling preserve modern terminal
+  input, ANSI output, and resize behavior; traditional doors continue to use
+  Doorway-compatible handling.
 - Colorized prompts and status messages
 - Welcome message with BBS website URL
 - Goodbye message on logout with reminder to visit website
