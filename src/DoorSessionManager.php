@@ -77,7 +77,13 @@ class DoorSessionManager
      * @return array Session information
      * @throws Exception If session cannot be started
      */
-    public function startSession(int $userId, string $doorName, array $userData, string $doorType = 'dos'): array
+    public function startSession(
+        int $userId,
+        string $doorName,
+        array $userData,
+        string $doorType = 'dos',
+        ?string $authSessionId = null
+    ): array
     {
         $remoteAddr = $_SERVER['REMOTE_ADDR'] ?? 'cli';
         $this->logger->info("[StartSession] BEGIN - User: $userId, Door: $doorName, Type: $doorType, IP: $remoteAddr");
@@ -135,8 +141,9 @@ class DoorSessionManager
         $stmt = $this->db->prepare("
             INSERT INTO door_sessions (
                 session_id, user_id, door_id, node_number,
-                ws_port, expires_at, ws_token, user_data, door_type
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ws_port, expires_at, ws_token, user_data, door_type,
+                auth_session_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ");
 
         $stmt->execute([
@@ -148,7 +155,8 @@ class DoorSessionManager
             $expiresAt,
             $wsToken,
             json_encode($userData),
-            $doorType
+            $doorType,
+            $authSessionId
         ]);
 
         // Commit transaction (releases node allocation lock)
@@ -240,6 +248,21 @@ class DoorSessionManager
         ");
         $stmt->execute(['normal', $sessionId]);
 
+        // Clear Experience presence for the BinkTerm auth session that
+        // currently owns this door session's presence.
+        $authSessionId = $session['auth_session_id'] ?? null;
+
+        if (is_string($authSessionId) && $authSessionId !== '') {
+            try {
+                (new ExperiencePresence())->leave($authSessionId);
+            } catch (\Throwable $e) {
+                $this->logger->warning(
+                    "[EndSession] Failed to clear Experience presence: "
+                    . $e->getMessage()
+                );
+            }
+        }
+
         // Log session termination
         $this->logSessionEvent($sessionId, 'terminated', ['exit_status' => 'normal']);
 
@@ -289,6 +312,61 @@ class DoorSessionManager
     }
 
     /**
+     * Assign the BinkTerm auth session that currently owns Experience presence.
+     */
+    public function setAuthSessionId(
+        string $sessionId,
+        ?string $authSessionId
+    ): bool
+    {
+        $currentStmt = $this->db->prepare("
+            SELECT auth_session_id
+            FROM door_sessions
+            WHERE session_id = ?
+              AND ended_at IS NULL
+        ");
+        $currentStmt->execute([$sessionId]);
+
+        $currentAuthSessionId = $currentStmt->fetchColumn();
+
+        if ($currentAuthSessionId === false) {
+            return false;
+        }
+
+        $stmt = $this->db->prepare("
+            UPDATE door_sessions
+            SET auth_session_id = ?
+            WHERE session_id = ?
+              AND ended_at IS NULL
+        ");
+
+        $stmt->execute([
+            $authSessionId,
+            $sessionId,
+        ]);
+
+        if (
+            is_string($currentAuthSessionId)
+            && $currentAuthSessionId !== ''
+            && $currentAuthSessionId !== $authSessionId
+        ) {
+            try {
+                (new ExperiencePresence())->leave(
+                    $currentAuthSessionId
+                );
+            } catch (\Throwable $e) {
+                $this->logger->warning(
+                    "[PresenceOwner] Failed to clear previous "
+                    . "Experience presence: "
+                    . $e->getMessage()
+                );
+            }
+        }
+
+        return true;
+    }
+
+    /**
      * Get active session by ID
      *
      * @param string $sessionId Session identifier
@@ -317,6 +395,7 @@ class DoorSessionManager
             'tcp_port' => $session['tcp_port'],
             'ws_port' => $session['ws_port'],
             'ws_token' => $session['ws_token'] ?? null,
+            'auth_session_id' => $session['auth_session_id'] ?? null,
             'bridge_pid' => $session['bridge_pid'],
             'dosbox_pid' => $session['dosbox_pid'],
             'session_path' => $session['session_path'],

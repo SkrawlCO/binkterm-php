@@ -19,7 +19,12 @@
     "experience": {
         "category": "game",
         "featured": true,
-        "multiplayer": true
+        "multiplayer": true,
+        "participant_messaging": true,
+        "conversation": {
+            "type": "chat_room",
+            "room_id": 4
+        }
     },
     "door": {
         "executable": "ssh",

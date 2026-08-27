@@ -203,4 +203,82 @@ final class ExperienceReturnContractTest extends TestCase
         );
     }
 
+
+    public function testDoorPresenceOwnerFollowsAuthenticatedLaunchAndResume(): void
+    {
+        $routes = file_get_contents(
+            dirname(__DIR__, 2) . '/routes/door-routes.php'
+        );
+
+        self::assertIsString($routes);
+
+        self::assertStringContainsString(
+            '$doorContext->authSessionId',
+            $routes
+        );
+
+        self::assertStringContainsString(
+            '$sessionManager->setAuthSessionId(',
+            $routes
+        );
+    }
+
+
+
+    public function testDoorTerminationClearsStoredPresenceOwner(): void
+    {
+        $manager = file_get_contents(
+            dirname(__DIR__, 2) . '/src/DoorSessionManager.php'
+        );
+
+        self::assertIsString($manager);
+
+        self::assertStringContainsString(
+            "'auth_session_id' => \$session['auth_session_id'] ?? null",
+            $manager
+        );
+
+        self::assertStringContainsString(
+            '(new ExperiencePresence())->leave($authSessionId);',
+            $manager
+        );
+    }
+
+
+
+    public function testBridgeClearsPresenceBeforeDeletingDoorSession(): void
+    {
+        $bridge = file_get_contents(
+            dirname(__DIR__, 2)
+            . '/scripts/dosbox-bridge/multiplexing-server.js'
+        );
+
+        self::assertIsString($bridge);
+
+        self::assertStringContainsString(
+            'auth_session_id',
+            $bridge
+        );
+
+        $clear = strpos(
+            $bridge,
+            'this.clearExperiencePresence('
+        );
+
+        $delete = strpos(
+            $bridge,
+            'this.deleteSession(session.sessionId, session.slog);'
+        );
+
+        self::assertNotFalse($clear);
+        self::assertNotFalse($delete);
+
+        self::assertLessThan(
+            $delete,
+            $clear,
+            'Bridge cleanup must clear Experience presence before deleting the door session.'
+        );
+    }
+
+
 }

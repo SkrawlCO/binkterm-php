@@ -179,6 +179,11 @@ SimpleRouter::post('/api/door/launch', function() {
                 $wsUrl = "{$protocol}://{$host}:{$port}";
             }
 
+            $sessionManager->setAuthSessionId(
+                $existingSession['session_id'],
+                $doorContext->authSessionId
+            );
+
             publishDoorExperiencePresence($doorContext, $user);
 
             echo json_encode([
@@ -295,7 +300,13 @@ SimpleRouter::post('/api/door/launch', function() {
         }
 
         // Start new session
-        $session = $sessionManager->startSession($doorContext->userId, $doorName, $userData, $doorType);
+        $session = $sessionManager->startSession(
+            $doorContext->userId,
+            $doorName,
+            $userData,
+            $doorType,
+            $doorContext->authSessionId
+        );
 
         publishDoorExperiencePresence($doorContext, $user);
         ActivityTracker::track($doorContext->userId, ActivityTracker::TYPE_DOSDOOR_PLAY, null, $doorName);

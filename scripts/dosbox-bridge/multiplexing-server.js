@@ -302,7 +302,7 @@ class SessionManager {
             await client.connect();
 
             const result = await client.query(
-                `SELECT session_id, user_id, door_id, node_number, ws_port, ws_token, session_path, user_data, door_type
+                `SELECT session_id, user_id, door_id, node_number, ws_port, ws_token, session_path, user_data, door_type, auth_session_id
                  FROM door_sessions
                  WHERE ws_token = $1 AND ended_at IS NULL
                  LIMIT 1`,
@@ -367,6 +367,33 @@ class SessionManager {
         } catch (err) {
             console.error('[DB] Update error:', err.message);
             throw err;
+        } finally {
+            await client.end();
+        }
+    }
+
+    async clearExperiencePresence(authSessionId, slog = null) {
+        if (!authSessionId) {
+            return;
+        }
+
+        const log = slog ? slog.log.bind(slog) : (...a) => console.log(...a);
+        const client = new Client(DB_CONFIG);
+
+        try {
+            await client.connect();
+
+            await client.query(
+                `UPDATE user_sessions
+                 SET activity = 'BBS',
+                     public_activity = NULL
+                 WHERE session_id = $1`,
+                [authSessionId]
+            );
+
+            log(`[PRESENCE] Cleared Experience presence for auth session ${authSessionId}`);
+        } catch (err) {
+            console.error('[PRESENCE] Cleanup error:', err.message);
         } finally {
             await client.end();
         }
@@ -1183,8 +1210,15 @@ class SessionManager {
         // Clean up session files and directory
         this.cleanupSessionFiles(session);
 
-        // Delete session from database
-        this.deleteSession(session.sessionId, session.slog);
+        // Clear BinkTerm Experience presence before removing the
+        // authoritative door-session record. Keep removeSession synchronous;
+        // order the database cleanup through the Promise chain instead.
+        this.clearExperiencePresence(
+            session.sessionData?.auth_session_id,
+            session.slog
+        ).finally(() => {
+            this.deleteSession(session.sessionId, session.slog);
+        });
 
         // Log statistics
         const uptime = Math.floor((Date.now() - session.startTime) / 1000);
