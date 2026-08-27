@@ -50,7 +50,7 @@ final class ExperienceLaunch
             'native' => [
                 'type' => 'native',
                 'id' => $id,
-                'url' => "/games/nativedoors/{$id}",
+                'url' => "/games/nativedoors/{$id}?experience=1",
             ],
             'dos' => [
                 'type' => 'dos',

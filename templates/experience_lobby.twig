@@ -3,7 +3,10 @@
 {% block title %}{{ experience.name }} - {{ system_name }}{% endblock %}
 
 {% block content %}
-<div class="container py-3">
+<script>
+    window.isExperiencePage = true;
+</script>
+<div class="container py-3" data-experience-lobby>
 
     <div class="row justify-content-center">
         <div class="col-12 col-lg-9 col-xl-8">

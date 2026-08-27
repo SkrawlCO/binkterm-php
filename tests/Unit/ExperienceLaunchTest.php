@@ -20,7 +20,7 @@ final class ExperienceLaunchTest extends TestCase
         self::assertSame([
             'type' => 'native',
             'id' => 'usurper',
-            'url' => '/games/nativedoors/usurper',
+            'url' => '/games/nativedoors/usurper?experience=1',
         ], $result);
     }
 
@@ -175,7 +175,7 @@ final class ExperienceLaunchTest extends TestCase
         self::assertSame([
             'type' => 'native',
             'id' => 'usurper',
-            'url' => '/games/nativedoors/usurper',
+            'url' => '/games/nativedoors/usurper?experience=1',
         ], $result);
     }
 }
