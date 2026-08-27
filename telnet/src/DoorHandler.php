@@ -4,6 +4,7 @@ namespace BinktermPHP\TelnetServer;
 
 use BinktermPHP\Config;
 use BinktermPHP\GameCatalog;
+use BinktermPHP\ExperiencePresentation;
 
 /**
  * DoorHandler - DOS door game access via telnet
@@ -132,17 +133,14 @@ class DoorHandler
         string $experienceId,
         array $experience
     ): array {
-        $name = trim((string)($experience['name'] ?? ''));
-        if ($name === '') {
-            $name = $experienceId;
-        }
-
-        $description = trim((string)($experience['description'] ?? ''));
-        $creditCost = max(0, (int)($experience['policy']['credit_cost'] ?? 0));
-        $category = strtolower(trim((string)($experience['category'] ?? '')));
-        if ($category === '') {
-            $category = 'game';
-        }
+        $presentation = ExperiencePresentation::build(
+            ['id' => $experienceId] + $experience,
+            'telnet'
+        );
+        $name = $presentation['name'];
+        $description = $presentation['description'];
+        $creditCost = $presentation['cost']['credits'];
+        $category = strtolower($presentation['category']);
 
         $categoryLabel = match ($category) {
             'gateway' => 'Gateway',
@@ -151,7 +149,7 @@ class DoorHandler
         };
 
         $metadata = [$categoryLabel];
-        if ($category === 'game' && !empty($experience['capabilities']['multiplayer'])) {
+        if ($category === 'game' && $presentation['capabilities']['multiplayer']) {
             $metadata[] = 'Multiplayer';
         }
 

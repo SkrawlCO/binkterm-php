@@ -105,6 +105,19 @@ Explicit discovery controls remain authoritative over cross-surface parity.
 For example, a managed door configured with `hide_from_web` is omitted from the
 web catalog entirely rather than disclosed as an unavailable Experience.
 
+`ExperiencePresentation` is the shared, backend-independent read model for web
+and terminal presentation consumers. It composes normalized `GameCatalog`
+metadata with optional `ExperienceState` and viewer participation data. It does
+not discover Experiences, authorize users, resolve dynamic runtime policy,
+launch sessions, or mutate participation, presence, or activity.
+
+The presentation model keeps visibility, static surface support, and runtime
+availability distinct. Its Play/Return/End fields describe presentation state;
+backend routes and session managers remain authoritative for credits, capacity,
+authorization, and the final launch or termination decision. Runtime counts are
+nullable when no state snapshot was supplied, allowing the same model to serve
+catalog-only and lobby/detail consumers without fabricating live state.
+
 ## Web and Classic BBS Parity
 
 BinkTerm Modern is intended to expand what a BBS can provide without abandoning

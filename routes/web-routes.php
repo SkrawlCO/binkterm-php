@@ -9,6 +9,7 @@ use BinktermPHP\BbsConfig;
 use BinktermPHP\BulletinManager;
 use BinktermPHP\Config;
 use BinktermPHP\ExperienceLaunch;
+use BinktermPHP\ExperienceParticipation;
 use BinktermPHP\ExperienceState;
 use BinktermPHP\GameCatalog;
 use BinktermPHP\I18n\LocaleResolver;
@@ -221,12 +222,21 @@ SimpleRouter::get('/experiences/{experienceId}', function(string $experienceId) 
     }
 
     $launch = ExperienceLaunch::resolve($experience, 'web');
+    $userId = (int)($user['user_id'] ?? $user['id'] ?? 0);
+    $viewerPlayer = ExperienceParticipation::findViewerPlayer($state, $userId);
+    $experiencePresentation = \BinktermPHP\ExperiencePresentation::build(
+        $experience,
+        'web',
+        $state,
+        $viewerPlayer
+    );
 
     $template = new Template();
     $template->renderResponse('experience_lobby.twig', [
         'experience' => $experience,
         'state' => $state,
         'launch' => $launch,
+        'experience_presentation' => $experiencePresentation,
     ]);
 });
 

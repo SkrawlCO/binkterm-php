@@ -143,6 +143,16 @@ SimpleRouter::get('/games', function() {
         'web'
     );
 
+    foreach ($games as &$game) {
+        $game['experience_presentation'] =
+            \BinktermPHP\ExperiencePresentation::build(
+                $game,
+                'web',
+                $experienceStates[$game['id']] ?? null
+            );
+    }
+    unset($game);
+
     // Sort all games by name
     usort($games, function($a, $b) {
         return strcasecmp($a['name'], $b['name']);

@@ -43,6 +43,11 @@ launch-only `DoorHandler` chooser filters on `actions.launch`, so those entries
 remain non-runnable until a later terminal discovery/detail interface presents
 non-launchable Experiences explicitly.
 
+Terminal display metadata is composed through `ExperiencePresentation`, the
+same read-model boundary available to web library and lobby consumers. Relay
+selection remains separate and continues to read the normalized
+`terminal.mode`; presentation data must never determine raw versus Doorway I/O.
+
 ---
 
 ## Session Flow

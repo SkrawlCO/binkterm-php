@@ -74,36 +74,37 @@
     {% if games|length > 0 %}
     <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
         {% for game in games %}
+        {% set experience_view = game.experience_presentation|default(game) %}
         <div class="col">
             <div class="card h-100 game-card">
                 <div class="card-body d-flex">
                     <div class="game-icon me-3">
-                        <img src="{{ game.presentation.icon_url }}" alt="{{ game.name }}" class="rounded"
+                        <img src="{{ experience_view.presentation.icon_url }}" alt="{{ experience_view.name }}" class="rounded"
                              style="width: 64px; height: 64px; object-fit: cover;"
                              onerror="this.src='/favicon.svg'">
                     </div>
                     <div class="flex-grow-1">
                         <h5 class="card-title mb-1">
-                            {{ game.name }}
-                            {% if game.backend.type == 'dos' %}
+                            {{ experience_view.name }}
+                            {% if experience_view.backend.type == 'dos' %}
                                 <span class="badge bg-info text-white" style="font-size: 0.65rem;">DOS</span>
-                            {% elseif game.backend.type == 'native' %}
+                            {% elseif experience_view.backend.type == 'native' %}
                                 <span class="badge bg-warning text-dark" style="font-size: 0.65rem;">NATIVE</span>
-                            {% elseif game.backend.type == 'jsdos' %}
+                            {% elseif experience_view.backend.type == 'jsdos' %}
                                 <span class="badge bg-primary text-white" style="font-size: 0.65rem;">{{ t('ui.webdoors.type_jsdos', {}, locale, ['common']) }}</span>
                             {% else %}
                                 <span class="badge bg-success text-white" style="font-size: 0.65rem;">WEB</span>
                             {% endif %}
                         </h5>
-                        <p class="card-text text-muted small mb-2">{{ game.description }}</p>
+                        <p class="card-text text-muted small mb-2">{{ experience_view.description }}</p>
 
-                        {% if game.capabilities.multiplayer %}
+                        {% if experience_view.capabilities.multiplayer %}
                             {% set experience_state = experience_states[game.id]|default(null) %}
                             {% set experience_live = experience_state and experience_state.active %}
                             <a
                                 href="/experiences/{{ game.id }}"
                                 class="experience-link text-decoration-none"
-                                aria-label="View {{ game.name }} Experience"
+                                aria-label="View {{ experience_view.name }} Experience"
                             >
                                 <div class="small mb-2">
                                     <i class="fas fa-compass me-1" aria-hidden="true"></i>
@@ -132,18 +133,19 @@
 
                         <div class="d-flex justify-content-between align-items-center">
                             <small class="text-muted">
-                                {% if game.backend.type == 'dos' or game.backend.type == 'native' %}
+                                {% if experience_view.backend.type == 'dos' or experience_view.backend.type == 'native' %}
                                     {% if game.players %}{{ t('ui.webdoors.players_count', {'count': game.players}, locale, ['common']) }}{% endif %}
-                                    {% if game.version or game.author %}
+                                    {% if experience_view.version or experience_view.author %}
                                         {% if game.players %} | {% endif %}
-                                        {% if game.version %}v{{ game.version }} {% endif %}
-                                        {% if game.author %}{{ t('ui.webdoors.by_author', {'author': game.author}, locale, ['common']) }}{% endif %}
+                                        {% if experience_view.version %}v{{ experience_view.version }} {% endif %}
+                                        {% if experience_view.author %}{{ t('ui.webdoors.by_author', {'author': experience_view.author}, locale, ['common']) }}{% endif %}
                                     {% endif %}
                                 {% else %}
-                                    {{ t('ui.webdoors.version_by_author', {'version': game.version, 'author': game.author}, locale, ['common']) }}
+                                    {{ t('ui.webdoors.version_by_author', {'version': experience_view.version, 'author': experience_view.author}, locale, ['common']) }}
                                 {% endif %}
                             </small>
-                            {% if game.actions.launch and game.launch %}
+                            {% set presentation_play = experience_view.actions.play is defined ? experience_view.actions.play : game.actions.launch %}
+                            {% if presentation_play and game.launch %}
                                 <a href="/experiences/{{ game.id }}" class="btn btn-primary btn-sm">
                                     <i class="fas fa-play"></i> {{ t('ui.webdoors.launch', {}, locale, ['common']) }}
                                 </a>
@@ -288,4 +290,3 @@
 })();
 </script>
 {% endblock %}
-
