@@ -84,6 +84,47 @@ class BinkpClient
      *                             binkp session rather than silently reusing
      *                             a real uplink relationship's secret.
      */
+    private function acquireHostLock(string $hostname, int $port, int $timeoutSeconds = 90)
+    {
+        $lockDir = rtrim(sys_get_temp_dir(), '/') . '/binkterm-host-locks';
+        if (!is_dir($lockDir)) {
+            @mkdir($lockDir, 0777, true);
+        }
+
+        $safeName = preg_replace('/[^a-zA-Z0-9._-]/', '_', strtolower($hostname)) . '_' . $port;
+        $lockPath = $lockDir . '/' . $safeName . '.lock';
+
+        $handle = @fopen($lockPath, 'c');
+        if ($handle === false) {
+            $this->log("Could not open host lock file {$lockPath}, proceeding without a lock", 'WARNING');
+            return null;
+        }
+
+        $start = time();
+        while (!flock($handle, LOCK_EX | LOCK_NB)) {
+            if (time() - $start >= $timeoutSeconds) {
+                $this->log("Timed out after {$timeoutSeconds}s waiting for host lock on {$hostname}:{$port}; proceeding without it", 'WARNING');
+                fclose($handle);
+                return null;
+            }
+            usleep(250000);
+        }
+
+        $this->log("Acquired host lock for {$hostname}:{$port}", 'DEBUG');
+        return $handle;
+    }
+
+    private function releaseHostLock($handle, string $hostname, int $port): void
+    {
+        if ($handle === null) {
+            return;
+        }
+
+        flock($handle, LOCK_UN);
+        fclose($handle);
+        $this->log("Released host lock for {$hostname}:{$port}", 'DEBUG');
+    }
+
     public function connect($address, $hostname = null, $port = null, $password = null, bool $forceAnonymous = false)
     {
         $callerPassword = $password;
@@ -116,6 +157,10 @@ class BinkpClient
         $password = $forceAnonymous
             ? ($callerPassword ?? '')
             : ($password !== null ? $password : ($uplink['password'] ?? ''));
+
+        $hostLock = $this->acquireHostLock($hostname, $port);
+
+        try {
 
         $this->log("Connecting to {$hostname}:{$port} ({$address})");
         if ($uplink) {
@@ -227,6 +272,10 @@ class BinkpClient
             }
             // Don't close socket here either - let the session handle cleanup
             throw $e;
+        }
+
+        } finally {
+            $this->releaseHostLock($hostLock, $hostname, $port);
         }
     }
 
