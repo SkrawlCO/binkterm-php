@@ -23,7 +23,7 @@
         "participant_messaging": true,
         "conversation": {
             "type": "chat_room",
-            "room_id": 3
+            "room_name": "Lateania"
         }
     },
     "door": {

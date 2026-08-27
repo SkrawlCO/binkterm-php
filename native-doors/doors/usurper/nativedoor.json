@@ -39,7 +39,7 @@
     "participant_messaging": true,
     "conversation": {
       "type": "chat_room",
-      "room_id": 2
+      "room_name": "Usurper Reborn"
     }
   }
 }

@@ -383,12 +383,17 @@ final class GameCatalogTest extends TestCase
             3,
             substr_count(
                 $source,
-                "'conversation' => self::normalizeConversationCapability("
+                "'conversation' => \$this->normalizeConversationCapability("
             )
         );
 
         self::assertStringContainsString(
-            "if (\$type !== 'chat_room' || \$roomId <= 0)",
+            "if (\$type !== 'chat_room')",
+            $source
+        );
+
+        self::assertStringContainsString(
+            "resolveActiveRoomByName(\$roomName)",
             $source
         );
 

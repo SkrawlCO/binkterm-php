@@ -13,8 +13,17 @@
 
 namespace BinktermPHP;
 
+use BinktermPHP\Chat\ChatRoomService;
+
 class GameCatalog
 {
+    private ChatRoomService $chatRooms;
+
+    public function __construct(?ChatRoomService $chatRooms = null)
+    {
+        $this->chatRooms = $chatRooms ?? new ChatRoomService();
+    }
+
     /**
      * Get enabled playable experiences for a presentation surface.
      *
@@ -50,10 +59,14 @@ class GameCatalog
     /**
      * Normalize an optional Experience conversation capability.
      *
+     * Manifests may reference a chat room by local numeric room_id or by the
+     * portable room_name. The normalized Experience contract always exposes
+     * the resolved numeric room_id used by the local BinkTerm installation.
+     *
      * @param mixed $conversation
      * @return array{type:string,room_id:int}|null
      */
-    private static function normalizeConversationCapability(
+    private function normalizeConversationCapability(
         mixed $conversation
     ): ?array {
         if (!is_array($conversation)) {
@@ -61,10 +74,30 @@ class GameCatalog
         }
 
         $type = (string)($conversation['type'] ?? '');
+
+        if ($type !== 'chat_room') {
+            return null;
+        }
+
         $roomId = (int)($conversation['room_id'] ?? 0);
 
-        if ($type !== 'chat_room' || $roomId <= 0) {
-            return null;
+        if ($roomId <= 0) {
+            $roomName = trim(
+                (string)($conversation['room_name'] ?? '')
+            );
+
+            if ($roomName === '') {
+                return null;
+            }
+
+            $room = $this->chatRooms
+                ->resolveActiveRoomByName($roomName);
+
+            if ($room === null) {
+                return null;
+            }
+
+            $roomId = $room['id'];
         }
 
         return [
@@ -120,7 +153,7 @@ class GameCatalog
                 'capabilities' => [
                     'multiplayer' => (bool)($experience['multiplayer'] ?? false),
                     'participant_messaging' => (bool)($experience['participant_messaging'] ?? false),
-                    'conversation' => self::normalizeConversationCapability(
+                    'conversation' => $this->normalizeConversationCapability(
                         $experience['conversation'] ?? null
                     ),
                 ],
@@ -249,7 +282,7 @@ class GameCatalog
                 'capabilities' => [
                     'multiplayer' => $multiplayer,
                     'participant_messaging' => false,
-                    'conversation' => self::normalizeConversationCapability(
+                    'conversation' => $this->normalizeConversationCapability(
                         $manifest['experience']['conversation'] ?? null
                     ),
                 ],
@@ -354,7 +387,7 @@ class GameCatalog
                 'capabilities' => [
                     'multiplayer' => false,
                     'participant_messaging' => false,
-                    'conversation' => self::normalizeConversationCapability(
+                    'conversation' => $this->normalizeConversationCapability(
                         $manifest['experience']['conversation'] ?? null
                     ),
                 ],
