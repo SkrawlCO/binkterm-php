@@ -143,18 +143,48 @@ SimpleRouter::get('/games', function() {
         'web'
     );
 
+    $currentUserId = (int)($user['user_id'] ?? $user['id'] ?? 0);
+    $continuePlaying = [];
+    $liveExperiences = [];
+
     foreach ($games as &$game) {
+        $experienceState = $experienceStates[$game['id']] ?? null;
+        $viewerPlayer = is_array($experienceState)
+            ? \BinktermPHP\ExperienceParticipation::findViewerPlayer(
+                $experienceState,
+                $currentUserId
+            )
+            : null;
+
         $game['experience_presentation'] =
             \BinktermPHP\ExperiencePresentation::build(
                 $game,
                 'web',
-                $experienceStates[$game['id']] ?? null
+                $experienceState,
+                $viewerPlayer
             );
+
+        if ($viewerPlayer !== null) {
+            $continuePlaying[] = $game;
+        } elseif (
+            (int)($game['experience_presentation']['runtime']['player_count'] ?? 0) > 0
+        ) {
+            // Continue Playing already communicates the viewer's live entry;
+            // avoid repeating it in the adjacent Live Now section. All
+            // Experiences remains the complete canonical collection below.
+            $liveExperiences[] = $game;
+        }
     }
     unset($game);
 
     // Sort all games by name
     usort($games, function($a, $b) {
+        return strcasecmp($a['name'], $b['name']);
+    });
+    usort($continuePlaying, function($a, $b) {
+        return strcasecmp($a['name'], $b['name']);
+    });
+    usort($liveExperiences, function($a, $b) {
         return strcasecmp($a['name'], $b['name']);
     });
 
@@ -185,10 +215,12 @@ SimpleRouter::get('/games', function() {
     $monthEnd = $monthStart->modify('+1 month');
     $leaderboardMonthLabel = $monthStart->format('F Y');
 
+    $scoreboardExpanded = ($_GET['scoreboard'] ?? '') === 'full';
     $leaderboard = [];
     try {
         $db = \BinktermPHP\Database::getInstance()->getPdo();
-        $limit = 10;
+        $scoreboardLimit = 5;
+        $limitClause = $scoreboardExpanded ? '' : 'LIMIT ?';
         $stmt = $db->prepare('
             WITH best_scores AS (
                 SELECT DISTINCT ON (l.user_id, l.game_id, l.board)
@@ -202,11 +234,12 @@ SimpleRouter::get('/games', function() {
             FROM best_scores b
             JOIN users u ON b.user_id = u.id
             ORDER BY b.score DESC, b.created_at DESC
-            LIMIT ?
-        ');
+            ' . $limitClause);
         $stmt->bindValue(1, $monthStart->format('Y-m-d H:i:s'));
         $stmt->bindValue(2, $monthEnd->format('Y-m-d H:i:s'));
-        $stmt->bindValue(3, $limit, \PDO::PARAM_INT);
+        if (!$scoreboardExpanded) {
+            $stmt->bindValue(3, $scoreboardLimit, \PDO::PARAM_INT);
+        }
         $stmt->execute();
         $rows = $stmt->fetchAll(\PDO::FETCH_ASSOC);
 
@@ -231,10 +264,13 @@ SimpleRouter::get('/games', function() {
     $template = new Template();
     $template->renderResponse('webdoors.twig', [
         'games' => $games,
+        'continue_playing' => $continuePlaying,
+        'live_experiences' => $liveExperiences,
         'experience_states' => $experienceStates,
         'leaderboard' => $leaderboard,
         'leaderboard_month_label' => $leaderboardMonthLabel,
-        'leaderboard_month_offset' => $monthOffset
+        'leaderboard_month_offset' => $monthOffset,
+        'scoreboard_expanded' => $scoreboardExpanded,
     ]);
 });
 

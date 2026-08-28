@@ -1,0 +1,41 @@
+{% set view = game.experience_presentation %}
+<div class="col">
+    <article class="card experience-library-card h-100 mb-0">
+        <div class="card-body experience-card-layout">
+            <div class="experience-card-identity d-flex gap-2">
+                <img class="experience-card-icon flex-shrink-0" src="{{ view.presentation.icon_url|default('/favicon.svg') }}" alt="" onerror="this.src='/favicon.svg'">
+                <div class="min-w-0 flex-grow-1">
+                    <h3 class="h5 mb-1"><a href="/experiences/{{ view.id }}" class="experience-title-link">{{ view.name }}</a></h3>
+                    <div class="experience-card-taxonomy small text-muted">
+                        {% if view.category == 'game' %}{{ t('ui.webdoors.category_game', {}, locale, ['common']) }}{% elseif view.category == 'gateway' %}{{ t('ui.webdoors.category_gateway', {}, locale, ['common']) }}{% else %}{{ view.category|capitalize }}{% endif %} · {% if view.capabilities.multiplayer %}{{ t('ui.webdoors.multiplayer', {}, locale, ['common']) }}{% else %}{{ t('ui.webdoors.single_player', {}, locale, ['common']) }}{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <p class="experience-card-description text-muted small mb-0">{{ view.description }}</p>
+
+            <div class="experience-metadata-cluster small" aria-label="{{ t('ui.webdoors.heading', {}, locale, ['common']) }}">
+                {% if view.runtime.player_count > 0 %}
+                <span class="experience-metadata-token experience-presence" data-experience-id="{{ view.id }}" aria-live="polite"><i class="fas fa-circle text-success me-1" aria-hidden="true"></i><span>{{ t('ui.webdoors.players_online', {'count': view.runtime.player_count}, locale, ['common']) }}{% if view.capacity.max_sessions %} · {{ view.runtime.session_count }}/{{ view.capacity.max_sessions }}{% endif %}</span></span>
+                {% elseif view.capabilities.multiplayer %}
+                <span class="experience-metadata-token experience-presence d-none" data-experience-id="{{ view.id }}" aria-live="polite"><i class="fas fa-circle text-success me-1" aria-hidden="true"></i><span></span></span>
+                {% endif %}
+                <span class="experience-metadata-token">{% if view.cost.free %}{{ t('ui.webdoors.free', {}, locale, ['common']) }}{% else %}{{ t('ui.webdoors.credit_cost', {'count': view.cost.credits}, locale, ['common']) }}{% endif %}</span>
+                <span class="experience-metadata-token experience-surface-token"><span class="experience-surface-label">{{ t('ui.webdoors.surface_web', {}, locale, ['common']) }}</span><span class="experience-surface-state state-{{ view.surfaces.web }}">{{ t('ui.webdoors.surface_' ~ view.surfaces.web, {}, locale, ['common']) }}</span></span>
+                <span class="experience-metadata-token experience-surface-token"><span class="experience-surface-label">{{ t('ui.webdoors.surface_telnet', {}, locale, ['common']) }}</span><span class="experience-surface-state state-{{ view.surfaces.telnet }}">{{ t('ui.webdoors.surface_' ~ view.surfaces.telnet, {}, locale, ['common']) }}</span></span>
+            </div>
+
+            <div class="experience-card-footer d-flex flex-wrap justify-content-between align-items-center gap-2">
+                <span class="experience-technical-label" title="{{ t('ui.webdoors.technology', {}, locale, ['common']) }}">{{ view.backend.label }}</span>
+                <div class="d-flex flex-wrap justify-content-end gap-2 ms-auto">
+                    <a href="/experiences/{{ view.id }}" class="btn btn-outline-secondary btn-sm experience-card-action">{{ t('ui.webdoors.details', {}, locale, ['common']) }}</a>
+                    {% if view.actions.return and game.launch %}
+                    <a href="/experiences/{{ view.id }}" class="btn btn-fidonet btn-sm experience-card-action"><i class="fas fa-sign-in-alt me-1" aria-hidden="true"></i>{{ t('ui.webdoors.return', {}, locale, ['common']) }}</a>
+                    {% elseif view.actions.play and game.launch %}
+                    <a href="/experiences/{{ view.id }}" class="btn btn-fidonet btn-sm experience-card-action"><i class="fas fa-play me-1" aria-hidden="true"></i>{{ t('ui.webdoors.play', {}, locale, ['common']) }}</a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </article>
+</div>

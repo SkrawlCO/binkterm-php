@@ -1,0 +1,282 @@
+.experiences-library {
+    --experience-surface: var(--message-bg, #fff);
+    --experience-surface-muted: var(--message-quote-bg, #f8f9fa);
+    --experience-border: var(--border-color, #dee2e6);
+    --experience-accent: var(--fidonet-blue, #0066cc);
+    --experience-live: var(--fidonet-green, #198754);
+    max-width: 1640px;
+}
+
+.experiences-library-header {
+    border-left: 3px solid var(--experience-accent);
+    padding-left: 1rem;
+}
+
+.experiences-eyebrow {
+    color: var(--text-color-muted, #6c757d);
+    font-family: "Courier New", monospace;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+
+.experience-section-heading {
+    align-items: end;
+    display: flex;
+    gap: 1rem;
+    justify-content: space-between;
+}
+
+.experience-count,
+.experience-state-label,
+.experience-action-state,
+.experience-technical-label {
+    border: 1px solid var(--experience-border);
+    border-radius: 999px;
+    color: var(--text-color-muted, #6c757d);
+    display: inline-block;
+    font-family: "Courier New", monospace;
+    font-size: 0.72rem;
+    line-height: 1.2;
+    padding: 0.25rem 0.55rem;
+    white-space: nowrap;
+}
+
+.experience-resume-card,
+.experience-live-card,
+.experience-library-card,
+.experience-scoreboard {
+    border: 1px solid var(--experience-border);
+}
+
+.experience-resume-card {
+    border-left: 3px solid var(--experience-accent);
+}
+
+.experience-resume-icon,
+.experience-card-icon {
+    background: var(--experience-surface-muted);
+    border: 1px solid var(--experience-border);
+    border-radius: 0.45rem;
+    height: 48px;
+    object-fit: cover;
+    width: 48px;
+}
+
+.experience-resume-icon {
+    height: 48px;
+    width: 48px;
+}
+
+.experience-live-dot {
+    background: var(--experience-live);
+    border-radius: 50%;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--experience-live) 18%, transparent);
+    height: 0.65rem;
+    width: 0.65rem;
+}
+
+.experience-state-live,
+.state-full {
+    border-color: var(--experience-live);
+    color: var(--experience-live);
+}
+
+.state-planned {
+    border-style: dashed;
+    color: var(--text-color-muted, #6c757d);
+}
+
+.state-unavailable {
+    opacity: 0.78;
+}
+
+.experience-library-card {
+    transition: border-color 0.15s ease, transform 0.15s ease;
+}
+
+.experience-card-layout {
+    display: grid;
+    grid-template-rows: auto auto minmax(2.9rem, auto) auto;
+    row-gap: 0.4rem;
+    padding: 0.65rem;
+}
+
+.experience-card-identity {
+    min-height: 48px;
+    min-width: 0;
+}
+
+.experience-card-identity h3 {
+    display: -webkit-box;
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+}
+
+.experience-library-card:hover,
+.experience-library-card:focus-within {
+    border-color: var(--experience-accent);
+    transform: translateY(-1px);
+}
+
+.experience-title-link,
+.leaderboard-link {
+    color: inherit;
+    text-decoration: none;
+}
+
+.experience-title-link:hover,
+.experience-title-link:focus,
+.leaderboard-link:hover,
+.leaderboard-link:focus {
+    color: var(--experience-accent);
+    text-decoration: underline;
+}
+
+.experience-card-description {
+    display: -webkit-box;
+    line-height: 1.3;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+}
+
+.experience-metadata-cluster {
+    align-content: start;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+}
+
+.experience-metadata-token {
+    background: var(--experience-surface-muted);
+    border: 1px solid var(--experience-border);
+    border-radius: 999px;
+    color: var(--text-color-muted, #6c757d);
+    display: inline-flex;
+    font-size: 0.72rem;
+    line-height: 1.2;
+    padding: 0.15rem 0.4rem;
+    white-space: nowrap;
+}
+
+.experience-surface-token {
+    gap: 0.25rem;
+}
+
+.experience-surface-token .experience-surface-label::after {
+    content: "·";
+    margin-left: 0.25rem;
+}
+
+.experience-surface-token .experience-surface-state {
+    font-weight: 600;
+}
+
+.experience-card-footer {
+    align-self: end;
+}
+
+.experience-library-card .experience-technical-label {
+    border: 0;
+    font-size: 0.65rem;
+    padding: 0;
+}
+
+.experience-card-action.btn-sm {
+    font-size: 0.75rem;
+    line-height: 1.2;
+    padding: 0.2rem 0.45rem;
+}
+
+/* Four columns begin only when each directory card retains a readable width. */
+@media (min-width: 1320px) {
+    .experience-library-grid > * {
+        flex: 0 0 auto;
+        width: 25%;
+    }
+}
+
+@media (min-width: 768px) {
+    .experience-card-identity {
+        min-height: 4.3rem;
+    }
+
+    .experience-card-description {
+        min-height: 2.6em;
+    }
+}
+
+.experience-scoreboard .card-footer {
+    background: var(--experience-surface-muted);
+    border-top: 1px solid var(--experience-border);
+}
+
+.experience-scoreboard-table th {
+    white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .experience-library-card {
+        transition: none;
+    }
+
+    .experience-library-card:hover,
+    .experience-library-card:focus-within {
+        transform: none;
+    }
+}
+
+@media (max-width: 575.98px) {
+    .experiences-library-header {
+        padding-left: 0.75rem;
+    }
+
+    .experience-card-layout {
+        grid-template-rows: auto auto auto auto;
+        padding: 0.65rem;
+    }
+
+    .experience-metadata-token {
+        white-space: normal;
+    }
+
+    .experience-scoreboard-table thead {
+        display: none;
+    }
+
+    .experience-scoreboard-table,
+    .experience-scoreboard-table tbody,
+    .experience-scoreboard-table tr,
+    .experience-scoreboard-table td {
+        display: block;
+        width: 100%;
+    }
+
+    .experience-scoreboard-table tr {
+        border-bottom: 1px solid var(--experience-border);
+        padding: 0.65rem 0.75rem;
+    }
+
+    .experience-scoreboard-table td {
+        align-items: baseline;
+        border: 0;
+        display: flex;
+        gap: 1rem;
+        justify-content: space-between;
+        padding: 0.15rem 0;
+        text-align: right !important;
+    }
+
+    .experience-scoreboard-table td::before {
+        color: var(--text-color-muted, #6c757d);
+        content: attr(data-label);
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-align: left;
+    }
+}

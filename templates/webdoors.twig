@@ -2,197 +2,170 @@
 
 {% block title %}{{ t('ui.webdoors.page_title', {}, locale, ['common']) }} - {{ system_name }}{% endblock %}
 
+{% block head %}
+<link href="/css/experiences.css" rel="stylesheet">
+{% endblock %}
+
 {% block content %}
-<div class="container mt-4">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h1><i class="fas fa-gamepad"></i> {{ t('ui.webdoors.heading', {}, locale, ['common']) }}</h1>
-    </div>
+<div class="container experiences-library py-3 py-md-4">
+    <header class="experiences-library-header mb-4">
+        <div class="experiences-eyebrow">{{ system_name }} // {{ t('ui.webdoors.heading', {}, locale, ['common']) }}</div>
+        <h1 class="h2 mb-1"><i class="fas fa-compass me-2" aria-hidden="true"></i>{{ t('ui.webdoors.heading', {}, locale, ['common']) }}</h1>
+        <p class="text-muted mb-0">{{ t('ui.webdoors.description', {}, locale, ['common']) }}</p>
+    </header>
 
-    <p class="text-muted mb-4">{{ t('ui.webdoors.description', {}, locale, ['common']) }}</p>
-    <div class="card mb-4">
-        <div class="card-header d-flex justify-content-between align-items-center">
-            <span><i class="fas fa-trophy text-warning me-2"></i>{{ t('ui.webdoors.top_scores_all_games', {}, locale, ['common']) }}</span>
-            <div class="d-flex align-items-center gap-2">
-                <div class="btn-group btn-group-sm" role="group" aria-label="{{ t('ui.webdoors.leaderboard_month_navigation', {}, locale, ['common']) }}">
-                    <a class="btn btn-outline-secondary btn-sm" href="/games?month_offset={{ leaderboard_month_offset + 1 }}" title="{{ t('ui.webdoors.previous_month', {}, locale, ['common']) }}">
-                        <i class="fas fa-chevron-left"></i>
-                    </a>
-                    {% if leaderboard_month_offset > 0 %}
-                    <a class="btn btn-outline-secondary btn-sm" href="/games?month_offset={{ leaderboard_month_offset - 1 }}" title="{{ t('ui.webdoors.next_month', {}, locale, ['common']) }}">
-                        <i class="fas fa-chevron-right"></i>
-                    </a>
-                    {% else %}
-                    <button class="btn btn-outline-secondary btn-sm" type="button" disabled title="{{ t('ui.webdoors.current_month', {}, locale, ['common']) }}">
-                        <i class="fas fa-chevron-right"></i>
-                    </button>
-                    {% endif %}
-                </div>
-                <small class="text-muted">{{ leaderboard_month_label }}</small>
+    {% if continue_playing|default([])|length > 0 %}
+    <section class="experience-section mb-4" aria-labelledby="continue-playing-title">
+        <div class="experience-section-heading">
+            <div>
+                <h2 id="continue-playing-title" class="h4 mb-1">{{ t('ui.webdoors.continue_playing', {}, locale, ['common']) }}</h2>
+                <p class="text-muted small mb-0">{{ t('ui.webdoors.continue_playing_description', {}, locale, ['common']) }}</p>
             </div>
         </div>
-        <div class="card-body p-0">
-            <div class="table-responsive">
-                <table class="table table-sm table-striped mb-0 align-middle">
-                    <thead class="table-light">
-                        <tr>
-                            <th style="width: 60px;">{{ t('ui.webdoors.rank', {}, locale, ['common']) }}</th>
-                        <th>{{ t('ui.webdoors.player', {}, locale, ['common']) }}</th>
-                        <th>{{ t('ui.webdoors.game', {}, locale, ['common']) }}</th>
-                        <th>{{ t('ui.webdoors.board', {}, locale, ['common']) }}</th>
-                        <th class="text-end" style="width: 100px;">{{ t('ui.webdoors.score', {}, locale, ['common']) }}</th>
-                        <th style="width: 110px;">{{ t('ui.webdoors.date', {}, locale, ['common']) }}</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% if leaderboard|length == 0 %}
-                    <tr>
-                        <td colspan="6" class="text-center text-muted py-3">{{ t('ui.webdoors.no_scores_for_month', {'month': leaderboard_month_label}, locale, ['common']) }}</td>
-                    </tr>
-                    {% else %}
-                    {% for entry in leaderboard %}
-                    <tr>
-                        <td class="text-muted">#{{ entry.rank }}</td>
-                        <td>{{ entry.display_name }}</td>
-                        <td>
-                            {% if entry.game_launch %}
-                                <a href="/experiences/{{ entry.game_id }}" class="leaderboard-link">{{ entry.game_name }}</a>
-                            {% else %}
-                                {{ entry.game_name }}
-                            {% endif %}
-                        </td>
-                        <td><span class="badge bg-secondary-subtle text-dark">{{ entry.board }}</span></td>
-                        <td class="text-end">{{ entry.score }}</td>
-                        <td class="text-muted">{{ entry.date }}</td>
-                    </tr>
-                    {% endfor %}
-                    {% endif %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-    {% if games|length > 0 %}
-    <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
-        {% for game in games %}
-        {% set experience_view = game.experience_presentation|default(game) %}
-        <div class="col">
-            <div class="card h-100 game-card">
-                <div class="card-body d-flex">
-                    <div class="game-icon me-3">
-                        <img src="{{ experience_view.presentation.icon_url }}" alt="{{ experience_view.name }}" class="rounded"
-                             style="width: 64px; height: 64px; object-fit: cover;"
-                             onerror="this.src='/favicon.svg'">
-                    </div>
-                    <div class="flex-grow-1">
-                        <h5 class="card-title mb-1">
-                            {{ experience_view.name }}
-                            {% if experience_view.backend.type == 'dos' %}
-                                <span class="badge bg-info text-white" style="font-size: 0.65rem;">DOS</span>
-                            {% elseif experience_view.backend.type == 'native' %}
-                                <span class="badge bg-warning text-dark" style="font-size: 0.65rem;">NATIVE</span>
-                            {% elseif experience_view.backend.type == 'jsdos' %}
-                                <span class="badge bg-primary text-white" style="font-size: 0.65rem;">{{ t('ui.webdoors.type_jsdos', {}, locale, ['common']) }}</span>
-                            {% else %}
-                                <span class="badge bg-success text-white" style="font-size: 0.65rem;">WEB</span>
-                            {% endif %}
-                        </h5>
-                        <p class="card-text text-muted small mb-2">{{ experience_view.description }}</p>
-
-                        {% if experience_view.capabilities.multiplayer %}
-                            {% set experience_state = experience_states[game.id]|default(null) %}
-                            {% set experience_live = experience_state and experience_state.active %}
-                            <a
-                                href="/experiences/{{ game.id }}"
-                                class="experience-link text-decoration-none"
-                                aria-label="View {{ experience_view.name }} Experience"
-                            >
-                                <div class="small mb-2">
-                                    <i class="fas fa-compass me-1" aria-hidden="true"></i>
-                                    Experience
-                                </div>
-                            </a>
-
-                            <div
-                                class="experience-presence small mb-2{% if not experience_live %} d-none{% endif %}"
-                                data-experience-id="{{ game.id }}"
-                                aria-live="polite"
-                            >
-                                <i class="fas fa-circle text-success me-1" aria-hidden="true"></i>
-                                <strong>LIVE</strong>
-                                <span class="ms-1">
-                                    {% if experience_live %}
-                                        {% if experience_state.player_count == 1 and experience_state.players[0] is defined %}
-                                            {{ experience_state.players[0].username }}{% if experience_state.players[0].presence %} — {{ experience_state.players[0].presence }}{% endif %}
-                                        {% else %}
-                                            {{ experience_state.player_count }} players online
-                                        {% endif %}
-                                    {% endif %}
-                                </span>
+        <div class="d-grid gap-2 mt-3">
+            {% for game in continue_playing %}
+                {% set view = game.experience_presentation %}
+                <article class="card experience-resume-card mb-0">
+                    <div class="card-body d-flex flex-column flex-md-row align-items-md-center gap-3 py-3">
+                        <img class="experience-resume-icon" src="{{ view.presentation.icon_url|default('/favicon.svg') }}" alt="" onerror="this.src='/favicon.svg'">
+                        <div class="flex-grow-1 min-w-0">
+                            <h3 class="h5 mb-1">{{ view.name }}</h3>
+                            <div class="text-muted small">
+                                {{ t('ui.webdoors.participating_now', {}, locale, ['common']) }}
+                                {% if view.runtime.player_count > 0 %} · {{ t('ui.webdoors.players_online', {'count': view.runtime.player_count}, locale, ['common']) }}{% endif %}
                             </div>
-                        {% endif %}
-
-                        <div class="d-flex justify-content-between align-items-center">
-                            <small class="text-muted">
-                                {% if experience_view.backend.type == 'dos' or experience_view.backend.type == 'native' %}
-                                    {% if game.players %}{{ t('ui.webdoors.players_count', {'count': game.players}, locale, ['common']) }}{% endif %}
-                                    {% if experience_view.version or experience_view.author %}
-                                        {% if game.players %} | {% endif %}
-                                        {% if experience_view.version %}v{{ experience_view.version }} {% endif %}
-                                        {% if experience_view.author %}{{ t('ui.webdoors.by_author', {'author': experience_view.author}, locale, ['common']) }}{% endif %}
-                                    {% endif %}
-                                {% else %}
-                                    {{ t('ui.webdoors.version_by_author', {'version': experience_view.version, 'author': experience_view.author}, locale, ['common']) }}
-                                {% endif %}
-                            </small>
-                            {% set presentation_play = experience_view.actions.play is defined ? experience_view.actions.play : game.actions.launch %}
-                            {% if presentation_play and game.launch %}
-                                <a href="/experiences/{{ game.id }}" class="btn btn-primary btn-sm">
-                                    <i class="fas fa-play"></i> {{ t('ui.webdoors.launch', {}, locale, ['common']) }}
-                                </a>
+                        </div>
+                        <div class="d-flex gap-2 flex-shrink-0">
+                            <a href="/experiences/{{ view.id }}" class="btn btn-outline-secondary btn-sm">{{ t('ui.webdoors.details', {}, locale, ['common']) }}</a>
+                            {% if view.actions.return and game.launch %}
+                            <a href="/experiences/{{ view.id }}" class="btn btn-fidonet btn-sm"><i class="fas fa-sign-in-alt me-1" aria-hidden="true"></i>{{ t('ui.webdoors.return', {}, locale, ['common']) }}</a>
                             {% endif %}
                         </div>
                     </div>
-                </div>
+                </article>
+            {% endfor %}
+        </div>
+    </section>
+    {% endif %}
+
+    {% if live_experiences|default([])|length > 0 %}
+    <section class="experience-section mb-4" aria-labelledby="live-now-title">
+        <div class="experience-section-heading">
+            <div>
+                <h2 id="live-now-title" class="h4 mb-1">{{ t('ui.webdoors.live_now', {}, locale, ['common']) }}</h2>
+                <p class="text-muted small mb-0">{{ t('ui.webdoors.live_now_description', {}, locale, ['common']) }}</p>
             </div>
         </div>
-        {% endfor %}
-    </div>
-    {% else %}
-    <div class="alert alert-info">
-        <i class="fas fa-info-circle"></i> {{ t('ui.webdoors.no_games_available', {}, locale, ['common']) }}
-    </div>
+        <div class="row row-cols-1 row-cols-lg-2 g-3 mt-0">
+            {% for game in live_experiences %}
+                {% set view = game.experience_presentation %}
+                <div class="col">
+                    <article class="card experience-live-card h-100 mb-0">
+                        <div class="card-body d-flex align-items-center gap-3 py-3">
+                            <span class="experience-live-dot" aria-hidden="true"></span>
+                            <div class="flex-grow-1 min-w-0">
+                                <h3 class="h6 mb-1"><a href="/experiences/{{ view.id }}" class="text-decoration-none">{{ view.name }}</a></h3>
+                                <div class="text-muted small">{{ t('ui.webdoors.players_online', {'count': view.runtime.player_count}, locale, ['common']) }}{% if view.capacity.max_sessions %} · {{ view.runtime.session_count }}/{{ view.capacity.max_sessions }}{% endif %}</div>
+                            </div>
+                            <span class="experience-state-label experience-state-live">{{ t('ui.webdoors.live', {}, locale, ['common']) }}</span>
+                        </div>
+                    </article>
+                </div>
+            {% endfor %}
+        </div>
+    </section>
     {% endif %}
-</div>
 
-<style>
-.game-card {
-    transition: transform 0.2s, box-shadow 0.2s;
-}
-.game-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-}
-.experience-presence-link {
-    display: block;
-}
-.experience-presence-link:hover .experience-presence {
-    text-decoration: underline;
-}
-.leaderboard-link {
-    color: inherit;
-    text-decoration: none;
-}
-.leaderboard-link:hover {
-    text-decoration: underline;
-}
-</style>
+    <section class="experience-section mb-5" aria-labelledby="all-experiences-title">
+        <div class="experience-section-heading">
+            <div>
+                <h2 id="all-experiences-title" class="h4 mb-1">{{ t('ui.webdoors.all_experiences', {}, locale, ['common']) }}</h2>
+                <p class="text-muted small mb-0">{{ t('ui.webdoors.all_experiences_description', {}, locale, ['common']) }}</p>
+            </div>
+            <span class="experience-count">{{ games|length }}</span>
+        </div>
+
+        {% if games|length > 0 %}
+        <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-2 mt-0 experience-library-grid">
+            {% for game in games %}
+                {% include 'partials/experience_library_card.twig' with {game: game} %}
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="alert alert-info mt-3 mb-0">
+            <i class="fas fa-info-circle me-1" aria-hidden="true"></i>{{ t('ui.webdoors.no_games_available', {}, locale, ['common']) }}
+        </div>
+        {% endif %}
+    </section>
+
+    <section class="experience-section" aria-labelledby="community-scoreboard-title">
+        <div class="card experience-scoreboard mb-0">
+            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+                <div>
+                    <h2 id="community-scoreboard-title" class="h5 mb-0"><i class="fas fa-trophy text-warning me-2" aria-hidden="true"></i>{{ t('ui.webdoors.community_scoreboard', {}, locale, ['common']) }}</h2>
+                    <small class="text-muted">{{ t('ui.webdoors.community_scoreboard_description', {}, locale, ['common']) }}</small>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <div class="btn-group btn-group-sm" role="group" aria-label="{{ t('ui.webdoors.leaderboard_month_navigation', {}, locale, ['common']) }}">
+                        <a class="btn btn-outline-secondary btn-sm" href="/games?month_offset={{ leaderboard_month_offset + 1 }}{% if scoreboard_expanded %}&amp;scoreboard=full{% endif %}" title="{{ t('ui.webdoors.previous_month', {}, locale, ['common']) }}" aria-label="{{ t('ui.webdoors.previous_month', {}, locale, ['common']) }}"><i class="fas fa-chevron-left" aria-hidden="true"></i></a>
+                        {% if leaderboard_month_offset > 0 %}
+                        <a class="btn btn-outline-secondary btn-sm" href="/games?month_offset={{ leaderboard_month_offset - 1 }}{% if scoreboard_expanded %}&amp;scoreboard=full{% endif %}" title="{{ t('ui.webdoors.next_month', {}, locale, ['common']) }}" aria-label="{{ t('ui.webdoors.next_month', {}, locale, ['common']) }}"><i class="fas fa-chevron-right" aria-hidden="true"></i></a>
+                        {% else %}
+                        <button class="btn btn-outline-secondary btn-sm" type="button" disabled title="{{ t('ui.webdoors.current_month', {}, locale, ['common']) }}" aria-label="{{ t('ui.webdoors.current_month', {}, locale, ['common']) }}"><i class="fas fa-chevron-right" aria-hidden="true"></i></button>
+                        {% endif %}
+                    </div>
+                    <small class="text-muted text-nowrap">{{ leaderboard_month_label }}</small>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                {% if leaderboard|length == 0 %}
+                <div class="text-center text-muted py-4">{{ t('ui.webdoors.no_scores_for_month', {'month': leaderboard_month_label}, locale, ['common']) }}</div>
+                {% else %}
+                <div class="table-responsive">
+                    <table class="table table-sm mb-0 align-middle experience-scoreboard-table">
+                        <thead><tr><th>{{ t('ui.webdoors.rank', {}, locale, ['common']) }}</th><th>{{ t('ui.webdoors.player', {}, locale, ['common']) }}</th><th>{{ t('ui.webdoors.game', {}, locale, ['common']) }}</th><th>{{ t('ui.webdoors.board', {}, locale, ['common']) }}</th><th class="text-end">{{ t('ui.webdoors.score', {}, locale, ['common']) }}</th><th>{{ t('ui.webdoors.date', {}, locale, ['common']) }}</th></tr></thead>
+                        <tbody>
+                        {% for entry in leaderboard %}
+                        <tr><td data-label="{{ t('ui.webdoors.rank', {}, locale, ['common']) }}" class="text-muted">#{{ entry.rank }}</td><td data-label="{{ t('ui.webdoors.player', {}, locale, ['common']) }}">{{ entry.display_name }}</td><td data-label="{{ t('ui.webdoors.game', {}, locale, ['common']) }}">{% if entry.game_launch %}<a href="/experiences/{{ entry.game_id }}" class="leaderboard-link">{{ entry.game_name }}</a>{% else %}{{ entry.game_name }}{% endif %}</td><td data-label="{{ t('ui.webdoors.board', {}, locale, ['common']) }}"><span class="experience-technical-label">{{ entry.board }}</span></td><td data-label="{{ t('ui.webdoors.score', {}, locale, ['common']) }}" class="text-end">{{ entry.score }}</td><td data-label="{{ t('ui.webdoors.date', {}, locale, ['common']) }}" class="text-muted">{{ entry.date }}</td></tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% endif %}
+            </div>
+            <div class="card-footer text-end">
+                {% if scoreboard_expanded %}
+                <a href="/games?month_offset={{ leaderboard_month_offset }}" class="btn btn-outline-secondary btn-sm">{{ t('ui.webdoors.show_compact_scoreboard', {}, locale, ['common']) }}</a>
+                {% else %}
+                <a href="/games?month_offset={{ leaderboard_month_offset }}&amp;scoreboard=full" class="btn btn-outline-secondary btn-sm">{{ t('ui.webdoors.view_full_scoreboard', {}, locale, ['common']) }}</a>
+                {% endif %}
+            </div>
+        </div>
+    </section>
+</div>
 
 <script>
 (function () {
     const presenceElements = document.querySelectorAll('.experience-presence');
+    const playersOnlineFallback = '{{ t('ui.webdoors.players_online', {'count': '{count}'}, locale, ['common']) | escape('js') }}';
 
     if (!presenceElements.length) {
         return;
+    }
+
+    function presenceT(params) {
+        if (typeof window.t === 'function') {
+            return window.t(
+                'ui.webdoors.players_online',
+                params,
+                playersOnlineFallback
+            );
+        }
+
+        return playersOnlineFallback.replace(
+            /\{([^}]+)\}/g,
+            (_, key) => params[key] ?? ''
+        );
     }
 
     function setPresenceVisible(element, visible) {
@@ -201,7 +174,6 @@
 
     function renderPresence(element, state) {
         const playerCount = Number(state.player_count || 0);
-        const players = Array.isArray(state.players) ? state.players : [];
         const label = element.querySelector('span');
 
         if (!label) {
@@ -214,21 +186,17 @@
             return;
         }
 
-        if (playerCount === 1) {
-            const player = players[0];
+        let presenceText = presenceT({ count: playerCount });
+        const sessionCount = Number(state.session_count || 0);
+        const maxSessions = Number(
+            state.experience?.capacity?.max_sessions || 0
+        );
 
-            if (player && player.username) {
-                const presence = player.presence || 'Playing';
-                label.textContent = player.username + ' — ' + presence;
-            } else {
-                label.textContent = '1 player online';
-            }
-
-            setPresenceVisible(element, true);
-            return;
+        if (maxSessions > 0) {
+            presenceText += ' · ' + sessionCount + '/' + maxSessions;
         }
 
-        label.textContent = playerCount + ' players online';
+        label.textContent = presenceText;
         setPresenceVisible(element, true);
     }
 

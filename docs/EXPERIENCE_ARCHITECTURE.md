@@ -118,6 +118,68 @@ authorization, and the final launch or termination decision. Runtime counts are
 nullable when no state snapshot was supplied, allowing the same model to serve
 catalog-only and lobby/detail consumers without fabricating live state.
 
+`ExperienceState` is the shared bulk read-side view of current sessions,
+players, and public presence. Collection pages should request state once for
+the authorized catalog rather than issue one state query per card.
+
+`ExperienceParticipation` interprets that state for the current viewer using
+numeric user identity. It owns the normalized semantics of Play, Return, and
+End actions, including explicit participation termination; it does not replace
+backend session ownership. `ExperienceLaunch` resolves static surface support
+and canonical launch targets. A resolved target means that presentation may
+offer an action, not that launch is guaranteed: backend launch and session
+routes remain authoritative for runtime authorization, credits, capacity, and
+session creation.
+
+The web `/games` route presents this model as the Experiences library. It uses
+one collection-level `ExperienceState` read to derive optional Continue Playing
+and Live Now sections, then renders the complete authorized web catalog under
+All Experiences. Viewer participation is matched by numeric user identity.
+Hidden entries remain absent because library composition occurs only after
+`GameCatalog` applies web discovery policy. The Community Scoreboard remains a
+separate score-oriented view and must not be treated as popularity metadata.
+
+The library sections have distinct membership rules:
+
+- **Continue Playing** contains every visible, authorized web Experience in
+  which the numeric viewer identity has active participation. Return takes
+  priority over Play.
+- **Live Now** contains other visible web Experiences with a player count
+  greater than zero. Continue Playing entries are excluded to avoid adjacent
+  duplication.
+- **All Experiences** is the complete visible, authorized web inventory,
+  including entries already shown in the optional activity sections.
+- **Community Scoreboard** reports submitted scores for the selected month.
+  Scores are not evidence of current occupancy or popularity.
+
+## SysOp Configuration and Customization
+
+Slice-level Experience behavior is core BinktermPHP functionality. Individual
+Experience content and availability remain backend-owned. SysOps add, enable,
+and configure Experiences through the existing backend manifests and Admin
+interfaces documented in [DOS Doors](DOSDoors.md), [Native Doors](NativeDoors.md),
+[WebDoors](WebDoors.md), and [JS-DOS](JSDOSDoors.md). Those systems supply names,
+descriptions, artwork, requirements, policy, and backend launch configuration;
+this shared layer normalizes their data for presentation.
+
+Shipped translation catalogs provide reusable defaults. Site-specific wording
+should use **Admin → BBS Settings → Language Overrides**, which stores overlays
+under `config/i18n/overrides/<locale>/<namespace>.json`. This avoids editing
+base catalogs that may be replaced by a future BinktermPHP upgrade.
+
+For upgrade-safe layout customization, template resolution checks
+`templates/custom/` before `templates/shells/<activeShell>/` and then
+`templates/`. A local replacement can therefore customize presentation without
+editing the shipped template. Custom templates should consume normalized
+Experience and `ExperiencePresentation` fields. They must not hard-code
+Experience IDs, backend manifest structure, backend launch URLs, catalog
+contents, or site-specific player assumptions.
+
+Core code owns discovery, normalized state, participation semantics, static
+launch resolution, and reusable presentation defaults. SysOp overrides own
+optional wording and layout changes. Branding, artwork, enabled integrations,
+and local content remain site-specific.
+
 ## Web and Classic BBS Parity
 
 BinkTerm Modern is intended to expand what a BBS can provide without abandoning
