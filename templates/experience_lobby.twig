@@ -227,8 +227,19 @@
                         </div>
                     {% endif %}
 
+                    {# Capacity is still derived in the template. ExperiencePresentation
+                       capacity/status normalization is deferred to a later slice. #}
                     {% set at_capacity = max_sessions and state.session_count >= max_sessions %}
-                    {% set launch_supported = experience.actions.launch and launch %}
+
+                    {# Slice 5B: the initial primary action and End control come from the
+                       canonical ExperiencePresentation the route already computed. No
+                       participation policy is decided here. #}
+                    {% set launch_supported = view.actions.static_launchable %}
+                    {% set viewer_participating = view.viewer.participating %}
+                    {% set primary_action = view.actions.primary %}
+                    {# Capacity blocks a new launch, but an existing participant may always
+                       return (mirrors the client-side `atCapacity && !viewerParticipating`). #}
+                    {% set launch_blocked_by_capacity = at_capacity and not viewer_participating %}
                     {% set credit_cost = view.cost.credits %}
 
                     <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
@@ -274,7 +285,8 @@
                             <button
                                 id="experience-end-button"
                                 type="button"
-                                class="btn btn-outline-danger d-none"
+                                class="btn btn-outline-danger{% if not view.actions.end_participation %} d-none{% endif %}"
+                                {% if not view.actions.end_participation %}disabled{% endif %}
                             >
                                 <i class="fas fa-stop me-1" aria-hidden="true"></i>
                                 End Participation
@@ -282,12 +294,15 @@
 
                             {% if launch_supported %}
                                 <a id="experience-launch-button" href="{{ launch.url }}"
-                                   class="btn btn-fidonet{% if at_capacity %} disabled{% endif %}"
-                                   {% if at_capacity %}aria-disabled="true" tabindex="-1"{% endif %}>
-                                    <i class="fas fa-play me-1" aria-hidden="true"></i>
+                                   class="btn btn-fidonet{% if launch_blocked_by_capacity %} disabled{% endif %}"
+                                   data-viewer-participating="{{ viewer_participating ? 'true' : 'false' }}"
+                                   {% if launch_blocked_by_capacity %}aria-disabled="true" tabindex="-1"{% endif %}>
+                                    <i class="fas {% if primary_action == 'return' %}fa-sign-in-alt{% else %}fa-play{% endif %} me-1" aria-hidden="true"></i>
                                     <span id="experience-launch-label">
-                                        {% if at_capacity %}
+                                        {% if launch_blocked_by_capacity %}
                                             At Capacity
+                                        {% elseif primary_action == 'return' %}
+                                            Return to {{ experience.name }}
                                         {% else %}
                                             Play {{ experience.name }}
                                         {% endif %}

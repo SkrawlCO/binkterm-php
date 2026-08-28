@@ -1605,4 +1605,174 @@ final class ExperienceLobbyTemplateTest extends TestCase
         self::assertLessThan($badgePos, $descPos);
     }
 
+    // ---- Slice 5B: server-correct initial Play / Return / End ----
+
+    /** @return array<string,mixed> A live participant record for state.players[]. */
+    private static function activePlayer(int $userId): array
+    {
+        return [
+            'user_id' => $userId,
+            'username' => 'Viewer',
+            'session_id' => 'session-' . $userId,
+            'presence' => 'Playing Usurper Reborn',
+            'presence_state' => 'playing',
+            'node' => 1,
+            'started_at' => time(),
+        ];
+    }
+
+    public function testParticipatingViewerInitialRenderShowsReturn(): void
+    {
+        $html = $this->renderLobby(
+            1,
+            10,
+            true,
+            null,
+            'Usurper Reborn',
+            true,
+            '/door-assets/usurper/icon',
+            '/games/nativedoors/usurper',
+            'native',
+            'usurper',
+            [self::activePlayer(42)],
+            42
+        );
+
+        self::assertStringContainsString('Return to Usurper Reborn', $html);
+        self::assertStringContainsString('fa-sign-in-alt', $html);
+        self::assertStringContainsString(
+            'data-viewer-participating="true"',
+            $html
+        );
+        self::assertStringNotContainsString('Play Usurper Reborn', $html);
+    }
+
+    public function testParticipatingViewerInitialRenderShowsEnabledEndControl(): void
+    {
+        $html = $this->renderLobby(
+            1,
+            10,
+            true,
+            null,
+            'Usurper Reborn',
+            true,
+            '/door-assets/usurper/icon',
+            '/games/nativedoors/usurper',
+            'native',
+            'usurper',
+            [self::activePlayer(42)],
+            42
+        );
+
+        // Isolate the End button element.
+        self::assertSame(
+            1,
+            preg_match(
+                '/<button\s+id="experience-end-button"([^>]*)>/s',
+                $html,
+                $m
+            )
+        );
+        self::assertStringNotContainsString('d-none', $m[1]);
+        self::assertStringNotContainsString('disabled', $m[1]);
+    }
+
+    public function testParticipatingViewerAtCapacityCanStillReturn(): void
+    {
+        $html = $this->renderLobby(
+            10,
+            10,
+            true,
+            null,
+            'Usurper Reborn',
+            true,
+            '/door-assets/usurper/icon',
+            '/games/nativedoors/usurper',
+            'native',
+            'usurper',
+            [self::activePlayer(42)],
+            42
+        );
+
+        self::assertStringContainsString('Return to Usurper Reborn', $html);
+
+        // Isolate the launch anchor; it must not be disabled for a participant.
+        self::assertSame(
+            1,
+            preg_match(
+                '/<a\s+id="experience-launch-button"([^>]*)>/s',
+                $html,
+                $m
+            )
+        );
+        self::assertStringNotContainsString('aria-disabled="true"', $m[1]);
+        self::assertStringNotContainsString('tabindex="-1"', $m[1]);
+        self::assertDoesNotMatchRegularExpression(
+            '/class="[^"]*\bdisabled\b[^"]*"/',
+            $m[1]
+        );
+        self::assertStringContainsString(
+            'data-viewer-participating="true"',
+            $html
+        );
+
+        // The primary-action label is Return, not the capacity fallback.
+        self::assertSame(
+            1,
+            preg_match(
+                '/<span id="experience-launch-label">\s*([^<]+?)\s*<\/span>/s',
+                $html,
+                $label
+            )
+        );
+        self::assertSame('Return to Usurper Reborn', trim($label[1]));
+    }
+
+    public function testNonParticipantInitialRenderShowsPlayAndHiddenEnd(): void
+    {
+        $html = $this->renderLobby(0, 10);
+
+        self::assertStringContainsString('Play Usurper Reborn', $html);
+        self::assertStringContainsString(
+            'data-viewer-participating="false"',
+            $html
+        );
+        self::assertStringNotContainsString('Return to Usurper Reborn', $html);
+
+        self::assertSame(
+            1,
+            preg_match(
+                '/<button\s+id="experience-end-button"([^>]*)>/s',
+                $html,
+                $m
+            )
+        );
+        self::assertStringContainsString('d-none', $m[1]);
+        self::assertStringContainsString('disabled', $m[1]);
+    }
+
+    public function testNonParticipantAtCapacityStillBlocksLaunch(): void
+    {
+        $html = $this->renderLobby(10, 10);
+
+        self::assertStringContainsString('At Capacity', $html);
+        self::assertStringNotContainsString('Play Usurper Reborn', $html);
+        self::assertStringNotContainsString('Return to Usurper Reborn', $html);
+
+        self::assertSame(
+            1,
+            preg_match(
+                '/<a\s+id="experience-launch-button"([^>]*)>/s',
+                $html,
+                $m
+            )
+        );
+        self::assertStringContainsString('aria-disabled="true"', $m[1]);
+        self::assertStringContainsString('tabindex="-1"', $m[1]);
+        self::assertMatchesRegularExpression(
+            '/class="[^"]*\bdisabled\b[^"]*"/',
+            $m[1]
+        );
+    }
+
 }
