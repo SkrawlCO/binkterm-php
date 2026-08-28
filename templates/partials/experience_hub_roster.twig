@@ -1,0 +1,38 @@
+{#
+    Crossroads hub — compact, social "who is here" roster line.
+
+    Consumes the already-authorized ExperienceState players[] roster passed to
+    webdoors.twig via experience_states. Public identity only (username +
+    profile link) — never node numbers, session ids, or timing data.
+
+    Params:
+      players          list    ExperienceState players[] for the Experience
+      experience_id    string  target for the "+N more" overflow link
+      limit            int     max visible names (default 4)
+      exclude_user_id  int     optional; drop this user (viewer) from the line
+      prefix           string  optional lead-in text (e.g. "Playing with")
+
+    Server-rendered page-load snapshot. Not live-refreshed in this slice.
+#}
+{%- set roster_players = [] -%}
+{%- for roster_person in players|default([]) -%}
+    {%- if roster_person.username|default('') is not empty
+        and (exclude_user_id is not defined
+            or (roster_person.user_id|default(0)) != exclude_user_id) -%}
+        {%- set roster_players = roster_players|merge([roster_person]) -%}
+    {%- endif -%}
+{%- endfor -%}
+{%- if roster_players is not empty -%}
+    {%- set roster_limit = limit|default(4) -%}
+    {%- set roster_overflow = roster_players|length - roster_limit -%}
+    <div class="experience-hub-roster small">
+        {%- if prefix|default('') is not empty -%}
+            <span class="experience-hub-roster-lead">{{ prefix }}</span>
+        {%- endif -%}
+        {%- for roster_person in roster_players|slice(0, roster_limit) -%}
+            {%- if not loop.first %} · {% endif -%}
+            <a class="experience-hub-roster-name" href="/profile/{{ roster_person.username|url_encode }}">{{ roster_person.username }}</a>
+        {%- endfor -%}
+        {%- if roster_overflow > 0 %} · <a class="experience-hub-roster-more" href="/experiences/{{ experience_id }}">{{ t('ui.webdoors.roster_more', {'count': roster_overflow}, locale, ['common']) }}</a>{% endif -%}
+    </div>
+{%- endif -%}

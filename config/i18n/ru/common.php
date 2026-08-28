@@ -3791,6 +3791,8 @@ return [
     'ui.webdoors.multiplayer' => 'Многопользовательская',
     'ui.webdoors.single_player' => 'Один игрок',
     'ui.webdoors.players_online' => 'Онлайн: {count}',
+    'ui.webdoors.playing_with' => 'Вы играете с',
+    'ui.webdoors.roster_more' => 'ещё {count}',
     'ui.webdoors.free' => 'Бесплатно',
     'ui.webdoors.credit_cost' => '{count} кредитов',
     'ui.webdoors.surface_web' => 'Веб',

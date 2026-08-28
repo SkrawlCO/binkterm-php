@@ -3785,6 +3785,8 @@ return [
     'ui.webdoors.multiplayer' => 'Multiplayer',
     'ui.webdoors.single_player' => 'Single player',
     'ui.webdoors.players_online' => '{count} online',
+    'ui.webdoors.playing_with' => 'Playing with',
+    'ui.webdoors.roster_more' => '+{count} more',
     'ui.webdoors.free' => 'Free',
     'ui.webdoors.credit_cost' => '{count} credits',
     'ui.webdoors.surface_web' => 'Web',

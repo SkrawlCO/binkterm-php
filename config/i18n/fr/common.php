@@ -3111,6 +3111,8 @@ Vous pouvez envoyer des rappels individuels en utilisant les boutons « Rappeler
     'ui.webdoors.multiplayer' => 'Multijoueur',
     'ui.webdoors.single_player' => 'Joueur unique',
     'ui.webdoors.players_online' => '{count} en ligne',
+    'ui.webdoors.playing_with' => 'En jeu avec',
+    'ui.webdoors.roster_more' => '+{count} de plus',
     'ui.webdoors.free' => 'Gratuit',
     'ui.webdoors.credit_cost' => '{count} crédits',
     'ui.webdoors.surface_web' => 'Web',

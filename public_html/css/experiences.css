@@ -116,6 +116,40 @@
     width: 0.65rem;
 }
 
+/* Compact "who is here" roster line on Live Now / Continue Playing cards. */
+.experience-hub-roster {
+    color: var(--text-color-muted, #6c757d);
+    line-height: 1.45;
+    margin-top: 0.15rem;
+    overflow-wrap: anywhere;
+}
+
+.experience-hub-roster-lead {
+    margin-right: 0.15rem;
+}
+
+.experience-hub-roster-name {
+    color: var(--experience-accent);
+    text-decoration: none;
+}
+
+.experience-hub-roster-name:hover,
+.experience-hub-roster-name:focus {
+    text-decoration: underline;
+}
+
+.experience-hub-roster-more {
+    color: var(--text-color-muted, #6c757d);
+    font-weight: 600;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.experience-hub-roster-more:hover,
+.experience-hub-roster-more:focus {
+    text-decoration: underline;
+}
+
 .experience-state-live,
 .state-full {
     border-color: var(--experience-live);

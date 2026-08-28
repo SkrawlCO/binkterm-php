@@ -34,6 +34,12 @@
                                 {{ t('ui.webdoors.participating_now', {}, locale, ['common']) }}
                                 {% if view.runtime.player_count > 0 %} · {{ t('ui.webdoors.players_online', {'count': view.runtime.player_count}, locale, ['common']) }}{% endif %}
                             </div>
+                            {% include 'partials/experience_hub_roster.twig' with {
+                                players: experience_states[game.id].players|default([]),
+                                experience_id: view.id,
+                                exclude_user_id: (current_user.user_id ?? current_user.id ?? 0),
+                                prefix: t('ui.webdoors.playing_with', {}, locale, ['common'])
+                            } %}
                         </div>
                         <div class="d-flex gap-2 flex-shrink-0">
                             <a href="/experiences/{{ view.id }}" class="btn btn-outline-secondary btn-sm">{{ t('ui.webdoors.details', {}, locale, ['common']) }}</a>
@@ -66,6 +72,10 @@
                             <div class="flex-grow-1 min-w-0">
                                 <h3 class="h6 mb-1"><a href="/experiences/{{ view.id }}" class="text-decoration-none">{{ view.name }}</a></h3>
                                 <div class="text-muted small">{{ t('ui.webdoors.players_online', {'count': view.runtime.player_count}, locale, ['common']) }}{% if view.capacity.max_sessions %} · {{ view.runtime.session_count }}/{{ view.capacity.max_sessions }}{% endif %}</div>
+                                {% include 'partials/experience_hub_roster.twig' with {
+                                    players: experience_states[game.id].players|default([]),
+                                    experience_id: view.id
+                                } %}
                             </div>
                             <span class="experience-state-label experience-state-live">{{ t('ui.webdoors.live', {}, locale, ['common']) }}</span>
                         </div>
@@ -294,7 +304,9 @@
         element.classList.toggle('d-none', !visible);
     }
 
-    function renderPresence(element, state) {
+    function renderPresence(element, payload) {
+        const state = payload.state || {};
+        const presentation = payload.presentation || {};
         const playerCount = Number(state.player_count || 0);
         const label = element.querySelector('span');
 
@@ -311,8 +323,11 @@
 
         let presenceText = presenceT({ count: playerCount });
         const sessionCount = Number(state.session_count || 0);
+        // Slice 5D: consume the canonical 5C presentation capacity. The old
+        // per-card `state` payload never carried a nested experience/capacity
+        // object, so this suffix was silently lost after the first refresh.
         const maxSessions = Number(
-            state.experience?.capacity?.max_sessions || 0
+            (presentation.capacity && presentation.capacity.max_sessions) || 0
         );
 
         if (maxSessions > 0) {
@@ -365,7 +380,7 @@
                 return;
             }
 
-            renderPresence(element, payload.state);
+            renderPresence(element, payload);
         } catch (error) {
             renderUnavailable(element);
         }

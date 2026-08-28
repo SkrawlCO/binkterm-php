@@ -17,7 +17,9 @@ final class GamesHubTemplateTest extends TestCase
         array $liveExperiences = [],
         array $leaderboard = [],
         bool $scoreboardExpanded = false,
-        array $translationOverrides = []
+        array $translationOverrides = [],
+        array $experienceStates = [],
+        ?array $currentUser = null
     ): string {
         $twig = new Environment(new FilesystemLoader(dirname(__DIR__, 2) . '/templates'));
         $translations = [
@@ -53,6 +55,8 @@ final class GamesHubTemplateTest extends TestCase
             'ui.webdoors.multiplayer' => 'Multiplayer',
             'ui.webdoors.single_player' => 'Single player',
             'ui.webdoors.players_online' => '{count} online',
+            'ui.webdoors.playing_with' => 'Playing with',
+            'ui.webdoors.roster_more' => '+{count} more',
             'ui.webdoors.free' => 'Free',
             'ui.webdoors.credit_cost' => '{count} credits',
             'ui.webdoors.surface_web' => 'Web',
@@ -77,6 +81,8 @@ final class GamesHubTemplateTest extends TestCase
             'games' => $games,
             'continue_playing' => $continuePlaying,
             'live_experiences' => $liveExperiences,
+            'experience_states' => $experienceStates,
+            'current_user' => $currentUser,
             'leaderboard' => $leaderboard,
             'leaderboard_month_label' => 'August 2026',
             'leaderboard_month_offset' => 0,
@@ -357,6 +363,160 @@ final class GamesHubTemplateTest extends TestCase
         self::assertStringNotContainsString('ucfirst($row[\'game_id\'])', $route);
     }
 
+    // ---- Slice 5D: people on the hub ----
+
+    public function testLiveNowShowsPlayerRosterFromAuthorizedState(): void
+    {
+        $game = $this->game('green-dragon', 3);
+        $html = $this->renderHub(
+            [$game],
+            [],
+            [$game],
+            [],
+            false,
+            [],
+            ['green-dragon' => $this->rosterState('green-dragon', ['Skrawl', 'Bard', 'Rogue'])]
+        );
+
+        $liveSection = $this->between($html, 'id="live-now-title"', 'id="all-experiences-title"');
+
+        self::assertStringContainsString('experience-hub-roster', $liveSection);
+        self::assertStringContainsString('href="/profile/Skrawl"', $liveSection);
+        self::assertStringContainsString('href="/profile/Bard"', $liveSection);
+        self::assertStringContainsString('href="/profile/Rogue"', $liveSection);
+        // Public identity only — no session id / node number / timing leakage.
+        $roster = $this->between($liveSection, 'experience-hub-roster', '</div>');
+        self::assertStringNotContainsString('sess-', $roster);
+        self::assertDoesNotMatchRegularExpression('/\bnode\b/i', $roster);
+        self::assertStringNotContainsString('started_at', $roster);
+        self::assertStringNotContainsString('1756000', $roster);
+        // Live Now uses no lead-in prefix.
+        self::assertStringNotContainsString('Playing with', $liveSection);
+    }
+
+    public function testLiveNowRosterIsCappedWithOverflowLinkToDetail(): void
+    {
+        $game = $this->game('green-dragon', 7);
+        $html = $this->renderHub(
+            [$game],
+            [],
+            [$game],
+            [],
+            false,
+            [],
+            ['green-dragon' => $this->rosterState(
+                'green-dragon',
+                ['Skrawl', 'Bard', 'Rogue', 'Alice', 'Bob', 'Cara', 'Dee']
+            )]
+        );
+
+        $liveSection = $this->between($html, 'id="live-now-title"', 'id="all-experiences-title"');
+
+        // First 4 shown, 5th+ collapsed.
+        self::assertStringContainsString('href="/profile/Alice"', $liveSection);
+        self::assertStringNotContainsString('href="/profile/Bob"', $liveSection);
+        self::assertStringContainsString('+3 more', $liveSection);
+        self::assertStringContainsString(
+            'class="experience-hub-roster-more" href="/experiences/green-dragon"',
+            $liveSection
+        );
+    }
+
+    public function testContinuePlayingShowsCoParticipantsExcludingViewer(): void
+    {
+        $game = $this->game('green-dragon', 3, true);
+        $html = $this->renderHub(
+            [$game],
+            [$game],
+            [],
+            [],
+            false,
+            [],
+            ['green-dragon' => $this->rosterState('green-dragon', ['Skrawl', 'Bard', 'Rogue'])],
+            ['user_id' => 1] // Skrawl
+        );
+
+        $resumeSection = $this->between($html, 'id="continue-playing-title"', 'id="all-experiences-title"');
+
+        self::assertStringContainsString('Playing with', $resumeSection);
+        self::assertStringContainsString('href="/profile/Bard"', $resumeSection);
+        self::assertStringContainsString('href="/profile/Rogue"', $resumeSection);
+        // The viewer is not listed among the co-participants.
+        self::assertStringNotContainsString('href="/profile/Skrawl"', $resumeSection);
+    }
+
+    public function testContinuePlayingRendersNoCoParticipantLineWhenViewerIsAlone(): void
+    {
+        $game = $this->game('green-dragon', 1, true);
+        $html = $this->renderHub(
+            [$game],
+            [$game],
+            [],
+            [],
+            false,
+            [],
+            ['green-dragon' => $this->rosterState('green-dragon', ['Skrawl'])],
+            ['user_id' => 1]
+        );
+
+        $resumeSection = $this->between($html, 'id="continue-playing-title"', 'id="all-experiences-title"');
+
+        self::assertStringNotContainsString('Playing with', $resumeSection);
+        self::assertStringNotContainsString('experience-hub-roster', $resumeSection);
+    }
+
+    public function testHubRendersNoRosterUiWhenStateIsMissing(): void
+    {
+        $game = $this->game('green-dragon', 2);
+        $html = $this->renderHub([$game], [], [$game], [], false, [], []); // no experience_states
+
+        $liveSection = $this->between($html, 'id="live-now-title"', 'id="all-experiences-title"');
+
+        self::assertStringNotContainsString('experience-hub-roster', $liveSection);
+    }
+
+    public function testAllExperiencesCardsDoNotGainPlayerNameRosters(): void
+    {
+        $game = $this->game('green-dragon', 3);
+        $html = $this->renderHub(
+            [$game],
+            [],
+            [$game],
+            [],
+            false,
+            [],
+            ['green-dragon' => $this->rosterState('green-dragon', ['Skrawl', 'Bard', 'Rogue'])]
+        );
+
+        $catalogSection = $this->between(
+            $html,
+            'data-experience-filter-root',
+            'community-scoreboard-title'
+        );
+
+        self::assertStringContainsString('experience-library-card', $catalogSection);
+        self::assertStringNotContainsString('experience-hub-roster', $catalogSection);
+        self::assertStringNotContainsString('href="/profile/Skrawl"', $catalogSection);
+    }
+
+    public function testHubPresenceJsConsumes5cPresentationCapacity(): void
+    {
+        $source = file_get_contents(dirname(__DIR__, 2) . '/templates/webdoors.twig');
+        self::assertIsString($source);
+
+        // The confirmed 5C bug path is gone.
+        self::assertStringNotContainsString('state.experience?.capacity', $source);
+        self::assertStringNotContainsString('state.experience', $source);
+
+        // Live presence reconciliation reads the canonical 5C slice.
+        self::assertStringContainsString(
+            'presentation.capacity && presentation.capacity.max_sessions',
+            $source
+        );
+        self::assertStringContainsString('renderPresence(element, payload)', $source);
+        self::assertStringContainsString('const presentation = payload.presentation || {};', $source);
+    }
+
     private function game(string $id, int $playerCount = 0, bool $participating = false): array
     {
         return [
@@ -379,6 +539,36 @@ final class GamesHubTemplateTest extends TestCase
                 'viewer' => ['participating' => $participating],
                 'actions' => ['primary' => $participating ? 'return' : 'play', 'details' => true, 'play' => !$participating, 'return' => $participating, 'end_participation' => $participating, 'static_launchable' => true],
             ],
+        ];
+    }
+
+    /**
+     * @param list<string> $usernames
+     * @return array<string,mixed> one experience_states[] entry
+     */
+    private function rosterState(string $id, array $usernames, int $firstUserId = 1): array
+    {
+        $players = [];
+        $uid = $firstUserId;
+        foreach ($usernames as $username) {
+            $players[] = [
+                'user_id' => $uid,
+                'username' => $username,
+                'session_id' => 'sess-' . $uid,
+                'presence' => 'Playing ' . ucfirst($id),
+                'presence_state' => 'playing',
+                'node' => $uid,
+                'started_at' => 1_756_000_000 + $uid,
+            ];
+            $uid++;
+        }
+
+        return [
+            'experience' => ['id' => $id],
+            'active' => $players !== [],
+            'session_count' => count($players),
+            'player_count' => count($players),
+            'players' => $players,
         ];
     }
 
