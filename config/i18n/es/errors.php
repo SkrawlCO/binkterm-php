@@ -583,6 +583,7 @@ return [
     // WebDoor
     'errors.webdoor.feature_disabled' => 'El sistema de juegos no esta habilitado',
     'errors.webdoor.auth_required' => 'No autenticado',
+    'errors.webdoor.game_unavailable' => 'La experiencia no está disponible',
     'errors.webdoor.invalid_slot' => 'Numero de ranura invalido',
     'errors.webdoor.save_too_large' => 'Los datos guardados exceden el tamano maximo',
     'errors.webdoor.save_not_found' => 'Guardado no encontrado',

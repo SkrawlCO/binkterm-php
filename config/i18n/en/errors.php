@@ -587,6 +587,7 @@ return [
     // WebDoor
     'errors.webdoor.feature_disabled' => 'Game system is not enabled',
     'errors.webdoor.auth_required' => 'Not authenticated',
+    'errors.webdoor.game_unavailable' => 'Experience is not available',
     'errors.webdoor.invalid_slot' => 'Invalid slot number',
     'errors.webdoor.save_too_large' => 'Save data exceeds maximum size',
     'errors.webdoor.save_not_found' => 'Save not found',

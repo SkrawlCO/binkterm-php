@@ -238,8 +238,8 @@ final class GamesHubTemplateTest extends TestCase
         $route = substr($source, $start, $end - $start);
         self::assertSame(1, substr_count($route, 'getExperienceStates('));
         self::assertStringContainsString("getEnabledGames(\$user, 'web')", $route);
-        self::assertStringContainsString('$scoreboardLimit = 5;', $route);
-        self::assertStringContainsString("\$limitClause = \$scoreboardExpanded ? '' : 'LIMIT ?';", $route);
+        self::assertStringContainsString('ExperienceScoreboard())->getMonthlyScores(', $route);
+        self::assertStringNotContainsString('ucfirst($row[\'game_id\'])', $route);
     }
 
     private function game(string $id, int $playerCount = 0, bool $participating = false): array

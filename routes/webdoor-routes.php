@@ -219,44 +219,13 @@ SimpleRouter::get('/games', function() {
     $leaderboard = [];
     try {
         $db = \BinktermPHP\Database::getInstance()->getPdo();
-        $scoreboardLimit = 5;
-        $limitClause = $scoreboardExpanded ? '' : 'LIMIT ?';
-        $stmt = $db->prepare('
-            WITH best_scores AS (
-                SELECT DISTINCT ON (l.user_id, l.game_id, l.board)
-                    l.user_id, l.game_id, l.board, l.score, l.created_at
-                FROM webdoor_leaderboards l
-                WHERE l.created_at >= ?
-                  AND l.created_at < ?
-                ORDER BY l.user_id, l.game_id, l.board, l.score DESC, l.created_at DESC
-            )
-            SELECT b.game_id, b.board, u.real_name, u.username, b.score, b.created_at
-            FROM best_scores b
-            JOIN users u ON b.user_id = u.id
-            ORDER BY b.score DESC, b.created_at DESC
-            ' . $limitClause);
-        $stmt->bindValue(1, $monthStart->format('Y-m-d H:i:s'));
-        $stmt->bindValue(2, $monthEnd->format('Y-m-d H:i:s'));
-        if (!$scoreboardExpanded) {
-            $stmt->bindValue(3, $scoreboardLimit, \PDO::PARAM_INT);
-        }
-        $stmt->execute();
-        $rows = $stmt->fetchAll(\PDO::FETCH_ASSOC);
-
-        foreach ($rows as $index => $row) {
-            $displayName = $row['username'];
-            $gameInfo = $gameLookup[$row['game_id']] ?? null;
-            $leaderboard[] = [
-                'rank' => $index + 1,
-                'display_name' => $displayName,
-                'score' => (int)$row['score'],
-                'game_id' => $row['game_id'],
-                'game_name' => $gameInfo['name'] ?? ucfirst($row['game_id']),
-                'game_launch' => $gameInfo['launch'] ?? null,
-                'board' => $row['board'],
-                'date' => substr($row['created_at'], 0, 10)
-            ];
-        }
+        $leaderboard = (new \BinktermPHP\ExperienceScoreboard())->getMonthlyScores(
+            $db,
+            $gameLookup,
+            $monthStart,
+            $monthEnd,
+            $scoreboardExpanded
+        );
     } catch (\Throwable $e) {
         getServerLogger()->error('Failed to load WebDoor leaderboard: ' . $e->getMessage());
     }

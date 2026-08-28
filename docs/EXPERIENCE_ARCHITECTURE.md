@@ -150,7 +150,12 @@ The library sections have distinct membership rules:
 - **All Experiences** is the complete visible, authorized web inventory,
   including entries already shown in the optional activity sections.
 - **Community Scoreboard** reports submitted scores for the selected month.
-  Scores are not evidence of current occupancy or popularity.
+  Scores are not evidence of current occupancy or popularity. Viewer-facing
+  scoreboards and leaderboards use the requested surface's authorized catalog
+  membership as their visibility boundary. They must not expose an Experience
+  through historical activity when discovery policy hides it from that viewer.
+  Filtering affects presentation and score submission authorization only;
+  historical score records remain stored.
 
 ## SysOp Configuration and Customization
 

@@ -340,6 +340,12 @@ Games requiring persistent storage use the BBS storage API to save/load user dat
 ### Leaderboard API
 
 Games can submit high scores to the BBS leaderboard system for display on the main games page.
+Leaderboard reads and score submissions require the resolved WebDoor ID to be
+present in the authenticated user's discoverable web Experience catalog. The
+API accepts the explicit `game_id` used by the shared SDK and retains referrer
+inference for compatible WebDoors, but unresolved, disabled, stale, or
+otherwise undiscoverable IDs are rejected. This authorization affects access
+to scores; it does not delete historical leaderboard records.
 
 ### Credits System
 

@@ -443,6 +443,7 @@ return [
     'errors.referrals.admin_stats_failed' => 'Échec du chargement des statistiques de parrainage administrateur',
     'errors.webdoor.feature_disabled' => 'Le système de jeu n\'est pas activé',
     'errors.webdoor.auth_required' => 'Non authentifié',
+    'errors.webdoor.game_unavailable' => 'L\'expérience n\'est pas disponible',
     'errors.webdoor.invalid_slot' => 'Numéro d\'emplacement invalide',
     'errors.webdoor.save_too_large' => 'Les données de sauvegarde dépassent la taille maximale',
     'errors.webdoor.save_not_found' => 'Sauvegarde introuvable',
@@ -757,5 +758,4 @@ return [
     'errors.admin.hub_nodes.invalid_owner_user' => 'L\'utilisateur selectionne n\'existe pas.',
     'errors.admin.users.autocomplete_failed' => 'Echec de la recherche d\'utilisateurs.',
 ];
-
 

@@ -584,6 +584,7 @@ return [
     // WebDoor
     'errors.webdoor.feature_disabled' => 'Игровая система не включена',
     'errors.webdoor.auth_required' => 'Требуется аутентификация',
+    'errors.webdoor.game_unavailable' => 'Раздел недоступен',
     'errors.webdoor.invalid_slot' => 'Недопустимый номер слота',
     'errors.webdoor.save_too_large' => 'Данные сохранения превышают максимально допустимый размер',
     'errors.webdoor.save_not_found' => 'Сохранение не найдено',

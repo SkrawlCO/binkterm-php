@@ -18,11 +18,13 @@ namespace BinktermPHP;
 
 use BinktermPHP\Binkp\Config\BinkpConfig;
 use BinktermPHP\BbsConfig;
+use PDO;
 
 class WebDoorController
 {
-    private $db;
-    private $auth;
+    private PDO $db;
+    private Auth $auth;
+    private GameCatalog $catalog;
     private $user;
     private $gameId;
 
@@ -35,10 +37,15 @@ class WebDoorController
     // Maximum save slots per game
     private const MAX_SLOTS = 5;
 
-    public function __construct()
+    public function __construct(
+        ?PDO $db = null,
+        ?Auth $auth = null,
+        ?GameCatalog $catalog = null
+    )
     {
-        $this->db = Database::getInstance()->getPdo();
-        $this->auth = new Auth();
+        $this->db = $db ?? Database::getInstance()->getPdo();
+        $this->auth = $auth ?? new Auth();
+        $this->catalog = $catalog ?? new GameCatalog();
     }
 
     /**
@@ -315,7 +322,14 @@ class WebDoorController
             return $this->errorResponse('errors.webdoor.auth_required', 'Not authenticated', 401);
         }
 
-        $gameId = $_GET['game_id'] ?? $this->detectGameIdFromReferer() ?? 'unknown';
+        $gameId = $this->resolveAuthorizedLeaderboardGameId();
+        if ($gameId === null) {
+            return $this->errorResponse(
+                'errors.webdoor.game_unavailable',
+                'Experience is not available',
+                404
+            );
+        }
         $limit = min((int)($_GET['limit'] ?? 10), 100);
         $scope = $_GET['scope'] ?? 'all';
 
@@ -339,12 +353,20 @@ class WebDoorController
 
         // Get top scores (one per user, highest score)
         $stmt = $this->db->prepare("
-            SELECT DISTINCT ON (l.user_id)
-                l.user_id, u.real_name, u.username, l.score, l.metadata, l.created_at
-            FROM webdoor_leaderboards l
-            JOIN users u ON l.user_id = u.id
-            WHERE l.game_id = ? AND l.board = ? $dateFilter
-            ORDER BY l.user_id, l.score DESC
+            WITH ranked_scores AS (
+                SELECT l.user_id, l.score, l.metadata, l.created_at,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY l.user_id
+                        ORDER BY l.score DESC, l.created_at DESC
+                    ) AS score_rank
+                FROM webdoor_leaderboards l
+                WHERE l.game_id = ? AND l.board = ? $dateFilter
+            )
+            SELECT r.user_id, u.real_name, u.username,
+                r.score, r.metadata, r.created_at
+            FROM ranked_scores r
+            JOIN users u ON r.user_id = u.id
+            WHERE r.score_rank = 1
         ");
         $stmt->execute([$gameId, $board]);
         $allScores = $stmt->fetchAll(\PDO::FETCH_ASSOC);
@@ -407,7 +429,14 @@ class WebDoorController
             return $this->errorResponse('errors.webdoor.auth_required', 'Not authenticated', 401);
         }
 
-        $gameId = $_GET['game_id'] ?? $this->detectGameIdFromReferer() ?? 'unknown';
+        $gameId = $this->resolveAuthorizedLeaderboardGameId();
+        if ($gameId === null) {
+            return $this->errorResponse(
+                'errors.webdoor.game_unavailable',
+                'Experience is not available',
+                404
+            );
+        }
         $input = $this->getJsonInput();
 
         $score = (int)($input['score'] ?? 0);
@@ -426,7 +455,7 @@ class WebDoorController
         // Insert new score
         $stmt = $this->db->prepare('
             INSERT INTO webdoor_leaderboards (user_id, game_id, board, score, metadata)
-            VALUES (?, ?, ?, ?, ?::jsonb)
+            VALUES (?, ?, ?, ?, CAST(? AS JSONB))
             RETURNING id
         ');
         $stmt->execute([
@@ -471,6 +500,33 @@ class WebDoorController
         return null;
     }
 
+    /**
+     * Resolve a leaderboard identity through the viewer's web discovery catalog.
+     */
+    private function resolveAuthorizedLeaderboardGameId(): ?string
+    {
+        $requestedId = $_GET['game_id'] ?? $this->detectGameIdFromReferer();
+        if (!is_string($requestedId) || trim($requestedId) === '') {
+            return null;
+        }
+
+        $requestedId = trim($requestedId);
+        $experiences = $this->catalog->getEnabledGames($this->user, 'web');
+        $experience = $experiences[$requestedId] ?? null;
+
+        if (!is_array($experience)) {
+            return null;
+        }
+
+        if (($experience['backend']['type'] ?? null) !== 'web') {
+            return null;
+        }
+
+        return (string)($experience['id'] ?? $requestedId) === $requestedId
+            ? $requestedId
+            : null;
+    }
+
 
     /**
      * Get JSON input from request body
@@ -506,4 +562,3 @@ class WebDoorController
         $stmt->execute();
     }
 }
-
