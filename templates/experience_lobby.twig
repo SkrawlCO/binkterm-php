@@ -227,20 +227,34 @@
                         </div>
                     {% endif %}
 
-                    {# Capacity is still derived in the template. ExperiencePresentation
-                       capacity/status normalization is deferred to a later slice. #}
-                    {% set at_capacity = max_sessions and state.session_count >= max_sessions %}
-
-                    {# Slice 5B: the initial primary action and End control come from the
-                       canonical ExperiencePresentation the route already computed. No
-                       participation policy is decided here. #}
+                    {# Slice 5C: capacity/status semantics are owned by the canonical
+                       ExperiencePresentation. The template only renders wording for the
+                       semantic status code — it does not decide which status applies,
+                       and it does not re-derive at_capacity. #}
                     {% set launch_supported = view.actions.static_launchable %}
                     {% set viewer_participating = view.viewer.participating %}
                     {% set primary_action = view.actions.primary %}
-                    {# Capacity blocks a new launch, but an existing participant may always
-                       return (mirrors the client-side `atCapacity && !viewerParticipating`). #}
-                    {% set launch_blocked_by_capacity = at_capacity and not viewer_participating %}
+                    {% set launch_blocked_by_capacity = view.viewer.blocked_by_capacity %}
+                    {% set status_code = view.status.code %}
                     {% set credit_cost = view.cost.credits %}
+
+                    {# Wording for each semantic status. The status code is decided by
+                       ExperiencePresentation; only the words live here. The live-refresh
+                       JS below keeps an equivalent map keyed on the same status code. #}
+                    {% set status_labels = {
+                        'available': 'Available',
+                        'at_capacity': 'At capacity',
+                        'participating': 'Active',
+                        'planned': 'Planned',
+                        'unavailable': 'Unavailable'
+                    } %}
+                    {% set status_messages = {
+                        'available': 'Ready to play.',
+                        'at_capacity': 'No open sessions right now.',
+                        'participating': 'You have an active session.',
+                        'planned': 'Not available here yet.',
+                        'unavailable': 'Not available from this surface.'
+                    } %}
 
                     <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
                         <a href="/games" class="btn btn-outline-secondary">
@@ -252,15 +266,9 @@
                             <div class="text-end me-1">
                                 <div class="d-flex align-items-center justify-content-end gap-2">
                                     <span id="experience-availability-badge"
-                                          data-launch-supported="{{ launch_supported ? 'true' : 'false' }}"
-                                          class="badge {% if at_capacity %}bg-warning text-dark{% elseif launch_supported %}bg-success{% else %}bg-secondary{% endif %}">
-                                        {% if at_capacity %}
-                                            At capacity
-                                        {% elseif launch_supported %}
-                                            Available
-                                        {% else %}
-                                            Unavailable
-                                        {% endif %}
+                                          data-status-code="{{ status_code }}"
+                                          class="badge {% if status_code == 'at_capacity' %}bg-warning text-dark{% elseif status_code == 'planned' or status_code == 'unavailable' %}bg-secondary{% else %}bg-success{% endif %}">
+                                        {{ status_labels[status_code]|default('Unavailable') }}
                                     </span>
 
                                     {% if credit_cost > 0 %}
@@ -272,13 +280,7 @@
 
                                 <div id="experience-availability-message"
                                      class="text-muted small mt-1">
-                                    {% if at_capacity %}
-                                        This Experience is currently at capacity.
-                                    {% elseif launch_supported %}
-                                        Ready to launch.
-                                    {% else %}
-                                        Launch is not currently available from this surface.
-                                    {% endif %}
+                                    {{ status_messages[status_code]|default('Not available from this surface.') }}
                                 </div>
                             </div>
 
@@ -371,9 +373,45 @@ function escapeExperienceHtml(value) {
     return div.innerHTML;
 }
 
-function updateExperienceLiveState(state, viewer = null) {
+// Wording for each semantic status code. Kept in sync with the Twig
+// status_labels / status_messages maps above. The status code itself is decided
+// server-side by ExperiencePresentation; this map only carries words.
+const EXPERIENCE_STATUS_WORDING = {
+    available: { label: 'Available', message: 'Ready to play.' },
+    at_capacity: { label: 'At capacity', message: 'No open sessions right now.' },
+    participating: { label: 'Active', message: 'You have an active session.' },
+    planned: { label: 'Planned', message: 'Not available here yet.' },
+    unavailable: { label: 'Unavailable', message: 'Not available from this surface.' }
+};
+
+function experienceStatusBadgeClass(code) {
+    if (code === 'at_capacity') return 'badge bg-warning text-dark';
+    if (code === 'planned' || code === 'unavailable') return 'badge bg-secondary';
+    return 'badge bg-success';
+}
+
+function updateExperienceLiveState(state, viewer = null, presentation = null) {
     const sessionCount = Number(state.session_count || 0);
     const viewerParticipating = !!(viewer && viewer.participating);
+
+    // Slice 5C: capacity/status policy comes from the server-composed
+    // ExperiencePresentation, not from DOM inspection. This removes the
+    // single-player drift where JS could not see max_sessions.
+    const capacity = (presentation && presentation.capacity) || {};
+    const maxSessions = Number(capacity.max_sessions || 0);
+    const blockedByCapacity = !!(
+        presentation
+        && presentation.viewer
+        && presentation.viewer.blocked_by_capacity
+    );
+    const launchSupported = !!(
+        presentation
+        && presentation.actions
+        && presentation.actions.static_launchable
+    );
+    const statusCode =
+        (presentation && presentation.status && presentation.status.code)
+        || null;
 
     const liveStatus = document.getElementById('experience-live-status');
     const sessionBadge = document.getElementById('experience-session-count');
@@ -391,18 +429,10 @@ function updateExperienceLiveState(state, viewer = null) {
             `${sessionCount} active session${sessionCount === 1 ? '' : 's'}`;
     }
 
-    if (capacityBadge) {
-        const maxSessions = Number(capacityBadge.dataset.maxSessions || 0);
-
-        if (maxSessions > 0) {
-            capacityBadge.textContent =
-                `${sessionCount} / ${maxSessions} capacity`;
-        }
+    if (capacityBadge && maxSessions > 0) {
+        capacityBadge.textContent =
+            `${sessionCount} / ${maxSessions} capacity`;
     }
-
-    const maxSessions = capacityBadge
-        ? Number(capacityBadge.dataset.maxSessions || 0)
-        : 0;
 
     const occupancyContainer = document.getElementById(
         'experience-occupancy-container'
@@ -452,39 +482,22 @@ function updateExperienceLiveState(state, viewer = null) {
         }
     }
 
-    const atCapacity = maxSessions > 0 && sessionCount >= maxSessions;
-    const launchSupported = availabilityBadge &&
-        availabilityBadge.dataset.launchSupported === 'true';
+    const wording = statusCode && EXPERIENCE_STATUS_WORDING[statusCode]
+        ? EXPERIENCE_STATUS_WORDING[statusCode]
+        : null;
 
-    if (availabilityMessage) {
-        if (atCapacity) {
-            availabilityMessage.textContent =
-                'This Experience is currently at capacity.';
-        } else if (launchSupported) {
-            availabilityMessage.textContent =
-                'Ready to launch.';
-        } else {
-            availabilityMessage.textContent =
-                'Launch is not currently available from this surface.';
-        }
+    if (availabilityMessage && wording) {
+        availabilityMessage.textContent = wording.message;
     }
 
-    if (availabilityBadge) {
-        if (atCapacity) {
-            availabilityBadge.className = 'badge bg-warning text-dark';
-            availabilityBadge.textContent = 'At capacity';
-        } else if (launchSupported) {
-            availabilityBadge.className = 'badge bg-success';
-            availabilityBadge.textContent = 'Available';
-        } else {
-            availabilityBadge.className = 'badge bg-secondary';
-            availabilityBadge.textContent = 'Unavailable';
-        }
+    if (availabilityBadge && wording) {
+        availabilityBadge.className = experienceStatusBadgeClass(statusCode);
+        availabilityBadge.textContent = wording.label;
+        availabilityBadge.dataset.statusCode = statusCode;
     }
 
     if (launchButton) {
-        const disabled =
-            (atCapacity && !viewerParticipating) || !launchSupported;
+        const disabled = blockedByCapacity || !launchSupported;
         launchButton.classList.toggle('disabled', disabled);
         launchButton.setAttribute('aria-disabled', disabled ? 'true' : 'false');
         launchButton.tabIndex = disabled ? -1 : 0;
@@ -959,11 +972,12 @@ function updateExperienceViewerActions(viewer = null) {
 function applyExperienceState(payload) {
     const state = payload.state || {};
     const viewer = payload.viewer || null;
+    const presentation = payload.presentation || null;
     const actions = state.participant_actions || {};
     const recentActivity = payload.recent_activity || [];
 
     updateExperiencePlayerSummary(state);
-    updateExperienceLiveState(state, viewer);
+    updateExperienceLiveState(state, viewer, presentation);
     updateExperienceViewerActions(viewer);
     renderExperienceParticipants(state, actions);
     renderExperienceActivity(recentActivity);

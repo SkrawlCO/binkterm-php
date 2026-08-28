@@ -151,6 +151,146 @@ final class ExperiencePresentationTest extends TestCase
         self::assertSame('planned', $view['actions']['primary']);
     }
 
+    // ---- Slice 5C: normalized capacity / status contract ----
+
+    public function testLimitedCapacityBelowMaximumIsNotAtCapacity(): void
+    {
+        $view = ExperiencePresentation::build(
+            $this->experience(),
+            'web',
+            ['active' => true, 'session_count' => 7, 'player_count' => 7, 'players' => []]
+        );
+
+        self::assertSame(8, $view['capacity']['max_sessions']);
+        self::assertTrue($view['capacity']['limited']);
+        self::assertFalse($view['capacity']['at_capacity']);
+    }
+
+    public function testLimitedCapacityAtMaximumIsAtCapacity(): void
+    {
+        $view = ExperiencePresentation::build(
+            $this->experience(),
+            'web',
+            ['active' => true, 'session_count' => 8, 'player_count' => 8, 'players' => []]
+        );
+
+        self::assertTrue($view['capacity']['limited']);
+        self::assertTrue($view['capacity']['at_capacity']);
+    }
+
+    public function testUnlimitedCapacityIsNeverAtCapacity(): void
+    {
+        $experience = $this->experience();
+        $experience['capacity']['max_sessions'] = null;
+
+        $view = ExperiencePresentation::build(
+            $experience,
+            'web',
+            ['active' => true, 'session_count' => 999, 'player_count' => 999, 'players' => []]
+        );
+
+        self::assertNull($view['capacity']['max_sessions']);
+        self::assertFalse($view['capacity']['limited']);
+        self::assertFalse($view['capacity']['at_capacity']);
+    }
+
+    public function testAtCapacityIsFalseWhenNoRuntimeStateSupplied(): void
+    {
+        $view = ExperiencePresentation::build($this->experience(), 'web');
+
+        self::assertTrue($view['capacity']['limited']);
+        self::assertFalse($view['capacity']['at_capacity']);
+        self::assertFalse($view['viewer']['blocked_by_capacity']);
+    }
+
+    public function testNonParticipantAtCapacityIsBlockedByCapacity(): void
+    {
+        $view = ExperiencePresentation::build(
+            $this->experience(),
+            'web',
+            ['active' => true, 'session_count' => 8, 'player_count' => 8, 'players' => []],
+            null
+        );
+
+        self::assertFalse($view['viewer']['participating']);
+        self::assertTrue($view['viewer']['blocked_by_capacity']);
+        self::assertSame('at_capacity', $view['status']['code']);
+    }
+
+    public function testParticipantAtCapacityIsNotBlockedByCapacity(): void
+    {
+        $player = ['user_id' => 7, 'username' => 'P', 'session_id' => 'sid'];
+
+        $view = ExperiencePresentation::build(
+            $this->experience(),
+            'web',
+            ['active' => true, 'session_count' => 8, 'player_count' => 8, 'players' => [$player]],
+            $player
+        );
+
+        self::assertTrue($view['viewer']['participating']);
+        self::assertFalse($view['viewer']['blocked_by_capacity']);
+        self::assertTrue($view['capacity']['at_capacity']);
+    }
+
+    public function testParticipantAtCapacityStatusIsParticipatingNotAtCapacity(): void
+    {
+        $player = ['user_id' => 7, 'username' => 'P', 'session_id' => 'sid'];
+
+        $view = ExperiencePresentation::build(
+            $this->experience(),
+            'web',
+            ['active' => true, 'session_count' => 8, 'player_count' => 8, 'players' => [$player]],
+            $player
+        );
+
+        self::assertSame('participating', $view['status']['code']);
+    }
+
+    /** @dataProvider statusPrecedenceProvider */
+    public function testStatusCodePrecedence(
+        string $webSurface,
+        int $sessionCount,
+        bool $participating,
+        string $expected
+    ): void {
+        $experience = $this->experience();
+        $experience['surfaces']['web'] = $webSurface;
+
+        $players = [];
+        $viewerPlayer = null;
+        if ($participating) {
+            $viewerPlayer = ['user_id' => 7, 'username' => 'P', 'session_id' => 'sid'];
+            $players[] = $viewerPlayer;
+        }
+
+        $view = ExperiencePresentation::build(
+            $experience,
+            'web',
+            [
+                'active' => $sessionCount > 0,
+                'session_count' => $sessionCount,
+                'player_count' => $sessionCount,
+                'players' => $players,
+            ],
+            $viewerPlayer
+        );
+
+        self::assertSame($expected, $view['status']['code']);
+    }
+
+    /** @return array<string,array{0:string,1:int,2:bool,3:string}> */
+    public static function statusPrecedenceProvider(): array
+    {
+        return [
+            'planned beats everything'          => ['planned', 8, true, 'planned'],
+            'unavailable beats participating'   => ['unavailable', 8, true, 'unavailable'],
+            'participating beats at_capacity'   => ['full', 8, true, 'participating'],
+            'at_capacity for blocked viewer'    => ['full', 8, false, 'at_capacity'],
+            'available with room'               => ['full', 2, false, 'available'],
+        ];
+    }
+
     /** @return array<string,mixed> */
     private function experience(): array
     {

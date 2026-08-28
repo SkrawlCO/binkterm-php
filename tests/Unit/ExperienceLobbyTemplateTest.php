@@ -396,7 +396,8 @@ final class ExperienceLobbyTemplateTest extends TestCase
     {
         $html = $this->renderLobby(0, 10);
 
-        self::assertStringContainsString('Ready to launch.', $html);
+        // Slice 5C: status wording is keyed on the canonical status.code.
+        self::assertStringContainsString('Ready to play.', $html);
         self::assertStringContainsString('Available', $html);
         self::assertStringContainsString('Play Usurper Reborn', $html);
         self::assertStringContainsString(
@@ -417,8 +418,9 @@ final class ExperienceLobbyTemplateTest extends TestCase
     {
         $html = $this->renderLobby(10, 10);
 
+        // Slice 5C: non-participant + full -> at_capacity status wording.
         self::assertStringContainsString(
-            'This Experience is currently at capacity.',
+            'No open sessions right now.',
             $html
         );
         self::assertStringContainsString('At capacity', $html);
@@ -441,8 +443,9 @@ final class ExperienceLobbyTemplateTest extends TestCase
     {
         $html = $this->renderLobby(0, 10, false);
 
+        // Slice 5C: unavailable-surface status wording.
         self::assertStringContainsString(
-            'Launch is not currently available from this surface.',
+            'Not available from this surface.',
             $html
         );
         self::assertStringContainsString('Unavailable', $html);
@@ -562,7 +565,7 @@ final class ExperienceLobbyTemplateTest extends TestCase
         );
 
         self::assertStringContainsString(
-            'function updateExperienceLiveState(state, viewer = null)',
+            'function updateExperienceLiveState(state, viewer = null, presentation = null)',
             $source
         );
 
@@ -572,7 +575,7 @@ final class ExperienceLobbyTemplateTest extends TestCase
         );
 
         self::assertStringContainsString(
-            '(atCapacity && !viewerParticipating) || !launchSupported;',
+            'const disabled = blockedByCapacity || !launchSupported;',
             $source
         );
 
@@ -617,7 +620,7 @@ final class ExperienceLobbyTemplateTest extends TestCase
         );
 
         self::assertStringContainsString(
-            'updateExperienceLiveState(state, viewer);',
+            'updateExperienceLiveState(state, viewer, presentation);',
             $source
         );
     }
@@ -666,7 +669,7 @@ final class ExperienceLobbyTemplateTest extends TestCase
         );
 
         self::assertStringContainsString(
-            'function updateExperienceLiveState(state, viewer = null)',
+            'function updateExperienceLiveState(state, viewer = null, presentation = null)',
             $source
         );
 
@@ -1773,6 +1776,162 @@ final class ExperienceLobbyTemplateTest extends TestCase
             '/class="[^"]*\bdisabled\b[^"]*"/',
             $m[1]
         );
+    }
+
+    // ---- Slice 5C: normalized capacity / status wording ----
+
+    /** Text content of the availability status badge + message. */
+    private static function statusText(string $html): array
+    {
+        preg_match(
+            '/<span id="experience-availability-badge"[^>]*>\s*([^<]+?)\s*<\/span>/s',
+            $html,
+            $badge
+        );
+        preg_match(
+            '/<div id="experience-availability-message"[^>]*>\s*([^<]+?)\s*<\/div>/s',
+            $html,
+            $message
+        );
+
+        return [
+            'badge' => isset($badge[1]) ? trim($badge[1]) : null,
+            'message' => isset($message[1]) ? trim($message[1]) : null,
+        ];
+    }
+
+    public function testParticipantAtCapacityShowsActiveStatusNotAtCapacity(): void
+    {
+        $html = $this->renderLobby(
+            10,
+            10,
+            true,
+            null,
+            'Usurper Reborn',
+            true,
+            '/door-assets/usurper/icon',
+            '/games/nativedoors/usurper',
+            'native',
+            'usurper',
+            [self::activePlayer(42)],
+            42
+        );
+
+        $status = self::statusText($html);
+        self::assertSame('Active', $status['badge']);
+        self::assertSame('You have an active session.', $status['message']);
+        self::assertStringContainsString('data-status-code="participating"', $html);
+
+        // Return remains enabled for the participant.
+        self::assertStringContainsString('Return to Usurper Reborn', $html);
+        self::assertSame(
+            1,
+            preg_match(
+                '/<a\s+id="experience-launch-button"([^>]*)>/s',
+                $html,
+                $m
+            )
+        );
+        self::assertStringNotContainsString('aria-disabled="true"', $m[1]);
+        self::assertStringNotContainsString('tabindex="-1"', $m[1]);
+        self::assertDoesNotMatchRegularExpression(
+            '/class="[^"]*\bdisabled\b[^"]*"/',
+            $m[1]
+        );
+    }
+
+    public function testNonParticipantAtCapacityShowsAtCapacityStatusAndBlockedLaunch(): void
+    {
+        $html = $this->renderLobby(10, 10);
+
+        $status = self::statusText($html);
+        self::assertSame('At capacity', $status['badge']);
+        self::assertSame('No open sessions right now.', $status['message']);
+        self::assertStringContainsString('data-status-code="at_capacity"', $html);
+
+        self::assertSame(
+            1,
+            preg_match(
+                '/<a\s+id="experience-launch-button"([^>]*)>/s',
+                $html,
+                $m
+            )
+        );
+        self::assertStringContainsString('aria-disabled="true"', $m[1]);
+    }
+
+    public function testAvailableNonParticipantShowsAvailableStatus(): void
+    {
+        $status = self::statusText($this->renderLobby(0, 10));
+
+        self::assertSame('Available', $status['badge']);
+        self::assertSame('Ready to play.', $status['message']);
+    }
+
+    public function testSinglePlayerAtCapacityIsSemanticallyBlockedThroughLiveContract(): void
+    {
+        // Single-player DOS/native Experience at max_sessions: the audit found
+        // JS could not see max_sessions here (it read #experience-capacity, which
+        // is multiplayer-only), so a live refresh wrongly re-enabled the launch.
+        // The presentation model now carries the capacity/status, and the JS
+        // consumes payload.presentation.* rather than the DOM.
+        $html = $this->renderLobby(
+            4,
+            4,
+            true,
+            null,
+            'Solo Quest',
+            false,               // multiplayer = false
+            '/door-assets/solo/icon',
+            '/games/nativedoors/solo',
+            'native',
+            'solo',
+            [self::activePlayer(1)],
+            null                 // viewer is not the participant
+        );
+
+        // Initial server render: blocked.
+        $status = self::statusText($html);
+        self::assertSame('At capacity', $status['badge']);
+        self::assertSame(
+            1,
+            preg_match(
+                '/<a\s+id="experience-launch-button"([^>]*)>/s',
+                $html,
+                $m
+            )
+        );
+        self::assertStringContainsString('aria-disabled="true"', $m[1]);
+
+        // Live-state JS derives capacity/status from payload.presentation.*,
+        // not from whether #experience-capacity happens to exist in the DOM.
+        $body = self::renderedBody($html);
+        self::assertStringContainsString('presentation.capacity', $html);
+        self::assertStringContainsString(
+            'presentation.viewer.blocked_by_capacity',
+            $html
+        );
+        self::assertStringContainsString('applyExperienceState', $html);
+        self::assertStringContainsString(
+            'updateExperienceLiveState(state, viewer, presentation)',
+            $html
+        );
+        // The old DOM-derived capacity/launch policy is gone.
+        self::assertStringNotContainsString(
+            'sessionCount >= maxSessions',
+            $html
+        );
+        self::assertStringNotContainsString(
+            'dataset.launchSupported',
+            $html
+        );
+        self::assertStringNotContainsString(
+            'dataset.maxSessions',
+            $html
+        );
+        // #experience-capacity is multiplayer-only; for single-player it is
+        // simply absent and the JS no longer depends on it for policy.
+        self::assertStringNotContainsString('id="experience-capacity"', $body);
     }
 
 }

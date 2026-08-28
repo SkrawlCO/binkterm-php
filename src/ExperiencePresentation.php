@@ -44,6 +44,32 @@ final class ExperiencePresentation
             $viewerActions['return'] = false;
         }
 
+        // Capacity is a read-side reflection of ExperienceState occupancy against
+        // the normalized GameCatalog limit. Backend/wrapper routes remain the
+        // runtime authority; this never gates an actual launch.
+        $maxSessions = isset($experience['capacity']['max_sessions'])
+            ? (int)$experience['capacity']['max_sessions']
+            : null;
+        $capacityLimited = $maxSessions !== null;
+        $sessionCount = $state !== null
+            ? (int)($state['session_count'] ?? 0)
+            : null;
+        $participating = $viewerPlayer !== null;
+        // Viewer-neutral world state. False for unlimited capacity and false
+        // when no runtime state was supplied (occupancy is unknown).
+        $atCapacity = $capacityLimited
+            && $sessionCount !== null
+            && $sessionCount >= $maxSessions;
+        // Viewer-action state: an existing participant may always Return, even
+        // when the Experience is full (wrappers resume before capacity checks).
+        $blockedByCapacity = $atCapacity && !$participating;
+        $statusCode = self::statusCode(
+            $surfaceState,
+            $staticLaunchable,
+            $participating,
+            $atCapacity
+        );
+
         return [
             'id' => $id,
             'name' => $name,
@@ -66,9 +92,9 @@ final class ExperiencePresentation
                 'multiplayer' => !empty($experience['capabilities']['multiplayer']),
             ],
             'capacity' => [
-                'max_sessions' => isset($experience['capacity']['max_sessions'])
-                    ? (int)$experience['capacity']['max_sessions']
-                    : null,
+                'max_sessions' => $maxSessions,
+                'limited' => $capacityLimited,
+                'at_capacity' => $atCapacity,
             ],
             'cost' => [
                 'credits' => max(0, (int)($experience['policy']['credit_cost'] ?? 0)),
@@ -97,7 +123,12 @@ final class ExperiencePresentation
                     : [],
             ],
             'viewer' => [
-                'participating' => $viewerPlayer !== null,
+                'participating' => $participating,
+                'blocked_by_capacity' => $blockedByCapacity,
+            ],
+            'status' => [
+                // Semantic status only. Consumers (Twig, JS) own the wording.
+                'code' => $statusCode,
             ],
             'actions' => [
                 'primary' => self::primaryAction(
@@ -123,6 +154,44 @@ final class ExperiencePresentation
         return in_array($state, ['full', 'planned', 'unavailable'], true)
             ? $state
             : 'unavailable';
+    }
+
+    /**
+     * Normalized semantic status for the current viewer and surface.
+     *
+     * This method owns only *which* status applies; the rendering layer owns
+     * the wording. Precedence:
+     *   1. planned surface        -> planned
+     *   2. not static-launchable  -> unavailable
+     *   3. viewer participating   -> participating
+     *   4. at capacity            -> at_capacity
+     *   5. otherwise              -> available
+     *
+     * @return 'participating'|'at_capacity'|'available'|'planned'|'unavailable'
+     */
+    private static function statusCode(
+        string $surfaceState,
+        bool $staticLaunchable,
+        bool $participating,
+        bool $atCapacity
+    ): string {
+        if ($surfaceState === 'planned') {
+            return 'planned';
+        }
+
+        if (!$staticLaunchable) {
+            return 'unavailable';
+        }
+
+        if ($participating) {
+            return 'participating';
+        }
+
+        if ($atCapacity) {
+            return 'at_capacity';
+        }
+
+        return 'available';
     }
 
     /** @param array{play:bool,return:bool,end:bool} $actions */

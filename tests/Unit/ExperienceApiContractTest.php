@@ -144,4 +144,68 @@ final class ExperienceApiContractTest extends TestCase
         );
     }
 
+    // ---- Slice 5C: normalized capacity / status slice ----
+
+    public function testStateApiExposesNormalizedPresentationSlice(): void
+    {
+        self::assertStringContainsString("'presentation' => [", $this->source);
+        self::assertStringContainsString("'at_capacity' =>", $this->source);
+        self::assertStringContainsString(
+            "'blocked_by_capacity' =>",
+            $this->source
+        );
+        self::assertStringContainsString("'status' => [", $this->source);
+        self::assertStringContainsString(
+            "'code' => \$presentation['status']['code']",
+            $this->source
+        );
+        self::assertStringContainsString(
+            "'static_launchable' =>",
+            $this->source
+        );
+    }
+
+    public function testStateApiSourcesPresentationFromExperiencePresentationBuild(): void
+    {
+        // The slice must come from the canonical composition, not a second
+        // hand-rolled capacity derivation in the route.
+        self::assertStringContainsString(
+            '$presentation = \\BinktermPHP\\ExperiencePresentation::build(',
+            $this->source
+        );
+        self::assertStringContainsString(
+            "\$presentation['capacity']['at_capacity']",
+            $this->source
+        );
+        self::assertStringContainsString(
+            "\$presentation['viewer']['blocked_by_capacity']",
+            $this->source
+        );
+
+        // No independent capacity policy re-implemented in the state route.
+        $stateRoute = $this->stateRouteBody();
+        self::assertStringNotContainsString('>= $maxSessions', $stateRoute);
+        self::assertStringNotContainsString(
+            'session_count >= ',
+            $stateRoute
+        );
+    }
+
+    private function stateRouteBody(): string
+    {
+        $start = strpos(
+            $this->source,
+            "SimpleRouter::get('/experiences/{experienceId}/state'"
+        );
+        self::assertNotFalse($start);
+
+        $end = strpos(
+            $this->source,
+            "SimpleRouter::post('/experiences/{experienceId}/end'",
+            $start
+        );
+        self::assertNotFalse($end);
+
+        return substr($this->source, $start, $end - $start);
+    }
 }

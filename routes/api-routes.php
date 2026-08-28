@@ -8761,6 +8761,17 @@ SimpleRouter::group(['prefix' => '/api'], function() {
         $recentActivity = (new \BinktermPHP\ExperienceActivity())
             ->recent($experience, 10);
 
+        // Slice 5C: reuse the canonical presentation composition so the live
+        // refresh renders the same normalized capacity/status the initial
+        // server render used. Discovery/state authorization already happened
+        // above; ExperiencePresentation performs no auth, query, or mutation.
+        $presentation = \BinktermPHP\ExperiencePresentation::build(
+            $experience,
+            'web',
+            $state,
+            $viewerPlayer
+        );
+
         echo json_encode([
             'success' => true,
             'experience' => $experienceId,
@@ -8782,6 +8793,25 @@ SimpleRouter::group(['prefix' => '/api'], function() {
                     ? (int)$viewerPlayer['node']
                     : null,
                 'actions' => $viewerActions,
+            ],
+            'presentation' => [
+                'capacity' => [
+                    'max_sessions' => $presentation['capacity']['max_sessions'],
+                    'limited' => $presentation['capacity']['limited'],
+                    'at_capacity' => $presentation['capacity']['at_capacity'],
+                ],
+                'viewer' => [
+                    'blocked_by_capacity' =>
+                        $presentation['viewer']['blocked_by_capacity'],
+                ],
+                'status' => [
+                    'code' => $presentation['status']['code'],
+                ],
+                'actions' => [
+                    'primary' => $presentation['actions']['primary'],
+                    'static_launchable' =>
+                        $presentation['actions']['static_launchable'],
+                ],
             ],
         ]);
     });
