@@ -67,8 +67,10 @@ class WebDoorController
             return $this->errorResponse('errors.webdoor.auth_required', 'Not authenticated', 401);
         }
 
-        // Get game ID from query param or referer
-        $gameId = $_GET['game_id'] ?? $this->detectGameIdFromReferer() ?? 'unknown';
+        $gameId = $this->resolveAuthorizedWebDoorGameId();
+        if ($gameId === null) {
+            return $this->gameUnavailableResponse();
+        }
         $this->gameId = $gameId;
 
         // Check for existing valid session
@@ -87,10 +89,15 @@ class WebDoorController
             $sessionId = bin2hex(random_bytes(32));
             $stmt = $this->db->prepare('
                 INSERT INTO webdoor_sessions (session_id, user_id, game_id, expires_at)
-                VALUES (?, ?, ?, NOW() + INTERVAL \'' . self::SESSION_LIFETIME . ' seconds\')
+                VALUES (?, ?, ?, ?)
                 RETURNING session_id, created_at, expires_at
             ');
-            $stmt->execute([$sessionId, $this->user['user_id'], $gameId]);
+            $stmt->execute([
+                $sessionId,
+                $this->user['user_id'],
+                $gameId,
+                gmdate('Y-m-d\TH:i:s+00:00', time() + self::SESSION_LIFETIME),
+            ]);
             $session = $stmt->fetch(\PDO::FETCH_ASSOC);
             $session['game_id'] = $gameId;
         }
@@ -322,13 +329,9 @@ class WebDoorController
             return $this->errorResponse('errors.webdoor.auth_required', 'Not authenticated', 401);
         }
 
-        $gameId = $this->resolveAuthorizedLeaderboardGameId();
+        $gameId = $this->resolveAuthorizedWebDoorGameId();
         if ($gameId === null) {
-            return $this->errorResponse(
-                'errors.webdoor.game_unavailable',
-                'Experience is not available',
-                404
-            );
+            return $this->gameUnavailableResponse();
         }
         $limit = min((int)($_GET['limit'] ?? 10), 100);
         $scope = $_GET['scope'] ?? 'all';
@@ -429,13 +432,9 @@ class WebDoorController
             return $this->errorResponse('errors.webdoor.auth_required', 'Not authenticated', 401);
         }
 
-        $gameId = $this->resolveAuthorizedLeaderboardGameId();
+        $gameId = $this->resolveAuthorizedWebDoorGameId();
         if ($gameId === null) {
-            return $this->errorResponse(
-                'errors.webdoor.game_unavailable',
-                'Experience is not available',
-                404
-            );
+            return $this->gameUnavailableResponse();
         }
         $input = $this->getJsonInput();
 
@@ -501,9 +500,9 @@ class WebDoorController
     }
 
     /**
-     * Resolve a leaderboard identity through the viewer's web discovery catalog.
+     * Resolve a WebDoor identity through the viewer's web discovery catalog.
      */
-    private function resolveAuthorizedLeaderboardGameId(): ?string
+    private function resolveAuthorizedWebDoorGameId(): ?string
     {
         $requestedId = $_GET['game_id'] ?? $this->detectGameIdFromReferer();
         if (!is_string($requestedId) || trim($requestedId) === '') {
@@ -548,6 +547,16 @@ class WebDoorController
             'error_code' => $errorCode,
             'error' => $message
         ];
+    }
+
+    /** @return array{success:false,error_code:string,error:string} */
+    private function gameUnavailableResponse(): array
+    {
+        return $this->errorResponse(
+            'errors.webdoor.game_unavailable',
+            'Experience is not available',
+            404
+        );
     }
 
     /**

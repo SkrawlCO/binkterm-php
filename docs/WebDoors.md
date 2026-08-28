@@ -333,6 +333,13 @@ WebDoors run within authenticated user sessions. Games can access:
 - User ID
 - Session token
 
+Session creation resolves the WebDoor identity from an explicit `game_id` or
+the existing `/webdoors/{id}/` referrer convention, then requires exact
+membership in the authenticated user's discoverable web Experience catalog.
+Missing, disabled, hidden, requirements-failing, stale, non-WebDoor, and
+otherwise undiscoverable identities are rejected before existing sessions are
+read or new sessions are created.
+
 ### Storage API
 
 Games requiring persistent storage use the BBS storage API to save/load user data.
