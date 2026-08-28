@@ -3,6 +3,11 @@
 {% block title %}{{ experience.name }} - {{ system_name }}{% endblock %}
 
 {% block content %}
+{# Slice 5A: consume the canonical ExperiencePresentation read model for
+   identity, multiplayer, and cost. The route still supplies raw `experience`
+   for aspects the presentation contract does not yet express (conversation
+   capability, participant_actions, launch/return footer, JS identity). #}
+{% set view = experience_presentation %}
 <script>
     window.isExperiencePage = true;
 </script>
@@ -15,32 +20,36 @@
                 <div class="card-body p-3 p-md-4">
 
 
-                    <div class="d-flex align-items-start gap-3 mb-3">
+                    {# Slice 5A: stack artwork above identity content on phones
+                       (< 576px) so the title/metadata/description column gets the
+                       full width; the approved side-by-side layout resumes at the
+                       Bootstrap `sm` breakpoint and up. #}
+                    <div class="d-flex flex-column flex-sm-row align-items-stretch align-items-sm-start gap-3 mb-3">
                         <img
-                            src="{{ experience.presentation.icon_url|default('/favicon.svg') }}"
-                            alt="{{ experience.name }}"
+                            src="{{ view.presentation.icon_url|default('/favicon.svg') }}"
+                            alt="{{ view.name }}"
                             class="rounded flex-shrink-0"
                             style="width: 120px; height: 120px; object-fit: cover;"
                             onerror="this.src='/favicon.svg'"
                         >
 
                         <div class="flex-grow-1">
-                            <h1 class="h3 mb-1">{{ experience.name }}</h1>
+                            <h1 class="h3 mb-1">{{ view.name }}</h1>
 
-                            {% if experience.author or experience.version %}
+                            {% if view.author or view.version %}
                                 <div class="text-muted small mb-2">
-                                    {% if experience.version %}v{{ experience.version }}{% endif %}
-                                    {% if experience.version and experience.author %} · {% endif %}
-                                    {% if experience.author %}by {{ experience.author }}{% endif %}
+                                    {% if view.version %}v{{ view.version }}{% endif %}
+                                    {% if view.version and view.author %} · {% endif %}
+                                    {% if view.author %}by {{ view.author }}{% endif %}
                                 </div>
                             {% endif %}
 
                             <p class="text-muted small mb-2">
-                                {{ experience.description }}
+                                {{ view.description }}
                             </p>
 
                             <div class="d-flex flex-wrap gap-2">
-                                {% if experience.capabilities.multiplayer %}
+                                {% if view.capabilities.multiplayer %}
                                     <span class="badge bg-secondary-subtle text-dark border">
                                         <i class="fas fa-users me-1" aria-hidden="true"></i>
                                         Multiplayer
@@ -52,7 +61,7 @@
                                     </span>
                                 {% endif %}
 
-                                {% set max_sessions = experience.capacity.max_sessions|default(null) %}
+                                {% set max_sessions = view.capacity.max_sessions|default(null) %}
                                 {% if max_sessions %}
                                     <span class="badge bg-secondary-subtle text-dark border">
                                         <i class="fas fa-server me-1" aria-hidden="true"></i>
@@ -60,24 +69,27 @@
                                     </span>
                                 {% endif %}
 
-                                {% set credit_cost = experience.policy.credit_cost|default(0) %}
-                                {% if credit_cost > 0 %}
+                                {# Slice 5A: no storefront-style "Free to play" emphasis. A
+                                   concise cost indicator is shown only when the normalized
+                                   credit cost is nonzero. #}
+                                {% if view.cost.credits > 0 %}
                                     <span class="badge bg-secondary-subtle text-dark border">
                                         <i class="fas fa-coins me-1" aria-hidden="true"></i>
-                                        {{ credit_cost }} credit{% if credit_cost != 1 %}s{% endif %}
-                                    </span>
-                                {% else %}
-                                    <span class="badge bg-secondary-subtle text-dark border">
-                                        <i class="fas fa-ticket-alt me-1" aria-hidden="true"></i>
-                                        Free to play
+                                        {{ view.cost.credits }} credit{% if view.cost.credits != 1 %}s{% endif %}
                                     </span>
                                 {% endif %}
                             </div>
                         </div>
                     </div>
 
+                    {# Slice 5A: the live-player / roster / occupancy section is
+                       multiplayer-only. Single-player Experiences never render it.
+                       Backend session tracking is unaffected; only this presentation
+                       is gated. A configured conversation panel is rendered
+                       independently below regardless of this flag. #}
+                    {% if view.capabilities.multiplayer %}
                     <div class="border rounded p-3 mb-4">
-                        {% set max_sessions = experience.capacity.max_sessions|default(null) %}
+                        {% set max_sessions = view.capacity.max_sessions|default(null) %}
 
                         <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
                             <div>
@@ -157,6 +169,7 @@
                             {% endif %}
                         </div>
                     </div>
+                    {% endif %}
 
                     <div class="border rounded p-3 mb-3">
                         <div class="fw-semibold mb-2">
@@ -216,7 +229,7 @@
 
                     {% set at_capacity = max_sessions and state.session_count >= max_sessions %}
                     {% set launch_supported = experience.actions.launch and launch %}
-                    {% set credit_cost = experience.policy.credit_cost|default(0) %}
+                    {% set credit_cost = view.cost.credits %}
 
                     <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
                         <a href="/games" class="btn btn-outline-secondary">

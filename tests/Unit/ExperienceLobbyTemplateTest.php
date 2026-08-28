@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace BinktermPHP\Tests\Unit;
 
+use BinktermPHP\ExperienceParticipation;
+use BinktermPHP\ExperiencePresentation;
 use PHPUnit\Framework\TestCase;
 use Twig\Environment;
 use Twig\Loader\FilesystemLoader;
@@ -24,7 +26,10 @@ final class ExperienceLobbyTemplateTest extends TestCase
         string $launchId = 'usurper',
         array $players = [],
         ?int $currentUserId = null,
-        bool $participantMessaging = false
+        bool $participantMessaging = false,
+        int $creditCost = 0,
+        ?array $presentationOverride = null,
+        array $experienceOverride = []
     ): string {
         $twig = new Environment(
             new FilesystemLoader(dirname(__DIR__, 2) . '/templates')
@@ -46,40 +51,79 @@ final class ExperienceLobbyTemplateTest extends TestCase
             static fn(string $feature): bool => false
         ));
 
+        $experience = [
+            'id' => 'usurper',
+            'name' => $name,
+            'description' => 'Usurper Reborn fantasy RPG BBS door.',
+            'icon' => 'fas fa-dungeon',
+            'backend' => [
+                'type' => $launchType,
+                'id' => $launchId,
+            ],
+            'presentation' => [
+                'icon_url' => $iconUrl,
+                'screenshot_url' => $screenshotUrl,
+            ],
+            'capabilities' => [
+                'multiplayer' => $multiplayer,
+            ],
+            'participant_actions' => [
+                'profile' => true,
+                'message' => $participantMessaging,
+            ],
+            'capacity' => [
+                'max_sessions' => $maxSessions,
+            ],
+            'surfaces' => [
+                'web' => $launchEnabled ? 'full' : 'unavailable',
+                'telnet' => 'planned',
+            ],
+            'policy' => [
+                'enabled' => true,
+                'credit_cost' => $creditCost,
+            ],
+            'actions' => [
+                'launch' => $launchEnabled,
+                'message_players' => $participantMessaging,
+            ],
+        ];
+
+        if ($experienceOverride !== []) {
+            $experience = array_replace_recursive($experience, $experienceOverride);
+        }
+
+        $state = [
+            'active' => $sessionCount > 0,
+            'session_count' => $sessionCount,
+            'player_count' => count($players),
+            'players' => $players,
+        ];
+
+        $viewerPlayer = $currentUserId !== null
+            ? ExperienceParticipation::findViewerPlayer($state, $currentUserId)
+            : null;
+
+        // The route constructs ExperiencePresentation and passes it to the
+        // template. Build it the same way here so these tests exercise the
+        // real read model rather than a hand-rolled shape.
+        $presentation = ExperiencePresentation::build(
+            $experience,
+            'web',
+            $state,
+            $viewerPlayer
+        );
+
+        if ($presentationOverride !== null) {
+            $presentation = array_replace_recursive(
+                $presentation,
+                $presentationOverride
+            );
+        }
+
         return $twig->render('experience_lobby.twig', [
-            'experience' => [
-                'id' => 'usurper',
-                'name' => $name,
-                'description' => 'Usurper Reborn fantasy RPG BBS door.',
-                'icon' => 'fas fa-dungeon',
-                'presentation' => [
-                    'icon_url' => $iconUrl,
-                    'screenshot_url' => $screenshotUrl,
-                ],
-                'capabilities' => [
-                    'multiplayer' => $multiplayer,
-                ],
-                'participant_actions' => [
-                    'profile' => true,
-                    'message' => $participantMessaging,
-                ],
-                'capacity' => [
-                    'max_sessions' => $maxSessions,
-                ],
-                'policy' => [
-                    'credit_cost' => 0,
-                ],
-                'actions' => [
-                    'launch' => $launchEnabled,
-                    'message_players' => $participantMessaging,
-                ],
-            ],
-            'state' => [
-                'active' => $sessionCount > 0,
-                'session_count' => $sessionCount,
-                'player_count' => count($players),
-                'players' => $players,
-            ],
+            'experience' => $experience,
+            'experience_presentation' => $presentation,
+            'state' => $state,
             'launch' => $launchEnabled ? [
                 'type' => $launchType,
                 'id' => $launchId,
@@ -169,7 +213,9 @@ final class ExperienceLobbyTemplateTest extends TestCase
 
         self::assertStringContainsString('Blackjack', $html);
         self::assertStringContainsString('Single Player', $html);
-        self::assertStringContainsString('Free to play', $html);
+        // Slice 5A: zero-cost Experiences no longer get storefront-style
+        // "Free to play" emphasis.
+        self::assertStringNotContainsString('Free to play', $html);
         self::assertStringContainsString(
             'src="/webdoors/blackjack/icon.svg"',
             $html
@@ -204,7 +250,9 @@ final class ExperienceLobbyTemplateTest extends TestCase
 
         self::assertStringContainsString('Doom', $html);
         self::assertStringContainsString('Single Player', $html);
-        self::assertStringContainsString('Free to play', $html);
+        // Slice 5A: zero-cost Experiences no longer get storefront-style
+        // "Free to play" emphasis.
+        self::assertStringNotContainsString('Free to play', $html);
         self::assertStringContainsString(
             'src="/jsdos-doors/doomsw/icon-v2.png"',
             $html
@@ -251,13 +299,15 @@ final class ExperienceLobbyTemplateTest extends TestCase
             $nativeHtml
         );
 
+        // Multiplayer so the roster renders; this case verifies node-badge
+        // suppression, not the Slice 5A single-player roster gating.
         $webHtml = $this->renderLobby(
             1,
             null,
             true,
             null,
             'Blackjack',
-            false,
+            true,
             '/webdoors/blackjack/icon.svg',
             '/games/blackjack',
             'web',
@@ -1341,6 +1391,218 @@ final class ExperienceLobbyTemplateTest extends TestCase
                 'renderExperienceConversationIdentity(message);'
             )
         );
+    }
+
+    /**
+     * Server-rendered body with <script> blocks removed, so inert JavaScript
+     * fallback strings (guarded dead code when their element is absent) do not
+     * create false positives for "is this section rendered".
+     */
+    private static function renderedBody(string $html): string
+    {
+        return (string)preg_replace(
+            '#<script\b[^>]*>.*?</script>#is',
+            '',
+            $html
+        );
+    }
+
+    // ---- Slice 5A: single-player vs multiplayer lobby normalization ----
+
+    public function testSinglePlayerLobbyOmitsMultiplayerRosterSection(): void
+    {
+        $html = $this->renderLobby(
+            2,
+            8,
+            true,
+            null,
+            'Solo Quest',
+            false
+        );
+
+        $body = self::renderedBody($html);
+
+        self::assertStringNotContainsString('Live Players', $body);
+        self::assertStringNotContainsString('id="experience-participants"', $body);
+        self::assertStringNotContainsString('id="experience-session-count"', $body);
+        self::assertStringNotContainsString('id="experience-live-status"', $body);
+        self::assertStringNotContainsString('id="experience-occupancy"', $body);
+        self::assertStringNotContainsString(
+            'aria-label="Experience capacity"',
+            $body
+        );
+        self::assertStringNotContainsString(
+            'No one is playing right now. Be the first one in.',
+            $body
+        );
+
+        // Identity and the non-multiplayer surfaces remain intact.
+        self::assertStringContainsString('Solo Quest', $body);
+        self::assertStringContainsString('Recent Activity', $body);
+        self::assertStringContainsString('Single Player', $body);
+    }
+
+    public function testMultiplayerLobbyRetainsRosterSection(): void
+    {
+        $html = $this->renderLobby(
+            2,
+            8,
+            true,
+            null,
+            'Guild Hall',
+            true,
+            '/door-assets/guild/icon',
+            '/games/nativedoors/guild',
+            'native',
+            'guild',
+            [[
+                'user_id' => 11,
+                'username' => 'Runner',
+                'session_id' => 'guild-1',
+                'presence' => 'Playing Guild Hall',
+                'presence_state' => 'playing',
+                'node' => 2,
+                'started_at' => time(),
+            ]]
+        );
+
+        $body = self::renderedBody($html);
+
+        self::assertStringContainsString('Live Players', $body);
+        self::assertStringContainsString('id="experience-participants"', $body);
+        self::assertStringContainsString('id="experience-session-count"', $body);
+        self::assertStringContainsString('Runner', $body);
+        self::assertStringContainsString('/ 8 capacity', $body);
+    }
+
+    public function testSinglePlayerLobbyStillRendersConfiguredConversation(): void
+    {
+        $html = $this->renderLobby(
+            0,
+            null,
+            true,
+            null,
+            'Chatty Solo',
+            false,
+            experienceOverride: [
+                'capabilities' => [
+                    'conversation' => ['type' => 'chat_room', 'room_id' => 5],
+                ],
+            ]
+        );
+
+        $body = self::renderedBody($html);
+
+        self::assertStringContainsString('id="experience-conversation"', $body);
+        self::assertStringContainsString('id="experience-conversation-input"', $body);
+        self::assertStringNotContainsString('Live Players', $body);
+    }
+
+    public function testZeroCreditCostDoesNotRenderFreeToPlayEmphasis(): void
+    {
+        $html = $this->renderLobby(0, null, true, null, 'Free Door', false);
+
+        self::assertStringNotContainsString('Free to play', $html);
+        self::assertStringNotContainsString('fa-ticket-alt', $html);
+        self::assertStringNotContainsString('fa-coins', $html);
+    }
+
+    public function testNonzeroCreditCostRendersConciseCostIndicator(): void
+    {
+        $plural = self::renderedBody(
+            $this->renderLobby(0, null, true, null, 'Paid Door', false, creditCost: 5)
+        );
+        self::assertStringContainsString('5 credits', $plural);
+        self::assertStringContainsString('fa-coins', $plural);
+
+        $singular = self::renderedBody(
+            $this->renderLobby(0, null, true, null, 'Paid Door', false, creditCost: 1)
+        );
+        self::assertStringContainsString('1 credit', $singular);
+        self::assertStringNotContainsString('1 credits', $singular);
+    }
+
+    public function testLobbyIdentityAndBadgesSourcedFromPresentationModel(): void
+    {
+        // Raw catalog values deliberately disagree with the normalized
+        // presentation model. The lobby must render the presentation values
+        // for the fields converted in this slice.
+        $html = $this->renderLobby(
+            0,
+            null,
+            true,
+            null,
+            'Raw Catalog Name',
+            false,
+            '/raw/icon.png',
+            '/games/demo',
+            'web',
+            'demo',
+            presentationOverride: [
+                'name' => 'Presented Name',
+                'description' => 'Presented description.',
+                'presentation' => ['icon_url' => '/presented/icon.png'],
+                'capabilities' => ['multiplayer' => true],
+                'cost' => ['credits' => 7, 'free' => false],
+            ]
+        );
+
+        $body = self::renderedBody($html);
+
+        self::assertStringContainsString(
+            '<h1 class="h3 mb-1">Presented Name</h1>',
+            $body
+        );
+        self::assertStringContainsString('Presented description.', $body);
+        self::assertStringContainsString('src="/presented/icon.png"', $body);
+        self::assertStringNotContainsString('src="/raw/icon.png"', $body);
+        // Multiplayer badge + roster follow the presentation flag, not the
+        // raw catalog capability.
+        self::assertStringContainsString('Multiplayer', $body);
+        self::assertStringContainsString('Live Players', $body);
+        // Cost indicator follows the normalized presentation cost.
+        self::assertStringContainsString('7 credits', $body);
+    }
+
+    public function testLobbyHeaderStacksArtworkAndIdentityOnNarrowViewports(): void
+    {
+        $body = self::renderedBody(
+            $this->renderLobby(
+                0,
+                null,
+                true,
+                null,
+                'An Unusually Long Experience Name That Needs Room',
+                false
+            )
+        );
+
+        // Header container: stacked (flex-column) on phones, side-by-side
+        // (flex-sm-row) from the Bootstrap `sm` breakpoint up.
+        self::assertMatchesRegularExpression(
+            '/<div class="[^"]*\bd-flex\b[^"]*\bflex-column\b[^"]*\bflex-sm-row\b[^"]*mb-3">\s*<img/s',
+            $body
+        );
+
+        // Artwork keeps its desktop dimensions; the fix does not shrink it.
+        self::assertStringContainsString(
+            'style="width: 120px; height: 120px; object-fit: cover;"',
+            $body
+        );
+
+        // DOM order is the desired mobile hierarchy:
+        // artwork -> name -> author/version -> description -> badges.
+        $imgPos = strpos($body, '<img');
+        $namePos = strpos($body, '<h1 class="h3 mb-1">');
+        $descPos = strpos($body, 'Usurper Reborn fantasy RPG BBS door.');
+        $badgePos = strpos($body, 'Single Player');
+        self::assertNotFalse($imgPos);
+        self::assertNotFalse($namePos);
+        self::assertNotFalse($descPos);
+        self::assertNotFalse($badgePos);
+        self::assertLessThan($namePos, $imgPos);
+        self::assertLessThan($descPos, $namePos);
+        self::assertLessThan($badgePos, $descPos);
     }
 
 }
