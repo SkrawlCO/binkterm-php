@@ -19,7 +19,9 @@ final class GamesHubTemplateTest extends TestCase
         bool $scoreboardExpanded = false,
         array $translationOverrides = [],
         array $experienceStates = [],
-        ?array $currentUser = null
+        ?array $currentUser = null,
+        ?int $aroundActivePlayers = null,
+        ?int $aroundActiveExperiences = null
     ): string {
         $twig = new Environment(new FilesystemLoader(dirname(__DIR__, 2) . '/templates'));
         $translations = [
@@ -57,6 +59,11 @@ final class GamesHubTemplateTest extends TestCase
             'ui.webdoors.players_online' => '{count} online',
             'ui.webdoors.playing_with' => 'Playing with',
             'ui.webdoors.roster_more' => '+{count} more',
+            'ui.webdoors.around_active' => '{players} players in {experiences} Experiences right now',
+            'ui.webdoors.around_active_1e' => '{players} players in 1 Experience right now',
+            'ui.webdoors.around_active_1p' => '1 player in {experiences} Experiences right now',
+            'ui.webdoors.around_active_1p_1e' => '1 player in 1 Experience right now',
+            'ui.webdoors.around_quiet' => "It's quiet right now. Start something.",
             'ui.webdoors.free' => 'Free',
             'ui.webdoors.credit_cost' => '{count} credits',
             'ui.webdoors.surface_web' => 'Web',
@@ -76,6 +83,27 @@ final class GamesHubTemplateTest extends TestCase
         }));
         $twig->addFunction(new TwigFunction('bbs_feature_enabled', static fn(string $feature): bool => false));
 
+        // Default the "Around the Crossroads" aggregates from the supplied
+        // states the same way routes/webdoor-routes.php does, unless a test
+        // passes explicit values.
+        if ($aroundActivePlayers === null || $aroundActiveExperiences === null) {
+            $activeExperiences = 0;
+            $userIds = [];
+            foreach ($experienceStates as $state) {
+                if ((int)($state['player_count'] ?? 0) > 0) {
+                    $activeExperiences++;
+                }
+                foreach ($state['players'] ?? [] as $player) {
+                    $uid = (int)($player['user_id'] ?? 0);
+                    if ($uid > 0) {
+                        $userIds[$uid] = true;
+                    }
+                }
+            }
+            $aroundActivePlayers ??= count($userIds);
+            $aroundActiveExperiences ??= $activeExperiences;
+        }
+
         return $twig->render('webdoors.twig', [
             'system_name' => 'L33Test Gaming',
             'games' => $games,
@@ -83,6 +111,8 @@ final class GamesHubTemplateTest extends TestCase
             'live_experiences' => $liveExperiences,
             'experience_states' => $experienceStates,
             'current_user' => $currentUser,
+            'around_active_players' => $aroundActivePlayers,
+            'around_active_experiences' => $aroundActiveExperiences,
             'leaderboard' => $leaderboard,
             'leaderboard_month_label' => 'August 2026',
             'leaderboard_month_offset' => 0,
@@ -515,6 +545,224 @@ final class GamesHubTemplateTest extends TestCase
         );
         self::assertStringContainsString('renderPresence(element, payload)', $source);
         self::assertStringContainsString('const presentation = payload.presentation || {};', $source);
+    }
+
+    // ---- Slice 5E: "Around the Crossroads" presence summary ----
+
+    private function aroundLine(string $html): string
+    {
+        self::assertSame(
+            1,
+            preg_match(
+                '/<p class="experiences-around[^"]*"[^>]*>\s*(.+?)\s*<\/p>/s',
+                $html,
+                $m
+            ),
+            'expected exactly one .experiences-around line'
+        );
+
+        return html_entity_decode(trim($m[1]), ENT_QUOTES);
+    }
+
+    public function testAroundSummaryIsPositionedBelowHeaderAboveContinuePlaying(): void
+    {
+        $game = $this->game('green-dragon', 2);
+        $html = $this->renderHub(
+            [$game],
+            [$game],
+            [$game],
+            [],
+            false,
+            [],
+            ['green-dragon' => $this->rosterState('green-dragon', ['Skrawl', 'Bard'])]
+        );
+
+        $headerPos = strpos($html, 'experiences-library-header');
+        $aroundPos = strpos($html, 'experiences-around');
+        $continuePos = strpos($html, 'id="continue-playing-title"');
+        $livePos = strpos($html, 'id="live-now-title"');
+
+        self::assertNotFalse($aroundPos);
+        self::assertLessThan($aroundPos, $headerPos);
+        self::assertLessThan($continuePos, $aroundPos);
+        self::assertLessThan($livePos, $continuePos);
+    }
+
+    public function testAroundSummaryShowsAggregateWhenPlayersAreActive(): void
+    {
+        $html = $this->renderHub(
+            [$this->game('a', 1), $this->game('b', 2)],
+            [],
+            [$this->game('a', 1), $this->game('b', 2)],
+            [],
+            false,
+            [],
+            [
+                'a' => $this->rosterState('a', ['Skrawl'], 1),
+                'b' => $this->rosterState('b', ['Bard', 'Rogue'], 2),
+            ]
+        );
+
+        // 3 distinct players across 2 active Experiences.
+        self::assertSame('3 players in 2 Experiences right now', $this->aroundLine($html));
+        self::assertStringContainsString('experiences-around--active', $html);
+    }
+
+    public function testAroundSummaryShowsQuietInvitationWhenNobodyIsActive(): void
+    {
+        $html = $this->renderHub([$this->game('a', 0)], [], [], [], false, [], []);
+
+        self::assertSame("It's quiet right now. Start something.", $this->aroundLine($html));
+        // Quiet state carries no "active" modifier (no green dot).
+        self::assertStringNotContainsString('experiences-around--active', $html);
+        // Not a Bootstrap alert.
+        self::assertDoesNotMatchRegularExpression(
+            '/<p class="experiences-around[^"]*"[^>]*>\s*.{0,20}alert/s',
+            $html
+        );
+    }
+
+    /**
+     * @dataProvider aroundSingularPluralProvider
+     */
+    public function testAroundSummarySingularAndPluralWording(
+        int $players,
+        int $experiences,
+        string $expected
+    ): void {
+        $html = $this->renderHub(
+            [$this->game('a', 1)],
+            [],
+            [],
+            [],
+            false,
+            [],
+            [],
+            null,
+            $players,
+            $experiences
+        );
+
+        self::assertSame($expected, $this->aroundLine($html));
+    }
+
+    /** @return array<string,array{0:int,1:int,2:string}> */
+    public static function aroundSingularPluralProvider(): array
+    {
+        return [
+            '1p 1e' => [1, 1, '1 player in 1 Experience right now'],
+            '1p 2e' => [1, 2, '1 player in 2 Experiences right now'],
+            '2p 1e' => [2, 1, '2 players in 1 Experience right now'],
+            '5p 3e' => [5, 3, '5 players in 3 Experiences right now'],
+        ];
+    }
+
+    public function testAroundSummaryCountsDistinctUsersNotSessions(): void
+    {
+        // One user (id 7) holds two sessions in the same Experience: two rows
+        // in players[], but player_count is 1.
+        $state = [
+            'experience' => ['id' => 'green-dragon'],
+            'active' => true,
+            'session_count' => 2,
+            'player_count' => 1,
+            'players' => [
+                ['user_id' => 7, 'username' => 'Skrawl', 'session_id' => 'a', 'node' => 1, 'started_at' => 1_756_000_001],
+                ['user_id' => 7, 'username' => 'Skrawl', 'session_id' => 'b', 'node' => 2, 'started_at' => 1_756_000_002],
+            ],
+        ];
+
+        $html = $this->renderHub(
+            [$this->game('green-dragon', 1)],
+            [],
+            [$this->game('green-dragon', 1)],
+            [],
+            false,
+            [],
+            ['green-dragon' => $state]
+        );
+
+        // 1 distinct player, not 2 sessions.
+        self::assertSame('1 player in 1 Experience right now', $this->aroundLine($html));
+    }
+
+    public function testAroundSummaryDeduplicatesUserPresentInMultipleExperiences(): void
+    {
+        $html = $this->renderHub(
+            [$this->game('a', 1), $this->game('b', 1)],
+            [],
+            [$this->game('a', 1), $this->game('b', 1)],
+            [],
+            false,
+            [],
+            [
+                'a' => $this->rosterState('a', ['Skrawl'], 7),
+                'b' => $this->rosterState('b', ['Skrawl'], 7),
+            ]
+        );
+
+        // Same user in two Experiences -> 1 player, 2 Experiences.
+        self::assertSame('1 player in 2 Experiences right now', $this->aroundLine($html));
+    }
+
+    public function testAroundActiveExperienceCountOnlyIncludesStatesWithPlayers(): void
+    {
+        $html = $this->renderHub(
+            [$this->game('a', 2), $this->game('b', 0), $this->game('c', 1)],
+            [],
+            [$this->game('a', 2), $this->game('c', 1)],
+            [],
+            false,
+            [],
+            [
+                'a' => $this->rosterState('a', ['Skrawl', 'Bard'], 1),
+                'b' => $this->rosterState('b', [], 1),
+                'c' => $this->rosterState('c', ['Rogue'], 3),
+            ]
+        );
+
+        // 'b' has an empty roster -> excluded; 3 players across 2 Experiences.
+        self::assertSame('3 players in 2 Experiences right now', $this->aroundLine($html));
+    }
+
+    public function testAroundSummaryRendersNoPlayerNames(): void
+    {
+        $html = $this->renderHub(
+            [$this->game('a', 2)],
+            [],
+            [$this->game('a', 2)],
+            [],
+            false,
+            [],
+            ['a' => $this->rosterState('a', ['Skrawl', 'Bard'])]
+        );
+
+        // The summary itself carries counts only; names appear only in Live Now.
+        $around = $this->between($html, 'experiences-around', '</p>');
+        self::assertStringNotContainsString('Skrawl', $around);
+        self::assertStringNotContainsString('Bard', $around);
+        self::assertStringNotContainsString('/profile/', $around);
+    }
+
+    public function testAroundSummaryRouteAggregatesFromAuthorizedStateWithoutNewQuery(): void
+    {
+        $source = file_get_contents(dirname(__DIR__, 2) . '/routes/webdoor-routes.php');
+        self::assertIsString($source);
+
+        $start = strpos($source, "SimpleRouter::get('/games'");
+        $end = strpos($source, '// GET /games/dosdoors');
+        self::assertNotFalse($start);
+        self::assertNotFalse($end);
+        $route = substr($source, $start, $end - $start);
+
+        // Aggregation reuses the single bulk state read; no extra query / no
+        // session table access / no public_activity inference.
+        self::assertSame(1, substr_count($route, 'getExperienceStates('));
+        self::assertStringContainsString('$aroundActivePlayers = count($aroundActiveUserIds);', $route);
+        self::assertStringContainsString("(int)(\$aroundState['player_count'] ?? 0) > 0", $route);
+        self::assertStringNotContainsString('session_count', substr($route, strpos($route, '$aroundActiveExperiences = 0;')));
+        self::assertStringContainsString("'around_active_players' => \$aroundActivePlayers", $route);
+        self::assertStringContainsString("'around_active_experiences' => \$aroundActiveExperiences", $route);
     }
 
     private function game(string $id, int $playerCount = 0, bool $participating = false): array

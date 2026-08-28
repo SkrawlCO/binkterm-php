@@ -143,6 +143,27 @@ SimpleRouter::get('/games', function() {
         'web'
     );
 
+    // Slice 5E: "Around the Crossroads" — a one-line, server-rendered snapshot
+    // of live community presence, aggregated from the already-authorized
+    // ExperienceState above. No extra query, no session lookup: active
+    // Experiences are those the canonical state reports with players present,
+    // and the player total is a distinct-user count across those rosters so a
+    // caller in several Experiences at once is counted once.
+    $aroundActiveExperiences = 0;
+    $aroundActiveUserIds = [];
+    foreach ($experienceStates as $aroundState) {
+        if ((int)($aroundState['player_count'] ?? 0) > 0) {
+            $aroundActiveExperiences++;
+        }
+        foreach ($aroundState['players'] ?? [] as $aroundPlayer) {
+            $aroundUserId = (int)($aroundPlayer['user_id'] ?? 0);
+            if ($aroundUserId > 0) {
+                $aroundActiveUserIds[$aroundUserId] = true;
+            }
+        }
+    }
+    $aroundActivePlayers = count($aroundActiveUserIds);
+
     $currentUserId = (int)($user['user_id'] ?? $user['id'] ?? 0);
     $continuePlaying = [];
     $liveExperiences = [];
@@ -236,6 +257,8 @@ SimpleRouter::get('/games', function() {
         'continue_playing' => $continuePlaying,
         'live_experiences' => $liveExperiences,
         'experience_states' => $experienceStates,
+        'around_active_players' => $aroundActivePlayers,
+        'around_active_experiences' => $aroundActiveExperiences,
         'leaderboard' => $leaderboard,
         'leaderboard_month_label' => $leaderboardMonthLabel,
         'leaderboard_month_offset' => $monthOffset,

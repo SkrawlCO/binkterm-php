@@ -14,6 +14,27 @@
         <p class="text-muted mb-0">{{ t('ui.webdoors.description', {}, locale, ['common']) }}</p>
     </header>
 
+    {# Slice 5E: "Around the Crossroads" — one quiet line answering "is anyone
+       around?" from the server-rendered ExperienceState snapshot. Counts only;
+       player names live in Live Now / Continue Playing. #}
+    {% set around_players = around_active_players|default(0) %}
+    {% set around_experiences = around_active_experiences|default(0) %}
+    <p class="experiences-around{% if around_players > 0 %} experiences-around--active{% endif %} mb-4">
+        {%- if around_players > 0 -%}
+            {%- if around_players == 1 and around_experiences == 1 -%}
+                {{ t('ui.webdoors.around_active_1p_1e', {}, locale, ['common']) }}
+            {%- elseif around_players == 1 -%}
+                {{ t('ui.webdoors.around_active_1p', {'experiences': around_experiences}, locale, ['common']) }}
+            {%- elseif around_experiences == 1 -%}
+                {{ t('ui.webdoors.around_active_1e', {'players': around_players}, locale, ['common']) }}
+            {%- else -%}
+                {{ t('ui.webdoors.around_active', {'players': around_players, 'experiences': around_experiences}, locale, ['common']) }}
+            {%- endif -%}
+        {%- else -%}
+            {{ t('ui.webdoors.around_quiet', {}, locale, ['common']) }}
+        {%- endif -%}
+    </p>
+
     {% if continue_playing|default([])|length > 0 %}
     <section class="experience-section mb-4" aria-labelledby="continue-playing-title">
         <div class="experience-section-heading">

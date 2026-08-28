@@ -21,6 +21,28 @@
     text-transform: uppercase;
 }
 
+/* Around the Crossroads — one quiet community-presence line under the header. */
+.experiences-around {
+    color: var(--text-color-muted, #6c757d);
+    display: flex;
+    font-size: 0.92rem;
+    gap: 0.45rem;
+    margin-top: -0.75rem;
+}
+
+/* A small live dot when people are around (matches the Live Now dot); the
+   quiet state carries no dot so "green" never contradicts "quiet". */
+.experiences-around--active::before {
+    background: var(--experience-live);
+    border-radius: 50%;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--experience-live) 18%, transparent);
+    content: "";
+    flex-shrink: 0;
+    height: 0.5rem;
+    margin-top: 0.42rem;
+    width: 0.5rem;
+}
+
 .experience-section-heading {
     align-items: end;
     display: flex;
