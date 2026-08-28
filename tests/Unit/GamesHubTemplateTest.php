@@ -52,6 +52,10 @@ final class GamesHubTemplateTest extends TestCase
             'ui.webdoors.details' => 'Details',
             'ui.webdoors.play' => 'Play',
             'ui.webdoors.return' => 'Return',
+            'ui.webdoors.enter' => 'Enter',
+            'ui.webdoors.full_capacity' => 'Full',
+            'ui.webdoors.coming_soon' => 'Coming soon',
+            'ui.webdoors.terminal_only' => 'Terminal only',
             'ui.webdoors.category_game' => 'Game',
             'ui.webdoors.category_gateway' => 'Gateway',
             'ui.webdoors.multiplayer' => 'Multiplayer',
@@ -294,41 +298,180 @@ final class GamesHubTemplateTest extends TestCase
         self::assertStringNotContainsString('dataset.filterBackend', $html);
     }
 
-    public function testCardRendersSurfaceStatesAndSubduedBackendMetadata(): void
+    // ---- Slice 5F: card de-clutter + truthful status/action ----
+
+    /** The All Experiences card body for a single supplied game. */
+    private function libraryCard(array $game, array $translationOverrides = []): string
     {
-        $game = $this->game('surface-state');
-        $game['experience_presentation']['surfaces']['telnet'] = 'planned';
-        $html = $this->renderHub([$game]);
-        self::assertStringContainsString('class="card experience-library-card h-100 mb-0"', $html);
-        self::assertStringContainsString('class="card-body experience-card-layout"', $html);
-        self::assertStringContainsString('class="experience-metadata-cluster small"', $html);
-        self::assertStringNotContainsString('experience-surface-grid', $html);
-        self::assertStringContainsString('experience-surface-label">Web</span>', $html);
-        self::assertStringContainsString('experience-surface-label">Telnet / SSH</span>', $html);
-        self::assertStringContainsString('experience-surface-state state-full">Available', $html);
-        self::assertStringContainsString('experience-surface-state state-planned">Planned', $html);
-        self::assertStringContainsString('class="experience-technical-label"', $html);
-        self::assertStringNotContainsString('badge bg-warning text-dark', $html);
-        self::assertStringNotContainsString('badge bg-info text-white', $html);
+        return $this->between(
+            $this->renderHub([$game], [], [], [], false, $translationOverrides),
+            'data-experience-filter-root',
+            'community-scoreboard-title'
+        );
     }
 
-    public function testPlannedAndUnavailableExperiencesNeverRenderPlay(): void
+    public function testLibraryCardDropsBackendLabelFreeBadgeAndSurfacePills(): void
     {
-        foreach (['planned', 'unavailable'] as $state) {
-            $game = $this->game($state);
-            $game['experience_presentation']['surfaces']['current'] = $state;
-            $game['experience_presentation']['surfaces']['web'] = $state;
-            $game['experience_presentation']['actions']['play'] = false;
-            $game['experience_presentation']['actions']['primary'] = $state;
-            $section = $this->between(
-                $this->renderHub([$game]),
-                'All Experiences',
-                'Community Scoreboard'
-            );
-            self::assertStringContainsString('>Details</a>', $section);
-            self::assertStringContainsString('>' . ucfirst($state) . '</span>', $section);
-            self::assertStringNotContainsString('>Play</a>', $section);
+        $card = $this->libraryCard($this->game('lateania', 1));
+
+        // No implementation vocabulary.
+        self::assertStringNotContainsString('Native', $card);
+        self::assertStringNotContainsString('WebDoor', $card);
+        self::assertStringNotContainsString('experience-technical-label', $card);
+        // No routine "Free".
+        self::assertStringNotContainsString('>Free<', $card);
+        // No routine Web/Telnet availability pills.
+        self::assertStringNotContainsString('experience-surface-token', $card);
+        self::assertStringNotContainsString('experience-surface-label', $card);
+        self::assertStringNotContainsString('experience-surface-state', $card);
+        // No separate Details button.
+        self::assertStringNotContainsString('>Details</a>', $card);
+        self::assertStringNotContainsString("ui.webdoors.details", $card);
+    }
+
+    public function testLibraryCardKeepsTitleLinkTaxonomyAndOccupancy(): void
+    {
+        $card = $this->libraryCard($this->game('lateania', 3));
+
+        self::assertStringContainsString(
+            '<a href="/experiences/lateania" class="experience-title-link">Lateania</a>',
+            $card
+        );
+        self::assertStringContainsString('experience-card-taxonomy', $card);
+        self::assertStringContainsString('Game · Multiplayer', $card);
+        // Live occupancy is preserved (player_count, not session_count).
+        self::assertStringContainsString('3 online', $card);
+    }
+
+    public function testLibraryCardShowsCostChipOnlyWhenNonZero(): void
+    {
+        $free = $this->game('free-one', 1);
+        self::assertStringNotContainsString('credits', $this->libraryCard($free));
+        self::assertStringNotContainsString('>Free<', $this->libraryCard($free));
+
+        $paid = $this->game('paid-one', 1);
+        $paid['experience_presentation']['cost'] = ['credits' => 5, 'free' => false];
+        $paidCard = $this->libraryCard($paid);
+        self::assertStringContainsString('experience-cost-token', $paidCard);
+        self::assertStringContainsString('5 credits', $paidCard);
+    }
+
+    public function testLibraryCardActionIsEnterForAvailableNonParticipant(): void
+    {
+        $card = $this->libraryCard($this->game('available-one'));
+
+        self::assertMatchesRegularExpression(
+            '/<a href="\/experiences\/available-one" class="btn btn-fidonet[^"]*"[^>]*>.*?Enter<\/a>/s',
+            $card
+        );
+        self::assertStringNotContainsString('>Play</a>', $card);
+        self::assertStringNotContainsString('>Open</a>', $card);
+    }
+
+    public function testLibraryCardActionIsReturnForParticipant(): void
+    {
+        $card = $this->libraryCard($this->game('resume-one', 2, true));
+
+        self::assertMatchesRegularExpression(
+            '/<a href="\/experiences\/resume-one" class="btn btn-fidonet[^"]*"[^>]*>.*?Return<\/a>/s',
+            $card
+        );
+        self::assertStringNotContainsString('>Enter</a>', $card);
+    }
+
+    public function testLibraryCardAtCapacityIsFullAndNotLive(): void
+    {
+        $game = $this->game('busy-one', 10, false, 'at_capacity');
+        $game['experience_presentation']['capacity']['max_sessions'] = 10;
+        $game['experience_presentation']['runtime']['session_count'] = 10;
+        $card = $this->libraryCard($game);
+
+        // Occupancy reads Full · N/M.
+        self::assertStringContainsString('experience-presence--full', $card);
+        self::assertMatchesRegularExpression('/Full\s*·\s*10\/10/s', $card);
+        // Action is a disabled, non-interactive "Full" — never a live link.
+        self::assertStringContainsString(
+            '<span class="btn btn-outline-secondary btn-sm experience-card-action disabled" aria-disabled="true">Full</span>',
+            $card
+        );
+        self::assertDoesNotMatchRegularExpression(
+            '/<a [^>]*class="btn btn-fidonet[^"]*"[^>]*>(?:(?!<\/a>).)*(?:Enter|Play|Return)/s',
+            $card
+        );
+    }
+
+    public function testLibraryCardPlannedIsComingSoonAndMutedAndNotLive(): void
+    {
+        $game = $this->game('soon-one', 0, false, 'planned');
+        $game['experience_presentation']['surfaces']['web'] = 'planned';
+        $game['experience_presentation']['surfaces']['current'] = 'planned';
+        $card = $this->libraryCard($game);
+
+        self::assertStringContainsString('experience-library-card--muted', $card);
+        self::assertStringContainsString(
+            '<span class="btn btn-outline-secondary btn-sm experience-card-action disabled" aria-disabled="true">Coming soon</span>',
+            $card
+        );
+        self::assertStringNotContainsString('btn btn-fidonet', $card);
+    }
+
+    public function testLibraryCardWebUnavailableCannotLookPlayable(): void
+    {
+        // Playable from a terminal.
+        $terminalOnly = $this->game('term-one', 0, false, 'unavailable');
+        $terminalOnly['experience_presentation']['surfaces']['web'] = 'unavailable';
+        $terminalOnly['experience_presentation']['surfaces']['telnet'] = 'full';
+        $card = $this->libraryCard($terminalOnly);
+        self::assertStringContainsString('experience-library-card--muted', $card);
+        self::assertStringContainsString('Terminal only', $card);
+        self::assertStringNotContainsString('btn btn-fidonet', $card);
+        self::assertStringNotContainsString('btn-outline-secondary btn-sm experience-card-action disabled', $card);
+
+        // Not playable anywhere on the hub.
+        $none = $this->game('gone-one', 0, false, 'unavailable');
+        $none['experience_presentation']['surfaces']['web'] = 'unavailable';
+        $none['experience_presentation']['surfaces']['telnet'] = 'unavailable';
+        $noneCard = $this->libraryCard($none);
+        self::assertStringContainsString('Unavailable', $noneCard);
+        self::assertStringNotContainsString('btn btn-fidonet', $noneCard);
+    }
+
+    public function testLibraryCardNeverDeepLinksToLaunchUrl(): void
+    {
+        foreach (['available', 'participating', 'at_capacity', 'planned', 'unavailable'] as $status) {
+            $game = $this->game('deep-' . $status, 1, $status === 'participating', $status);
+            $card = $this->libraryCard($game);
+            self::assertStringNotContainsString('/games/nativedoors/', $card, "status {$status} leaked launch.url");
+            self::assertStringNotContainsString('launch.url', $card);
         }
+    }
+
+    public function testHubPresenceJsKeepsAtCapacityLabelTruthfulOnRefresh(): void
+    {
+        $source = file_get_contents(dirname(__DIR__, 2) . '/templates/webdoors.twig');
+        self::assertIsString($source);
+
+        self::assertStringContainsString(
+            'presentation.capacity && presentation.capacity.at_capacity',
+            $source
+        );
+        self::assertStringContainsString('fullCapacityT()', $source);
+        self::assertStringContainsString(
+            "element.classList.toggle('experience-presence--full', atCapacity)",
+            $source
+        );
+    }
+
+    public function testDeclutteredCardsDoNotChangeFilterDataAttributes(): void
+    {
+        $game = $this->game('filter-safe', 2);
+        $game['experience_presentation']['surfaces']['telnet'] = 'planned';
+        $card = $this->libraryCard($game);
+
+        self::assertStringContainsString('data-filter-web="full"', $card);
+        self::assertStringContainsString('data-filter-telnet="planned"', $card);
+        self::assertStringContainsString('data-filter-player-count="2"', $card);
+        self::assertStringContainsString('data-filter-multiplayer="1"', $card);
     }
 
     public function testScoreboardDefaultsToFiveRowsAndPreservesFullAndMonthLinks(): void
@@ -765,8 +908,16 @@ final class GamesHubTemplateTest extends TestCase
         self::assertStringContainsString("'around_active_experiences' => \$aroundActiveExperiences", $route);
     }
 
-    private function game(string $id, int $playerCount = 0, bool $participating = false): array
-    {
+    private function game(
+        string $id,
+        int $playerCount = 0,
+        bool $participating = false,
+        ?string $statusCode = null
+    ): array {
+        $statusCode ??= $participating ? 'participating' : 'available';
+        $atCapacity = $statusCode === 'at_capacity';
+        $launchable = in_array($statusCode, ['participating', 'at_capacity', 'available'], true);
+
         return [
             'id' => $id,
             'launch' => ['type' => 'native', 'id' => $id, 'url' => '/games/nativedoors/' . $id],
@@ -780,12 +931,20 @@ final class GamesHubTemplateTest extends TestCase
                 'presentation' => ['icon_url' => '/icon/' . $id],
                 'backend' => ['type' => 'native', 'label' => 'Native'],
                 'capabilities' => ['multiplayer' => true],
-                'capacity' => ['max_sessions' => 8],
+                'capacity' => ['max_sessions' => 8, 'limited' => true, 'at_capacity' => $atCapacity],
                 'cost' => ['credits' => 0, 'free' => true],
-                'surfaces' => ['requested' => 'web', 'current' => 'full', 'web' => 'full', 'telnet' => 'full', 'static_launchable' => true],
+                'surfaces' => ['requested' => 'web', 'current' => 'full', 'web' => 'full', 'telnet' => 'full', 'static_launchable' => $launchable],
                 'runtime' => ['supplied' => true, 'active' => $playerCount > 0, 'session_count' => $playerCount, 'player_count' => $playerCount, 'players' => []],
-                'viewer' => ['participating' => $participating],
-                'actions' => ['primary' => $participating ? 'return' : 'play', 'details' => true, 'play' => !$participating, 'return' => $participating, 'end_participation' => $participating, 'static_launchable' => true],
+                'viewer' => ['participating' => $participating, 'blocked_by_capacity' => $atCapacity && !$participating],
+                'status' => ['code' => $statusCode],
+                'actions' => [
+                    'primary' => $participating ? 'return' : ($statusCode === 'available' ? 'play' : $statusCode),
+                    'details' => true,
+                    'play' => !$participating && $launchable,
+                    'return' => $participating,
+                    'end_participation' => $participating,
+                    'static_launchable' => $launchable,
+                ],
             ],
         ];
     }

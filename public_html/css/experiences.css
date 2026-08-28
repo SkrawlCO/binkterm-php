@@ -192,10 +192,15 @@
 }
 
 .experience-card-layout {
-    display: grid;
-    grid-template-rows: auto auto minmax(2.9rem, auto) auto;
-    row-gap: 0.4rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
     padding: 0.65rem;
+}
+
+/* Planned / web-unavailable Experiences read as visibly quieter. */
+.experience-library-card--muted {
+    opacity: 0.82;
 }
 
 .experience-card-identity {
@@ -273,19 +278,25 @@
 }
 
 .experience-card-footer {
-    align-self: end;
-}
-
-.experience-library-card .experience-technical-label {
-    border: 0;
-    font-size: 0.65rem;
-    padding: 0;
+    margin-top: auto;
+    min-height: 1.9rem;
+    padding-top: 0.15rem;
 }
 
 .experience-card-action.btn-sm {
     font-size: 0.75rem;
     line-height: 1.2;
     padding: 0.2rem 0.45rem;
+}
+
+/* At-capacity occupancy: no green "come on in" dot, muted text. */
+.experience-presence--full {
+    color: var(--text-color-muted, #6c757d);
+}
+
+.experience-presence-dot--full {
+    color: var(--text-color-muted, #6c757d);
+    opacity: 0.6;
 }
 
 /* Four columns begin only when each directory card retains a readable width. */
@@ -329,11 +340,6 @@
 @media (max-width: 575.98px) {
     .experiences-library-header {
         padding-left: 0.75rem;
-    }
-
-    .experience-card-layout {
-        grid-template-rows: auto auto auto auto;
-        padding: 0.65rem;
     }
 
     .experience-filter-search {

@@ -220,6 +220,7 @@
         ?.querySelector('.experience-count');
     const presenceElements = document.querySelectorAll('.experience-presence');
     const playersOnlineFallback = '{{ t('ui.webdoors.players_online', {'count': '{count}'}, locale, ['common']) | escape('js') }}';
+    const fullCapacityFallback = '{{ t('ui.webdoors.full_capacity', {}, locale, ['common']) | escape('js') }}';
 
     function normalizeSearch(value) {
         return String(value || '')
@@ -321,6 +322,14 @@
         );
     }
 
+    function fullCapacityT() {
+        if (typeof window.t === 'function') {
+            return window.t('ui.webdoors.full_capacity', {}, fullCapacityFallback);
+        }
+
+        return fullCapacityFallback;
+    }
+
     function setPresenceVisible(element, visible) {
         element.classList.toggle('d-none', !visible);
     }
@@ -342,7 +351,6 @@
             return;
         }
 
-        let presenceText = presenceT({ count: playerCount });
         const sessionCount = Number(state.session_count || 0);
         // Slice 5D: consume the canonical 5C presentation capacity. The old
         // per-card `state` payload never carried a nested experience/capacity
@@ -350,9 +358,25 @@
         const maxSessions = Number(
             (presentation.capacity && presentation.capacity.max_sessions) || 0
         );
+        // Slice 5F: an at-capacity Experience reads "Full · N/M", not "N online",
+        // and its dot loses the green "come on in" colour. Keep this in sync on
+        // every refresh so the initial server render is not overwritten.
+        const atCapacity = !!(
+            presentation.capacity && presentation.capacity.at_capacity
+        );
 
+        let presenceText = atCapacity
+            ? fullCapacityT()
+            : presenceT({ count: playerCount });
         if (maxSessions > 0) {
             presenceText += ' · ' + sessionCount + '/' + maxSessions;
+        }
+
+        element.classList.toggle('experience-presence--full', atCapacity);
+        const dot = element.querySelector('i.fa-circle');
+        if (dot) {
+            dot.classList.toggle('text-success', !atCapacity);
+            dot.classList.toggle('experience-presence-dot--full', atCapacity);
         }
 
         label.textContent = presenceText;
