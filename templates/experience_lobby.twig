@@ -751,14 +751,56 @@ async function refreshExperienceConversation() {
     renderExperienceConversation(experienceConversationMessages);
 }
 
-function formatExperienceActivityTime(value) {
+function formatExperienceActivityTime(value, nowValue = new Date()) {
     const date = new Date(value);
+    const now = nowValue instanceof Date
+        ? nowValue
+        : new Date(nowValue);
 
-    if (Number.isNaN(date.getTime())) {
+    if (Number.isNaN(date.getTime()) || Number.isNaN(now.getTime())) {
         return '';
     }
 
-    return date.toLocaleString();
+    const elapsedMs = now.getTime() - date.getTime();
+
+    if (elapsedMs >= 0) {
+        const elapsedMinutes = Math.floor(elapsedMs / 60000);
+
+        if (elapsedMinutes < 1) {
+            return 'just now';
+        }
+
+        if (elapsedMinutes < 60) {
+            return `${elapsedMinutes} minute${elapsedMinutes === 1 ? '' : 's'} ago`;
+        }
+
+        const elapsedHours = Math.floor(elapsedMinutes / 60);
+
+        if (elapsedHours < 24) {
+            return `${elapsedHours} hour${elapsedHours === 1 ? '' : 's'} ago`;
+        }
+    }
+
+    const localDayNumber = candidate => Date.UTC(
+        candidate.getFullYear(),
+        candidate.getMonth(),
+        candidate.getDate()
+    ) / 86400000;
+
+    if (localDayNumber(now) - localDayNumber(date) === 1) {
+        return 'yesterday';
+    }
+
+    const options = {
+        month: 'short',
+        day: 'numeric'
+    };
+
+    if (date.getFullYear() !== now.getFullYear()) {
+        options.year = 'numeric';
+    }
+
+    return new Intl.DateTimeFormat(undefined, options).format(date);
 }
 
 function renderExperienceActivity(activity = []) {
@@ -783,20 +825,19 @@ function renderExperienceActivity(activity = []) {
         );
 
         const time = occurredAt
-            ? `<span class="text-nowrap">${escapeHtml(occurredAt)}</span>`
+            ? `<span class="text-nowrap"> · ${escapeHtml(occurredAt)}</span>`
             : '';
 
         const activityLabel = entry.type === 'first_play'
-            ? 'played for the first time'
+            ? 'first recorded play'
             : 'played';
 
         return `
-            <div class="d-flex flex-wrap justify-content-between gap-2 py-1">
+            <div class="d-flex flex-wrap gap-2 py-1">
                 <span>
                     <i class="fas fa-gamepad me-1" aria-hidden="true"></i>
-                    <strong>${username}</strong> ${activityLabel}
+                    <strong>${username}</strong> ${activityLabel}${time}
                 </span>
-                ${time}
             </div>
         `;
     }).join('');

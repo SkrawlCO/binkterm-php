@@ -998,9 +998,73 @@ final class ExperienceLobbyTemplateTest extends TestCase
         );
 
         self::assertStringContainsString(
+            "'first recorded play'",
+            $source
+        );
+
+        self::assertStringNotContainsString(
             "'played for the first time'",
             $source
         );
+
+        self::assertStringContainsString(
+            ": 'played';",
+            $source
+        );
+    }
+
+    public function testExperienceActivityUsesCompactDeterministicTimeFormatting(): void
+    {
+        $source = file_get_contents(
+            __DIR__ . '/../../templates/experience_lobby.twig'
+        );
+
+        self::assertIsString($source);
+        self::assertStringContainsString(
+            'function formatExperienceActivityTime(value, nowValue = new Date())',
+            $source
+        );
+        self::assertStringContainsString("return 'just now';", $source);
+        self::assertStringContainsString(
+            "minute\${elapsedMinutes === 1 ? '' : 's'} ago",
+            $source
+        );
+        self::assertStringContainsString(
+            "hour\${elapsedHours === 1 ? '' : 's'} ago",
+            $source
+        );
+        self::assertStringContainsString("return 'yesterday';", $source);
+        self::assertStringContainsString("month: 'short'", $source);
+        self::assertStringContainsString("day: 'numeric'", $source);
+        self::assertStringContainsString("options.year = 'numeric';", $source);
+        self::assertStringContainsString(
+            "Number.isNaN(date.getTime()) || Number.isNaN(now.getTime())",
+            $source
+        );
+        self::assertStringNotContainsString('return date.toLocaleString();', $source);
+    }
+
+    public function testExperienceActivityRenderingRemainsBoundedAndPrivate(): void
+    {
+        $source = file_get_contents(
+            __DIR__ . '/../../templates/experience_lobby.twig'
+        );
+
+        self::assertIsString($source);
+        $start = strpos($source, 'function renderExperienceActivity(activity = [])');
+        $end = strpos($source, 'function updateExperienceViewerActions', $start);
+        self::assertNotFalse($start);
+        self::assertNotFalse($end);
+        $renderer = substr($source, $start, $end - $start);
+
+        self::assertStringContainsString('activity.slice(0, 5)', $renderer);
+        self::assertStringContainsString("container.textContent = 'No recent activity yet.';", $renderer);
+        self::assertStringContainsString("const username = escapeHtml(", $renderer);
+        self::assertStringContainsString("entry.username || 'Unknown user'", $renderer);
+        self::assertStringContainsString("entry.occurred_at || ''", $renderer);
+        self::assertStringContainsString("? `<span class=\"text-nowrap\"> · \${escapeHtml(occurredAt)}</span>`", $renderer);
+        self::assertStringNotContainsString('/profile/', $renderer);
+        self::assertStringNotContainsString('EXPERIENCE_NAME', $renderer);
     }
 
 
