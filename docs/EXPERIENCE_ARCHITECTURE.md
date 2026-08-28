@@ -148,7 +148,10 @@ The library sections have distinct membership rules:
   greater than zero. Continue Playing entries are excluded to avoid adjacent
   duplication.
 - **All Experiences** is the complete visible, authorized web inventory,
-  including entries already shown in the optional activity sections.
+  including entries already shown in the optional activity sections. Its
+  browser-side filters narrow only these already-authorized rendered entries;
+  they do not rediscover Experiences, alter catalog order, or affect the other
+  library sections.
 - **Community Scoreboard** reports submitted scores for the selected month.
   Scores are not evidence of current occupancy or popularity. Viewer-facing
   scoreboards and leaderboards use the requested surface's authorized catalog

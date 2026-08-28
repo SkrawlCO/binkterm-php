@@ -32,6 +32,15 @@ final class GamesHubTemplateTest extends TestCase
             'ui.webdoors.live' => 'Live',
             'ui.webdoors.all_experiences' => 'All Experiences',
             'ui.webdoors.all_experiences_description' => 'All description',
+            'ui.webdoors.filter_controls' => 'Filter Experiences',
+            'ui.webdoors.filter_search_label' => 'Search Experiences',
+            'ui.webdoors.filter_search_placeholder' => 'Search by name or description',
+            'ui.webdoors.filter_live' => 'Live Now filter',
+            'ui.webdoors.filter_multiplayer' => 'Multiplayer filter',
+            'ui.webdoors.filter_web_available' => 'Web available',
+            'ui.webdoors.filter_telnet_available' => 'Telnet available',
+            'ui.webdoors.clear_filters' => 'Clear filters',
+            'ui.webdoors.no_filter_matches' => 'No matching Experiences.',
             'ui.webdoors.community_scoreboard' => 'Community Scoreboard',
             'ui.webdoors.community_scoreboard_description' => 'Score description',
             'ui.webdoors.view_full_scoreboard' => 'View full scoreboard',
@@ -98,8 +107,8 @@ final class GamesHubTemplateTest extends TestCase
     public function testOptionalCommunitySectionsAreOmittedWhenEmpty(): void
     {
         $html = $this->renderHub([$this->game('only-entry')]);
-        self::assertStringNotContainsString('Continue Playing', $html);
-        self::assertStringNotContainsString('Live Now', $html);
+        self::assertStringNotContainsString('id="continue-playing-title"', $html);
+        self::assertStringNotContainsString('id="live-now-title"', $html);
         self::assertStringContainsString('All Experiences', $html);
     }
 
@@ -143,6 +152,110 @@ final class GamesHubTemplateTest extends TestCase
         self::assertStringContainsString('/experiences/one', $section);
         self::assertStringContainsString('/experiences/two', $section);
         self::assertStringContainsString('/experiences/three', $section);
+        self::assertLessThan(
+            strpos($section, '/experiences/two'),
+            strpos($section, '/experiences/one')
+        );
+        self::assertLessThan(
+            strpos($section, '/experiences/three'),
+            strpos($section, '/experiences/two')
+        );
+    }
+
+    public function testAllExperienceFiltersExposeOnlyNormalizedPublicState(): void
+    {
+        $game = $this->game('filter-entry', 2);
+        $view = &$game['experience_presentation'];
+        $view['name'] = 'Public Name';
+        $view['description'] = 'Public description';
+        $view['backend']['label'] = 'Private implementation label';
+        $view['capabilities']['multiplayer'] = false;
+        $view['surfaces']['web'] = 'full';
+        $view['surfaces']['telnet'] = 'planned';
+
+        $section = $this->between(
+            $this->renderHub([$game]),
+            'All Experiences',
+            'Community Scoreboard'
+        );
+
+        self::assertStringContainsString('data-experience-filter-controls', $section);
+        self::assertStringContainsString('type="search"', $section);
+        self::assertStringContainsString('data-filter-name="Public Name"', $section);
+        self::assertStringContainsString('data-filter-description="Public description"', $section);
+        self::assertStringContainsString('data-filter-player-count="2"', $section);
+        self::assertStringContainsString('data-filter-multiplayer="0"', $section);
+        self::assertStringContainsString('data-filter-web="full"', $section);
+        self::assertStringContainsString('data-filter-telnet="planned"', $section);
+
+        self::assertMatchesRegularExpression(
+            '/data-experience-filter-item(?:(?!Private implementation label).)*data-filter-telnet="planned"/s',
+            $section
+        );
+    }
+
+    public function testFiltersTargetOnlyAllExperiences(): void
+    {
+        $library = $this->game('library-only');
+        $continue = $this->game('continue-only', 1, true);
+        $live = $this->game('live-only', 2);
+        $html = $this->renderHub([$library], [$continue], [$live]);
+
+        self::assertSame(1, substr_count($html, 'data-filter-name="'));
+        self::assertStringNotContainsString(
+            'data-experience-filter-item',
+            $this->between($html, 'Continue Playing', 'Live Now')
+        );
+        self::assertStringNotContainsString(
+            'data-experience-filter-item',
+            $this->between($html, 'Live Now', 'All Experiences')
+        );
+        self::assertStringNotContainsString(
+            'data-filter-name="',
+            $this->between($html, 'Community Scoreboard', '</section>')
+        );
+    }
+
+    public function testFilterEmptyStateAndResetUseTranslations(): void
+    {
+        $html = $this->renderHub(
+            [$this->game('filter-copy')],
+            [],
+            [],
+            [],
+            false,
+            [
+                'ui.webdoors.clear_filters' => 'Zurücksetzen',
+                'ui.webdoors.no_filter_matches' => 'Keine passenden Einträge.',
+            ]
+        );
+
+        self::assertStringContainsString('Keine passenden Einträge.', $html);
+        self::assertSame(2, substr_count($html, '>Zurücksetzen</button>'));
+        self::assertStringContainsString('data-experience-filter-empty aria-live="polite"', $html);
+    }
+
+    public function testCatalogEmptyStateDoesNotRenderFilterControls(): void
+    {
+        $html = $this->renderHub([]);
+
+        self::assertStringNotContainsString('data-experience-filter-controls', $html);
+        self::assertStringNotContainsString('class="alert alert-info mt-3 mb-0 d-none experience-filter-empty"', $html);
+        self::assertStringContainsString('ui.webdoors.no_games_available', $html);
+    }
+
+    public function testFilterScriptUsesNormalizedAndSemanticsWithoutReordering(): void
+    {
+        $html = $this->renderHub([$this->game('filter-script')]);
+
+        self::assertStringContainsString("Number(item.dataset.filterPlayerCount || 0) > 0", $html);
+        self::assertStringContainsString("item.dataset.filterMultiplayer === '1'", $html);
+        self::assertStringContainsString("item.dataset.filterWeb === 'full'", $html);
+        self::assertStringContainsString("item.dataset.filterTelnet === 'full'", $html);
+        self::assertStringContainsString("matchesSearch\n                && matchesLive", $html);
+        self::assertStringContainsString('item.hidden = !visible;', $html);
+        self::assertStringNotContainsString('appendChild(item)', $html);
+        self::assertStringNotContainsString('dataset.filterBackend', $html);
     }
 
     public function testCardRendersSurfaceStatesAndSubduedBackendMetadata(): void
@@ -201,7 +314,9 @@ final class GamesHubTemplateTest extends TestCase
         self::assertStringContainsString('href="/experiences/launch-target"', $html);
         self::assertStringNotContainsString('href="/games/nativedoors/launch-target"', $html);
         self::assertStringContainsString('window.setInterval(refreshAllPresence, 15000);', $html);
+        self::assertSame(1, substr_count($html, 'window.setInterval('));
         self::assertStringContainsString("'/api/experiences/'", $html);
+        self::assertStringContainsString('updateFilterOccupancy(element, playerCount);', $html);
         self::assertStringContainsString(
             "const playersOnlineFallback = '\\u007Bcount\\u007D\\u0020online';",
             $html

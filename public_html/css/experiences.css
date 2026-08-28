@@ -28,6 +28,45 @@
     justify-content: space-between;
 }
 
+.experience-filter-toolbar {
+    align-items: center;
+    background: var(--experience-surface-muted);
+    border: 1px solid var(--experience-border);
+    border-radius: 0.45rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.55rem 0.8rem;
+    padding: 0.55rem 0.65rem;
+}
+
+.experience-filter-search {
+    flex: 1 1 15rem;
+    max-width: 25rem;
+}
+
+.experience-filter-toggles {
+    align-items: center;
+    display: flex;
+    flex: 1 1 auto;
+    flex-wrap: wrap;
+    gap: 0.35rem 0.8rem;
+}
+
+.experience-filter-toggle {
+    font-size: 0.82rem;
+    margin: 0;
+    min-height: auto;
+}
+
+.experience-filter-toggle .form-check-input,
+.experience-filter-toggle .form-check-label {
+    cursor: pointer;
+}
+
+.experience-filter-empty {
+    text-align: center;
+}
+
 .experience-count,
 .experience-state-label,
 .experience-action-state,
@@ -239,6 +278,15 @@
     .experience-card-layout {
         grid-template-rows: auto auto auto auto;
         padding: 0.65rem;
+    }
+
+    .experience-filter-search {
+        flex-basis: 100%;
+        max-width: none;
+    }
+
+    .experience-filter-toggles {
+        flex-basis: 100%;
     }
 
     .experience-metadata-token {

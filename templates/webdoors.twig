@@ -82,14 +82,44 @@
                 <h2 id="all-experiences-title" class="h4 mb-1">{{ t('ui.webdoors.all_experiences', {}, locale, ['common']) }}</h2>
                 <p class="text-muted small mb-0">{{ t('ui.webdoors.all_experiences_description', {}, locale, ['common']) }}</p>
             </div>
-            <span class="experience-count">{{ games|length }}</span>
+            <span class="experience-count" aria-live="polite" aria-atomic="true">{{ games|length }}</span>
         </div>
 
         {% if games|length > 0 %}
-        <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-2 mt-0 experience-library-grid">
+        <div class="experience-filter-toolbar mt-3" data-experience-filter-controls role="group" aria-label="{{ t('ui.webdoors.filter_controls', {}, locale, ['common']) }}">
+            <div class="experience-filter-search">
+                <label for="experience-filter-search" class="visually-hidden">{{ t('ui.webdoors.filter_search_label', {}, locale, ['common']) }}</label>
+                <input type="search" class="form-control form-control-sm" id="experience-filter-search" placeholder="{{ t('ui.webdoors.filter_search_placeholder', {}, locale, ['common']) }}" autocomplete="off">
+            </div>
+            <div class="experience-filter-toggles">
+                <div class="form-check form-check-inline experience-filter-toggle">
+                    <input class="form-check-input" type="checkbox" id="experience-filter-live" data-experience-filter="live">
+                    <label class="form-check-label" for="experience-filter-live">{{ t('ui.webdoors.filter_live', {}, locale, ['common']) }}</label>
+                </div>
+                <div class="form-check form-check-inline experience-filter-toggle">
+                    <input class="form-check-input" type="checkbox" id="experience-filter-multiplayer" data-experience-filter="multiplayer">
+                    <label class="form-check-label" for="experience-filter-multiplayer">{{ t('ui.webdoors.filter_multiplayer', {}, locale, ['common']) }}</label>
+                </div>
+                <div class="form-check form-check-inline experience-filter-toggle">
+                    <input class="form-check-input" type="checkbox" id="experience-filter-web" data-experience-filter="web">
+                    <label class="form-check-label" for="experience-filter-web">{{ t('ui.webdoors.filter_web_available', {}, locale, ['common']) }}</label>
+                </div>
+                <div class="form-check form-check-inline experience-filter-toggle">
+                    <input class="form-check-input" type="checkbox" id="experience-filter-telnet" data-experience-filter="telnet">
+                    <label class="form-check-label" for="experience-filter-telnet">{{ t('ui.webdoors.filter_telnet_available', {}, locale, ['common']) }}</label>
+                </div>
+            </div>
+            <button type="button" class="btn btn-outline-secondary btn-sm experience-filter-reset" data-experience-filter-reset>{{ t('ui.webdoors.clear_filters', {}, locale, ['common']) }}</button>
+        </div>
+
+        <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-2 mt-0 experience-library-grid" data-experience-filter-root>
             {% for game in games %}
                 {% include 'partials/experience_library_card.twig' with {game: game} %}
             {% endfor %}
+        </div>
+        <div class="alert alert-info mt-3 mb-0 d-none experience-filter-empty" data-experience-filter-empty aria-live="polite">
+            <i class="fas fa-info-circle me-1" aria-hidden="true"></i>{{ t('ui.webdoors.no_filter_matches', {}, locale, ['common']) }}
+            <button type="button" class="btn btn-outline-secondary btn-sm ms-2" data-experience-filter-reset>{{ t('ui.webdoors.clear_filters', {}, locale, ['common']) }}</button>
         </div>
         {% else %}
         <div class="alert alert-info mt-3 mb-0">
@@ -146,11 +176,103 @@
 
 <script>
 (function () {
+    const filterRoot = document.querySelector('[data-experience-filter-root]');
+    const filterItems = filterRoot
+        ? Array.from(filterRoot.querySelectorAll('[data-experience-filter-item]'))
+        : [];
+    const filterSearch = document.getElementById('experience-filter-search');
+    const filterInputs = Array.from(document.querySelectorAll('[data-experience-filter]'));
+    const filterResetButtons = Array.from(document.querySelectorAll('[data-experience-filter-reset]'));
+    const filterEmpty = document.querySelector('[data-experience-filter-empty]');
+    const filterCount = document.querySelector('#all-experiences-title')
+        ?.closest('.experience-section-heading')
+        ?.querySelector('.experience-count');
     const presenceElements = document.querySelectorAll('.experience-presence');
     const playersOnlineFallback = '{{ t('ui.webdoors.players_online', {'count': '{count}'}, locale, ['common']) | escape('js') }}';
 
-    if (!presenceElements.length) {
-        return;
+    function normalizeSearch(value) {
+        return String(value || '')
+            .toLocaleLowerCase()
+            .trim()
+            .replace(/\s+/g, ' ');
+    }
+
+    function filterIsActive(name) {
+        return Boolean(document.querySelector(
+            '[data-experience-filter="' + name + '"]:checked'
+        ));
+    }
+
+    function applyExperienceFilters() {
+        if (!filterRoot) {
+            return;
+        }
+
+        const searchTerms = normalizeSearch(filterSearch?.value).split(' ').filter(Boolean);
+        const liveOnly = filterIsActive('live');
+        const multiplayerOnly = filterIsActive('multiplayer');
+        const webOnly = filterIsActive('web');
+        const telnetOnly = filterIsActive('telnet');
+        let visibleCount = 0;
+
+        filterItems.forEach(function (item) {
+            const searchableText = normalizeSearch(
+                item.dataset.filterName + ' ' + item.dataset.filterDescription
+            );
+            const matchesSearch = searchTerms.every(function (term) {
+                return searchableText.includes(term);
+            });
+            const matchesLive = !liveOnly || Number(item.dataset.filterPlayerCount || 0) > 0;
+            const matchesMultiplayer = !multiplayerOnly || item.dataset.filterMultiplayer === '1';
+            const matchesWeb = !webOnly || item.dataset.filterWeb === 'full';
+            const matchesTelnet = !telnetOnly || item.dataset.filterTelnet === 'full';
+            const visible = matchesSearch
+                && matchesLive
+                && matchesMultiplayer
+                && matchesWeb
+                && matchesTelnet;
+
+            item.hidden = !visible;
+            if (visible) {
+                visibleCount += 1;
+            }
+        });
+
+        if (filterCount) {
+            filterCount.textContent = String(visibleCount);
+        }
+        if (filterEmpty) {
+            filterEmpty.classList.toggle('d-none', visibleCount !== 0);
+        }
+    }
+
+    function resetExperienceFilters() {
+        if (filterSearch) {
+            filterSearch.value = '';
+        }
+        filterInputs.forEach(function (input) {
+            input.checked = false;
+        });
+        applyExperienceFilters();
+        filterSearch?.focus();
+    }
+
+    filterSearch?.addEventListener('input', applyExperienceFilters);
+    filterInputs.forEach(function (input) {
+        input.addEventListener('change', applyExperienceFilters);
+    });
+    filterResetButtons.forEach(function (button) {
+        button.addEventListener('click', resetExperienceFilters);
+    });
+
+    function updateFilterOccupancy(element, playerCount) {
+        const filterItem = element.closest('[data-experience-filter-item]');
+        if (!filterItem) {
+            return;
+        }
+
+        filterItem.dataset.filterPlayerCount = String(playerCount);
+        applyExperienceFilters();
     }
 
     function presenceT(params) {
@@ -183,6 +305,7 @@
         if (playerCount === 0) {
             label.textContent = '';
             setPresenceVisible(element, false);
+            updateFilterOccupancy(element, 0);
             return;
         }
 
@@ -198,6 +321,7 @@
 
         label.textContent = presenceText;
         setPresenceVisible(element, true);
+        updateFilterOccupancy(element, playerCount);
     }
 
     function renderUnavailable(element) {
@@ -253,8 +377,11 @@
         });
     }
 
-    refreshAllPresence();
-    window.setInterval(refreshAllPresence, 15000);
+    applyExperienceFilters();
+    if (presenceElements.length) {
+        refreshAllPresence();
+        window.setInterval(refreshAllPresence, 15000);
+    }
 })();
 </script>
 {% endblock %}

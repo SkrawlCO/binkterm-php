@@ -1,5 +1,12 @@
 {% set view = game.experience_presentation %}
-<div class="col">
+<div class="col"
+     data-experience-filter-item
+     data-filter-name="{{ view.name }}"
+     data-filter-description="{{ view.description }}"
+     data-filter-player-count="{{ view.runtime.player_count|default(0) }}"
+     data-filter-multiplayer="{{ view.capabilities.multiplayer ? '1' : '0' }}"
+     data-filter-web="{{ view.surfaces.web }}"
+     data-filter-telnet="{{ view.surfaces.telnet }}">
     <article class="card experience-library-card h-100 mb-0">
         <div class="card-body experience-card-layout">
             <div class="experience-card-identity d-flex gap-2">
