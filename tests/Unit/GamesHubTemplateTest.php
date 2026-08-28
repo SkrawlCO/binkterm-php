@@ -21,7 +21,8 @@ final class GamesHubTemplateTest extends TestCase
         array $experienceStates = [],
         ?array $currentUser = null,
         ?int $aroundActivePlayers = null,
-        ?int $aroundActiveExperiences = null
+        ?int $aroundActiveExperiences = null,
+        ?bool $showGlobalPresenceSummary = null
     ): string {
         $twig = new Environment(new FilesystemLoader(dirname(__DIR__, 2) . '/templates'));
         $translations = [
@@ -108,6 +109,28 @@ final class GamesHubTemplateTest extends TestCase
             $aroundActiveExperiences ??= $activeExperiences;
         }
 
+        if ($showGlobalPresenceSummary === null) {
+            $viewerId = (int)($currentUser['user_id'] ?? $currentUser['id'] ?? 0);
+            $viewerIsParticipating = false;
+            $activeUserIds = [];
+            foreach ($experienceStates as $state) {
+                foreach ($state['players'] ?? [] as $player) {
+                    $playerId = (int)($player['user_id'] ?? 0);
+                    if ($playerId > 0) {
+                        $activeUserIds[$playerId] = true;
+                    }
+                    if ($viewerId > 0 && $playerId === $viewerId) {
+                        $viewerIsParticipating = true;
+                    }
+                }
+            }
+            $showGlobalPresenceSummary = !(
+                $viewerIsParticipating
+                && count($activeUserIds) === 1
+                && isset($activeUserIds[$viewerId])
+            );
+        }
+
         return $twig->render('webdoors.twig', [
             'system_name' => 'L33Test Gaming',
             'games' => $games,
@@ -117,6 +140,7 @@ final class GamesHubTemplateTest extends TestCase
             'current_user' => $currentUser,
             'around_active_players' => $aroundActivePlayers,
             'around_active_experiences' => $aroundActiveExperiences,
+            'show_global_presence_summary' => $showGlobalPresenceSummary,
             'leaderboard' => $leaderboard,
             'leaderboard_month_label' => 'August 2026',
             'leaderboard_month_offset' => 0,
@@ -790,6 +814,91 @@ final class GamesHubTemplateTest extends TestCase
         );
     }
 
+    public function testAroundSummaryIsHiddenWhenViewerIsSoleActivePlayer(): void
+    {
+        $game = $this->game('lateania', 1, true);
+        $html = $this->renderHub(
+            games: [$game],
+            continuePlaying: [$game],
+            experienceStates: [
+                'lateania' => $this->rosterState('lateania', ['Skrawl']),
+            ],
+            currentUser: ['user_id' => 1]
+        );
+
+        self::assertStringNotContainsString('experiences-around', $html);
+
+        $continueSection = $this->between(
+            $html,
+            'id="continue-playing-title"',
+            'id="all-experiences-title"'
+        );
+        self::assertStringContainsString('You are participating now', $continueSection);
+        self::assertStringContainsString('>Return</a>', $continueSection);
+
+        $librarySection = $this->between(
+            $html,
+            'data-experience-filter-root',
+            'community-scoreboard-title'
+        );
+        self::assertStringContainsString('1 online · 1/8', $librarySection);
+        self::assertStringNotContainsString('id="live-now-title"', $html);
+    }
+
+    public function testAroundSummaryRemainsWhenViewerHasCoPlayerInSameExperience(): void
+    {
+        $game = $this->game('lateania', 2, true);
+        $html = $this->renderHub(
+            games: [$game],
+            continuePlaying: [$game],
+            experienceStates: [
+                'lateania' => $this->rosterState('lateania', ['Skrawl', 'Bard']),
+            ],
+            currentUser: ['user_id' => 1]
+        );
+
+        self::assertSame('2 players in 1 Experience right now', $this->aroundLine($html));
+        self::assertStringContainsString('id="continue-playing-title"', $html);
+        self::assertStringNotContainsString('id="live-now-title"', $html);
+    }
+
+    public function testAroundSummaryRemainsWhenOtherPlayerIsInAnotherExperience(): void
+    {
+        $viewerGame = $this->game('lateania', 1, true);
+        $otherGame = $this->game('trade-wars', 1);
+        $html = $this->renderHub(
+            games: [$viewerGame, $otherGame],
+            continuePlaying: [$viewerGame],
+            liveExperiences: [$otherGame],
+            experienceStates: [
+                'lateania' => $this->rosterState('lateania', ['Skrawl'], 1),
+                'trade-wars' => $this->rosterState('trade-wars', ['Bard'], 2),
+            ],
+            currentUser: ['user_id' => 1]
+        );
+
+        self::assertSame('2 players in 2 Experiences right now', $this->aroundLine($html));
+        self::assertStringContainsString('id="continue-playing-title"', $html);
+        self::assertStringContainsString('id="live-now-title"', $html);
+    }
+
+    public function testAroundSummaryRemainsForOneOtherPlayerWhenViewerIsNotParticipating(): void
+    {
+        $game = $this->game('trade-wars', 1);
+        $html = $this->renderHub(
+            games: [$game],
+            liveExperiences: [$game],
+            experienceStates: [
+                'trade-wars' => $this->rosterState('trade-wars', ['Bard'], 2),
+            ],
+            currentUser: ['user_id' => 1]
+        );
+
+        self::assertSame('1 player in 1 Experience right now', $this->aroundLine($html));
+        self::assertStringNotContainsString('id="continue-playing-title"', $html);
+        self::assertStringContainsString('id="live-now-title"', $html);
+    }
+
     /**
      * @dataProvider aroundSingularPluralProvider
      */
@@ -931,6 +1040,13 @@ final class GamesHubTemplateTest extends TestCase
         self::assertStringNotContainsString('session_count', substr($route, strpos($route, '$aroundActiveExperiences = 0;')));
         self::assertStringContainsString("'around_active_players' => \$aroundActivePlayers", $route);
         self::assertStringContainsString("'around_active_experiences' => \$aroundActiveExperiences", $route);
+        self::assertStringContainsString('$viewerIsParticipating = true;', $route);
+        self::assertStringContainsString('count($aroundActiveUserIds) === 1', $route);
+        self::assertStringContainsString('isset($aroundActiveUserIds[$currentUserId])', $route);
+        self::assertStringContainsString(
+            "'show_global_presence_summary' => \$showGlobalPresenceSummary",
+            $route
+        );
     }
 
     private function game(

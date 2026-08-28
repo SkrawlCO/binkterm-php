@@ -167,6 +167,7 @@ SimpleRouter::get('/games', function() {
     $currentUserId = (int)($user['user_id'] ?? $user['id'] ?? 0);
     $continuePlaying = [];
     $liveExperiences = [];
+    $viewerIsParticipating = false;
 
     foreach ($games as &$game) {
         $experienceState = $experienceStates[$game['id']] ?? null;
@@ -186,6 +187,7 @@ SimpleRouter::get('/games', function() {
             );
 
         if ($viewerPlayer !== null) {
+            $viewerIsParticipating = true;
             $continuePlaying[] = $game;
         } elseif (
             (int)($game['experience_presentation']['runtime']['player_count'] ?? 0) > 0
@@ -197,6 +199,15 @@ SimpleRouter::get('/games', function() {
         }
     }
     unset($game);
+
+    // Crossroads 5G: the global live count adds no community information when
+    // the authenticated viewer is the only distinct active player. Keep the
+    // quiet state and every state involving another player unchanged.
+    $showGlobalPresenceSummary = !(
+        $viewerIsParticipating
+        && count($aroundActiveUserIds) === 1
+        && isset($aroundActiveUserIds[$currentUserId])
+    );
 
     // Sort all games by name
     usort($games, function($a, $b) {
@@ -259,6 +270,7 @@ SimpleRouter::get('/games', function() {
         'experience_states' => $experienceStates,
         'around_active_players' => $aroundActivePlayers,
         'around_active_experiences' => $aroundActiveExperiences,
+        'show_global_presence_summary' => $showGlobalPresenceSummary,
         'leaderboard' => $leaderboard,
         'leaderboard_month_label' => $leaderboardMonthLabel,
         'leaderboard_month_offset' => $monthOffset,
