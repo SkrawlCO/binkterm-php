@@ -858,7 +858,7 @@ Direct file editing is still supported as a fallback (useful for scripted deploy
 | File | When shown |
 |------|-----------|
 | `config/terminal_welcome.txt` | Telnet/SSH BBS login screen (replaces default host:port message) |
-| `config/newuser_welcome.txt` | Email sent to newly approved users |
+| `config/newuser_welcome.txt` | Welcome Netmail sent to newly approved users; also used for the welcome email when email is enabled |
 | `config/welcome.txt` | General welcome message on the main page / login screen |
 
-Files are plain text; newlines are preserved as written. When both a file and an Appearance editor value exist, the Appearance editor value takes precedence.
+Files are plain text; newlines are preserved as written. When both a file and an Appearance editor value exist, the Appearance editor value takes precedence. The new-user welcome is file-based rather than managed by the Appearance editor: copy `config/newuser_welcome.txt.example` to `config/newuser_welcome.txt` as a starting point. Keep the live file local and untracked so the operator's message survives normal upgrades.

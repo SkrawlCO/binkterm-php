@@ -6,6 +6,7 @@ config/*.json.*
 config/taglines.txt
 config/welcome.txt
 config/terminal_welcome.txt
+config/newuser_welcome.txt
 config/systemnews.twig
 templates/custom/*
 data/*

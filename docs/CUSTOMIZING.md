@@ -344,9 +344,12 @@ Several plain-text files in `config/` control messages shown to users:
 |------|-----------------|
 | `config/welcome.txt` | Main page or login screen general welcome |
 | `config/terminal_welcome.txt` | Replaces the default "SSH Connection to host:port" message on the terminal login page |
-| `config/newuser_welcome.txt` | Email body sent to newly approved users |
+| `config/newuser_welcome.txt` | Welcome Netmail body sent to newly approved users; also used for the welcome email when email is enabled |
 
-Create the file if it does not exist. If it does not exist, the built-in default is shown.
+Create the live file if it does not exist. For `config/newuser_welcome.txt`, copy
+`config/newuser_welcome.txt.example` as a starting point. The live file is local,
+operator-owned configuration and should remain untracked so normal upgrades preserve
+the installation's message. If it does not exist, the built-in default is used.
 
 ---
 
