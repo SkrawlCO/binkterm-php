@@ -44,9 +44,9 @@
 
             <div class="experience-card-footer d-flex justify-content-end align-items-center">
                 {%- if status == 'participating' -%}
-                <a href="/experiences/{{ view.id }}" class="btn btn-fidonet btn-sm experience-card-action"><i class="fas fa-sign-in-alt me-1" aria-hidden="true"></i>{{ t('ui.webdoors.return', {}, locale, ['common']) }}</a>
+                <a href="/experiences/{{ view.id }}" class="btn btn-fidonet btn-sm experience-card-action">{{ t('ui.webdoors.return', {}, locale, ['common']) }}</a>
                 {%- elseif status == 'available' -%}
-                <a href="/experiences/{{ view.id }}" class="btn btn-fidonet btn-sm experience-card-action"><i class="fas fa-door-open me-1" aria-hidden="true"></i>{{ t('ui.webdoors.enter', {}, locale, ['common']) }}</a>
+                <a href="/experiences/{{ view.id }}" class="btn btn-fidonet btn-sm experience-card-action">{{ t('ui.webdoors.enter', {}, locale, ['common']) }}</a>
                 {%- elseif status == 'at_capacity' -%}
                 <span class="btn btn-outline-secondary btn-sm experience-card-action disabled" aria-disabled="true">{{ t('ui.webdoors.full_capacity', {}, locale, ['common']) }}</span>
                 {%- elseif status == 'planned' -%}

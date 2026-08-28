@@ -163,6 +163,23 @@ final class GamesHubTemplateTest extends TestCase
         self::assertStringContainsString('href="/experiences/resume-me"', $section);
         self::assertStringContainsString('>Return</a>', $section);
         self::assertStringNotContainsString('>Play</a>', $section);
+
+        // Continue Playing "Return" is a text-only Crossroads action: no
+        // door/fuel-pump icon, no replacement icon on the fidonet button.
+        self::assertStringContainsString(
+            '<a href="/experiences/resume-me" class="btn btn-fidonet btn-sm">Return</a>',
+            $section
+        );
+        self::assertStringNotContainsString('fa-sign-in-alt', $section);
+        self::assertDoesNotMatchRegularExpression(
+            '/class="btn btn-fidonet[^"]*"[^>]*>\s*<i /s',
+            $section
+        );
+        // The Details button is unchanged.
+        self::assertStringContainsString(
+            '<a href="/experiences/resume-me" class="btn btn-outline-secondary btn-sm">Details</a>',
+            $section
+        );
     }
 
     public function testLiveNowContainsOnlyComposedOccupiedExperiences(): void
@@ -360,23 +377,31 @@ final class GamesHubTemplateTest extends TestCase
     {
         $card = $this->libraryCard($this->game('available-one'));
 
-        self::assertMatchesRegularExpression(
-            '/<a href="\/experiences\/available-one" class="btn btn-fidonet[^"]*"[^>]*>.*?Enter<\/a>/s',
+        // Text-only action — no door/fuel-pump icon, no replacement icon.
+        self::assertStringContainsString(
+            '<a href="/experiences/available-one" class="btn btn-fidonet btn-sm experience-card-action">Enter</a>',
             $card
         );
         self::assertStringNotContainsString('>Play</a>', $card);
         self::assertStringNotContainsString('>Open</a>', $card);
+        self::assertStringNotContainsString('fa-door-open', $card);
+        self::assertDoesNotMatchRegularExpression(
+            '/class="btn btn-fidonet[^"]*"[^>]*>\s*<i /s',
+            $card
+        );
     }
 
     public function testLibraryCardActionIsReturnForParticipant(): void
     {
         $card = $this->libraryCard($this->game('resume-one', 2, true));
 
-        self::assertMatchesRegularExpression(
-            '/<a href="\/experiences\/resume-one" class="btn btn-fidonet[^"]*"[^>]*>.*?Return<\/a>/s',
+        // Text-only action — no icon.
+        self::assertStringContainsString(
+            '<a href="/experiences/resume-one" class="btn btn-fidonet btn-sm experience-card-action">Return</a>',
             $card
         );
         self::assertStringNotContainsString('>Enter</a>', $card);
+        self::assertStringNotContainsString('fa-sign-in-alt', $card);
     }
 
     public function testLibraryCardAtCapacityIsFullAndNotLive(): void

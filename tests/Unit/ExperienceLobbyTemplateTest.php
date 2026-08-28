@@ -178,24 +178,81 @@ final class ExperienceLobbyTemplateTest extends TestCase
         );
     }
 
-    public function testEmptyExperienceUsesCompactOccupancyState(): void
+    public function testEmptyExperienceUsesSingleOccupancyExpression(): void
     {
-        $html = $this->renderLobby(0, 10);
+        $body = self::renderedBody($this->renderLobby(0, 10));
 
-        self::assertStringContainsString('Capacity: 10', $html);
-        self::assertStringContainsString('Waiting for players.', $html);
-        self::assertStringContainsString('0 / 10 capacity', $html);
+        // Exactly one occupancy expression. Empty state suppresses the ratio —
+        // the invitation copy below already covers "come on in".
+        self::assertStringContainsString('id="experience-occupancy-summary"', $body);
+        self::assertSame('0 online', self::occupancySummaryText($body));
         self::assertStringContainsString(
             'No one is playing right now. Be the first one in.',
-            $html
+            $body
         );
 
-        self::assertStringNotContainsString('Quiet', $html);
-        self::assertStringNotContainsString('0 active sessions', $html);
-        self::assertStringNotContainsString(
-            'aria-label="Experience capacity"',
-            $html
-        );
+        // No capacity telemetry / session mechanics / duplicate count sentence.
+        self::assertStringNotContainsString('Capacity:', $body);
+        self::assertStringNotContainsString('capacity</span>', $body);
+        self::assertStringNotContainsString('active session', $body);
+        self::assertStringNotContainsString('Waiting for players.', $body);
+        self::assertStringNotContainsString('players are in this Experience', $body);
+        self::assertStringNotContainsString('player is in this Experience', $body);
+        self::assertStringNotContainsString('aria-label="Experience capacity"', $body);
+        self::assertStringNotContainsString('class="progress', $body);
+    }
+
+    /** @return array<string,array{0:string,1:int,2:?int,3:list<array<string,mixed>>}> */
+    public static function occupancyShapeProvider(): array
+    {
+        $one = [[
+            'user_id' => 3, 'username' => 'Skrawl', 'session_id' => 's1',
+            'presence' => 'Playing X', 'presence_state' => 'playing',
+            'node' => 1, 'started_at' => 0,
+        ]];
+        $three = [];
+        foreach (['Skrawl', 'Bard', 'Rogue'] as $i => $u) {
+            $three[] = [
+                'user_id' => 10 + $i, 'username' => $u, 'session_id' => 's' . $i,
+                'presence' => 'Playing X', 'presence_state' => 'playing',
+                'node' => $i + 1, 'started_at' => 0,
+            ];
+        }
+
+        return [
+            'empty capped'       => ['0 online',        0,  10,   []],
+            'one of ten'         => ['1 online · 1/10', 1,  10,   $one],
+            'three of ten'       => ['3 online · 3/10', 3,  10,   $three],
+            'unlimited capacity' => ['3 online',        3,  null, $three],
+            'at capacity'        => ['Full · 10/10',    10, 10,   $one],
+        ];
+    }
+
+    /**
+     * @dataProvider occupancyShapeProvider
+     * @param list<array<string,mixed>> $players
+     */
+    public function testOccupancyExpressionShape(
+        string $expected,
+        int $sessionCount,
+        ?int $maxSessions,
+        array $players
+    ): void {
+        $body = self::renderedBody($this->renderLobby(
+            $sessionCount,
+            $maxSessions,
+            true,
+            null,
+            'Occupancy Probe',
+            true,
+            '/door-assets/x/icon',
+            '/games/nativedoors/x',
+            'native',
+            'x',
+            $players
+        ));
+
+        self::assertSame($expected, self::occupancySummaryText($body));
     }
 
     public function testWebExperienceUsesSameCanonicalLobbyAndLaunchAction(): void
@@ -224,7 +281,8 @@ final class ExperienceLobbyTemplateTest extends TestCase
             'href="/games/blackjack"',
             $html
         );
-        self::assertStringContainsString('Play Blackjack', $html);
+        self::assertSame('Enter', self::launchLabel($html));
+        self::assertStringNotContainsString('Play Blackjack', $html);
 
         self::assertStringNotContainsString('Capacity:', $html);
         self::assertStringNotContainsString(
@@ -261,7 +319,8 @@ final class ExperienceLobbyTemplateTest extends TestCase
             'href="/games/jsdos/doomsw"',
             $html
         );
-        self::assertStringContainsString('Play Doom', $html);
+        self::assertSame('Enter', self::launchLabel($html));
+        self::assertStringNotContainsString('Play Doom', $html);
 
         self::assertStringNotContainsString('Capacity:', $html);
         self::assertStringNotContainsString(
@@ -270,8 +329,10 @@ final class ExperienceLobbyTemplateTest extends TestCase
         );
     }
 
-    public function testPlayerNodeIsShownOnlyWhenRuntimeProvidesOne(): void
+    public function testParticipantRowsNeverExposeNodeNumbers(): void
     {
+        // A native door supplies a node number in runtime state; it must never
+        // reach an ordinary Crossroads caller.
         $nativeHtml = $this->renderLobby(
             1,
             10,
@@ -288,46 +349,20 @@ final class ExperienceLobbyTemplateTest extends TestCase
                 'username' => 'Skrawl',
                 'session_id' => 'native-usurper-test',
                 'presence' => 'Playing Usurper Reborn',
+                'presence_state' => 'playing',
                 'node' => 3,
                 'started_at' => time(),
             ]]
         );
 
-        self::assertStringContainsString('Skrawl', $nativeHtml);
-        self::assertMatchesRegularExpression(
-            '/<span class="badge bg-secondary-subtle text-dark border">\s*Node 3\s*<\/span>/',
-            $nativeHtml
-        );
+        $nativeBody = self::renderedBody($nativeHtml);
 
-        // Multiplayer so the roster renders; this case verifies node-badge
-        // suppression, not the Slice 5A single-player roster gating.
-        $webHtml = $this->renderLobby(
-            1,
-            null,
-            true,
-            null,
-            'Blackjack',
-            true,
-            '/webdoors/blackjack/icon.svg',
-            '/games/blackjack',
-            'web',
-            'blackjack',
-            [[
-                'user_id' => 3,
-                'username' => 'Skrawl',
-                'session_id' => 'webdoor-blackjack-test',
-                'presence' => 'Playing Blackjack',
-                'node' => null,
-                'started_at' => time(),
-            ]]
-        );
-
-        self::assertStringContainsString('Skrawl', $webHtml);
-        self::assertStringContainsString('Playing Blackjack', $webHtml);
-        self::assertDoesNotMatchRegularExpression(
-            '/<span class="badge bg-secondary-subtle text-dark border">\s*Node \d+\s*<\/span>/',
-            $webHtml
-        );
+        self::assertStringContainsString('Skrawl', $nativeBody);
+        self::assertStringContainsString('Playing Usurper Reborn', $nativeBody);
+        self::assertDoesNotMatchRegularExpression('/\bNode\s+\d+\b/', $nativeBody);
+        // The JS refresh renderer must not reintroduce a node badge either.
+        self::assertStringNotContainsString('Node ${Number(player.node)}', $nativeHtml);
+        self::assertStringNotContainsString('player.node', $nativeHtml);
     }
 
     public function testLivePlayerLinksToCanonicalBinkTermProfile(): void
@@ -396,10 +431,12 @@ final class ExperienceLobbyTemplateTest extends TestCase
     {
         $html = $this->renderLobby(0, 10);
 
-        // Slice 5C: status wording is keyed on the canonical status.code.
-        self::assertStringContainsString('Ready to play.', $html);
-        self::assertStringContainsString('Available', $html);
-        self::assertStringContainsString('Play Usurper Reborn', $html);
+        // Normal state: the Enter action is the whole statement — no badge,
+        // no "Ready to play." line.
+        self::assertSame('Enter', self::launchLabel($html));
+        self::assertNull(self::statusMessage($html));
+        self::assertStringNotContainsString('Ready to play.', $html);
+        self::assertStringNotContainsString('Play Usurper Reborn', $html);
         self::assertStringContainsString(
             'href="/games/nativedoors/usurper"',
             $html
@@ -418,13 +455,14 @@ final class ExperienceLobbyTemplateTest extends TestCase
     {
         $html = $this->renderLobby(10, 10);
 
-        // Slice 5C: non-participant + full -> at_capacity status wording.
+        // Exceptional state keeps a concise line; the action reads Full.
         self::assertStringContainsString(
             'No open sessions right now.',
             $html
         );
-        self::assertStringContainsString('At capacity', $html);
-        self::assertStringContainsString('At Capacity', $html);
+        self::assertSame('Full', self::launchLabel($html));
+        self::assertStringNotContainsString('>At capacity<', $html);
+        self::assertStringNotContainsString('At Capacity', $html);
         self::assertStringContainsString(
             'aria-disabled="true"',
             $html
@@ -443,12 +481,12 @@ final class ExperienceLobbyTemplateTest extends TestCase
     {
         $html = $this->renderLobby(0, 10, false);
 
-        // Slice 5C: unavailable-surface status wording.
+        // Exceptional surface state keeps its concise line.
         self::assertStringContainsString(
             'Not available from this surface.',
             $html
         );
-        self::assertStringContainsString('Unavailable', $html);
+        self::assertSame('unavailable', self::statusCode($html));
         self::assertStringNotContainsString(
             'Play Usurper Reborn',
             $html
@@ -485,23 +523,18 @@ final class ExperienceLobbyTemplateTest extends TestCase
             true
         );
 
-        self::assertStringContainsString(
-            'href="/profile/Bard"',
-            $html
-        );
+        $body = self::renderedBody($html);
 
-        self::assertStringContainsString(
-            '<span class="badge bg-success me-1" aria-label="Currently playing">Playing</span>',
-            $html
-        );
+        // Identity, human presence text, and Message survive.
+        self::assertStringContainsString('href="/profile/Bard"', $body);
+        self::assertStringContainsString('Playing Usurper Reborn', $body);
+        self::assertStringContainsString('href="/chat?dm_user_id=7"', $body);
+        self::assertStringContainsString('Message', $body);
 
-        self::assertStringContainsString(
-            'href="/chat?dm_user_id=7"',
-            $html
-        );
-
-        self::assertStringContainsString('Message', $html);
-        self::assertStringContainsString('Node 2', $html);
+        // No redundant "Playing" badge, no node badge.
+        self::assertStringNotContainsString('aria-label="Currently playing"', $body);
+        self::assertStringNotContainsString('>Playing</span>', $body);
+        self::assertDoesNotMatchRegularExpression('/\bNode\s+\d+\b/', $body);
     }
 
     public function testExperienceLobbyIncludesParticipantPartial(): void
@@ -520,12 +553,7 @@ final class ExperienceLobbyTemplateTest extends TestCase
             $source
         );
         self::assertStringContainsString(
-            'id="experience-player-summary"',
-            $source
-        );
-
-        self::assertStringContainsString(
-            'id="experience-session-count"',
+            'id="experience-occupancy-summary"',
             $source
         );
 
@@ -534,6 +562,11 @@ final class ExperienceLobbyTemplateTest extends TestCase
             $source
         );
 
+        // The retired session-telemetry ids are gone.
+        self::assertStringNotContainsString('id="experience-player-summary"', $source);
+        self::assertStringNotContainsString('id="experience-session-count"', $source);
+        self::assertStringNotContainsString('id="experience-live-status"', $source);
+        self::assertStringNotContainsString('id="experience-capacity"', $source);
     }
 
     public function testExperienceLobbyDefinesLiveStateRefreshContract(): void
@@ -579,20 +612,14 @@ final class ExperienceLobbyTemplateTest extends TestCase
             $source
         );
 
+        // Primary action vocabulary: Full / Return / Enter — no "Play"/"Return to".
         self::assertStringContainsString(
-            'const label = viewerParticipating',
+            "const label = blockedByCapacity\n            ? 'Full'\n            : (viewerParticipating ? 'Return' : 'Enter');",
             $source
         );
 
-        self::assertStringContainsString(
-            '`Return to ${EXPERIENCE_NAME}`',
-            $source
-        );
-
-        self::assertStringContainsString(
-            '`Play ${EXPERIENCE_NAME}`',
-            $source
-        );
+        self::assertStringNotContainsString('`Return to ${EXPERIENCE_NAME}`', $source);
+        self::assertStringNotContainsString('`Play ${EXPERIENCE_NAME}`', $source);
 
         self::assertStringContainsString(
             "launchButton.dataset.viewerParticipating =",
@@ -605,7 +632,7 @@ final class ExperienceLobbyTemplateTest extends TestCase
         );
 
         self::assertStringContainsString(
-            "document.getElementById(\n                'experience-launch-label'\n            )",
+            "const labelElement = document.getElementById('experience-launch-label');",
             $source
         );
 
@@ -618,6 +645,10 @@ final class ExperienceLobbyTemplateTest extends TestCase
             'Array.from(launchButton.childNodes)',
             $source
         );
+
+        // No launch-action icon manipulation remains.
+        self::assertStringNotContainsString('fa-sign-in-alt', $source);
+        self::assertStringNotContainsString('fa-play', $source);
 
         self::assertStringContainsString(
             'updateExperienceLiveState(state, viewer, presentation);',
@@ -642,11 +673,6 @@ final class ExperienceLobbyTemplateTest extends TestCase
         );
 
         self::assertStringContainsString(
-            "player.presence_state === 'playing'",
-            $source
-        );
-
-        self::assertStringContainsString(
             'participant_actions',
             $source
         );
@@ -660,9 +686,14 @@ final class ExperienceLobbyTemplateTest extends TestCase
             '/chat?dm_user_id=',
             $source
         );
+
+        // The renderer no longer emits a "Playing" badge or a node badge.
+        self::assertStringNotContainsString("player.presence_state === 'playing'", $source);
+        self::assertStringNotContainsString('aria-label="Currently playing"', $source);
+        self::assertStringNotContainsString('player.node', $source);
     }
 
-    public function testExperienceLobbyDefinesLiveStateUpdaterContract(): void
+    public function testExperienceLobbyLiveStateUpdaterRendersOneOccupancyLine(): void
     {
         $source = file_get_contents(
             __DIR__ . '/../../templates/experience_lobby.twig'
@@ -673,45 +704,37 @@ final class ExperienceLobbyTemplateTest extends TestCase
             $source
         );
 
+        // The single occupancy expression, keyed on the canonical contract.
+        self::assertStringContainsString('function experienceOccupancyText(state, presentation)', $source);
         self::assertStringContainsString(
-            "document.getElementById('experience-live-status')",
+            "document.getElementById('experience-occupancy-summary')",
             $source
         );
-
         self::assertStringContainsString(
-            "document.getElementById('experience-session-count')",
+            'occupancySummary.textContent = experienceOccupancyText(state, presentation);',
             $source
         );
-
+        // Empty state suppresses the capacity ratio in the refresh path too.
         self::assertStringContainsString(
-            "document.getElementById('experience-capacity')",
+            'if (maxSessions > 0 && (atCapacity || online > 0)) {',
             $source
         );
-
-        self::assertStringContainsString(
-            "document.getElementById(\n        'experience-occupancy-container'\n    )",
-            $source
-        );
-
         self::assertStringContainsString(
             "document.getElementById('experience-availability-message')",
             $source
         );
 
-        self::assertStringContainsString(
-            "document.getElementById('experience-availability-badge')",
-            $source
-        );
-
-        self::assertStringContainsString(
-            "liveOccupancy.remove()",
-            $source
-        );
-
-        self::assertStringContainsString(
-            "liveOccupancy = document.createElement('div')",
-            $source
-        );
+        // The retired telemetry DOM handling is gone — the refresh cannot
+        // rebuild the Live badge / session count / capacity gauge / progress bar.
+        self::assertStringNotContainsString("getElementById('experience-live-status')", $source);
+        self::assertStringNotContainsString("getElementById('experience-session-count')", $source);
+        self::assertStringNotContainsString("getElementById('experience-capacity')", $source);
+        self::assertStringNotContainsString('experience-occupancy-container', $source);
+        self::assertStringNotContainsString('liveOccupancy', $source);
+        self::assertStringNotContainsString("getElementById('experience-availability-badge')", $source);
+        self::assertStringNotContainsString("'progress mb-3'", $source);
+        self::assertStringNotContainsString('class="progress', $source);
+        self::assertStringNotContainsString('active session', $source);
     }
 
     public function testParticipantPartialUsesNormalizedParticipantActions(): void
@@ -736,27 +759,22 @@ final class ExperienceLobbyTemplateTest extends TestCase
         );
     }
 
-    public function testParticipantPartialUsesNormalizedPresenceState(): void
+    public function testParticipantPartialShowsHumanPresenceWithoutBadgesOrNodes(): void
     {
         $source = file_get_contents(
             __DIR__ . '/../../templates/partials/experience_participant.twig'
         );
 
-        self::assertStringContainsString(
-            'player.presence_state',
-            $source
-        );
+        // Human presence text is kept, with a readable fallback.
+        self::assertStringContainsString('{{ player.presence }}', $source);
+        self::assertStringContainsString('Playing {{ experience.name }}', $source);
 
-        self::assertStringContainsString(
-            'bg-success',
-            $source
-        );
-
-        self::assertStringContainsString(
-            'playing',
-            $source
-        );
-
+        // No "Playing" status badge, no node badge, no presence_state gate.
+        self::assertStringNotContainsString('presence_state', $source);
+        self::assertStringNotContainsString('bg-success', $source);
+        self::assertStringNotContainsString('Currently playing', $source);
+        self::assertStringNotContainsString('player.node', $source);
+        self::assertStringNotContainsString('Node ', $source);
         self::assertStringNotContainsString(
             "presence == 'Playing'",
             $source
@@ -1139,11 +1157,8 @@ final class ExperienceLobbyTemplateTest extends TestCase
             $source
         );
 
-        self::assertStringContainsString(
-            'id="experience-availability-badge"',
-            $source
-        );
-
+        // The positive status badge is gone; the availability line stays, once.
+        self::assertStringNotContainsString('id="experience-availability-badge"', $source);
         self::assertStringContainsString(
             'id="experience-availability-message"',
             $source
@@ -1155,13 +1170,18 @@ final class ExperienceLobbyTemplateTest extends TestCase
         );
 
         self::assertSame(
-            1,
+            0,
             substr_count($source, 'id="experience-availability-badge"')
         );
 
         self::assertSame(
             1,
             substr_count($source, 'id="experience-availability-message"')
+        );
+
+        self::assertSame(
+            1,
+            substr_count($source, 'id="experience-occupancy-summary"')
         );
     }
 
@@ -1410,6 +1430,22 @@ final class ExperienceLobbyTemplateTest extends TestCase
         );
     }
 
+    /** Trimmed text content of the single Live Players occupancy expression. */
+    private static function occupancySummaryText(string $html): ?string
+    {
+        if (
+            preg_match(
+                '/<div id="experience-occupancy-summary"[^>]*>(.*?)<\/div>/s',
+                $html,
+                $m
+            ) !== 1
+        ) {
+            return null;
+        }
+
+        return trim(preg_replace('/\s+/', ' ', $m[1]));
+    }
+
     // ---- Slice 5A: single-player vs multiplayer lobby normalization ----
 
     public function testSinglePlayerLobbyOmitsMultiplayerRosterSection(): void
@@ -1427,6 +1463,7 @@ final class ExperienceLobbyTemplateTest extends TestCase
 
         self::assertStringNotContainsString('Live Players', $body);
         self::assertStringNotContainsString('id="experience-participants"', $body);
+        self::assertStringNotContainsString('id="experience-occupancy-summary"', $body);
         self::assertStringNotContainsString('id="experience-session-count"', $body);
         self::assertStringNotContainsString('id="experience-live-status"', $body);
         self::assertStringNotContainsString('id="experience-occupancy"', $body);
@@ -1473,9 +1510,14 @@ final class ExperienceLobbyTemplateTest extends TestCase
 
         self::assertStringContainsString('Live Players', $body);
         self::assertStringContainsString('id="experience-participants"', $body);
-        self::assertStringContainsString('id="experience-session-count"', $body);
         self::assertStringContainsString('Runner', $body);
-        self::assertStringContainsString('/ 8 capacity', $body);
+        self::assertStringContainsString('Playing Guild Hall', $body);
+        // One occupancy expression: 1 distinct player, 2 sessions, cap 8.
+        self::assertSame('1 online · 2/8', self::occupancySummaryText($body));
+        self::assertStringNotContainsString('id="experience-session-count"', $body);
+        self::assertStringNotContainsString('active session', $body);
+        self::assertStringNotContainsString('capacity</span>', $body);
+        self::assertDoesNotMatchRegularExpression('/\bNode\s+\d+\b/', $body);
     }
 
     public function testSinglePlayerLobbyStillRendersConfiguredConversation(): void
@@ -1641,8 +1683,9 @@ final class ExperienceLobbyTemplateTest extends TestCase
             42
         );
 
-        self::assertStringContainsString('Return to Usurper Reborn', $html);
-        self::assertStringContainsString('fa-sign-in-alt', $html);
+        self::assertSame('Return', self::launchLabel($html));
+        self::assertStringNotContainsString('Return to Usurper Reborn', $html);
+        self::assertStringNotContainsString('fa-sign-in-alt', $html);
         self::assertStringContainsString(
             'data-viewer-participating="true"',
             $html
@@ -1697,8 +1740,6 @@ final class ExperienceLobbyTemplateTest extends TestCase
             42
         );
 
-        self::assertStringContainsString('Return to Usurper Reborn', $html);
-
         // Isolate the launch anchor; it must not be disabled for a participant.
         self::assertSame(
             1,
@@ -1720,26 +1761,19 @@ final class ExperienceLobbyTemplateTest extends TestCase
         );
 
         // The primary-action label is Return, not the capacity fallback.
-        self::assertSame(
-            1,
-            preg_match(
-                '/<span id="experience-launch-label">\s*([^<]+?)\s*<\/span>/s',
-                $html,
-                $label
-            )
-        );
-        self::assertSame('Return to Usurper Reborn', trim($label[1]));
+        self::assertSame('Return', self::launchLabel($html));
     }
 
-    public function testNonParticipantInitialRenderShowsPlayAndHiddenEnd(): void
+    public function testNonParticipantInitialRenderShowsEnterAndHiddenEnd(): void
     {
         $html = $this->renderLobby(0, 10);
 
-        self::assertStringContainsString('Play Usurper Reborn', $html);
+        self::assertSame('Enter', self::launchLabel($html));
         self::assertStringContainsString(
             'data-viewer-participating="false"',
             $html
         );
+        self::assertStringNotContainsString('Play Usurper Reborn', $html);
         self::assertStringNotContainsString('Return to Usurper Reborn', $html);
 
         self::assertSame(
@@ -1758,7 +1792,8 @@ final class ExperienceLobbyTemplateTest extends TestCase
     {
         $html = $this->renderLobby(10, 10);
 
-        self::assertStringContainsString('At Capacity', $html);
+        self::assertSame('Full', self::launchLabel($html));
+        self::assertStringNotContainsString('At Capacity', $html);
         self::assertStringNotContainsString('Play Usurper Reborn', $html);
         self::assertStringNotContainsString('Return to Usurper Reborn', $html);
 
@@ -1780,27 +1815,60 @@ final class ExperienceLobbyTemplateTest extends TestCase
 
     // ---- Slice 5C: normalized capacity / status wording ----
 
-    /** Text content of the availability status badge + message. */
-    private static function statusText(string $html): array
+    /**
+     * Trimmed text of the availability line — null when it is empty (normal
+     * states leave it blank/hidden; only exceptional states carry a line).
+     */
+    private static function statusMessage(string $html): ?string
     {
-        preg_match(
-            '/<span id="experience-availability-badge"[^>]*>\s*([^<]+?)\s*<\/span>/s',
-            $html,
-            $badge
-        );
-        preg_match(
-            '/<div id="experience-availability-message"[^>]*>\s*([^<]+?)\s*<\/div>/s',
-            $html,
-            $message
-        );
+        if (
+            preg_match(
+                '/<div id="experience-availability-message"[^>]*>(.*?)<\/div>/s',
+                $html,
+                $m
+            ) !== 1
+        ) {
+            return null;
+        }
 
-        return [
-            'badge' => isset($badge[1]) ? trim($badge[1]) : null,
-            'message' => isset($message[1]) ? trim($message[1]) : null,
-        ];
+        $text = trim($m[1]);
+
+        return $text === '' ? null : $text;
     }
 
-    public function testParticipantAtCapacityShowsActiveStatusNotAtCapacity(): void
+    /** The data-status-code carried on the availability line for the JS refresh. */
+    private static function statusCode(string $html): ?string
+    {
+        if (
+            preg_match(
+                '/id="experience-availability-message"[^>]*\bdata-status-code="([^"]*)"/s',
+                $html,
+                $m
+            ) !== 1
+        ) {
+            return null;
+        }
+
+        return $m[1] === '' ? null : $m[1];
+    }
+
+    /** Trimmed text of the primary launch action label, or null if absent. */
+    private static function launchLabel(string $html): ?string
+    {
+        if (
+            preg_match(
+                '/<span id="experience-launch-label">(.*?)<\/span>/s',
+                $html,
+                $m
+            ) !== 1
+        ) {
+            return null;
+        }
+
+        return trim($m[1]);
+    }
+
+    public function testParticipantAtCapacityStaysSilentAndKeepsReturn(): void
     {
         $html = $this->renderLobby(
             10,
@@ -1817,13 +1885,14 @@ final class ExperienceLobbyTemplateTest extends TestCase
             42
         );
 
-        $status = self::statusText($html);
-        self::assertSame('Active', $status['badge']);
-        self::assertSame('You have an active session.', $status['message']);
-        self::assertStringContainsString('data-status-code="participating"', $html);
+        // Participating is a normal state: no positive badge, no line.
+        self::assertNull(self::statusMessage($html));
+        self::assertSame('participating', self::statusCode($html));
+        self::assertStringNotContainsString('>Active<', $html);
+        self::assertStringNotContainsString('You have an active session.', $html);
 
         // Return remains enabled for the participant.
-        self::assertStringContainsString('Return to Usurper Reborn', $html);
+        self::assertSame('Return', self::launchLabel($html));
         self::assertSame(
             1,
             preg_match(
@@ -1840,15 +1909,16 @@ final class ExperienceLobbyTemplateTest extends TestCase
         );
     }
 
-    public function testNonParticipantAtCapacityShowsAtCapacityStatusAndBlockedLaunch(): void
+    public function testNonParticipantAtCapacityShowsFullAndBlockedLaunch(): void
     {
         $html = $this->renderLobby(10, 10);
 
-        $status = self::statusText($html);
-        self::assertSame('At capacity', $status['badge']);
-        self::assertSame('No open sessions right now.', $status['message']);
-        self::assertStringContainsString('data-status-code="at_capacity"', $html);
+        // Exceptional state keeps a concise line.
+        self::assertSame('No open sessions right now.', self::statusMessage($html));
+        self::assertSame('at_capacity', self::statusCode($html));
+        self::assertStringNotContainsString('>At capacity<', $html);
 
+        self::assertSame('Full', self::launchLabel($html));
         self::assertSame(
             1,
             preg_match(
@@ -1860,12 +1930,15 @@ final class ExperienceLobbyTemplateTest extends TestCase
         self::assertStringContainsString('aria-disabled="true"', $m[1]);
     }
 
-    public function testAvailableNonParticipantShowsAvailableStatus(): void
+    public function testAvailableNonParticipantStaysSilentWithEnterAction(): void
     {
-        $status = self::statusText($this->renderLobby(0, 10));
+        $html = $this->renderLobby(0, 10);
 
-        self::assertSame('Available', $status['badge']);
-        self::assertSame('Ready to play.', $status['message']);
+        self::assertNull(self::statusMessage($html));
+        self::assertSame('available', self::statusCode($html));
+        self::assertStringNotContainsString('Ready to play.', $html);
+        self::assertStringNotContainsString('>Available<', $html);
+        self::assertSame('Enter', self::launchLabel($html));
     }
 
     public function testSinglePlayerAtCapacityIsSemanticallyBlockedThroughLiveContract(): void
@@ -1890,9 +1963,9 @@ final class ExperienceLobbyTemplateTest extends TestCase
             null                 // viewer is not the participant
         );
 
-        // Initial server render: blocked.
-        $status = self::statusText($html);
-        self::assertSame('At capacity', $status['badge']);
+        // Initial server render: blocked, and the primary action reads Full.
+        self::assertSame('at_capacity', self::statusCode($html));
+        self::assertSame('Full', self::launchLabel($html));
         self::assertSame(
             1,
             preg_match(

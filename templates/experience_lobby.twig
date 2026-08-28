@@ -61,14 +61,6 @@
                                     </span>
                                 {% endif %}
 
-                                {% set max_sessions = view.capacity.max_sessions|default(null) %}
-                                {% if max_sessions %}
-                                    <span class="badge bg-secondary-subtle text-dark border">
-                                        <i class="fas fa-server me-1" aria-hidden="true"></i>
-                                        Capacity: {{ max_sessions }}
-                                    </span>
-                                {% endif %}
-
                                 {# Slice 5A: no storefront-style "Free to play" emphasis. A
                                    concise cost indicator is shown only when the normalized
                                    credit cost is nonzero. #}
@@ -89,67 +81,25 @@
                        independently below regardless of this flag. #}
                     {% if view.capabilities.multiplayer %}
                     <div class="border rounded p-3 mb-4">
-                        {% set max_sessions = view.capacity.max_sessions|default(null) %}
-
-                        <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
-                            <div>
-                                <div class="fw-semibold">
-                                    <i class="fas fa-users me-1" aria-hidden="true"></i>
-                                    Live Players
-                                </div>
-                                <div id="experience-player-summary" class="text-muted small">
-                                    {% if state.player_count == 0 %}
-                                        Waiting for players.
-                                    {% elseif state.player_count == 1 %}
-                                        1 player is in this Experience.
-                                    {% else %}
-                                        {{ state.player_count }} players are in this Experience.
-                                    {% endif %}
-                                </div>
+                        {# Slice "quiet the lobby": one occupancy expression only.
+                           No standalone Live badge, no session-count telemetry,
+                           no separate player-count sentence, no progress bar. The
+                           30s refresh keeps #experience-occupancy-summary in sync
+                           via the same canonical state/presentation contract. #}
+                        <div class="mb-3">
+                            <div class="fw-semibold">
+                                <i class="fas fa-users me-1" aria-hidden="true"></i>
+                                Live Players
                             </div>
-
-                            <div class="d-flex flex-wrap gap-2 justify-content-end">
-                                <span id="experience-live-status"
-                                      class="badge bg-success{% if state.session_count <= 0 %} d-none{% endif %}">
-                                    <i class="fas fa-circle me-1" aria-hidden="true"></i>
-                                    Live
-                                </span>
-
-                                <span id="experience-session-count"
-                                      class="badge bg-secondary-subtle text-dark border">
-                                    {{ state.session_count }}
-                                    active session{% if state.session_count != 1 %}s{% endif %}
-                                </span>
-
-                                {% if max_sessions %}
-                                    <span id="experience-capacity"
-                                          data-max-sessions="{{ max_sessions|default(0) }}"
-                                          class="badge bg-secondary-subtle text-dark border">
-                                        {{ state.session_count }} / {{ max_sessions }} capacity
-                                    </span>
-                                {% endif %}
+                            <div id="experience-occupancy-summary" class="text-muted small">
+                                {%- if view.capacity.at_capacity -%}
+                                    Full
+                                {%- else -%}
+                                    {{ state.player_count }} online
+                                {%- endif -%}
+                                {%- if view.capacity.max_sessions and (view.capacity.at_capacity or state.player_count > 0) %} · {{ state.session_count }}/{{ view.capacity.max_sessions }}{% endif -%}
                             </div>
                         </div>
-
-                        {% if max_sessions and max_sessions > 0 %}
-                            <div id="experience-occupancy-container">
-                                {% if state.session_count > 0 %}
-                                    {% set occupancy_percent = ((state.session_count / max_sessions) * 100)|round %}
-                                    <div id="experience-occupancy"
-                                         class="progress mb-3"
-                                         role="progressbar"
-                                         aria-label="Experience capacity"
-                                         aria-valuenow="{{ state.session_count }}"
-                                         aria-valuemin="0"
-                                         aria-valuemax="{{ max_sessions }}"
-                                         style="height: 6px;">
-                                        <div class="progress-bar"
-                                             style="width: {{ occupancy_percent > 100 ? 100 : occupancy_percent }}%;">
-                                        </div>
-                                    </div>
-                                {% endif %}
-                            </div>
-                        {% endif %}
 
                         <div id="experience-participants"
                              class="{% if state.players|length > 0 %}list-group{% else %}text-muted small{% endif %}">
@@ -230,28 +180,22 @@
                     {# Slice 5C: capacity/status semantics are owned by the canonical
                        ExperiencePresentation. The template only renders wording for the
                        semantic status code — it does not decide which status applies,
-                       and it does not re-derive at_capacity. #}
+                       and it does not re-derive at_capacity.
+
+                       Slice "quiet the lobby": the primary action (Enter / Return /
+                       Full) is the whole statement for normal states. Only the
+                       exceptional states carry a short explanatory line. The
+                       live-refresh JS keeps an equivalent map keyed on the same
+                       status code. #}
                     {% set launch_supported = view.actions.static_launchable %}
                     {% set viewer_participating = view.viewer.participating %}
                     {% set primary_action = view.actions.primary %}
                     {% set launch_blocked_by_capacity = view.viewer.blocked_by_capacity %}
                     {% set status_code = view.status.code %}
                     {% set credit_cost = view.cost.credits %}
-
-                    {# Wording for each semantic status. The status code is decided by
-                       ExperiencePresentation; only the words live here. The live-refresh
-                       JS below keeps an equivalent map keyed on the same status code. #}
-                    {% set status_labels = {
-                        'available': 'Available',
-                        'at_capacity': 'At capacity',
-                        'participating': 'Active',
-                        'planned': 'Planned',
-                        'unavailable': 'Unavailable'
-                    } %}
+                    {% set exceptional_status = status_code in ['at_capacity', 'planned', 'unavailable'] %}
                     {% set status_messages = {
-                        'available': 'Ready to play.',
                         'at_capacity': 'No open sessions right now.',
-                        'participating': 'You have an active session.',
                         'planned': 'Not available here yet.',
                         'unavailable': 'Not available from this surface.'
                     } %}
@@ -264,23 +208,18 @@
 
                         <div class="d-flex flex-wrap align-items-center justify-content-end gap-2">
                             <div class="text-end me-1">
-                                <div class="d-flex align-items-center justify-content-end gap-2">
-                                    <span id="experience-availability-badge"
-                                          data-status-code="{{ status_code }}"
-                                          class="badge {% if status_code == 'at_capacity' %}bg-warning text-dark{% elseif status_code == 'planned' or status_code == 'unavailable' %}bg-secondary{% else %}bg-success{% endif %}">
-                                        {{ status_labels[status_code]|default('Unavailable') }}
-                                    </span>
-
-                                    {% if credit_cost > 0 %}
+                                {% if credit_cost > 0 %}
+                                    <div class="d-flex align-items-center justify-content-end gap-2">
                                         <span class="badge bg-secondary-subtle text-dark border">
                                             {{ credit_cost }} credit{% if credit_cost != 1 %}s{% endif %}
                                         </span>
-                                    {% endif %}
-                                </div>
+                                    </div>
+                                {% endif %}
 
                                 <div id="experience-availability-message"
-                                     class="text-muted small mt-1">
-                                    {{ status_messages[status_code]|default('Not available from this surface.') }}
+                                     data-status-code="{{ status_code }}"
+                                     class="text-muted small{% if credit_cost > 0 %} mt-1{% endif %}{% if not exceptional_status %} d-none{% endif %}">
+                                    {{ exceptional_status ? (status_messages[status_code]|default('')) : '' }}
                                 </div>
                             </div>
 
@@ -299,16 +238,7 @@
                                    class="btn btn-fidonet{% if launch_blocked_by_capacity %} disabled{% endif %}"
                                    data-viewer-participating="{{ viewer_participating ? 'true' : 'false' }}"
                                    {% if launch_blocked_by_capacity %}aria-disabled="true" tabindex="-1"{% endif %}>
-                                    <i class="fas {% if primary_action == 'return' %}fa-sign-in-alt{% else %}fa-play{% endif %} me-1" aria-hidden="true"></i>
-                                    <span id="experience-launch-label">
-                                        {% if launch_blocked_by_capacity %}
-                                            At Capacity
-                                        {% elseif primary_action == 'return' %}
-                                            Return to {{ experience.name }}
-                                        {% else %}
-                                            Play {{ experience.name }}
-                                        {% endif %}
-                                    </span>
+                                    <span id="experience-launch-label">{% if launch_blocked_by_capacity %}Full{% elseif primary_action == 'return' %}Return{% else %}Enter{% endif %}</span>
                                 </a>
                             {% endif %}
                         </div>
@@ -349,22 +279,12 @@ async function refreshExperienceState() {
 
 
 function updateExperiencePlayerSummary(state) {
+    // Kept as the single place the conversation identity cache is refreshed
+    // from live state. The occupancy line itself is rendered by
+    // updateExperienceLiveState (it needs presentation.capacity too).
     experienceCurrentPlayers = Array.isArray(state.players)
         ? state.players
         : [];
-
-    const summary = document.getElementById('experience-player-summary');
-    if (!summary) return;
-
-    const count = Number(state.player_count || 0);
-
-    if (count === 0) {
-        summary.textContent = 'Waiting for players.';
-    } else if (count === 1) {
-        summary.textContent = '1 player is in this Experience.';
-    } else {
-        summary.textContent = `${count} players are in this Experience.`;
-    }
 }
 
 function escapeExperienceHtml(value) {
@@ -373,32 +293,41 @@ function escapeExperienceHtml(value) {
     return div.innerHTML;
 }
 
-// Wording for each semantic status code. Kept in sync with the Twig
-// status_labels / status_messages maps above. The status code itself is decided
-// server-side by ExperiencePresentation; this map only carries words.
-const EXPERIENCE_STATUS_WORDING = {
-    available: { label: 'Available', message: 'Ready to play.' },
-    at_capacity: { label: 'At capacity', message: 'No open sessions right now.' },
-    participating: { label: 'Active', message: 'You have an active session.' },
-    planned: { label: 'Planned', message: 'Not available here yet.' },
-    unavailable: { label: 'Unavailable', message: 'Not available from this surface.' }
+// Short explanatory line for the exceptional states only. Normal states
+// (available / participating) say everything through the primary action itself.
+// Kept in sync with the Twig status_messages map above; the status code is
+// decided server-side by ExperiencePresentation.
+const EXPERIENCE_EXCEPTIONAL_STATUS = ['at_capacity', 'planned', 'unavailable'];
+const EXPERIENCE_STATUS_MESSAGE = {
+    at_capacity: 'No open sessions right now.',
+    planned: 'Not available here yet.',
+    unavailable: 'Not available from this surface.'
 };
 
-function experienceStatusBadgeClass(code) {
-    if (code === 'at_capacity') return 'badge bg-warning text-dark';
-    if (code === 'planned' || code === 'unavailable') return 'badge bg-secondary';
-    return 'badge bg-success';
+function experienceOccupancyText(state, presentation) {
+    const online = Number(state.player_count || 0);
+    const sessions = Number(state.session_count || 0);
+    const capacity = (presentation && presentation.capacity) || {};
+    const maxSessions = Number(capacity.max_sessions || 0);
+    const atCapacity = !!capacity.at_capacity;
+
+    let text = atCapacity ? 'Full' : `${online} online`;
+
+    // Suppress the capacity ratio while the room is empty — the empty-state
+    // copy below already invites the caller in.
+    if (maxSessions > 0 && (atCapacity || online > 0)) {
+        text += ` · ${sessions}/${maxSessions}`;
+    }
+
+    return text;
 }
 
 function updateExperienceLiveState(state, viewer = null, presentation = null) {
-    const sessionCount = Number(state.session_count || 0);
     const viewerParticipating = !!(viewer && viewer.participating);
 
     // Slice 5C: capacity/status policy comes from the server-composed
     // ExperiencePresentation, not from DOM inspection. This removes the
     // single-player drift where JS could not see max_sessions.
-    const capacity = (presentation && presentation.capacity) || {};
-    const maxSessions = Number(capacity.max_sessions || 0);
     const blockedByCapacity = !!(
         presentation
         && presentation.viewer
@@ -413,87 +342,27 @@ function updateExperienceLiveState(state, viewer = null, presentation = null) {
         (presentation && presentation.status && presentation.status.code)
         || null;
 
-    const liveStatus = document.getElementById('experience-live-status');
-    const sessionBadge = document.getElementById('experience-session-count');
-    const capacityBadge = document.getElementById('experience-capacity');
+    const occupancySummary = document.getElementById('experience-occupancy-summary');
     const availabilityMessage = document.getElementById('experience-availability-message');
-    const availabilityBadge = document.getElementById('experience-availability-badge');
     const launchButton = document.getElementById('experience-launch-button');
 
-    if (liveStatus) {
-        liveStatus.classList.toggle('d-none', sessionCount <= 0);
+    // The one occupancy expression: "N online" / "N online · S/M" / "Full · M/M".
+    if (occupancySummary) {
+        occupancySummary.textContent = experienceOccupancyText(state, presentation);
     }
 
-    if (sessionBadge) {
-        sessionBadge.textContent =
-            `${sessionCount} active session${sessionCount === 1 ? '' : 's'}`;
-    }
+    // Only the exceptional states get a line; normal states stay silent because
+    // the primary action already says Enter / Return.
+    if (availabilityMessage) {
+        const isExceptional = EXPERIENCE_EXCEPTIONAL_STATUS.includes(statusCode);
+        availabilityMessage.textContent = isExceptional
+            ? (EXPERIENCE_STATUS_MESSAGE[statusCode] || '')
+            : '';
+        availabilityMessage.classList.toggle('d-none', !isExceptional);
 
-    if (capacityBadge && maxSessions > 0) {
-        capacityBadge.textContent =
-            `${sessionCount} / ${maxSessions} capacity`;
-    }
-
-    const occupancyContainer = document.getElementById(
-        'experience-occupancy-container'
-    );
-
-    let liveOccupancy = document.getElementById('experience-occupancy');
-
-    if (occupancyContainer && maxSessions > 0) {
-        if (sessionCount > 0) {
-            const percent = Math.min(
-                100,
-                Math.round((sessionCount / maxSessions) * 100)
-            );
-
-            if (!liveOccupancy) {
-                liveOccupancy = document.createElement('div');
-                liveOccupancy.id = 'experience-occupancy';
-                liveOccupancy.className = 'progress mb-3';
-                liveOccupancy.setAttribute('role', 'progressbar');
-                liveOccupancy.setAttribute(
-                    'aria-label',
-                    'Experience capacity'
-                );
-                liveOccupancy.setAttribute('aria-valuemin', '0');
-                liveOccupancy.setAttribute(
-                    'aria-valuemax',
-                    String(maxSessions)
-                );
-
-                const bar = document.createElement('div');
-                bar.className = 'progress-bar';
-                liveOccupancy.appendChild(bar);
-                occupancyContainer.appendChild(liveOccupancy);
-            }
-
-            liveOccupancy.setAttribute(
-                'aria-valuenow',
-                String(sessionCount)
-            );
-
-            const bar = liveOccupancy.querySelector('.progress-bar');
-            if (bar) {
-                bar.style.width = `${percent}%`;
-            }
-        } else if (liveOccupancy) {
-            liveOccupancy.remove();
+        if (statusCode) {
+            availabilityMessage.dataset.statusCode = statusCode;
         }
-    }
-
-    const wording = statusCode && EXPERIENCE_STATUS_WORDING[statusCode]
-        ? EXPERIENCE_STATUS_WORDING[statusCode]
-        : null;
-
-    if (availabilityMessage && wording) {
-        availabilityMessage.textContent = wording.message;
-    }
-
-    if (availabilityBadge && wording) {
-        availabilityBadge.className = experienceStatusBadgeClass(statusCode);
-        availabilityBadge.textContent = wording.label;
-        availabilityBadge.dataset.statusCode = statusCode;
     }
 
     if (launchButton) {
@@ -502,30 +371,18 @@ function updateExperienceLiveState(state, viewer = null, presentation = null) {
         launchButton.setAttribute('aria-disabled', disabled ? 'true' : 'false');
         launchButton.tabIndex = disabled ? -1 : 0;
 
-        if (!disabled) {
-            const icon = launchButton.querySelector('i');
+        const label = blockedByCapacity
+            ? 'Full'
+            : (viewerParticipating ? 'Return' : 'Enter');
 
-            if (icon) {
-                icon.className = viewerParticipating
-                    ? 'fas fa-sign-in-alt me-1'
-                    : 'fas fa-play me-1';
-            }
+        launchButton.setAttribute('aria-label', label);
+        launchButton.dataset.viewerParticipating =
+            viewerParticipating ? 'true' : 'false';
 
-            const label = viewerParticipating
-                ? `Return to ${EXPERIENCE_NAME}`
-                : `Play ${EXPERIENCE_NAME}`;
+        const labelElement = document.getElementById('experience-launch-label');
 
-            launchButton.setAttribute('aria-label', label);
-            launchButton.dataset.viewerParticipating =
-                viewerParticipating ? 'true' : 'false';
-
-            const labelElement = document.getElementById(
-                'experience-launch-label'
-            );
-
-            if (labelElement) {
-                labelElement.textContent = label;
-            }
+        if (labelElement) {
+            labelElement.textContent = label;
         }
     }
 }
@@ -557,31 +414,21 @@ function renderExperienceParticipants(state, actions) {
             ? `<div class="fw-semibold"><a href="/profile/${encodeURIComponent(String(player.username || ''))}" class="text-decoration-none">${username}</a></div>`
             : `<div class="fw-semibold">${username}</div>`;
 
-        const playingBadge = player.presence_state === 'playing'
-            ? '<span class="badge bg-success me-1" aria-label="Currently playing">Playing</span>'
-            : '';
-
         const message = messageEnabled &&
             window.currentUserId &&
             userId !== Number(window.currentUserId)
             ? `<a href="/chat?dm_user_id=${encodeURIComponent(String(userId))}" class="btn btn-sm btn-outline-secondary"><i class="fas fa-comment me-1" aria-hidden="true"></i>Message</a>`
             : '';
 
-        const node = player.node !== null && player.node !== undefined
-            ? `<span class="badge bg-secondary-subtle text-dark border">Node ${Number(player.node)}</span>`
-            : '';
-
         return `<div class="list-group-item d-flex justify-content-between align-items-center gap-3">
     <div class="min-w-0">
         ${identity}
         <div class="text-muted small">
-            ${playingBadge}
             ${presence}
         </div>
     </div>
     <div class="d-flex align-items-center gap-2 flex-shrink-0">
         ${message}
-        ${node}
     </div>
 </div>`;
     }).join('');

@@ -65,7 +65,7 @@
                         <div class="d-flex gap-2 flex-shrink-0">
                             <a href="/experiences/{{ view.id }}" class="btn btn-outline-secondary btn-sm">{{ t('ui.webdoors.details', {}, locale, ['common']) }}</a>
                             {% if view.actions.return and game.launch %}
-                            <a href="/experiences/{{ view.id }}" class="btn btn-fidonet btn-sm"><i class="fas fa-sign-in-alt me-1" aria-hidden="true"></i>{{ t('ui.webdoors.return', {}, locale, ['common']) }}</a>
+                            <a href="/experiences/{{ view.id }}" class="btn btn-fidonet btn-sm">{{ t('ui.webdoors.return', {}, locale, ['common']) }}</a>
                             {% endif %}
                         </div>
                     </div>
