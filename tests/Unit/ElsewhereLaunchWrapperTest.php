@@ -111,15 +111,38 @@ SH;
         chmod($this->scratch . '/client/pwmangclient', 0755);
     }
 
+    /**
+     * A fake client that actually behaves like the real GCU client's need for
+     * keyboard input: it records what fd 0 points at and reads one line from
+     * stdin. Used to prove the wrapper hands the client its PTY stdin rather
+     * than the shell's automatic /dev/null for a backgrounded command.
+     */
+    private function writeStdinProbeClient(): void
+    {
+        $c = "#!/bin/bash\n"
+            . "readlink /proc/self/fd/0 > \"\$CLIENT_STDIN_FD0\" 2>/dev/null || printf 'unknown' > \"\$CLIENT_STDIN_FD0\"\n"
+            . "IFS= read -r -t 5 line || true\n"
+            . "printf '%s' \"\$line\" > \"\$CLIENT_STDIN_SEEN\"\n"
+            . "printf 'started\\n' > \"\$CLIENT_STARTED\"\n"
+            . "exit 0\n";
+        file_put_contents($this->scratch . '/client/pwmangclient', $c);
+        chmod($this->scratch . '/client/pwmangclient', 0755);
+    }
+
     // ---- runner --------------------------------------------------------
 
     /**
      * @param array<string,string> $extraEnv
      * @param int|null $signalAfterStart  signal to send once the client is up
+     * @param string|null $stdinData  if set, written to the wrapper's stdin
+     *                    pipe (kept open) instead of closing stdin immediately
      * @return array{code:int,stdout:string,stderr:string}
      */
-    private function runWrapper(array $extraEnv = [], ?int $signalAfterStart = null): array
-    {
+    private function runWrapper(
+        array $extraEnv = [],
+        ?int $signalAfterStart = null,
+        ?string $stdinData = null
+    ): array {
         $env = array_merge([
             'PATH' => getenv('PATH') ?: '/usr/bin:/bin',
             'TERM' => 'xterm-256color',
@@ -137,6 +160,8 @@ SH;
             'CLIENT_LOG' => $this->scratch . '/client.log',
             'CLIENT_ENV' => $this->scratch . '/client.env',
             'CLIENT_STARTED' => $this->scratch . '/client.started',
+            'CLIENT_STDIN_SEEN' => $this->scratch . '/client.stdin_seen',
+            'CLIENT_STDIN_FD0' => $this->scratch . '/client.stdin_fd0',
         ], $extraEnv);
 
         $descriptors = [
@@ -153,7 +178,13 @@ SH;
             $env
         );
         self::assertIsResource($proc);
-        fclose($pipes[0]);
+        if ($stdinData !== null) {
+            fwrite($pipes[0], $stdinData);
+            fflush($pipes[0]);
+            // leave $pipes[0] open so the backgrounded client can read it
+        } else {
+            fclose($pipes[0]);
+        }
         stream_set_blocking($pipes[1], false);
         stream_set_blocking($pipes[2], false);
 
@@ -183,6 +214,9 @@ SH;
 
         $stdout .= (string)stream_get_contents($pipes[1]);
         $stderr .= (string)stream_get_contents($pipes[2]);
+        if (isset($pipes[0]) && is_resource($pipes[0])) {
+            fclose($pipes[0]);
+        }
         fclose($pipes[1]);
         fclose($pipes[2]);
         $code = proc_close($proc);
@@ -359,6 +393,59 @@ SH;
         // Source-level: no `exec` of the client.
         $src = (string)file_get_contents($this->wrapper);
         self::assertDoesNotMatchRegularExpression('~^\s*exec\b~m', $src);
+    }
+
+    public function testClientReceivesWrapperStdin(): void
+    {
+        // The real GCU client reads keyboard input from fd 0. The wrapper
+        // backgrounds it, so without an explicit redirection a non-interactive
+        // shell would assign the client's stdin to /dev/null (the M4E first
+        // human-launch failure). Prove a byte written to the wrapper's stdin
+        // reaches the client.
+        $this->writeStdinProbeClient();
+        $r = $this->runWrapper([], null, "hello\n");
+
+        self::assertSame(0, $r['code'], $r['stderr']);
+        self::assertSame(
+            'hello',
+            trim((string)@file_get_contents($this->scratch . '/client.stdin_seen')),
+            'the client did not receive the wrapper\'s stdin'
+        );
+    }
+
+    public function testClientStdinIsNotDevNull(): void
+    {
+        // Direct check of the exact defect: client fd 0 must not be /dev/null.
+        $this->writeStdinProbeClient();
+        $r = $this->runWrapper([], null, "x\n");
+
+        self::assertSame(0, $r['code'], $r['stderr']);
+        $fd0 = trim((string)@file_get_contents($this->scratch . '/client.stdin_fd0'));
+
+        self::assertNotSame('/dev/null', $fd0, 'client stdin was severed to /dev/null');
+        // the runner gives the wrapper a pipe as stdin; `<&0` must carry that
+        // same endpoint to the backgrounded child (a real deploy carries the
+        // node-pty slave instead).
+        self::assertMatchesRegularExpression(
+            '~^(pipe:|anon_inode:|/dev/pts/|/dev/ptmx)~',
+            $fd0,
+            "unexpected client stdin endpoint: {$fd0}"
+        );
+    }
+
+    public function testWrapperWaitsAndPropagatesChildExitStatus(): void
+    {
+        // The stdin redirection must not change child lifecycle: the wrapper
+        // still waits on the client and exits with the client's status, and
+        // cleanup still runs.
+        $this->writeFakeClient('exit 7');
+        $r = $this->runWrapper();
+        self::assertSame(7, $r['code'], 'wrapper did not propagate the child exit code');
+        self::assertStringContainsString('CLEANUP', $this->gatewayLog(), 'cleanup did not run');
+
+        $this->writeFakeClient('exit 0');
+        $r = $this->runWrapper();
+        self::assertSame(0, $r['code']);
     }
 
     public function testCredentialNeverAppearsInArgvEnvOrPlayerOutput(): void

@@ -285,6 +285,14 @@ trap cleanup EXIT INT TERM HUP
 # 6. run the Tangaria client as a CHILD (never exec) so the trap survives.
 #    HOME is scoped to the client only and points at the private session dir;
 #    TERM is preserved from BinkTerm (xterm-256color); ESCDELAY per M2/M3.
+#
+#    The client is backgrounded (`&`) so this wrapper stays alive to wait on
+#    it, propagate signals, and run cleanup-launch. In a non-interactive shell
+#    (no job control) an asynchronous command's stdin is assigned to /dev/null
+#    "before any explicit redirections" (POSIX). The GCU client reads keyboard
+#    input from fd 0, so it MUST be given this wrapper's stdin -- the real PTY
+#    slave from the native-door bridge. `<&0` is that explicit redirection: it
+#    overrides the automatic /dev/null. Output (fd 1/2) is inherited normally.
 # ---------------------------------------------------------------------------
 cd "$CLIENT_DIR" || fail "" "cannot cd to client dir: $CLIENT_DIR"
 
@@ -293,7 +301,7 @@ diag "launching client for user $HOME_USER (token $CLEANUP_TOKEN)"
 HOME="$SESSION_DIR" \
 TERM="${TERM:-xterm-256color}" \
 ESCDELAY="$ESCDELAY_VALUE" \
-    "$CLIENT_BIN" &
+    "$CLIENT_BIN" <&0 &
 CLIENT_PID=$!
 
 wait "$CLIENT_PID"
