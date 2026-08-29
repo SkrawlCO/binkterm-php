@@ -84,6 +84,11 @@ final class ExperienceLaunch
                 'id' => $id,
                 'url' => "/games/jsdos/{$id}",
             ],
+            'rlogin' => [
+                'type' => 'rlogin',
+                'id' => $id,
+                'url' => "/games/rlogindoors/{$id}",
+            ],
             'web' => [
                 'type' => 'web',
                 'id' => $id,

@@ -296,7 +296,11 @@ class DoorHandler
      * @param resource $conn Telnet client socket
      * @param array $state Terminal state (updated by NAWS sequences)
      * @param resource $wsSock WebSocket TCP socket
-     * @param string $terminalMode Terminal input mode: doorway (legacy) or raw
+     * @param string $terminalMode Terminal input mode: doorway (legacy) or raw.
+     *                             RLogin experiences (and any door whose manifest
+     *                             sets terminal_mode=raw) resolve to raw so ANSI
+     *                             cursor keys are preserved rather than rewritten
+     *                             to Doorway protocol scan codes.
      */
     private function relayLoop(
         $conn,
@@ -546,14 +550,22 @@ class DoorHandler
      * Strip telnet IAC command sequences from raw input and convert ANSI terminal
      * escape sequences (ESC[...) to Doorway protocol scan codes (0x00 + scan_code).
      *
-     * Doorway protocol is the standard used by DOS BBS door games for extended keys.
+     * Doorway protocol is the standard used by DOS BBS door games (and Native
+     * doors, which are also legacy drop-file executables) for extended keys.
+     * RLogin doors are a real outbound terminal session to a remote system
+     * (e.g. Synchronet) that does its own ANSI cursor-key handling and has no
+     * notion of Doorway protocol, so cursor/extended keys must pass through
+     * unmodified for that door type — rewriting them silently breaks arrow
+     * keys in remote door games (e.g. Synchronet's Minesweeper).
+     *
      * NAWS subnegotiations are parsed to keep the terminal size in sync.
      *
      * @param string $data Raw bytes from the telnet client
      * @param array $state Terminal state (cols/rows updated if NAWS seen)
+     * @param string $doorType Door type ('dos', 'native', or 'rlogin')
      * @return string Processed bytes ready to send to the bridge
      */
-    private function processTelnetInput(string $data, array &$state): string
+    private function processTelnetInput(string $data, array &$state, string $doorType = 'dos'): string
     {
         $out = '';
         $len = strlen($data);
@@ -611,8 +623,10 @@ class DoorHandler
                 continue; // Unrecognised IAC command — skip
             }
 
-            // ANSI escape sequence — convert to Doorway protocol if possible
-            if ($byte === 27 && ($i + 1) < $len && $data[$i + 1] === '[') {
+            // ANSI escape sequence — convert to Doorway protocol if possible.
+            // RLogin doors are a real remote terminal session, not a Doorway-
+            // protocol drop-file program, so pass ANSI sequences through as-is.
+            if ($doorType !== 'rlogin' && $byte === 27 && ($i + 1) < $len && $data[$i + 1] === '[') {
                 $i += 2; // skip ESC[
                 $params = '';
                 while ($i < $len && !ctype_alpha($data[$i])) {
@@ -1181,7 +1195,7 @@ class DoorHandler
      */
     private function callDoorLaunchApi(string $session, string $doorId, ?string $csrfToken = null): array
     {
-        $headers = ['Content-Type: application/x-www-form-urlencoded'];
+        $headers = array_merge(['Content-Type: application/x-www-form-urlencoded'], TelnetUtils::clientContextHeaders());
         if ($csrfToken !== null) {
             $headers[] = 'X-CSRF-Token: ' . $csrfToken;
         }
@@ -1218,7 +1232,7 @@ class DoorHandler
      */
     private function callDoorEndApi(string $session, string $sessionId, ?string $csrfToken = null): void
     {
-        $headers = ['Content-Type: application/x-www-form-urlencoded'];
+        $headers = array_merge(['Content-Type: application/x-www-form-urlencoded'], TelnetUtils::clientContextHeaders());
         if ($csrfToken !== null) {
             $headers[] = 'X-CSRF-Token: ' . $csrfToken;
         }

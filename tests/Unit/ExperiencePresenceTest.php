@@ -108,7 +108,7 @@ final class RecordingAuth extends Auth
         // Deliberately do not initialize the database-backed Auth parent.
     }
 
-    public function updateSessionActivity(string $sessionId, string $activity): void
+    public function updateSessionActivity(string $sessionId, string $activity, ?string $ipAddress = null): void
     {
         $this->updates[] = [$sessionId, $activity];
     }

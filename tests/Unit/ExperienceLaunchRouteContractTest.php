@@ -51,8 +51,10 @@ final class ExperienceLaunchRouteContractTest extends TestCase
             "\$catalogSurface = \$surface === 'terminal' ? 'telnet' : \$surface;",
             $this->doorRoutes
         );
+        // RLogin was added to the accepted launch backends when upstream 1.10.4
+        // RLogin door support was integrated into the Experience launch model.
         self::assertStringContainsString(
-            "!in_array(\$launchBackend, ['dos', 'native'], true)",
+            "!in_array(\$launchBackend, ['dos', 'native', 'rlogin'], true)",
             $this->doorRoutes
         );
         self::assertStringNotContainsString(

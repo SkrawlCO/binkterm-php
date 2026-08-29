@@ -50,6 +50,21 @@ class GameCatalog
             $surface
         );
 
+        // RLogin doors are DB-backed (rlogin_doors table). Tolerate the table
+        // being absent so discovery still works on installs that have not yet
+        // run the RLogin migration — the doors simply do not appear until then.
+        try {
+            $this->addManagedDoors(
+                $experiences,
+                'rlogin',
+                (new RLoginDoorManager())->getEnabledDoors(),
+                $user,
+                $surface
+            );
+        } catch (\Throwable $e) {
+            // No RLogin doors available (e.g. pre-migration schema).
+        }
+
         $this->addWebDoors($experiences, $user, $surface);
         $this->addJsdosDoors($experiences, $user, $surface);
 
@@ -201,17 +216,29 @@ class GameCatalog
 
                 'capacity' => [
                     // max_nodes is the runtime concurrency limit enforced
-                    // by the door launch/session machinery.
+                    // by the door launch/session machinery. RLogin doors are
+                    // DB-backed and carry the same limit as config.max_sessions.
                     'max_sessions' => isset($door['max_nodes'])
                         ? (int)$door['max_nodes']
-                        : null,
+                        : ((int)($door['config']['max_sessions'] ?? 0) > 0
+                            ? (int)$door['config']['max_sessions']
+                            : null),
                 ],
 
                 'terminal' => [
                     // Managed door manifests own the runtime mode. Normalize
                     // it here so terminal clients do not depend on manifest
                     // nesting or pass unknown modes into the relay path.
-                    'mode' => strtolower((string)($door['door']['terminal_mode'] ?? '')) === 'raw'
+                    //
+                    // RLogin backends are a live outbound terminal session to a
+                    // remote host (e.g. Synchronet) with no notion of Doorway
+                    // protocol — cursor/extended keys must pass through raw or
+                    // remote navigation breaks. DOS and native doors keep the
+                    // manifest-driven default (doorway unless terminal_mode=raw).
+                    'mode' => (
+                        $backendType === 'rlogin'
+                        || strtolower((string)($door['door']['terminal_mode'] ?? '')) === 'raw'
+                    )
                         ? 'raw'
                         : 'doorway',
                 ],
