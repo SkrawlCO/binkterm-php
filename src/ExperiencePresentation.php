@@ -146,6 +146,121 @@ final class ExperiencePresentation
         ];
     }
 
+    /**
+     * Anonymous-safe presentation projection.
+     *
+     * This is the read model for logged-out discovery surfaces. It composes the
+     * same normalized metadata as build(), but the returned structure is
+     * guaranteed to carry no viewer identity and no participation authority:
+     *
+     *   - no runtime.players (roster identities are never in anonymous output)
+     *   - no viewer block at all
+     *   - actions.play / return / end_participation are always false
+     *   - no launch target/URL is produced or echoed
+     *   - status.code is viewer-neutral only
+     *     (available | at_capacity | planned | unavailable) — never participating
+     *   - no source / backend manifest / raw backend id
+     *
+     * Callers must not have to strip anything themselves. A null viewer is the
+     * only mode: an aggregate state snapshot (active / session_count /
+     * player_count) may be supplied for occupancy, but any players[] it carries
+     * is discarded before composition.
+     *
+     * @param array<string,mixed> $experience
+     * @param array{active?:bool,session_count?:int,player_count?:int,...}|null $aggregateState
+     * @return array<string,mixed>
+     */
+    public static function buildPublic(
+        array $experience,
+        string $surface,
+        ?array $aggregateState = null
+    ): array {
+        $sanitizedState = null;
+        if ($aggregateState !== null) {
+            // Discard any roster/identity payload before it can reach build().
+            $sanitizedState = [
+                'active' => (bool)($aggregateState['active'] ?? false),
+                'session_count' => max(0, (int)($aggregateState['session_count'] ?? 0)),
+                'player_count' => max(0, (int)($aggregateState['player_count'] ?? 0)),
+                'players' => [],
+            ];
+        }
+
+        // Compose with an explicitly absent viewer. build() cannot return a
+        // viewer-specific status or enable a participation action without a
+        // viewerPlayer, but the projection below re-asserts every boundary so
+        // the public contract does not depend on that internal detail.
+        $view = self::build($experience, $surface, $sanitizedState, null);
+
+        $publicStatus = in_array(
+            $view['status']['code'] ?? '',
+            ['available', 'at_capacity', 'planned', 'unavailable'],
+            true
+        )
+            ? $view['status']['code']
+            : 'unavailable';
+
+        return [
+            'id' => $view['id'],
+            'name' => $view['name'],
+            'description' => $view['description'],
+            'category' => $view['category'],
+            'author' => $view['author'],
+            'version' => $view['version'],
+            'presentation' => [
+                'icon' => $view['presentation']['icon'] ?? null,
+                'icon_url' => $view['presentation']['icon_url'] ?? null,
+                'screenshot' => $view['presentation']['screenshot'] ?? null,
+                'screenshot_url' => $view['presentation']['screenshot_url'] ?? null,
+            ],
+            'backend' => [
+                // Human-readable label only. The raw backend id and the
+                // source manifest are never part of anonymous output.
+                'label' => $view['backend']['label'] ?? null,
+            ],
+            'capabilities' => [
+                'multiplayer' => (bool)($view['capabilities']['multiplayer'] ?? false),
+            ],
+            'capacity' => [
+                'max_sessions' => $view['capacity']['max_sessions'],
+                'limited' => (bool)($view['capacity']['limited'] ?? false),
+                'at_capacity' => (bool)($view['capacity']['at_capacity'] ?? false),
+            ],
+            'cost' => [
+                'credits' => max(0, (int)($view['cost']['credits'] ?? 0)),
+                'free' => (bool)($view['cost']['free'] ?? true),
+            ],
+            'surfaces' => [
+                'requested' => $view['surfaces']['requested'],
+                'current' => $view['surfaces']['current'],
+                'web' => $view['surfaces']['web'],
+                'telnet' => $view['surfaces']['telnet'],
+                'static_launchable' => (bool)($view['surfaces']['static_launchable'] ?? false),
+            ],
+            'runtime' => [
+                'supplied' => $view['runtime']['supplied'],
+                'active' => $view['runtime']['active'],
+                'session_count' => $view['runtime']['session_count'],
+                'player_count' => $view['runtime']['player_count'],
+                // 'players' intentionally omitted — anonymous output never
+                // contains identity-bearing roster data.
+            ],
+            'status' => [
+                'code' => $publicStatus,
+            ],
+            'actions' => [
+                // Anonymous visitors have no participation authority. These are
+                // hard-coded false, not derived, so no viewer state can flip them.
+                'play' => false,
+                'return' => false,
+                'end_participation' => false,
+                'details' => false,
+                'static_launchable' => (bool)($view['actions']['static_launchable'] ?? false),
+            ],
+            // No 'viewer' key. No 'launch' key. No 'source' key.
+        ];
+    }
+
     /** @param array<string,mixed> $experience */
     private static function surfaceState(array $experience, string $surface): string
     {

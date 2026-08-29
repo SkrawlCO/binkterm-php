@@ -515,6 +515,13 @@
                             </ul>
                         </li>
                     {% else %}
+                        {% if bbs_feature_enabled('anonymous_experience_discovery') %}
+                        <li class="nav-item">
+                            <a class="nav-link" href="/crossroads">
+                                <i class="fas fa-compass"></i> {{ t('ui.discovery.heading', {}, 'common') }}
+                            </a>
+                        </li>
+                        {% endif %}
                         {% if bbs_feature_enabled('guest_doors_page') %}
                         <li class="nav-item">
                             <a class="nav-link" href="/guest-doors">

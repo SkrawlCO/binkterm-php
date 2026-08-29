@@ -182,6 +182,71 @@ if (!function_exists('pgpDiscoveryHostConfig')) {
 }
 
 /**
+ * Public Experience discovery window (Crossroads, at L33TEST).
+ *
+ * A logged-out visitor can see what lives here before creating an account.
+ * READ-ONLY DISCOVERY: Experience metadata plus aggregate occupancy counts,
+ * nothing else. No member identities, no rosters, no activity history, no
+ * scoreboard, no conversation, no participation authority, no launch. There is
+ * no polling and no anonymous state API — this is a server-rendered snapshot.
+ *
+ * Opt-in per installation via the `anonymous_experience_discovery` feature.
+ * When disabled the route behaves as not-found and does not advertise itself.
+ */
+SimpleRouter::get('/crossroads', function() {
+    $template = new Template();
+
+    if (!BbsConfig::isAnonymousExperienceDiscoveryEnabled()) {
+        http_response_code(404);
+        $template->renderResponse('404.twig', ['requested_url' => '/crossroads']);
+        return;
+    }
+
+    // Anonymous catalog: null viewer -> admin-only and hide_from_web
+    // Experiences are already excluded by GameCatalog discovery policy.
+    $experiences = (new GameCatalog())->getEnabledGames(null, 'web');
+
+    $state = new ExperienceState();
+    $aggregates = $state->getPublicExperienceAggregates('web');
+
+    $cards = [];
+    $activeExperiences = 0;
+
+    foreach ($experiences as $experienceId => $experience) {
+        $aggregate = $aggregates[$experienceId] ?? null;
+
+        // buildPublic() guarantees the privacy boundary — no viewer, no roster,
+        // no launch target, viewer-neutral status only.
+        $view = \BinktermPHP\ExperiencePresentation::buildPublic(
+            $experience,
+            'web',
+            $aggregate
+        );
+
+        if ((int)($view['runtime']['player_count'] ?? 0) > 0) {
+            $activeExperiences++;
+        }
+
+        $cards[] = ['experience_presentation' => $view];
+    }
+
+    usort($cards, static function (array $a, array $b): int {
+        return strcasecmp(
+            (string)$a['experience_presentation']['name'],
+            (string)$b['experience_presentation']['name']
+        );
+    });
+
+    $activePeople = $state->getPublicActivePeopleCount('web');
+
+    $template->renderResponse('crossroads.twig', [
+        'cards' => $cards,
+        'around_active_people' => $activePeople,
+        'around_active_experiences' => $activeExperiences,
+    ]);
+});
+
+/**
  * Experience lobby.
  *
  * This is a presentation surface around the normalized Experience contract.

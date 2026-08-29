@@ -1,0 +1,84 @@
+{% extends "base.twig" %}
+
+{#
+    Public Experience discovery window ("Crossroads" at L33TEST).
+
+    Server-rendered snapshot for logged-out visitors. Reuses the /games visual
+    language (experiences.css) and the shared experience_library_card partial in
+    public_mode. There is deliberately NO filter toolbar, NO scoreboard, NO
+    Continue Playing / Live Now roster, NO conversation, and NO JavaScript /
+    polling — every value on this page is aggregate metadata rendered once.
+
+    The cards receive ExperiencePresentation::buildPublic() output, which carries
+    no member identity, roster, activity, launch target, or viewer state.
+#}
+
+{% block title %}{{ t('ui.discovery.heading', {}, locale, ['common']) }} - {{ system_name }}{% endblock %}
+
+{% block head %}
+<link href="/css/experiences.css" rel="stylesheet">
+{% endblock %}
+
+{% block content %}
+<div class="container experiences-library py-3 py-md-4">
+    <header class="experiences-library-header mb-4">
+        <div class="experiences-eyebrow">{{ system_name }} // {{ t('ui.discovery.heading', {}, locale, ['common']) }}</div>
+        <h1 class="h2 mb-1"><i class="fas fa-compass me-2" aria-hidden="true"></i>{{ t('ui.discovery.heading', {}, locale, ['common']) }}</h1>
+        <p class="text-muted mb-0">{{ t('ui.discovery.intro', {'system_name': system_name}, locale, ['common']) }}</p>
+    </header>
+
+    {# "Around" line: aggregate counts only, and only when someone is actually
+       active. When the place is quiet the line is simply absent — the catalog
+       below still tells the whole story. #}
+    {% set around_people = around_active_people|default(0) %}
+    {% set around_experiences = around_active_experiences|default(0) %}
+    {% if around_people > 0 %}
+    <p class="experiences-around experiences-around--active mb-4">
+        {%- if around_people == 1 and around_experiences == 1 -%}
+            {{ t('ui.webdoors.around_active_1p_1e', {}, locale, ['common']) }}
+        {%- elseif around_people == 1 -%}
+            {{ t('ui.webdoors.around_active_1p', {'experiences': around_experiences}, locale, ['common']) }}
+        {%- elseif around_experiences == 1 -%}
+            {{ t('ui.webdoors.around_active_1e', {'players': around_people}, locale, ['common']) }}
+        {%- else -%}
+            {{ t('ui.webdoors.around_active', {'players': around_people, 'experiences': around_experiences}, locale, ['common']) }}
+        {%- endif -%}
+    </p>
+    {% endif %}
+
+    <section class="experience-section mb-4" aria-labelledby="crossroads-all-title">
+        <div class="experience-section-heading">
+            <h2 id="crossroads-all-title" class="h4 mb-1">{{ t('ui.webdoors.all_experiences', {}, locale, ['common']) }}</h2>
+        </div>
+
+        {% if cards|default([])|length > 0 %}
+        <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-2 mt-0 experience-library-grid">
+            {% for card in cards %}
+                {% include 'partials/experience_library_card.twig' with {game: card, public_mode: true} %}
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="alert alert-info mt-3 mb-0">
+            <i class="fas fa-info-circle me-1" aria-hidden="true"></i>{{ t('ui.discovery.empty', {}, locale, ['common']) }}
+        </div>
+        {% endif %}
+    </section>
+
+    <section class="experience-section" aria-labelledby="crossroads-join-title">
+        <div class="card mb-0">
+            <div class="card-body text-center py-4">
+                <h2 id="crossroads-join-title" class="h5 mb-2">{{ t('ui.discovery.join_heading', {}, locale, ['common']) }}</h2>
+                <p class="text-muted small mb-3">{{ t('ui.discovery.join_body', {}, locale, ['common']) }}</p>
+                <div class="d-flex flex-wrap gap-2 justify-content-center">
+                    <a href="/register" class="btn btn-fidonet btn-sm">{{ t('ui.discovery.create_account', {}, locale, ['common']) }}</a>
+                    <a href="/login" class="btn btn-outline-secondary btn-sm">{{ t('ui.discovery.have_account', {}, locale, ['common']) }} {{ t('ui.register.sign_in', {}, locale, ['common']) }}</a>
+                </div>
+                {% set terminal_line = t('ui.discovery.terminal_line', {}, locale, ['common']) %}
+                {% if terminal_line and terminal_line != 'ui.discovery.terminal_line' %}
+                <p class="text-muted small mt-3 mb-0"><code>{{ terminal_line }}</code></p>
+                {% endif %}
+            </div>
+        </div>
+    </section>
+</div>
+{% endblock %}

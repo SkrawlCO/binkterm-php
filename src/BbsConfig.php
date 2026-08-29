@@ -352,6 +352,19 @@ class BbsConfig
     }
 
     /**
+     * Whether logged-out visitors may browse a read-only Experience discovery
+     * surface (the public /crossroads window).
+     *
+     * Default: false. This exposes only Experience metadata and aggregate
+     * occupancy counts — never member identities, rosters, activity history,
+     * conversation, or any participation authority.
+     */
+    public static function isAnonymousExperienceDiscoveryEnabled(): bool
+    {
+        return self::isFeatureEnabled('anonymous_experience_discovery');
+    }
+
+    /**
      * Get a feature setting value with optional default
      *
      * @param string $feature Feature key to retrieve

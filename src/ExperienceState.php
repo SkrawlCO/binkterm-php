@@ -368,4 +368,179 @@ class ExperienceState
             'players' => $players,
         ];
     }
+
+    /**
+     * Anonymous-safe aggregate occupancy for every web-discoverable Experience.
+     *
+     * This is the state read for logged-out discovery. It deliberately does not
+     * build a roster: no users join, so the result carries no username, user id,
+     * session id, node, timestamp, or presence string. Only per-Experience
+     * aggregate counts are returned.
+     *
+     * Active-session semantics match getExperienceState(): rows in
+     * door_sessions / webdoor_sessions with ended_at IS NULL and a live
+     * expires_at. session_count is the active row count; player_count is the
+     * distinct user count (a user in the same Experience on two nodes counts
+     * once).
+     *
+     * @return array<string,array{active:bool,session_count:int,player_count:int}>
+     */
+    public function getPublicExperienceAggregates(string $surface = 'web'): array
+    {
+        $experiences = $this->catalog->getEnabledGames(null, $surface);
+
+        if (empty($experiences)) {
+            return [];
+        }
+
+        $doorIds = [];
+        $webIds = [];
+
+        foreach ($experiences as $experienceId => $experience) {
+            $experienceId = (string)$experienceId;
+
+            if (trim($experienceId) === '') {
+                continue;
+            }
+
+            if ((string)($experience['backend']['type'] ?? '') === 'web') {
+                $webIds[] = $experienceId;
+            } else {
+                $doorIds[] = $experienceId;
+            }
+        }
+
+        $now = gmdate('Y-m-d H:i:s');
+
+        $sessionRowCounts = [];
+        $distinctUsers = [];
+
+        if (!empty($doorIds)) {
+            $placeholders = implode(',', array_fill(0, count($doorIds), '?'));
+
+            $stmt = $this->db->prepare("
+                SELECT ds.door_id AS experience_id, ds.user_id
+                FROM door_sessions ds
+                WHERE ds.door_id IN ($placeholders)
+                  AND ds.ended_at IS NULL
+                  AND ds.expires_at > ?
+            ");
+            $stmt->execute([...$doorIds, $now]);
+
+            foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+                $experienceId = (string)$row['experience_id'];
+                $sessionRowCounts[$experienceId] =
+                    ($sessionRowCounts[$experienceId] ?? 0) + 1;
+                $distinctUsers[$experienceId][(int)$row['user_id']] = true;
+            }
+        }
+
+        if (!empty($webIds)) {
+            $placeholders = implode(',', array_fill(0, count($webIds), '?'));
+
+            $stmt = $this->db->prepare("
+                SELECT ws.game_id AS experience_id, ws.user_id
+                FROM webdoor_sessions ws
+                WHERE ws.game_id IN ($placeholders)
+                  AND ws.ended_at IS NULL
+                  AND ws.expires_at > ?
+            ");
+            $stmt->execute([...$webIds, $now]);
+
+            foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+                $experienceId = (string)$row['experience_id'];
+                $sessionRowCounts[$experienceId] =
+                    ($sessionRowCounts[$experienceId] ?? 0) + 1;
+                $distinctUsers[$experienceId][(int)$row['user_id']] = true;
+            }
+        }
+
+        $aggregates = [];
+
+        foreach ($experiences as $experienceId => $experience) {
+            $experienceId = (string)$experienceId;
+            $sessionCount = $sessionRowCounts[$experienceId] ?? 0;
+
+            $aggregates[$experienceId] = [
+                'active' => $sessionCount > 0,
+                'session_count' => $sessionCount,
+                'player_count' => count($distinctUsers[$experienceId] ?? []),
+            ];
+        }
+
+        return $aggregates;
+    }
+
+    /**
+     * Site-wide distinct count of people currently active in any
+     * web-discoverable Experience.
+     *
+     * Name-free companion to getPublicExperienceAggregates() for the
+     * "around the Crossroads" line. Returns a single integer; no identity
+     * ever leaves this method.
+     */
+    public function getPublicActivePeopleCount(string $surface = 'web'): int
+    {
+        $experiences = $this->catalog->getEnabledGames(null, $surface);
+
+        if (empty($experiences)) {
+            return 0;
+        }
+
+        $doorIds = [];
+        $webIds = [];
+
+        foreach ($experiences as $experienceId => $experience) {
+            $experienceId = (string)$experienceId;
+
+            if (trim($experienceId) === '') {
+                continue;
+            }
+
+            if ((string)($experience['backend']['type'] ?? '') === 'web') {
+                $webIds[] = $experienceId;
+            } else {
+                $doorIds[] = $experienceId;
+            }
+        }
+
+        $now = gmdate('Y-m-d H:i:s');
+        $activeUserIds = [];
+
+        if (!empty($doorIds)) {
+            $placeholders = implode(',', array_fill(0, count($doorIds), '?'));
+
+            $stmt = $this->db->prepare("
+                SELECT DISTINCT ds.user_id
+                FROM door_sessions ds
+                WHERE ds.door_id IN ($placeholders)
+                  AND ds.ended_at IS NULL
+                  AND ds.expires_at > ?
+            ");
+            $stmt->execute([...$doorIds, $now]);
+
+            foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $userId) {
+                $activeUserIds[(int)$userId] = true;
+            }
+        }
+
+        if (!empty($webIds)) {
+            $placeholders = implode(',', array_fill(0, count($webIds), '?'));
+
+            $stmt = $this->db->prepare("
+                SELECT DISTINCT ws.user_id
+                FROM webdoor_sessions ws
+                WHERE ws.game_id IN ($placeholders)
+                  AND ws.ended_at IS NULL
+                  AND ws.expires_at > ?
+            ");
+            $stmt->execute([...$webIds, $now]);
+
+            foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $userId) {
+                $activeUserIds[(int)$userId] = true;
+            }
+        }
+
+        return count($activeUserIds);
+    }
 }

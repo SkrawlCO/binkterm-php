@@ -7,6 +7,7 @@
         "chat": true,
         "file_areas": true,
         "guest_doors_page": false,
+        "anonymous_experience_discovery": false,
         "bbs_directory": true,
         "public_files_index": false,
         "qwk": true,

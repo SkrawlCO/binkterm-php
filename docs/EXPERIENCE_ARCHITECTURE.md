@@ -224,6 +224,58 @@ Additional backend-independent policy should move toward shared Experience
 services when appropriate rather than being duplicated by individual
 presentation routes.
 
+## Anonymous Experience Discovery
+
+BinkTerm can expose a read-only Experience discovery surface to logged-out
+visitors so a prospective member can see what lives on the BBS before creating
+an account.
+
+This is **opt-in and default-off**, controlled by the
+`anonymous_experience_discovery` feature flag in `bbs.json`
+(`BbsConfig::isAnonymousExperienceDiscoveryEnabled()`). When the flag is off the
+public route responds as not-found and does not advertise its own existence.
+
+What the anonymous surface may contain:
+
+- Experience identity and display metadata (name, description, category,
+  artwork), multiplayer capability, cost/free state, surface availability, and
+  maximum capacity.
+- **Aggregate occupancy only**: a per-Experience active boolean, session count,
+  and distinct-player count, plus a site-wide distinct count of people currently
+  active in any Experience.
+- Viewer-neutral status: `available`, `at_capacity`, `planned`, or
+  `unavailable`.
+
+What it must never contain:
+
+- Any member identity — username, display name, user id, profile link.
+- Any roster (`players[]`), per-user presence string, session id, node, or
+  session timestamp.
+- Recent activity history or scoreboard identities.
+- Conversation.
+- Viewer participation state, or Play / Return / End authority.
+- A launch target, launch URL, or launch token.
+- `source` / raw backend manifest / raw backend id.
+
+The presentation projection is owned by `ExperiencePresentation::buildPublic()`,
+which composes the same normalized metadata as `build()` but guarantees the
+boundary above — no viewer is ever supplied, participation actions are
+hard-coded false, and a viewer-specific status can never be produced. The
+aggregate state read is `ExperienceState::getPublicExperienceAggregates()` (and
+the companion `getPublicActivePeopleCount()`), which build no roster and perform
+no `users` join.
+
+The initial implementation is a **server-rendered snapshot** with no polling,
+no anonymous state API, and no realtime. The authenticated Experience state API
+(`/api/experiences/{id}/state`), the lobby (`/experiences/{id}`), the library
+(`/games`), and every launch/participation/chat route remain authenticated and
+unchanged.
+
+The discovery route path and any community-specific framing (for example the
+name "Crossroads") are presentation concerns. The route serves a generic
+BinkTerm capability; SysOps can relabel the surface through the standard
+language-override mechanism without changing the platform.
+
 ## Current Foundation
 
 Experience foundation v1 establishes:
