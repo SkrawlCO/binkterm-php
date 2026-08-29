@@ -112,8 +112,9 @@ class DoorHandler
             $entry = $doorList[$selected];
             $doorName = $entry['data']['name'] ?? $entry['id'];
             $terminalMode = self::resolveTerminalMode($entry['data']);
+            $backendType = (string)($entry['data']['backend']['type'] ?? '');
             $this->server->logAction($state['username'] ?? 'unknown', "Doors: launched \"{$doorName}\"");
-            $this->launchDoor($conn, $state, $session, $entry['id'], $doorName, $terminalMode);
+            $this->launchDoor($conn, $state, $session, $entry['id'], $doorName, $terminalMode, $backendType);
             // Return to the door menu so users can launch another door or back out explicitly.
             continue;
         }
@@ -187,6 +188,8 @@ class DoorHandler
      * @param string $doorId Door identifier (e.g. "lord")
      * @param string $doorName Human-readable door name for display
      * @param string $terminalMode Terminal input mode: doorway (legacy) or raw
+     * @param string $backendType Catalog backend type ('native', 'rlogin', 'dos', ...),
+     *                            used only to scope raw-mode cursor-key normalization
      */
     private function launchDoor(
         $conn,
@@ -194,7 +197,8 @@ class DoorHandler
         string $session,
         string $doorId,
         string $doorName,
-        string $terminalMode = 'doorway'
+        string $terminalMode = 'doorway',
+        string $backendType = ''
     ): void
     {
         TelnetUtils::safeWrite($conn, "\033[2J\033[H");
@@ -248,7 +252,7 @@ class DoorHandler
             $this->sendTerminalResize($wsSock, $state);
         }
 
-        $this->relayLoop($conn, $state, $wsSock, $terminalMode);
+        $this->relayLoop($conn, $state, $wsSock, $terminalMode, $backendType);
 
         // Notify the API before closing the WebSocket so the active door
         // session still exists when /api/door/end performs authorization
@@ -301,12 +305,16 @@ class DoorHandler
      *                             sets terminal_mode=raw) resolve to raw so ANSI
      *                             cursor keys are preserved rather than rewritten
      *                             to Doorway protocol scan codes.
+     * @param string $backendType Catalog backend type; only 'native' enables the
+     *                             raw-mode cursor-key normalization in
+     *                             processRawTelnetInput().
      */
     private function relayLoop(
         $conn,
         array &$state,
         $wsSock,
-        string $terminalMode = 'doorway'
+        string $terminalMode = 'doorway',
+        string $backendType = ''
     ): void
     {
         $connMeta = stream_get_meta_data($conn);
@@ -352,7 +360,7 @@ class DoorHandler
                             $oldCols = (int)($state['cols'] ?? 0);
                             $oldRows = (int)($state['rows'] ?? 0);
 
-                            $processed = $this->processRawTelnetInput($raw, $state);
+                            $processed = $this->processRawTelnetInput($raw, $state, $backendType);
 
                             $newCols = (int)($state['cols'] ?? 0);
                             $newRows = (int)($state['rows'] ?? 0);
@@ -454,12 +462,29 @@ class DoorHandler
      * sequences to Doorway scan codes, remap DEL, or perform character-set
      * conversion. NAWS is still consumed so terminal dimensions remain known.
      *
+     * One narrow compatibility rewrite is applied for native doors only
+     * (`$backendType === 'native'`, telnet transport): the four exact cursor
+     * sequences ESC[A/B/C/D are rewritten to their SS3 form ESC O A/B/C/D.
+     * A native door's PTY runs under TERM=xterm-256color, whose ncurses
+     * terminfo defines the cursor keys solely in application form
+     * (kcuf1=\EOC, ...) and asks the terminal to switch via smkx (DECCKM).
+     * Classic BBS telnet clients that cannot honour DECCKM keep sending the
+     * normal-mode CSI form, which the door's ncurses then never matches.
+     * RLogin/SSH sessions manage their own cursor mode and are left alone,
+     * as is every non-navigation CSI sequence.
+     *
      * @param string $data Raw bytes from the Telnet client
      * @param array $state Terminal state (cols/rows updated if NAWS seen)
+     * @param string $backendType Catalog backend type; 'native' enables the
+     *                            cursor-key normalization described above
      * @return string Raw terminal payload ready for the bridge
      */
-    private function processRawTelnetInput(string $data, array &$state): string
+    private function processRawTelnetInput(string $data, array &$state, string $backendType = ''): string
     {
+        // Only native doors run the local xterm-256color PTY that expects SS3
+        // cursor keys; SSH clients negotiate DECCKM themselves.
+        $normalizeCursorKeys = ($backendType === 'native') && empty($state['isSsh']);
+
         $out = '';
         $len = strlen($data);
         $i = 0;
@@ -536,6 +561,26 @@ class DoorHandler
                     $i++;
                 }
 
+                continue;
+            }
+
+            // Native-door cursor-key compatibility: rewrite the four exact
+            // normal-mode CSI cursor sequences to SS3 so an xterm-256color
+            // ncurses door recognizes them from clients that do not honour
+            // DECCKM. Any other ESC[... sequence (and a truncated ESC[ at the
+            // end of a read) is passed through byte-for-byte below.
+            if (
+                $normalizeCursorKeys
+                && $byte === 27
+                && ($i + 2) < $len
+                && $data[$i + 1] === '['
+                && (
+                    $data[$i + 2] === 'A' || $data[$i + 2] === 'B'
+                    || $data[$i + 2] === 'C' || $data[$i + 2] === 'D'
+                )
+            ) {
+                $out .= "\x1bO" . $data[$i + 2];
+                $i += 3;
                 continue;
             }
 
