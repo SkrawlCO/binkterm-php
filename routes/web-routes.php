@@ -310,6 +310,14 @@ SimpleRouter::get('/', function() {
     $user = $auth->getCurrentUser();
 
     if (!$user) {
+        // Anonymous visitors land on the public Crossroads discovery window when
+        // it is enabled, so the site root is a "look through the glass" surface
+        // rather than a bare login wall. The anonymous_experience_discovery
+        // feature flag is the sole authority; when it is off, /crossroads itself
+        // 404s, so fall back to /login (no redirect loop is possible).
+        if (BbsConfig::isAnonymousExperienceDiscoveryEnabled()) {
+            return SimpleRouter::response()->redirect('/crossroads');
+        }
         return SimpleRouter::response()->redirect('/login');
     }
 

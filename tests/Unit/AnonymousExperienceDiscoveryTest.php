@@ -333,6 +333,56 @@ final class AnonymousExperienceDiscoveryTest extends TestCase
         self::assertStringContainsString('RouteHelper::requireAuth()', $endApi);
     }
 
+    public function testSiteRootOpensCrossroadsForAnonymousWhenDiscoveryEnabled(): void
+    {
+        $web = (string)file_get_contents(
+            dirname(__DIR__, 2) . '/routes/web-routes.php'
+        );
+
+        $root = $this->between(
+            $web,
+            "SimpleRouter::get('/', function() {",
+            "SimpleRouter::get('/bulletins',"
+        );
+
+        // Anonymous branch only: the feature flag is the sole authority, and it
+        // gates the redirect target between /crossroads (on) and /login (off).
+        $anonBranch = $this->between(
+            $root,
+            'if (!$user) {',
+            "\n\n"
+        );
+        self::assertStringContainsString(
+            'BbsConfig::isAnonymousExperienceDiscoveryEnabled()',
+            $anonBranch
+        );
+        self::assertStringContainsString("redirect('/crossroads')", $anonBranch);
+        self::assertStringContainsString("redirect('/login')", $anonBranch);
+
+        // No new configuration option was introduced for this behavior.
+        self::assertStringNotContainsString('isFeatureEnabled(', $anonBranch);
+
+        // Authenticated GET / must be untouched: the bulletin redirect and the
+        // dashboard render both remain in the handler.
+        self::assertStringContainsString(
+            "redirect('/bulletins?unread=1')",
+            $root
+        );
+        self::assertStringContainsString(
+            "renderResponse('dashboard.twig'",
+            $root
+        );
+
+        // No redirect loop: /crossroads only ever renders or 404s for an
+        // anonymous visitor — it never redirects back to the site root.
+        $crossroads = $this->between(
+            $web,
+            "SimpleRouter::get('/crossroads',",
+            "SimpleRouter::get('/experiences/{experienceId}',"
+        );
+        self::assertStringNotContainsString("redirect('/')", $crossroads);
+    }
+
     // ---------------------------------------------------------------- E: template privacy
 
     private function renderPublicCard(array $view): string

@@ -25,9 +25,23 @@ test.describe('Login flow (unauthenticated)', () => {
         await expect(page.locator('input[type="password"]').first()).toBeVisible();
     });
 
-    test('unauthenticated / redirects to /login', async ({ page }) => {
+    test('unauthenticated / redirects to the anonymous entry point', async ({ page, request }) => {
+        // The site root's anonymous target depends solely on the
+        // anonymous_experience_discovery feature: /crossroads when it is
+        // enabled, /login otherwise. Detect the live state rather than
+        // hardcoding one expectation.
+        const crossroads = await request.get('/crossroads');
+        const discoveryEnabled = crossroads.status() === 200;
+
         await page.goto('/');
-        expect(page.url()).toContain('/login');
+
+        if (discoveryEnabled) {
+            expect(page.url()).toContain('/crossroads');
+            // Following the redirect lands on a real page, not a loop or wall.
+            expect(page.url()).not.toContain('/login');
+        } else {
+            expect(page.url()).toContain('/login');
+        }
     });
 
     test('bad credentials returns error_code', async ({ request }) => {
