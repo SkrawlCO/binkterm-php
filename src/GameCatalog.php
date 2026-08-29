@@ -159,6 +159,17 @@ class GameCatalog
                 : $door;
 
             $experience = $door['experience'] ?? [];
+
+            // The DOS/native door managers hand us a FLATTENED manifest, so the
+            // declared runtime mode lives at $door['terminal_mode']. Older or
+            // nested callers/fixtures may still provide
+            // $door['door']['terminal_mode']; accept both, preferring the
+            // flattened production shape.
+            $manifestTerminalMode = strtolower((string)(
+                $door['terminal_mode']
+                ?? ($door['door']['terminal_mode'] ?? '')
+            ));
+
             $surfaces = [
                 'web' => empty($door['config']['hide_from_web'])
                     ? 'full'
@@ -237,7 +248,7 @@ class GameCatalog
                     // manifest-driven default (doorway unless terminal_mode=raw).
                     'mode' => (
                         $backendType === 'rlogin'
-                        || strtolower((string)($door['door']['terminal_mode'] ?? '')) === 'raw'
+                        || $manifestTerminalMode === 'raw'
                     )
                         ? 'raw'
                         : 'doorway',

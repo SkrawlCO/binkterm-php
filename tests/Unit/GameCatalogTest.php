@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use BinktermPHP\GameCatalog;
 use BinktermPHP\ExperienceLaunch;
+use BinktermPHP\NativeDoorManager;
 use PHPUnit\Framework\TestCase;
 
 final class GameCatalogTest extends TestCase
@@ -448,18 +449,41 @@ final class GameCatalogTest extends TestCase
         ));
     }
 
-    public function testRawManagedDoorTerminalModeIsNormalized(): void
-    {
+    /**
+     * Normalize one managed-door array through GameCatalog::addManagedDoors and
+     * return its catalogued experience.
+     *
+     * @param array<string,mixed> $door
+     * @return array<string,mixed>
+     */
+    private function normalizeManagedDoor(
+        array $door,
+        string $backendType = 'native',
+        string $surface = 'telnet'
+    ): array {
         $method = new ReflectionMethod(GameCatalog::class, 'addManagedDoors');
         $experiences = [];
-        $sourceDoor = [
+        $method->invokeArgs($this->catalog, [
+            &$experiences,
+            $backendType,
+            ['fx' => $door],
+            ['is_admin' => true],
+            $surface,
+        ]);
+
+        return $experiences['fx'] ?? [];
+    }
+
+    public function testRawManagedDoorTerminalModeIsNormalized(): void
+    {
+        // REAL production shape: NativeDoorManager / DoorManager flatten the
+        // manifest, so terminal_mode is a top-level key (no ['door'] nesting).
+        $exp = $this->normalizeManagedDoor([
             'game' => [
                 'name' => 'Raw Native Door',
                 'description' => 'Raw terminal regression fixture.',
             ],
-            'door' => [
-                'terminal_mode' => 'raw',
-            ],
+            'terminal_mode' => 'raw',
             'config' => [
                 'enabled' => true,
                 'credit_cost' => 3,
@@ -468,20 +492,112 @@ final class GameCatalogTest extends TestCase
                 'category' => 'game',
                 'multiplayer' => true,
             ],
-        ];
+        ]);
 
+        self::assertSame('raw', $exp['terminal']['mode']);
+        self::assertSame('game', $exp['category']);
+        self::assertTrue($exp['capabilities']['multiplayer']);
+        self::assertSame(3, $exp['policy']['credit_cost']);
+    }
+
+    public function testNestedTerminalModeShapeStillNormalizesToRaw(): void
+    {
+        // Backwards compatibility: a caller/fixture still passing the old
+        // nested shape must keep working.
+        $exp = $this->normalizeManagedDoor([
+            'game' => ['name' => 'Nested Raw Door'],
+            'door' => ['terminal_mode' => 'raw'],
+            'config' => ['enabled' => true],
+        ]);
+
+        self::assertSame('raw', $exp['terminal']['mode']);
+    }
+
+    public function testFlattenedShapeWinsOverStaleNestedShape(): void
+    {
+        // If both are present, the flattened production key is authoritative.
+        $exp = $this->normalizeManagedDoor([
+            'game' => ['name' => 'Mixed Shape Door'],
+            'terminal_mode' => 'raw',
+            'door' => ['terminal_mode' => 'doorway'],
+            'config' => ['enabled' => true],
+        ]);
+
+        self::assertSame('raw', $exp['terminal']['mode']);
+    }
+
+    public function testManagedDoorWithoutTerminalModeDefaultsToDoorway(): void
+    {
+        $exp = $this->normalizeManagedDoor([
+            'game' => ['name' => 'Legacy Door'],
+            'config' => ['enabled' => true],
+        ]);
+
+        self::assertSame('doorway', $exp['terminal']['mode']);
+    }
+
+    public function testExplicitNonRawManagedDoorTerminalModeIsDoorway(): void
+    {
+        $exp = $this->normalizeManagedDoor([
+            'game' => ['name' => 'Doorway Door'],
+            'terminal_mode' => 'doorway',
+            'config' => ['enabled' => true],
+        ]);
+
+        self::assertSame('doorway', $exp['terminal']['mode']);
+    }
+
+    public function testRloginBackendIsRawRegardlessOfManifestMode(): void
+    {
+        // RLogin is always a raw passthrough even if the manifest says doorway
+        // (or says nothing).
+        $exp = $this->normalizeManagedDoor(
+            [
+                'game' => ['name' => 'Remote BBS'],
+                'terminal_mode' => 'doorway',
+                'config' => ['enabled' => true],
+            ],
+            'rlogin'
+        );
+
+        self::assertSame('raw', $exp['terminal']['mode']);
+    }
+
+    public function testNativeManagerRawManifestCataloguesAsRaw(): void
+    {
+        // Producer -> catalog contract against REAL NativeDoorManager output
+        // (flattened: terminal_mode at the top level). Generic: it picks up
+        // whichever installed native doors declare raw, not a named one.
+        $rawDoors = [];
+        foreach ((new NativeDoorManager())->getAllDoors() as $id => $door) {
+            if (strtolower((string)($door['terminal_mode'] ?? '')) === 'raw') {
+                $door['config']['enabled'] = true; // exercise normalization only
+                $rawDoors[$id] = $door;
+            }
+        }
+
+        if ($rawDoors === []) {
+            self::markTestSkipped('no installed native door declares terminal_mode=raw');
+        }
+
+        $method = new ReflectionMethod(GameCatalog::class, 'addManagedDoors');
+        $experiences = [];
         $method->invokeArgs($this->catalog, [
             &$experiences,
             'native',
-            ['raw-native' => $sourceDoor],
-            null,
+            $rawDoors,
+            ['is_admin' => true],
             'telnet',
         ]);
 
-        self::assertSame('raw', $experiences['raw-native']['terminal']['mode']);
-        self::assertSame('game', $experiences['raw-native']['category']);
-        self::assertTrue($experiences['raw-native']['capabilities']['multiplayer']);
-        self::assertSame(3, $experiences['raw-native']['policy']['credit_cost']);
+        foreach (array_keys($rawDoors) as $id) {
+            self::assertArrayHasKey($id, $experiences, "raw native door {$id} was not catalogued");
+            self::assertSame(
+                'raw',
+                $experiences[$id]['terminal']['mode'],
+                "native door {$id} lost its raw terminal mode through GameCatalog"
+            );
+        }
     }
 
     public function testWebOnlyBackendsDescribeTelnetAsPlanned(): void
