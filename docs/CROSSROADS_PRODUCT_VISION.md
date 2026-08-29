@@ -276,6 +276,33 @@ Connection is good.
 
 Dependency deserves scrutiny.
 
+## Games change. People remain.
+
+L33TEST is, and will remain, a community that plays modern games—out in
+the world, on platforms and in places L33TEST does not control.
+
+Those games, and the platforms and destinations around them, will change.
+That churn is normal; it is not a problem to solve.
+
+Crossroads does not try to replace those places, pull that activity
+inside L33TEST, or pretend every game must run on L33TEST infrastructure.
+
+What Crossroads keeps is the connection back—to L33TEST's people, its
+identity, its conversation, its activity, its worlds, and the community
+they share.
+
+External destinations can come and go. The way home should not.
+
+> **Games change. People remain. Crossroads bring them home.**
+
+That is why the front door holds two different things. **What Lives
+Here** is the relatively durable catalog of experiences L33TEST hosts or
+integrates. **What We're Playing** is changing community state—what the
+people here are into right now.
+
+This is a product and design principle, not an instruction to build a
+Crossroads page for every game today.
+
 ## The SysOp still matters
 
 Crossroads retains something increasingly uncommon on the modern Internet:
