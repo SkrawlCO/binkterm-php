@@ -48,6 +48,46 @@ same read-model boundary available to web library and lobby consumers. Relay
 selection remains separate and continues to read the normalized
 `terminal.mode`; presentation data must never determine raw versus Doorway I/O.
 
+### Experience detail screen (telnet Crossroads slice 1)
+
+Selecting an experience in the `DoorHandler` chooser now opens
+`DoorHandler::showExperienceDetail()` instead of launching immediately. The
+journey is `catalog -> detail -> Play/Return -> door -> detail -> Back ->
+catalog`.
+
+`showExperienceDetail()` wires up three collaborators and hands them to
+`runExperienceDetailLoop()`:
+
+- **reload** — recomposes the shared read models on every iteration:
+  `ExperienceState::getExperienceState($id, $user, 'terminal')` (the returned
+  `experience` key is the authoritative catalog entry),
+  `ExperienceParticipation::findViewerPlayer()`,
+  `ExperiencePresentation::build($experience, 'telnet', $state, $viewerPlayer)`,
+  and `ExperienceActivity::recent($experience, 5)`. It returns `null` when the
+  experience is no longer discoverable, which the loop renders as an alert and
+  exits.
+- **onLaunch** — logs and calls the existing `launchDoor()` path with
+  `resolveTerminalMode()` / `backend.type` exactly as the old direct-launch
+  branch did. Because the loop calls `reload` again after `onLaunch` returns,
+  the caller lands back on the same experience's detail screen (the Crossroads
+  return destination); `Q`/`B` from there returns to the catalog.
+
+Pure helpers, unit-tested without a daemon:
+
+- `composeExperienceDetailView()` — assembles the view model (name, body lines,
+  action set, status-bar segments) from the presentation + state snapshot.
+- `buildExperienceDetailLines()` — formats the compact body (description, type,
+  status, occupancy/capacity, cost, roster with node numbers and a `(you)`
+  marker, recent activity). No business state is decided here.
+- `resolveDetailActions()` — maps `presentation.actions.play` / `.return`
+  (mutually exclusive in the normalized contract) to the single launch key
+  `g` plus back.
+
+The detail screen is a snapshot on open/redraw; it does not poll. Planned /
+browser-only experiences are still filtered out of the chooser (unchanged) and
+never reach the detail screen. `ExperienceParticipation::end()` /
+`End Participation` is intentionally **not** exposed in this slice.
+
 ---
 
 ## Session Flow

@@ -208,6 +208,20 @@ Stats are refreshed from the API after returning from netmail, echomail, or bull
   experiences configured for raw terminal handling preserve modern terminal
   input, ANSI output, and resize behavior; traditional doors continue to use
   Doorway-compatible handling.
+- Selecting an experience from the menu opens an **experience detail screen**
+  before anything launches. It shows the description, type, availability status,
+  how many players are online (and the capacity limit when the experience has
+  one), the credit cost, who is currently playing (with node numbers), and
+  recent play activity. If the caller already has a session for that experience,
+  the screen offers **Return** instead of **Play**. Keys: **G** plays or
+  returns, **Q** / **B** goes back to the catalog. Nothing is launched by
+  opening the detail screen.
+- After a door launched from the detail screen exits normally, the caller is
+  returned to that same experience's detail screen (not the flat catalog), so
+  the occupancy, roster, and activity reflect the session that just ended. From
+  the detail screen, Back returns to the Games & Experiences catalog.
+- The detail screen is a point-in-time snapshot taken when it is opened (and
+  refreshed each time it is redrawn after a door exit); it does not live-poll.
 - The shared catalog can describe browser-only Experiences as planned for the
   terminal surface. The current launch menu continues to list only Experiences
   that can run in the terminal.

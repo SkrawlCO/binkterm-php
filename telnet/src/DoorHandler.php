@@ -4,7 +4,10 @@ namespace BinktermPHP\TelnetServer;
 
 use BinktermPHP\Config;
 use BinktermPHP\GameCatalog;
+use BinktermPHP\ExperienceActivity;
+use BinktermPHP\ExperienceParticipation;
 use BinktermPHP\ExperiencePresentation;
+use BinktermPHP\ExperienceState;
 
 /**
  * DoorHandler - DOS door game access via telnet
@@ -110,14 +113,411 @@ class DoorHandler
             }
 
             $entry = $doorList[$selected];
-            $doorName = $entry['data']['name'] ?? $entry['id'];
-            $terminalMode = self::resolveTerminalMode($entry['data']);
-            $backendType = (string)($entry['data']['backend']['type'] ?? '');
-            $this->server->logAction($state['username'] ?? 'unknown', "Doors: launched \"{$doorName}\"");
-            $this->launchDoor($conn, $state, $session, $entry['id'], $doorName, $terminalMode, $backendType);
-            // Return to the door menu so users can launch another door or back out explicitly.
+
+            // Selecting an experience now opens a terminal-native detail
+            // screen instead of launching immediately. Play/Return happens
+            // from there; Back returns here, to the Crossroads catalog list.
+            $this->showExperienceDetail(
+                $conn,
+                $state,
+                $session,
+                (string)$entry['id'],
+                $shell
+            );
             continue;
         }
+    }
+
+    /**
+     * Terminal-native Crossroads experience detail screen.
+     *
+     * This is the first telnet Crossroads product slice: before launching, the
+     * caller sees the shared Crossroads context for the experience (status,
+     * occupancy, roster, recent activity, their own participation state) and
+     * then chooses Play / Return / Back.
+     *
+     * All state is composed from the same shared read models the web experience
+     * lobby uses — {@see ExperienceState::getExperienceState()},
+     * {@see ExperiencePresentation::build()}, {@see ExperienceActivity::recent()}
+     * and {@see ExperienceParticipation::findViewerPlayer()} — so telnet and web
+     * cannot drift on availability, capacity, or participation semantics.
+     *
+     * The screen is recomposed on every loop iteration, so returning here after
+     * a door exits reflects the caller's new session/participation state. Back
+     * returns to the Crossroads catalog list without launching anything.
+     *
+     * @param resource $conn Socket connection to client
+     * @param array<string,mixed> $state Terminal state array
+     * @param string $session Session token for authentication
+     * @param string $experienceId Canonical Experience identifier
+     * @param TerminalShellInterface $shell Resolved shell for this session
+     */
+    private function showExperienceDetail(
+        $conn,
+        array &$state,
+        string $session,
+        string $experienceId,
+        TerminalShellInterface $shell
+    ): void {
+        $locale = $state['locale'] ?? 'en';
+        $t = function (string $key, array $params = [], string $fallback = '') use ($locale): string {
+            return $this->server->t($key, $fallback, $params, $locale);
+        };
+
+        $modelUser = [
+            'user_id'  => (int)($state['user_id'] ?? 0),
+            'id'       => (int)($state['user_id'] ?? 0),
+            'is_admin' => !empty($state['is_admin']),
+        ];
+        $viewerId = (int)($state['user_id'] ?? 0);
+
+        // Recompose the shared Crossroads read models on demand. The detail loop
+        // calls this once per iteration, so the screen shown after a door exits
+        // reflects the caller's new session/participation state.
+        $reload = function () use ($experienceId, $modelUser, $viewerId, $t): ?array {
+            $experienceState = (new ExperienceState())->getExperienceState(
+                $experienceId,
+                $modelUser,
+                'terminal'
+            );
+
+            if (!is_array($experienceState) || !is_array($experienceState['experience'] ?? null)) {
+                return null;
+            }
+
+            $experience = $experienceState['experience'];
+            $viewerPlayer = ExperienceParticipation::findViewerPlayer($experienceState, $viewerId);
+            $presentation = ExperiencePresentation::build(
+                $experience,
+                'telnet',
+                $experienceState,
+                $viewerPlayer
+            );
+            $recentActivity = (new ExperienceActivity())->recent($experience, 5);
+
+            return self::composeExperienceDetailView(
+                $experience,
+                $presentation,
+                $experienceState,
+                $recentActivity,
+                $viewerPlayer,
+                $t
+            );
+        };
+
+        $onLaunch = function (array $view) use ($conn, &$state, $session, $experienceId): void {
+            $experience = $view['experience'];
+            $this->server->logAction(
+                $state['username'] ?? 'unknown',
+                "Doors: launched \"{$view['name']}\""
+            );
+            $this->launchDoor(
+                $conn,
+                $state,
+                $session,
+                $experienceId,
+                $view['name'],
+                self::resolveTerminalMode($experience),
+                (string)($experience['backend']['type'] ?? '')
+            );
+        };
+
+        $this->runExperienceDetailLoop($conn, $state, $shell, $reload, $onLaunch, $t);
+    }
+
+    /**
+     * Drive the experience detail screen: render, read an action, and either
+     * launch (then recompose and redraw — the Crossroads return destination)
+     * or fall back to the catalog. No I/O beyond the shell and the injected
+     * callables, so the whole catalog -> detail -> play -> detail -> back loop
+     * is directly testable.
+     *
+     * @param resource $conn
+     * @param array<string,mixed> $state
+     * @param callable():(array<string,mixed>|null) $reload Recompose the detail view model, or null when gone
+     * @param callable(array<string,mixed>):void $onLaunch Launch the experience for the given view model
+     * @param callable(string,array<string,mixed>,string):string $t Translator: (key, params, fallback)
+     */
+    private function runExperienceDetailLoop(
+        $conn,
+        array &$state,
+        TerminalShellInterface $shell,
+        callable $reload,
+        callable $onLaunch,
+        callable $t
+    ): void {
+        while (true) {
+            $view = $reload();
+
+            if (!is_array($view)) {
+                $shell->showAlert(
+                    $conn,
+                    $state,
+                    $t('ui.terminalserver.doors.title', [], 'Games & Experiences'),
+                    $t('ui.terminalserver.doors.detail_not_found', [], 'That experience is no longer available.'),
+                    'error'
+                );
+                return;
+            }
+
+            $actions = $view['actions'];
+            $launchable = !empty($actions['can_play']) || !empty($actions['can_return']);
+
+            $action = $shell->showScrollablePanel(
+                $conn,
+                $state,
+                (string)$view['name'],
+                $view['lines'],
+                [
+                    'extra_keys'      => $launchable ? ['g' => 'launch'] : [],
+                    'status_segments' => $view['status_segments'],
+                ]
+            );
+
+            if ($action === 'launch' && $launchable) {
+                $onLaunch($view);
+                continue;
+            }
+
+            // 'quit' (Q / B / Enter / Esc) or any other exit: back to the catalog.
+            return;
+        }
+    }
+
+    /**
+     * Assemble the detail screen view model from the shared read models.
+     *
+     * Pure: name, body lines, action set, and status bar segments are all
+     * derived from {@see ExperiencePresentation::build()} output plus the
+     * {@see ExperienceState::getExperienceState()} snapshot — no business state
+     * is decided here.
+     *
+     * @param array<string,mixed> $experience Normalized catalog entry
+     * @param array<string,mixed> $presentation ExperiencePresentation::build() result
+     * @param array<string,mixed> $experienceState ExperienceState::getExperienceState() result
+     * @param array<int,array<string,mixed>> $recentActivity ExperienceActivity::recent() rows
+     * @param array<string,mixed>|null $viewerPlayer Viewer's player row when participating
+     * @param callable(string,array<string,mixed>,string):string $t Translator: (key, params, fallback)
+     * @return array{experience:array<string,mixed>,name:string,lines:string[],actions:array{can_play:bool,can_return:bool,keys:string[],primary:string},status_segments:array<int,array{text:string,color?:string}>}
+     */
+    public static function composeExperienceDetailView(
+        array $experience,
+        array $presentation,
+        array $experienceState,
+        array $recentActivity,
+        ?array $viewerPlayer,
+        callable $t
+    ): array {
+        $actions = self::resolveDetailActions($presentation);
+
+        $segments = [];
+        if ($actions['can_return']) {
+            $segments[] = ['text' => 'G', 'color' => TelnetUtils::ANSI_RED];
+            $segments[] = ['text' => ' ' . $t('ui.terminalserver.doors.detail_action_return', [], 'Return to your session') . '  ', 'color' => TelnetUtils::ANSI_BLUE];
+        } elseif ($actions['can_play']) {
+            $segments[] = ['text' => 'G', 'color' => TelnetUtils::ANSI_RED];
+            $segments[] = ['text' => ' ' . $t('ui.terminalserver.doors.detail_action_play', [], 'Play') . '  ', 'color' => TelnetUtils::ANSI_BLUE];
+        }
+        $segments[] = ['text' => 'Q', 'color' => TelnetUtils::ANSI_RED];
+        $segments[] = ['text' => ' ' . $t('ui.terminalserver.doors.detail_action_back', [], 'Back'), 'color' => TelnetUtils::ANSI_BLUE];
+
+        return [
+            'experience' => $experience,
+            'name' => (string)($presentation['name'] ?? ($experience['id'] ?? '')),
+            'lines' => self::buildExperienceDetailLines(
+                $presentation,
+                $experienceState,
+                $recentActivity,
+                $viewerPlayer,
+                $t
+            ),
+            'actions' => $actions,
+            'status_segments' => $segments,
+        ];
+    }
+
+    /**
+     * Compose the compact Crossroads detail body for a telnet experience screen.
+     *
+     * Pure formatter: every value comes from the shared read models
+     * ({@see ExperiencePresentation::build()} output, the
+     * {@see ExperienceState::getExperienceState()} snapshot, and
+     * {@see ExperienceActivity::recent()} rows). No business state is derived
+     * here — availability, capacity, and participation are read straight from
+     * the normalized presentation.
+     *
+     * @param array<string,mixed> $presentation ExperiencePresentation::build() result
+     * @param array<string,mixed> $experienceState ExperienceState::getExperienceState() result
+     * @param array<int,array<string,mixed>> $recentActivity ExperienceActivity::recent() rows
+     * @param array<string,mixed>|null $viewerPlayer Viewer's player row when participating
+     * @param callable(string,array<string,mixed>,string):string $t Translator: (key, params, fallback)
+     * @return string[]
+     */
+    public static function buildExperienceDetailLines(
+        array $presentation,
+        array $experienceState,
+        array $recentActivity,
+        ?array $viewerPlayer,
+        callable $t
+    ): array {
+        $lines = [];
+
+        $description = trim((string)($presentation['description'] ?? ''));
+        if ($description === '') {
+            $description = $t('ui.terminalserver.doors.detail_description_none', [], '(No description provided.)');
+        }
+        foreach (explode("\n", wordwrap($description, 72, "\n", true)) as $wrapped) {
+            $lines[] = $wrapped;
+        }
+        $lines[] = '';
+
+        $category = strtolower((string)($presentation['category'] ?? 'game'));
+        $categoryLabel = match ($category) {
+            'gateway' => 'Gateway',
+            'game'    => 'Game',
+            default   => ucfirst($category),
+        };
+        if (!empty($presentation['capabilities']['multiplayer'])) {
+            $categoryLabel .= ' / ' . $t('ui.terminalserver.doors.detail_multiplayer', [], 'Multiplayer');
+        }
+        $lines[] = $t('ui.terminalserver.doors.detail_type', ['type' => $categoryLabel], 'Type: {type}');
+
+        $statusCode = (string)($presentation['status']['code'] ?? 'available');
+        $statusText = match ($statusCode) {
+            'participating' => $t('ui.terminalserver.doors.detail_status_playing', [], 'You are playing this now'),
+            'at_capacity'   => $t('ui.terminalserver.doors.detail_status_full', [], 'Full'),
+            'planned'       => $t('ui.terminalserver.doors.detail_status_planned', [], 'Not available on this terminal'),
+            'unavailable'   => $t('ui.terminalserver.doors.detail_status_unavailable', [], 'Currently unavailable'),
+            default         => $t('ui.terminalserver.doors.detail_status_available', [], 'Available'),
+        };
+        $lines[] = $t('ui.terminalserver.doors.detail_status', ['status' => $statusText], 'Status: {status}');
+
+        $playerCount = (int)($experienceState['player_count'] ?? 0);
+        $maxSessions = $presentation['capacity']['max_sessions'] ?? null;
+        if ($maxSessions !== null && (int)$maxSessions > 0) {
+            $lines[] = $t(
+                'ui.terminalserver.doors.detail_players_capacity',
+                ['count' => $playerCount, 'max' => (int)$maxSessions],
+                'Players online: {count} / {max}'
+            );
+        } else {
+            $lines[] = $t(
+                'ui.terminalserver.doors.detail_players',
+                ['count' => $playerCount],
+                'Players online: {count}'
+            );
+        }
+
+        $credits = (int)($presentation['cost']['credits'] ?? 0);
+        if ($credits > 0) {
+            $lines[] = $t(
+                'ui.terminalserver.doors.detail_cost',
+                ['credits' => $credits],
+                'Cost: {credits} credits'
+            );
+        }
+
+        $players = is_array($experienceState['players'] ?? null) ? $experienceState['players'] : [];
+        if ($players !== []) {
+            $lines[] = '';
+            $lines[] = $t('ui.terminalserver.doors.detail_roster_heading', [], 'Who is here:');
+            $viewerUserId = (int)($viewerPlayer['user_id'] ?? 0);
+            $shown = 0;
+            foreach ($players as $player) {
+                if (!is_array($player)) {
+                    continue;
+                }
+                if ($shown >= 8) {
+                    $lines[] = $t(
+                        'ui.terminalserver.doors.detail_roster_more',
+                        ['count' => count($players) - $shown],
+                        '  ... and {count} more'
+                    );
+                    break;
+                }
+                $username = trim((string)($player['username'] ?? ''));
+                if ($username === '') {
+                    continue;
+                }
+                $node = $player['node'] ?? null;
+                $entryLine = $node !== null
+                    ? $t(
+                        'ui.terminalserver.doors.detail_roster_node',
+                        ['username' => $username, 'node' => (int)$node],
+                        '  {username} (node {node})'
+                    )
+                    : $t(
+                        'ui.terminalserver.doors.detail_roster_entry',
+                        ['username' => $username],
+                        '  {username}'
+                    );
+                if ($viewerUserId > 0 && (int)($player['user_id'] ?? 0) === $viewerUserId) {
+                    $entryLine .= ' ' . $t('ui.terminalserver.doors.detail_roster_you', [], '(you)');
+                }
+                $lines[] = $entryLine;
+                $shown++;
+            }
+        }
+
+        $lines[] = '';
+        $lines[] = $t('ui.terminalserver.doors.detail_activity_heading', [], 'Recent activity:');
+        $activityShown = 0;
+        foreach ($recentActivity as $event) {
+            if (!is_array($event)) {
+                continue;
+            }
+            $username = trim((string)($event['username'] ?? ''));
+            if ($username === '') {
+                continue;
+            }
+            $lines[] = ((string)($event['type'] ?? 'play')) === 'first_play'
+                ? $t(
+                    'ui.terminalserver.doors.detail_activity_first',
+                    ['username' => $username],
+                    '  {username} played for the first time'
+                )
+                : $t(
+                    'ui.terminalserver.doors.detail_activity_play',
+                    ['username' => $username],
+                    '  {username} played'
+                );
+            $activityShown++;
+            if ($activityShown >= 5) {
+                break;
+            }
+        }
+        if ($activityShown === 0) {
+            $lines[] = $t('ui.terminalserver.doors.detail_activity_none', [], '  Nothing yet - be the first.');
+        }
+
+        return $lines;
+    }
+
+    /**
+     * Resolve the detail screen's action set from the shared presentation.
+     *
+     * Play and Return are mutually exclusive in the normalized contract
+     * ({@see ExperiencePresentation::build()} derives them from viewer
+     * participation + static launchability); Return wins if both are ever set.
+     *
+     * @param array<string,mixed> $presentation ExperiencePresentation::build() result
+     * @return array{can_play:bool,can_return:bool,keys:string[],primary:string}
+     */
+    public static function resolveDetailActions(array $presentation): array
+    {
+        $canReturn = !empty($presentation['actions']['return']);
+        $canPlay   = !$canReturn && !empty($presentation['actions']['play']);
+
+        // Play and Return are mutually exclusive and share one launch key ('g').
+        $keys = ($canReturn || $canPlay) ? ['g', 'q'] : ['q'];
+        $primary = ($canReturn || $canPlay) ? 'g' : 'q';
+
+        return [
+            'can_play'   => $canPlay,
+            'can_return' => $canReturn,
+            'keys'       => $keys,
+            'primary'    => $primary,
+        ];
     }
 
     /**
