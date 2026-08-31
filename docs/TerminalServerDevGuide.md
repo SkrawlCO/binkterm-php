@@ -32,6 +32,14 @@ Terminal-side bulletin rendering in `telnet/src/BulletinsHandler.php` follows th
 
 Both daemon entry points manually `require_once` every `telnet/src/` class they use. New classes added under `telnet/src/` must be registered in both `telnet/telnet_daemon.php` and `ssh/ssh_daemon.php` — they are not Composer-autoloaded. See also `telnet/CLAUDE.md` for the include-list rule.
 
+The Telnet server is a long-running process and keeps loaded PHP classes in
+memory. After changing Telnet PHP source (including handlers under
+`telnet/src/`), restart the deployment's Supervisor-managed `telnet_daemon`
+program through the established deployment procedure before runtime validation
+(for Supervisor deployments, this is typically `supervisorctl restart
+telnet_daemon`). A browser refresh or new terminal connection alone does not
+prove that the running daemon has loaded the changed source.
+
 The Games & Experiences handler consumes normalized `GameCatalog` fields for
 display metadata and launch behavior. Managed doors publish `terminal.mode` as
 either `doorway` or `raw`; `DoorHandler` must use that field so raw native
