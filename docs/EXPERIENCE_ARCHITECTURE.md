@@ -218,6 +218,20 @@ The sections render in this order, with distinct membership rules:
   Filtering affects presentation and score submission authorization only;
   historical score records remain stored.
 
+### Place identity on the inner surfaces
+
+The Experience lobby (`/experiences/{id}`) and the managed / WebDoor / JS-DOS
+player-page chrome are first-class Crossroads surfaces, not a separate "Games"
+or "Doors" area. Their user-facing wording uses **Crossroads** as the place
+identity (the lobby back control reads "Back to Crossroads"; player-page back
+controls and title chrome say "Crossroads", never "Doors" or "Doors and
+Games"). Like every other Crossroads surface, all of their user-facing text —
+including JavaScript-generated strings — is resolved through the project i18n
+mechanism in every base locale. The terminal Experience detail screen
+(`DoorHandler`) is the reference implementation for this identity and wording.
+The word "game" remains fine as ordinary language for an actual game; only the
+legacy product/navigation identity is retired.
+
 ### Door-play activity semantics
 
 Door-play activity records successful Experience entry/return and is historical

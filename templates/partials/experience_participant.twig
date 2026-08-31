@@ -11,7 +11,7 @@
             {% if player.presence %}
                 {{ player.presence }}
             {% else %}
-                Playing {{ experience.name }}
+                {{ t('ui.experience_lobby.presence_playing', {'name': experience.name}, locale, ['common']) }}
             {% endif %}
         </div>
     </div>
@@ -21,7 +21,7 @@
             <a href="/chat?dm_user_id={{ player.user_id }}"
                class="btn btn-sm btn-outline-secondary">
                 <i class="fas fa-comment me-1" aria-hidden="true"></i>
-                Message
+                {{ t('ui.common.message', {}, locale, ['common']) }}
             </a>
         {% endif %}
     </div>

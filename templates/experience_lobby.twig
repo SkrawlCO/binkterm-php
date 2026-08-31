@@ -40,7 +40,7 @@
                                 <div class="text-muted small mb-2">
                                     {% if view.version %}v{{ view.version }}{% endif %}
                                     {% if view.version and view.author %} · {% endif %}
-                                    {% if view.author %}by {{ view.author }}{% endif %}
+                                    {% if view.author %}{{ t('ui.webdoors.by_author', {'author': view.author}, locale, ['common']) }}{% endif %}
                                 </div>
                             {% endif %}
 
@@ -52,12 +52,12 @@
                                 {% if view.capabilities.player_mode == 'multiplayer' %}
                                     <span class="badge bg-secondary-subtle text-dark border">
                                         <i class="fas fa-users me-1" aria-hidden="true"></i>
-                                        Multiplayer
+                                        {{ t('ui.webdoors.multiplayer', {}, locale, ['common']) }}
                                     </span>
                                 {% elseif view.capabilities.player_mode == 'single_player' %}
                                     <span class="badge bg-secondary-subtle text-dark border">
                                         <i class="fas fa-user me-1" aria-hidden="true"></i>
-                                        Single Player
+                                        {{ t('ui.webdoors.single_player', {}, locale, ['common']) }}
                                     </span>
                                 {% else %}
                                     <span class="badge bg-secondary-subtle text-dark border">
@@ -72,7 +72,7 @@
                                 {% if view.cost.credits > 0 %}
                                     <span class="badge bg-secondary-subtle text-dark border">
                                         <i class="fas fa-coins me-1" aria-hidden="true"></i>
-                                        {{ view.cost.credits }} credit{% if view.cost.credits != 1 %}s{% endif %}
+                                        {% if view.cost.credits == 1 %}{{ t('ui.experience_lobby.credit_cost_one', {}, locale, ['common']) }}{% else %}{{ t('ui.experience_lobby.credit_cost', {'count': view.cost.credits}, locale, ['common']) }}{% endif %}
                                     </span>
                                 {% endif %}
                             </div>
@@ -94,13 +94,13 @@
                         <div class="mb-3">
                             <div class="fw-semibold">
                                 <i class="fas fa-users me-1" aria-hidden="true"></i>
-                                Live Players
+                                {{ t('ui.experience_lobby.live_players', {}, locale, ['common']) }}
                             </div>
                             <div id="experience-occupancy-summary" class="text-muted small">
                                 {%- if view.capacity.at_capacity -%}
-                                    Full
+                                    {{ t('ui.webdoors.full_capacity', {}, locale, ['common']) }}
                                 {%- else -%}
-                                    {{ state.player_count }} online
+                                    {{ t('ui.webdoors.players_online', {'count': state.player_count}, locale, ['common']) }}
                                 {%- endif -%}
                                 {%- if view.capacity.max_sessions and (view.capacity.at_capacity or state.player_count > 0) %} · {{ state.session_count }}/{{ view.capacity.max_sessions }}{% endif -%}
                             </div>
@@ -117,10 +117,10 @@
                                         participant_actions: experience.participant_actions|default({})
                                     } %}
                                 {% else %}
-                                    No one is playing right now. Be the first one in.
+                                    {{ t('ui.experience_lobby.nobody_playing', {}, locale, ['common']) }}
                                 {% endfor %}
                             {% else %}
-                                No one is playing right now. Be the first one in.
+                                {{ t('ui.experience_lobby.nobody_playing', {}, locale, ['common']) }}
                             {% endif %}
                         </div>
                     </div>
@@ -129,11 +129,11 @@
                     <div class="border rounded p-3 mb-3">
                         <div class="fw-semibold mb-2">
                             <i class="fas fa-clock-rotate-left me-1" aria-hidden="true"></i>
-                            Recent Activity
+                            {{ t('ui.experience_lobby.recent_activity', {}, locale, ['common']) }}
                         </div>
 
                         <div id="experience-recent-activity" class="small text-muted">
-                            No recent activity yet.
+                            {{ t('ui.experience_lobby.no_recent_activity', {}, locale, ['common']) }}
                         </div>
                     </div>
 
@@ -144,14 +144,14 @@
                         >
                             <div class="fw-semibold mb-2">
                                 <i class="fas fa-comments me-1" aria-hidden="true"></i>
-                                Conversation
+                                {{ t('ui.experience_lobby.conversation', {}, locale, ['common']) }}
                             </div>
 
                             <div
                                 id="experience-conversation-messages"
                                 class="small text-muted mb-3"
                             >
-                                Loading conversation…
+                                {{ t('ui.experience_lobby.conversation_loading', {}, locale, ['common']) }}
                             </div>
 
                             <div class="d-flex gap-2 align-items-end">
@@ -160,8 +160,8 @@
                                     class="form-control"
                                     rows="2"
                                     maxlength="1000"
-                                    placeholder="Join the conversation…"
-                                    aria-label="Conversation message"
+                                    placeholder="{{ t('ui.experience_lobby.conversation_placeholder', {}, locale, ['common']) }}"
+                                    aria-label="{{ t('ui.experience_lobby.conversation_aria', {}, locale, ['common']) }}"
                                 ></textarea>
 
                                 <button
@@ -170,7 +170,7 @@
                                     class="btn btn-primary flex-shrink-0"
                                 >
                                     <i class="fas fa-paper-plane me-1" aria-hidden="true"></i>
-                                    Send
+                                    {{ t('ui.experience_lobby.conversation_send', {}, locale, ['common']) }}
                                 </button>
                             </div>
 
@@ -200,15 +200,15 @@
                     {% set credit_cost = view.cost.credits %}
                     {% set exceptional_status = status_code in ['at_capacity', 'planned', 'unavailable'] %}
                     {% set status_messages = {
-                        'at_capacity': 'No open sessions right now.',
-                        'planned': 'Not available here yet.',
-                        'unavailable': 'Not available from this surface.'
+                        'at_capacity': t('ui.experience_lobby.status_at_capacity', {}, locale, ['common']),
+                        'planned': t('ui.experience_lobby.status_planned', {}, locale, ['common']),
+                        'unavailable': t('ui.experience_lobby.status_unavailable', {}, locale, ['common'])
                     } %}
 
                     <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
                         <a href="/games" class="btn btn-outline-secondary">
                             <i class="fas fa-arrow-left me-1" aria-hidden="true"></i>
-                            Back to Games
+                            {{ t('ui.experience_lobby.back', {}, locale, ['common']) }}
                         </a>
 
                         <div class="d-flex flex-wrap align-items-center justify-content-end gap-2">
@@ -216,7 +216,7 @@
                                 {% if credit_cost > 0 %}
                                     <div class="d-flex align-items-center justify-content-end gap-2">
                                         <span class="badge bg-secondary-subtle text-dark border">
-                                            {{ credit_cost }} credit{% if credit_cost != 1 %}s{% endif %}
+                                            {% if credit_cost == 1 %}{{ t('ui.experience_lobby.credit_cost_one', {}, locale, ['common']) }}{% else %}{{ t('ui.experience_lobby.credit_cost', {'count': credit_cost}, locale, ['common']) }}{% endif %}
                                         </span>
                                     </div>
                                 {% endif %}
@@ -235,7 +235,7 @@
                                 {% if not view.actions.end_participation %}disabled{% endif %}
                             >
                                 <i class="fas fa-stop me-1" aria-hidden="true"></i>
-                                End Participation
+                                {{ t('ui.experience_lobby.end_participation', {}, locale, ['common']) }}
                             </button>
 
                             {% if launch_supported %}
@@ -243,7 +243,7 @@
                                    class="btn btn-fidonet{% if launch_blocked_by_capacity %} disabled{% endif %}"
                                    data-viewer-participating="{{ viewer_participating ? 'true' : 'false' }}"
                                    {% if launch_blocked_by_capacity %}aria-disabled="true" tabindex="-1"{% endif %}>
-                                    <span id="experience-launch-label">{% if launch_blocked_by_capacity %}Full{% elseif primary_action == 'return' %}Return{% else %}Enter{% endif %}</span>
+                                    <span id="experience-launch-label">{% if launch_blocked_by_capacity %}{{ t('ui.webdoors.full_capacity', {}, locale, ['common']) }}{% elseif primary_action == 'return' %}{{ t('ui.webdoors.return', {}, locale, ['common']) }}{% else %}{{ t('ui.webdoors.enter', {}, locale, ['common']) }}{% endif %}</span>
                                 </a>
                             {% endif %}
                         </div>
@@ -264,6 +264,44 @@ const EXPERIENCE_ID = {{ experience.id|json_encode|raw }};
 const EXPERIENCE_NAME = {{ experience.name|json_encode|raw }};
 const EXPERIENCE_CAPABILITIES =
     {{ experience.capabilities|default({})|json_encode|raw }};
+
+// Server-rendered fallbacks for JS-generated lobby text. window.t() resolves
+// the live catalog once it has loaded; until then (and if the fetch fails)
+// these locale-correct strings are used. Params like {name}/{count} stay
+// literal here so window.t() can interpolate the fallback too.
+const EXPERIENCE_LOBBY_I18N = {
+    nobody_playing: {{ t('ui.experience_lobby.nobody_playing', {}, locale, ['common'])|json_encode|raw }},
+    no_recent_activity: {{ t('ui.experience_lobby.no_recent_activity', {}, locale, ['common'])|json_encode|raw }},
+    no_conversation: {{ t('ui.experience_lobby.no_conversation', {}, locale, ['common'])|json_encode|raw }},
+    conversation_unavailable: {{ t('ui.experience_lobby.conversation_unavailable', {}, locale, ['common'])|json_encode|raw }},
+    conversation_load_failed: {{ t('ui.experience_lobby.conversation_load_failed', {}, locale, ['common'])|json_encode|raw }},
+    send_failed: {{ t('ui.experience_lobby.send_failed', {}, locale, ['common'])|json_encode|raw }},
+    end_confirm: {{ t('ui.experience_lobby.end_confirm', {}, locale, ['common'])|json_encode|raw }},
+    end_failed: {{ t('ui.experience_lobby.end_failed', {}, locale, ['common'])|json_encode|raw }},
+    status_at_capacity: {{ t('ui.experience_lobby.status_at_capacity', {}, locale, ['common'])|json_encode|raw }},
+    status_planned: {{ t('ui.experience_lobby.status_planned', {}, locale, ['common'])|json_encode|raw }},
+    status_unavailable: {{ t('ui.experience_lobby.status_unavailable', {}, locale, ['common'])|json_encode|raw }},
+    presence_playing: {{ t('ui.experience_lobby.presence_playing', {}, locale, ['common'])|json_encode|raw }},
+    playing_badge: {{ t('ui.experience_lobby.playing_badge', {}, locale, ['common'])|json_encode|raw }},
+    unknown_user: {{ t('ui.experience_lobby.unknown_user', {}, locale, ['common'])|json_encode|raw }},
+    message: {{ t('ui.common.message', {}, locale, ['common'])|json_encode|raw }},
+    full: {{ t('ui.webdoors.full_capacity', {}, locale, ['common'])|json_encode|raw }},
+    players_online: {{ t('ui.webdoors.players_online', {}, locale, ['common'])|json_encode|raw }},
+    enter: {{ t('ui.webdoors.enter', {}, locale, ['common'])|json_encode|raw }},
+    return: {{ t('ui.webdoors.return', {}, locale, ['common'])|json_encode|raw }},
+    activity_played: {{ t('ui.webdoors.recent_activity_played', {}, locale, ['common'])|json_encode|raw }},
+    activity_first_played: {{ t('ui.webdoors.recent_activity_first_played', {}, locale, ['common'])|json_encode|raw }},
+    time_just_now: {{ t('time.just_now', {}, locale, ['common'])|json_encode|raw }},
+    time_minutes_ago: {{ t('time.minutes_ago', {}, locale, ['common'])|json_encode|raw }},
+    time_hours_ago: {{ t('time.hours_ago', {}, locale, ['common'])|json_encode|raw }},
+    time_yesterday: {{ t('time.yesterday', {}, locale, ['common'])|json_encode|raw }},
+    time_suffix_singular: {{ t('time.suffix_singular', {}, locale, ['common'])|json_encode|raw }},
+    time_suffix_plural: {{ t('time.suffix_plural', {}, locale, ['common'])|json_encode|raw }}
+};
+
+function lobbyT(key, fallbackKey, params) {
+    return window.t(key, params || {}, EXPERIENCE_LOBBY_I18N[fallbackKey]);
+}
 
 let experienceConversationCursor = 0;
 let experienceCurrentPlayers = [];
@@ -304,9 +342,9 @@ function escapeExperienceHtml(value) {
 // decided server-side by ExperiencePresentation.
 const EXPERIENCE_EXCEPTIONAL_STATUS = ['at_capacity', 'planned', 'unavailable'];
 const EXPERIENCE_STATUS_MESSAGE = {
-    at_capacity: 'No open sessions right now.',
-    planned: 'Not available here yet.',
-    unavailable: 'Not available from this surface.'
+    at_capacity: () => lobbyT('ui.experience_lobby.status_at_capacity', 'status_at_capacity'),
+    planned: () => lobbyT('ui.experience_lobby.status_planned', 'status_planned'),
+    unavailable: () => lobbyT('ui.experience_lobby.status_unavailable', 'status_unavailable')
 };
 
 function experienceOccupancyText(state, presentation) {
@@ -316,7 +354,9 @@ function experienceOccupancyText(state, presentation) {
     const maxSessions = Number(capacity.max_sessions || 0);
     const atCapacity = !!capacity.at_capacity;
 
-    let text = atCapacity ? 'Full' : `${online} online`;
+    let text = atCapacity
+        ? lobbyT('ui.webdoors.full_capacity', 'full')
+        : lobbyT('ui.webdoors.players_online', 'players_online', { count: online });
 
     // Suppress the capacity ratio while the room is empty — the empty-state
     // copy below already invites the caller in.
@@ -361,7 +401,7 @@ function updateExperienceLiveState(state, viewer = null, presentation = null) {
     if (availabilityMessage) {
         const isExceptional = EXPERIENCE_EXCEPTIONAL_STATUS.includes(statusCode);
         availabilityMessage.textContent = isExceptional
-            ? (EXPERIENCE_STATUS_MESSAGE[statusCode] || '')
+            ? (EXPERIENCE_STATUS_MESSAGE[statusCode] ? EXPERIENCE_STATUS_MESSAGE[statusCode]() : '')
             : '';
         availabilityMessage.classList.toggle('d-none', !isExceptional);
 
@@ -377,8 +417,10 @@ function updateExperienceLiveState(state, viewer = null, presentation = null) {
         launchButton.tabIndex = disabled ? -1 : 0;
 
         const label = blockedByCapacity
-            ? 'Full'
-            : (viewerParticipating ? 'Return' : 'Enter');
+            ? lobbyT('ui.webdoors.full_capacity', 'full')
+            : (viewerParticipating
+                ? lobbyT('ui.webdoors.return', 'return')
+                : lobbyT('ui.webdoors.enter', 'enter'));
 
         launchButton.setAttribute('aria-label', label);
         launchButton.dataset.viewerParticipating =
@@ -402,7 +444,7 @@ function renderExperienceParticipants(state, actions) {
 
     if (players.length === 0) {
         container.className = 'text-muted small';
-        container.textContent = 'No one is playing right now. Be the first one in.';
+        container.textContent = lobbyT('ui.experience_lobby.nobody_playing', 'nobody_playing');
         return;
     }
 
@@ -413,7 +455,11 @@ function renderExperienceParticipants(state, actions) {
         const username = escapeExperienceHtml(player.username);
         const presence = player.presence
             ? escapeExperienceHtml(player.presence)
-            : `Playing ${escapeExperienceHtml({{ experience.name|json_encode|raw }})}`;
+            : escapeExperienceHtml(lobbyT(
+                'ui.experience_lobby.presence_playing',
+                'presence_playing',
+                { name: EXPERIENCE_NAME }
+            ));
 
         const identity = profileEnabled
             ? `<div class="fw-semibold"><a href="/profile/${encodeURIComponent(String(player.username || ''))}" class="text-decoration-none">${username}</a></div>`
@@ -422,7 +468,7 @@ function renderExperienceParticipants(state, actions) {
         const message = messageEnabled &&
             window.currentUserId &&
             userId !== Number(window.currentUserId)
-            ? `<a href="/chat?dm_user_id=${encodeURIComponent(String(userId))}" class="btn btn-sm btn-outline-secondary"><i class="fas fa-comment me-1" aria-hidden="true"></i>Message</a>`
+            ? `<a href="/chat?dm_user_id=${encodeURIComponent(String(userId))}" class="btn btn-sm btn-outline-secondary"><i class="fas fa-comment me-1" aria-hidden="true"></i>${escapeExperienceHtml(lobbyT('ui.common.message', 'message'))}</a>`
             : '';
 
         return `<div class="list-group-item d-flex justify-content-between align-items-center gap-3">
@@ -458,9 +504,9 @@ function getExperienceConversation() {
 }
 
 function renderExperienceConversationIdentity(message) {
-    const username = String(
-        message.from_username || 'Unknown user'
-    );
+    const unknownUser = lobbyT('ui.experience_lobby.unknown_user', 'unknown_user');
+    const hasName = !!message.from_username;
+    const username = String(message.from_username || unknownUser);
     const escapedUsername = escapeHtml(username);
 
     const userId = Number(message.from_user_id || 0);
@@ -470,18 +516,18 @@ function renderExperienceConversationIdentity(message) {
             return true;
         }
 
-        return username !== 'Unknown user'
+        return hasName
             && String(candidate.username || '').toLowerCase()
                 === username.toLowerCase();
     });
 
-    const identity = username === 'Unknown user'
+    const identity = !hasName
         ? escapedUsername
         : `<a href="/profile/${encodeURIComponent(username)}"
               class="text-decoration-none">${escapedUsername}</a>`;
 
     const playing = player
-        ? '<span class="badge bg-success ms-2">Playing</span>'
+        ? `<span class="badge bg-success ms-2">${escapeHtml(lobbyT('ui.experience_lobby.playing_badge', 'playing_badge'))}</span>`
         : '';
 
     return `<strong>${identity}</strong>${playing}`;
@@ -495,7 +541,7 @@ function renderExperienceConversation(messages = []) {
     if (!container) return;
 
     if (!Array.isArray(messages) || messages.length === 0) {
-        container.textContent = 'No conversation yet.';
+        container.textContent = lobbyT('ui.experience_lobby.no_conversation', 'no_conversation');
         return;
     }
 
@@ -678,8 +724,11 @@ async function sendExperienceConversationMessage() {
         const result = await response.json();
 
         if (!response.ok || !result.success) {
+            const sendFallback = lobbyT('ui.experience_lobby.send_failed', 'send_failed');
             throw new Error(
-                result.error || 'Unable to send message'
+                window.getApiErrorMessage
+                    ? window.getApiErrorMessage(result, sendFallback)
+                    : (result.error || sendFallback)
             );
         }
 
@@ -701,7 +750,7 @@ async function sendExperienceConversationMessage() {
             errorElement.textContent =
                 error instanceof Error
                     ? error.message
-                    : 'Unable to send message';
+                    : lobbyT('ui.experience_lobby.send_failed', 'send_failed');
 
             errorElement.classList.remove('d-none');
         }
@@ -745,8 +794,11 @@ async function refreshExperienceConversation() {
     const payload = await response.json();
 
     if (!response.ok) {
+        const loadFallback = lobbyT('ui.experience_lobby.conversation_load_failed', 'conversation_load_failed');
         throw new Error(
-            payload.error || 'Unable to load conversation'
+            window.getApiErrorMessage
+                ? window.getApiErrorMessage(payload, loadFallback)
+                : (payload.error || loadFallback)
         );
     }
 
@@ -772,17 +824,22 @@ function formatExperienceActivityTime(value, nowValue = new Date()) {
         const elapsedMinutes = Math.floor(elapsedMs / 60000);
 
         if (elapsedMinutes < 1) {
-            return 'just now';
+            return lobbyT('time.just_now', 'time_just_now');
         }
 
         if (elapsedMinutes < 60) {
-            return `${elapsedMinutes} minute${elapsedMinutes === 1 ? '' : 's'} ago`;
+            return lobbyT('time.minutes_ago', 'time_minutes_ago', { count: elapsedMinutes });
         }
 
         const elapsedHours = Math.floor(elapsedMinutes / 60);
 
         if (elapsedHours < 24) {
-            return `${elapsedHours} hour${elapsedHours === 1 ? '' : 's'} ago`;
+            return lobbyT('time.hours_ago', 'time_hours_ago', {
+                count: elapsedHours,
+                suffix: elapsedHours === 1
+                    ? lobbyT('time.suffix_singular', 'time_suffix_singular')
+                    : lobbyT('time.suffix_plural', 'time_suffix_plural')
+            });
         }
     }
 
@@ -793,7 +850,7 @@ function formatExperienceActivityTime(value, nowValue = new Date()) {
     ) / 86400000;
 
     if (localDayNumber(now) - localDayNumber(date) === 1) {
-        return 'yesterday';
+        return lobbyT('time.yesterday', 'time_yesterday');
     }
 
     const options = {
@@ -816,13 +873,13 @@ function renderExperienceActivity(activity = []) {
     if (!container) return;
 
     if (!Array.isArray(activity) || activity.length === 0) {
-        container.textContent = 'No recent activity yet.';
+        container.textContent = lobbyT('ui.experience_lobby.no_recent_activity', 'no_recent_activity');
         return;
     }
 
     container.innerHTML = activity.slice(0, 5).map(entry => {
         const username = escapeHtml(
-            entry.username || 'Unknown user'
+            entry.username || lobbyT('ui.experience_lobby.unknown_user', 'unknown_user')
         );
 
         const occurredAt = formatExperienceActivityTime(
@@ -834,8 +891,8 @@ function renderExperienceActivity(activity = []) {
             : '';
 
         const activityLabel = entry.type === 'first_play'
-            ? 'first recorded play'
-            : 'played';
+            ? lobbyT('ui.webdoors.recent_activity_first_played', 'activity_first_played')
+            : lobbyT('ui.webdoors.recent_activity_played', 'activity_played');
 
         return `
             <div class="d-flex flex-wrap gap-2 py-1">
@@ -884,7 +941,7 @@ async function endExperienceParticipation() {
     }
 
     if (!window.confirm(
-        `End your active participation in ${EXPERIENCE_NAME}?`
+        lobbyT('ui.experience_lobby.end_confirm', 'end_confirm', { name: EXPERIENCE_NAME })
     )) {
         return;
     }
@@ -910,8 +967,11 @@ async function endExperienceParticipation() {
         const result = await response.json();
 
         if (!response.ok || !result.success) {
+            const endFallback = lobbyT('ui.experience_lobby.end_failed', 'end_failed');
             throw new Error(
-                result.error || 'Unable to end active participation'
+                window.getApiErrorMessage
+                    ? window.getApiErrorMessage(result, endFallback)
+                    : (result.error || endFallback)
             );
         }
 
@@ -921,7 +981,7 @@ async function endExperienceParticipation() {
         window.alert(
             error instanceof Error
                 ? error.message
-                : 'Unable to end active participation'
+                : lobbyT('ui.experience_lobby.end_failed', 'end_failed')
         );
 
         try {
@@ -985,7 +1045,7 @@ initializeExperienceConversation()
 
         if (container) {
             container.textContent =
-                'Conversation is temporarily unavailable.';
+                lobbyT('ui.experience_lobby.conversation_unavailable', 'conversation_unavailable');
         }
     });
 

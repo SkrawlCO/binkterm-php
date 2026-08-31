@@ -35,12 +35,28 @@ final class ExperienceLobbyTemplateTest extends TestCase
             new FilesystemLoader(dirname(__DIR__, 2) . '/templates')
         );
 
-        // The production Template environment provides t(). These tests
-        // exercise Experience lobby behavior, so translation itself is
-        // intentionally stubbed with a deterministic value.
+        // Resolve translation keys against the real English catalog and
+        // interpolate {param} tokens, mirroring the production t(). This lets
+        // the lobby's rendered output be asserted as real UI text rather than
+        // raw keys, and proves the template actually routes through t().
         $twig->addFunction(new TwigFunction(
             't',
-            static fn(string $key, array $params = [], ...$args): string => $key
+            static function (string $key, array $params = [], ...$args) {
+                static $catalog = null;
+                if ($catalog === null) {
+                    $catalog = require dirname(__DIR__, 2)
+                        . '/config/i18n/en/common.php';
+                }
+                $value = $catalog[$key] ?? $key;
+                foreach ($params as $name => $replacement) {
+                    $value = str_replace(
+                        '{' . $name . '}',
+                        (string) $replacement,
+                        $value
+                    );
+                }
+                return $value;
+            }
         ));
 
         // base.twig also relies on this production Twig helper. The lobby
@@ -121,6 +137,7 @@ final class ExperienceLobbyTemplateTest extends TestCase
         }
 
         return $twig->render('experience_lobby.twig', [
+            'locale' => 'en',
             'experience' => $experience,
             'experience_presentation' => $presentation,
             'state' => $state,
@@ -269,7 +286,7 @@ final class ExperienceLobbyTemplateTest extends TestCase
         );
 
         self::assertStringContainsString('Blackjack', $html);
-        self::assertStringContainsString('Single Player', $html);
+        self::assertStringContainsString('Single player', $html);
         // Slice 5A: zero-cost Experiences no longer get storefront-style
         // "Free to play" emphasis.
         self::assertStringNotContainsString('Free to play', $html);
@@ -307,7 +324,7 @@ final class ExperienceLobbyTemplateTest extends TestCase
         );
 
         self::assertStringContainsString('Doom', $html);
-        self::assertStringContainsString('Single Player', $html);
+        self::assertStringContainsString('Single player', $html);
         // Slice 5A: zero-cost Experiences no longer get storefront-style
         // "Free to play" emphasis.
         self::assertStringNotContainsString('Free to play', $html);
@@ -612,11 +629,16 @@ final class ExperienceLobbyTemplateTest extends TestCase
             $source
         );
 
-        // Primary action vocabulary: Full / Return / Enter — no "Play"/"Return to".
-        self::assertStringContainsString(
-            "const label = blockedByCapacity\n            ? 'Full'\n            : (viewerParticipating ? 'Return' : 'Enter');",
+        // Primary action vocabulary: Full / Return / Enter — resolved through
+        // the shared webdoors keys, no "Play"/"Return to", no hardcoded label.
+        self::assertMatchesRegularExpression(
+            "/const label = blockedByCapacity\\s*\\?\\s*lobbyT\\('ui\\.webdoors\\.full_capacity', 'full'\\)"
+            . "\\s*:\\s*\\(viewerParticipating\\s*\\?\\s*lobbyT\\('ui\\.webdoors\\.return', 'return'\\)"
+            . "\\s*:\\s*lobbyT\\('ui\\.webdoors\\.enter', 'enter'\\)\\);/",
             $source
         );
+        self::assertStringNotContainsString("? 'Full'", $source);
+        self::assertStringNotContainsString("'Return' : 'Enter'", $source);
 
         self::assertStringNotContainsString('`Return to ${EXPERIENCE_NAME}`', $source);
         self::assertStringNotContainsString('`Play ${EXPERIENCE_NAME}`', $source);
@@ -765,9 +787,13 @@ final class ExperienceLobbyTemplateTest extends TestCase
             __DIR__ . '/../../templates/partials/experience_participant.twig'
         );
 
-        // Human presence text is kept, with a readable fallback.
+        // Human presence text is kept, with a readable localized fallback.
         self::assertStringContainsString('{{ player.presence }}', $source);
-        self::assertStringContainsString('Playing {{ experience.name }}', $source);
+        self::assertStringContainsString(
+            "t('ui.experience_lobby.presence_playing', {'name': experience.name}",
+            $source
+        );
+        self::assertStringNotContainsString('Playing {{ experience.name }}', $source);
 
         // No "Playing" status badge, no node badge, no presence_state gate.
         self::assertStringNotContainsString('presence_state', $source);
@@ -797,7 +823,10 @@ final class ExperienceLobbyTemplateTest extends TestCase
             $source
         );
 
-        self::assertStringContainsString('Message', $source);
+        self::assertStringContainsString(
+            "t('ui.common.message', {}, locale, ['common'])",
+            $source
+        );
     }
 
     public function testChatSupportsCanonicalDmDeepLink(): void
@@ -831,7 +860,7 @@ final class ExperienceLobbyTemplateTest extends TestCase
         );
 
         self::assertStringContainsString(
-            'End Participation',
+            "t('ui.experience_lobby.end_participation', {}, locale, ['common'])",
             $source
         );
 
@@ -939,7 +968,7 @@ final class ExperienceLobbyTemplateTest extends TestCase
         );
 
         self::assertStringContainsString(
-            'Recent Activity',
+            "t('ui.experience_lobby.recent_activity', {}, locale, ['common'])",
             $source
         );
 
@@ -973,7 +1002,7 @@ final class ExperienceLobbyTemplateTest extends TestCase
         );
 
         self::assertStringContainsString(
-            'entry.username || \'Unknown user\'',
+            "entry.username || lobbyT('ui.experience_lobby.unknown_user', 'unknown_user')",
             $source
         );
 
@@ -997,8 +1026,14 @@ final class ExperienceLobbyTemplateTest extends TestCase
             $source
         );
 
+        // First-play vs ordinary-play wording is shared with the /games list
+        // and terminal through the webdoors keys, not hardcoded here.
         self::assertStringContainsString(
-            "'first recorded play'",
+            "lobbyT('ui.webdoors.recent_activity_first_played', 'activity_first_played')",
+            $source
+        );
+        self::assertStringContainsString(
+            "lobbyT('ui.webdoors.recent_activity_played', 'activity_played')",
             $source
         );
 
@@ -1006,9 +1041,8 @@ final class ExperienceLobbyTemplateTest extends TestCase
             "'played for the first time'",
             $source
         );
-
-        self::assertStringContainsString(
-            ": 'played';",
+        self::assertStringNotContainsString(
+            "'first recorded play'",
             $source
         );
     }
@@ -1024,16 +1058,27 @@ final class ExperienceLobbyTemplateTest extends TestCase
             'function formatExperienceActivityTime(value, nowValue = new Date())',
             $source
         );
-        self::assertStringContainsString("return 'just now';", $source);
+        // Relative-time wording is the shared time.* ladder, resolved through
+        // lobbyT() so it is localized like the /games recent-activity list.
         self::assertStringContainsString(
-            "minute\${elapsedMinutes === 1 ? '' : 's'} ago",
+            "lobbyT('time.just_now', 'time_just_now')",
             $source
         );
         self::assertStringContainsString(
-            "hour\${elapsedHours === 1 ? '' : 's'} ago",
+            "lobbyT('time.minutes_ago', 'time_minutes_ago', { count: elapsedMinutes })",
             $source
         );
-        self::assertStringContainsString("return 'yesterday';", $source);
+        self::assertStringContainsString(
+            "lobbyT('time.hours_ago', 'time_hours_ago', {",
+            $source
+        );
+        self::assertStringContainsString(
+            "lobbyT('time.yesterday', 'time_yesterday')",
+            $source
+        );
+        self::assertStringNotContainsString("return 'just now';", $source);
+        self::assertStringNotContainsString("return 'yesterday';", $source);
+        // The deterministic older-than-a-day fallback (Intl month/day) stays.
         self::assertStringContainsString("month: 'short'", $source);
         self::assertStringContainsString("day: 'numeric'", $source);
         self::assertStringContainsString("options.year = 'numeric';", $source);
@@ -1058,9 +1103,15 @@ final class ExperienceLobbyTemplateTest extends TestCase
         $renderer = substr($source, $start, $end - $start);
 
         self::assertStringContainsString('activity.slice(0, 5)', $renderer);
-        self::assertStringContainsString("container.textContent = 'No recent activity yet.';", $renderer);
+        self::assertStringContainsString(
+            "container.textContent = lobbyT('ui.experience_lobby.no_recent_activity', 'no_recent_activity');",
+            $renderer
+        );
         self::assertStringContainsString("const username = escapeHtml(", $renderer);
-        self::assertStringContainsString("entry.username || 'Unknown user'", $renderer);
+        self::assertStringContainsString(
+            "entry.username || lobbyT('ui.experience_lobby.unknown_user', 'unknown_user')",
+            $renderer
+        );
         self::assertStringContainsString("entry.occurred_at || ''", $renderer);
         self::assertStringContainsString("? `<span class=\"text-nowrap\"> · \${escapeHtml(occurredAt)}</span>`", $renderer);
         self::assertStringNotContainsString('/profile/', $renderer);
@@ -1166,7 +1217,11 @@ final class ExperienceLobbyTemplateTest extends TestCase
         );
 
         self::assertStringContainsString(
-            "message.from_username || 'Unknown user'",
+            'const username = String(message.from_username || unknownUser);',
+            $source
+        );
+        self::assertStringContainsString(
+            "lobbyT('ui.experience_lobby.unknown_user', 'unknown_user')",
             $source
         );
 
@@ -1176,7 +1231,7 @@ final class ExperienceLobbyTemplateTest extends TestCase
         );
 
         self::assertStringContainsString(
-            "container.textContent = 'No conversation yet.';",
+            "container.textContent = lobbyT('ui.experience_lobby.no_conversation', 'no_conversation');",
             $source
         );
     }
@@ -1467,6 +1522,10 @@ final class ExperienceLobbyTemplateTest extends TestCase
         );
 
         self::assertStringContainsString(
+            "badge bg-success ms-2\">\${escapeHtml(lobbyT('ui.experience_lobby.playing_badge', 'playing_badge'))}</span>",
+            $source
+        );
+        self::assertStringNotContainsString(
             "badge bg-success ms-2\">Playing</span>",
             $source
         );
@@ -1543,7 +1602,7 @@ final class ExperienceLobbyTemplateTest extends TestCase
         // Identity and the non-multiplayer surfaces remain intact.
         self::assertStringContainsString('Solo Quest', $body);
         self::assertStringContainsString('Recent Activity', $body);
-        self::assertStringContainsString('Single Player', $body);
+        self::assertStringContainsString('Single player', $body);
     }
 
     public function testMultiplayerLobbyRetainsRosterSection(): void
@@ -1609,11 +1668,11 @@ final class ExperienceLobbyTemplateTest extends TestCase
 
         $body = self::renderedBody($html);
 
-        self::assertStringNotContainsString('Single Player', $body);
+        self::assertStringNotContainsString('Single player', $body);
         self::assertStringNotContainsString('Multiplayer', $body);
         self::assertStringNotContainsString('Live Players', $body);
         // The player-mode badge falls back to the generic Gateway descriptor.
-        self::assertStringContainsString('ui.webdoors.category_gateway', $body);
+        self::assertStringContainsString('Gateway', $body);
         self::assertStringContainsString('Remote Games Server', $body);
     }
 
@@ -1737,7 +1796,7 @@ final class ExperienceLobbyTemplateTest extends TestCase
         $imgPos = strpos($body, '<img');
         $namePos = strpos($body, '<h1 class="h3 mb-1">');
         $descPos = strpos($body, 'Usurper Reborn fantasy RPG BBS door.');
-        $badgePos = strpos($body, 'Single Player');
+        $badgePos = strpos($body, 'Single player');
         self::assertNotFalse($imgPos);
         self::assertNotFalse($namePos);
         self::assertNotFalse($descPos);
