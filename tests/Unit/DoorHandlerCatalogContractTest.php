@@ -19,8 +19,10 @@ final class DoorHandlerCatalogContractTest extends TestCase
             'policy' => ['credit_cost' => 7],
         ]);
 
-        self::assertSame('DoorParty [7 credits]', $item['label']);
-        self::assertSame('A remote door gateway. [Gateway]', $item['detail']);
+        self::assertSame('DoorParty - Gateway', $item['label']);
+        self::assertSame('', $item['detail']);
+        self::assertStringNotContainsString('A remote door gateway.', $item['label']);
+        self::assertStringNotContainsString('credits', $item['label']);
     }
 
     public function testChooserItemShowsCanonicalMultiplayerCapabilityForGames(): void
@@ -33,18 +35,49 @@ final class DoorHandlerCatalogContractTest extends TestCase
             'policy' => ['credit_cost' => 0],
         ]);
 
-        self::assertSame(
-            'Fantasy RPG. [Game / Multiplayer]',
-            $item['detail']
-        );
+        self::assertSame('Legend of the Red Dragon - Multiplayer', $item['label']);
+        self::assertSame('', $item['detail']);
+        self::assertStringNotContainsString('Fantasy RPG.', $item['label']);
     }
 
     public function testChooserItemFallsBackWhenOptionalMetadataIsAbsent(): void
     {
         $item = DoorHandler::buildExperienceListItem('minimal-door', []);
 
-        self::assertSame('minimal-door', $item['label']);
-        self::assertSame('[Game]', $item['detail']);
+        self::assertSame('minimal-door - Game', $item['label']);
+        self::assertSame('', $item['detail']);
+    }
+
+    public function testFirstCatalogItemCarriesLightweightExperiencesSectionCue(): void
+    {
+        $item = DoorHandler::buildExperienceListItem('doorparty', [
+            'name' => 'DoorParty',
+            'category' => 'gateway',
+        ], null, true);
+
+        self::assertSame('Experiences - DoorParty - Gateway', $item['label']);
+        self::assertSame('', $item['detail']);
+    }
+
+    public function testArrivalUsesCrossroadsTitleAndPreservesSyntheticItemOrder(): void
+    {
+        $source = (string)file_get_contents(__DIR__ . '/../../telnet/src/DoorHandler.php');
+        $showStart = strpos($source, 'public function show(');
+        $showEnd = strpos($source, 'public static function composeLiveNow(', $showStart);
+        self::assertNotFalse($showStart);
+        self::assertNotFalse($showEnd);
+        $show = substr($source, $showStart, $showEnd - $showStart);
+
+        self::assertStringContainsString("doors.title', 'Crossroads'", $show);
+        $live = strpos($show, 'buildLiveNowArrivalItem');
+        $places = strpos($show, 'buildYourPlacesArrivalItem');
+        $catalog = strpos($show, 'buildExperienceListItem');
+        self::assertNotFalse($live);
+        self::assertNotFalse($places);
+        self::assertNotFalse($catalog);
+        self::assertLessThan($places, $live);
+        self::assertLessThan($catalog, $places);
+        self::assertStringContainsString('$catalogIndex === 0', $show);
     }
 
     public function testRawNativeExperienceUsesRawRelayMode(): void

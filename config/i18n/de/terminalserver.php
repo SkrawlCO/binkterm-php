@@ -538,7 +538,11 @@ return [
 
     // --- Door games ---
     'ui.terminalserver.doors.no_doors'                 => 'Derzeit sind keine Türspiele verfügbar.',
-    'ui.terminalserver.doors.title'                    => 'Türspiele',
+    'ui.terminalserver.doors.title'                    => 'Crossroads',
+    'ui.terminalserver.doors.catalog_section'          => 'Erlebnisse',
+    'ui.terminalserver.doors.catalog_gateway'          => 'Gateway',
+    'ui.terminalserver.doors.catalog_game'             => 'Spiel',
+    'ui.terminalserver.doors.catalog_multiplayer'      => 'Mehrspieler',
     'ui.terminalserver.doors.enter_choice'             => 'Nummer eingeben zum Spielen oder Q zum Zurückkehren: ',
     'ui.terminalserver.doors.invalid'                  => 'Ungültige Auswahl.',
     'ui.terminalserver.doors.launching'                => '{name} wird gestartet...',

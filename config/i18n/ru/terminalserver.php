@@ -541,7 +541,11 @@ return [
 
     // --- Door games ---
     'ui.terminalserver.doors.no_doors' => 'В данный момент игр нет.',
-    'ui.terminalserver.doors.title' => 'Игры через двери (Door Games)',
+    'ui.terminalserver.doors.title' => 'Crossroads',
+    'ui.terminalserver.doors.catalog_section' => 'Пространства',
+    'ui.terminalserver.doors.catalog_gateway' => 'Шлюз',
+    'ui.terminalserver.doors.catalog_game' => 'Игра',
+    'ui.terminalserver.doors.catalog_multiplayer' => 'Мультиплеер',
     'ui.terminalserver.doors.enter_choice' => 'Введите номер для запуска игры или Q — вернуться: ',
     'ui.terminalserver.doors.invalid' => 'Некорректный выбор.',
     'ui.terminalserver.doors.launching' => 'Запуск {name}…',

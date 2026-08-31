@@ -91,7 +91,7 @@ class DoorHandler
                 $shell->showText(
                     $conn,
                     $state,
-                    $t('ui.terminalserver.doors.title', [], 'Games & Experiences'),
+                    $t('ui.terminalserver.doors.title', [], 'Crossroads'),
                     [$t('ui.terminalserver.doors.no_doors', [], 'No games or experiences are currently available.')]
                 );
                 return;
@@ -111,17 +111,19 @@ class DoorHandler
                 self::buildLiveNowArrivalItem($liveNow, $t),
                 self::buildYourPlacesArrivalItem($yourPlaces, $t),
             ];
-            foreach ($doorList as $entry) {
+            foreach ($doorList as $catalogIndex => $entry) {
                 $items[] = self::buildExperienceListItem(
                     $entry['id'],
-                    $entry['data']
+                    $entry['data'],
+                    $t,
+                    $catalogIndex === 0
                 );
             }
 
             $selected = $shell->chooseFromList(
                 $conn,
                 $state,
-                $this->server->t('ui.terminalserver.doors.title', 'Games & Experiences', [], $state['locale']),
+                $this->server->t('ui.terminalserver.doors.title', 'Crossroads', [], $state['locale']),
                 $items,
                 [
                     'prompt' => $this->server->t('ui.terminalserver.doors.enter_choice', 'Select an experience or Q to return: ', [], $state['locale']),
@@ -1071,7 +1073,7 @@ class DoorHandler
                 $shell->showAlert(
                     $conn,
                     $state,
-                    $t('ui.terminalserver.doors.title', [], 'Games & Experiences'),
+                    $t('ui.terminalserver.doors.title', [], 'Crossroads'),
                     $t('ui.terminalserver.doors.detail_not_found', [], 'That experience is no longer available.'),
                     'error'
                 );
@@ -1463,41 +1465,43 @@ class DoorHandler
      *
      * @param string $experienceId Canonical Experience identifier
      * @param array<string, mixed> $experience Normalized catalog entry
+     * @param callable(string,array<string,mixed>,string):string|null $t
      * @return array{label: string, detail: string}
      */
     public static function buildExperienceListItem(
         string $experienceId,
-        array $experience
+        array $experience,
+        ?callable $t = null,
+        bool $startsCatalog = false
     ): array {
+        $t ??= static fn(string $key, array $params = [], string $fallback = ''): string => $fallback;
         $presentation = ExperiencePresentation::build(
             ['id' => $experienceId] + $experience,
             'telnet'
         );
         $name = $presentation['name'];
-        $description = $presentation['description'];
-        $creditCost = $presentation['cost']['credits'];
         $category = strtolower($presentation['category']);
 
         $categoryLabel = match ($category) {
-            'gateway' => 'Gateway',
-            'game' => 'Game',
+            'gateway' => $t('ui.terminalserver.doors.catalog_gateway', [], 'Gateway'),
+            'game' => $t('ui.terminalserver.doors.catalog_game', [], 'Game'),
             default => ucfirst($category),
         };
 
         $metadata = [$categoryLabel];
         if ($category === 'game' && $presentation['capabilities']['multiplayer']) {
-            $metadata[] = 'Multiplayer';
+            $metadata = [$t('ui.terminalserver.doors.catalog_multiplayer', [], 'Multiplayer')];
         }
 
-        $detailParts = [];
-        if ($description !== '') {
-            $detailParts[] = $description;
+        $label = $name;
+        if ($startsCatalog) {
+            $label = $t('ui.terminalserver.doors.catalog_section', [], 'Experiences') . ' - ' . $label;
         }
-        $detailParts[] = '[' . implode(' / ', $metadata) . ']';
+        $label .= ' - ' . implode(' / ', $metadata);
 
         return [
-            'label' => $name . ($creditCost > 0 ? " [{$creditCost} credits]" : ''),
-            'detail' => implode(' ', $detailParts),
+            'label' => $label,
+            'detail' => '',
         ];
     }
 

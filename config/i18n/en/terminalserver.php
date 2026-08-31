@@ -540,7 +540,11 @@ return [
 
     // --- Door games ---
     'ui.terminalserver.doors.no_doors'                 => 'No games or experiences are currently available.',
-    'ui.terminalserver.doors.title'                    => 'Games & Experiences',
+    'ui.terminalserver.doors.title'                    => 'Crossroads',
+    'ui.terminalserver.doors.catalog_section'          => 'Experiences',
+    'ui.terminalserver.doors.catalog_gateway'          => 'Gateway',
+    'ui.terminalserver.doors.catalog_game'             => 'Game',
+    'ui.terminalserver.doors.catalog_multiplayer'      => 'Multiplayer',
     'ui.terminalserver.doors.enter_choice'             => 'Select an experience or Q to return: ',
     'ui.terminalserver.doors.invalid'                  => 'Invalid selection.',
     'ui.terminalserver.doors.launching'                => 'Launching {name}...',
