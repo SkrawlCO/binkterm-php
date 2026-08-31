@@ -2039,9 +2039,15 @@ class TelnetUtils
     /**
      * Normalize a selectable row into a wrapped multi-line display block.
      *
+     * `section_before` is a single non-selectable heading line rendered above
+     * the row. `section_before_lines` is an optional array of extra
+     * non-selectable lines rendered above that heading (used for a short
+     * informational block, e.g. the Crossroads "Recently in the Crossroads"
+     * footprints); each entry is one pre-formatted line.
+     *
      * @param mixed $row
      * @param int $width
-     * @return array{label:string, lines:string[], section_before:string}
+     * @return array{label:string, lines:string[], section_before:string, section_before_lines:string[]}
      */
     private static function normalizeStructuredSelectableRow($row, int $width): array
     {
@@ -2050,6 +2056,7 @@ class TelnetUtils
                 'label' => (string)$row,
                 'lines' => [(string)$row],
                 'section_before' => '',
+                'section_before_lines' => [],
             ];
         }
 
@@ -2071,10 +2078,18 @@ class TelnetUtils
             }
         }
 
+        $sectionBeforeLines = [];
+        if (is_array($row['section_before_lines'] ?? null)) {
+            foreach ($row['section_before_lines'] as $sectionLine) {
+                $sectionBeforeLines[] = (string)$sectionLine;
+            }
+        }
+
         return [
             'label' => $label,
             'lines' => $lines,
             'section_before' => trim((string)($row['section_before'] ?? '')),
+            'section_before_lines' => $sectionBeforeLines,
         ];
     }
 
@@ -2146,6 +2161,7 @@ class TelnetUtils
                 $seen = false;
                 for ($i = $offset; $i < $count; $i++) {
                     $height = max(1, count($blocks[$i]['lines'] ?? ['']))
+                        + count($blocks[$i]['section_before_lines'] ?? [])
                         + (($blocks[$i]['section_before'] ?? '') !== '' ? 1 : 0);
                     if ($used + $height > $bodyHeight) {
                         break;
@@ -2185,8 +2201,18 @@ class TelnetUtils
             for ($i = $offset; $i < $count && $screenRow < $inputRow; $i++) {
                 $lines = $blocks[$i]['lines'] ?? [''];
                 $isSelected = ($i === $selectedIndex);
+                foreach ($blocks[$i]['section_before_lines'] ?? [] as $sectionLine) {
+                    if ($screenRow >= $inputRow) {
+                        break 2;
+                    }
+                    self::safeWrite($conn, "\033[{$screenRow};1H\033[K  " . self::truncateAnsi((string)$sectionLine, max(1, $cols - 3)));
+                    $screenRow++;
+                }
                 $sectionBefore = (string)($blocks[$i]['section_before'] ?? '');
                 if ($sectionBefore !== '') {
+                    if ($screenRow >= $inputRow) {
+                        break;
+                    }
                     self::safeWrite($conn, "\033[{$screenRow};1H\033[K  " . self::truncateAnsi($sectionBefore, max(1, $cols - 3)));
                     $screenRow++;
                     if ($screenRow >= $inputRow) {

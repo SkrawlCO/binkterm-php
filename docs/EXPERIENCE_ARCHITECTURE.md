@@ -199,6 +199,12 @@ The sections render in this order, with distinct membership rules:
   The known activity-data limitation that managed doors record a play on a fresh
   session but not on resume is not corrected here. Hidden entirely when there is
   nothing to show — it is not an empty-state card, and it is not a feed.
+  The authenticated **telnet** Crossroads arrival mirrors this section between
+  Your Places and the Experiences catalog: the same `recentAcrossCatalog()`
+  semantics and five-row cap, scoped to the viewer's authorized *telnet* catalog
+  (`$doorList`, so a Web-only Experience never leaks a footprint), rendered as a
+  terminal-native non-selectable block that consumes no menu number. See
+  `docs/TerminalServerDevGuide.md`.
 - **Experiences** is the complete visible, authorized web inventory, including
   every entry already shown in the contextual sections. Its browser-side
   filters narrow only these already-authorized rendered entries; they do not

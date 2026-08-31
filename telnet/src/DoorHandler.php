@@ -111,6 +111,7 @@ class DoorHandler
                 self::buildLiveNowArrivalItem($liveNow, $t),
                 self::buildYourPlacesArrivalItem($yourPlaces, $t),
             ];
+            $firstExperienceIndex = count($items);
             foreach ($doorList as $catalogIndex => $entry) {
                 $items[] = self::buildExperienceListItem(
                     $entry['id'],
@@ -118,6 +119,27 @@ class DoorHandler
                     $t,
                     $catalogIndex === 0
                 );
+            }
+
+            // Recently in the Crossroads: one bounded read of the SAME shared
+            // read model the web arrival uses, scoped to this viewer's
+            // authorized terminal catalog ($doorList — no second discovery, no
+            // per-Experience query). Rendered as a non-selectable block before
+            // the first Experience item, so it never consumes a menu number and
+            // does not shift the Live Now (0) / Your Places (1) / Experience
+            // ($selected - 2) contract. Omitted entirely when there is nothing.
+            if (isset($items[$firstExperienceIndex])) {
+                $recentFootprints = self::composeRecentFootprints(
+                    (new ExperienceActivity())->recentAcrossCatalog(
+                        array_column($doorList, 'data'),
+                        5
+                    ),
+                    $t
+                );
+                if ($recentFootprints['count'] > 0) {
+                    $items[$firstExperienceIndex]['section_before_lines'] =
+                        $recentFootprints['lines'];
+                }
             }
 
             $selected = $shell->chooseFromList(
@@ -400,6 +422,130 @@ class DoorHandler
             'label' => $t('ui.terminalserver.doors.your_places_title', [], 'Your Places'),
             'detail' => (string)($yourPlaces['summary'] ?? ''),
         ];
+    }
+
+    /**
+     * Compose the terminal "Recently in the Crossroads" arrival block.
+     *
+     * Pure formatter over the shared {@see ExperienceActivity::recentAcrossCatalog()}
+     * read model — the SAME distinct person + Experience footprint semantics the
+     * web Crossroads arrival uses (one newest footprint per user + Experience
+     * pair; distinct-pair selection before the limit; newest distinct pairs
+     * first; capped at five). This method performs no query, no dedupe, and no
+     * authorization: the caller passes rows already filtered to the viewer's
+     * authorized terminal catalog, and no second dedupe is applied here.
+     *
+     * Historical play evidence, not live presence — "quiet now" does not mean
+     * nobody has been here. The block is rendered as a non-selectable heading
+     * before the Experiences catalog; it never consumes a menu number and
+     * carries no actions, times-played, durations, or surface labels.
+     *
+     * The returned lines are the section block ready to attach as
+     * `section_before_lines` on the first Experience chooser item: the heading,
+     * one line per footprint, then a blank separator. Returns no lines when
+     * there is nothing to show, so the caller omits the section entirely.
+     *
+     * @param array<int,array<string,mixed>> $recentActivity recentAcrossCatalog() rows
+     * @param callable(string,array<string,mixed>,string):string $t
+     * @return array{lines:array<int,string>,count:int}
+     */
+    public static function composeRecentFootprints(array $recentActivity, callable $t): array
+    {
+        $now = time();
+        $rows = [];
+
+        foreach ($recentActivity as $event) {
+            if (!is_array($event) || count($rows) >= 5) {
+                continue;
+            }
+
+            $username = trim((string)($event['username'] ?? ''));
+            $experienceName = trim((string)($event['experience_name'] ?? ''));
+            if ($username === '' || $experienceName === '') {
+                continue;
+            }
+
+            $occurredTs = strtotime((string)($event['occurred_at'] ?? ''));
+            $relative = self::formatRecentFootprintTime(
+                $occurredTs !== false ? ($now - $occurredTs) : 0,
+                $t
+            );
+
+            $params = [
+                'username' => $username,
+                'experience' => $experienceName,
+                'time' => $relative,
+            ];
+
+            $rows[] = ((string)($event['type'] ?? 'play')) === 'first_play'
+                ? $t(
+                    'ui.terminalserver.doors.recent_footprint_first',
+                    $params,
+                    '{username} first played {experience} - {time}'
+                )
+                : $t(
+                    'ui.terminalserver.doors.recent_footprint',
+                    $params,
+                    '{username} played {experience} - {time}'
+                );
+        }
+
+        if ($rows === []) {
+            return ['lines' => [], 'count' => 0];
+        }
+
+        return [
+            'lines' => array_merge(
+                [$t('ui.terminalserver.doors.recent_heading', [], 'Recently in the Crossroads')],
+                $rows,
+                ['']
+            ),
+            'count' => count($rows),
+        ];
+    }
+
+    /**
+     * Compact, terminal-native relative time for a recent footprint.
+     *
+     * "just now" under a minute, then "{n}m ago" / "{n}h ago" / "{n}d ago".
+     * Deliberately terse so a footprint line stays readable on a narrow
+     * terminal and in line mode.
+     *
+     * @param int $secondsAgo Seconds between the play event and now (negative
+     *     clamped to zero for clock skew).
+     * @param callable(string,array<string,mixed>,string):string $t
+     */
+    public static function formatRecentFootprintTime(int $secondsAgo, callable $t): string
+    {
+        $secondsAgo = max(0, $secondsAgo);
+
+        if ($secondsAgo < 60) {
+            return $t('ui.terminalserver.doors.recent_time_now', [], 'just now');
+        }
+
+        $minutes = intdiv($secondsAgo, 60);
+        if ($minutes < 60) {
+            return $t(
+                'ui.terminalserver.doors.recent_time_minutes',
+                ['count' => $minutes],
+                '{count}m ago'
+            );
+        }
+
+        $hours = intdiv($minutes, 60);
+        if ($hours < 24) {
+            return $t(
+                'ui.terminalserver.doors.recent_time_hours',
+                ['count' => $hours],
+                '{count}h ago'
+            );
+        }
+
+        return $t(
+            'ui.terminalserver.doors.recent_time_days',
+            ['count' => intdiv($hours, 24)],
+            '{count}d ago'
+        );
     }
 
     /** @return array{label:string,detail:string} */

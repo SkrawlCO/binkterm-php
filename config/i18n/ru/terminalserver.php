@@ -605,6 +605,13 @@ return [
     'ui.terminalserver.doors.your_places_return_available' => 'Можно вернуться',
     'ui.terminalserver.doors.your_places_prompt' => 'Выберите пространство или Q для возврата: ',
     'ui.terminalserver.doors.your_places_empty' => 'Сейчас у вас нет активных пространств.',
+    'ui.terminalserver.doors.recent_heading' => 'Недавно в Crossroads',
+    'ui.terminalserver.doors.recent_footprint' => '{username} сыграл в {experience} - {time}',
+    'ui.terminalserver.doors.recent_footprint_first' => '{username} впервые сыграл в {experience} - {time}',
+    'ui.terminalserver.doors.recent_time_now' => 'только что',
+    'ui.terminalserver.doors.recent_time_minutes' => '{count}м назад',
+    'ui.terminalserver.doors.recent_time_hours' => '{count}ч назад',
+    'ui.terminalserver.doors.recent_time_days' => '{count}д назад',
 
     // --- Experience social layer (People / Conversation) ---
     'ui.terminalserver.doors.detail_action_people' => 'Люди',

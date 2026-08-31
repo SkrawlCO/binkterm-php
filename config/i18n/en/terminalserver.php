@@ -604,6 +604,13 @@ return [
     'ui.terminalserver.doors.your_places_return_available' => 'Return available',
     'ui.terminalserver.doors.your_places_prompt' => 'Select an Experience or Q to return: ',
     'ui.terminalserver.doors.your_places_empty' => 'You have no active places right now.',
+    'ui.terminalserver.doors.recent_heading' => 'Recently in the Crossroads',
+    'ui.terminalserver.doors.recent_footprint' => '{username} played {experience} - {time}',
+    'ui.terminalserver.doors.recent_footprint_first' => '{username} first played {experience} - {time}',
+    'ui.terminalserver.doors.recent_time_now' => 'just now',
+    'ui.terminalserver.doors.recent_time_minutes' => '{count}m ago',
+    'ui.terminalserver.doors.recent_time_hours' => '{count}h ago',
+    'ui.terminalserver.doors.recent_time_days' => '{count}d ago',
 
     // --- Experience social layer (People / Conversation) ---
     'ui.terminalserver.doors.detail_action_people' => 'People',

@@ -602,6 +602,13 @@ return [
     'ui.terminalserver.doors.your_places_return_available' => 'Rückkehr möglich',
     'ui.terminalserver.doors.your_places_prompt' => 'Erlebnis auswählen oder Q für zurück: ',
     'ui.terminalserver.doors.your_places_empty' => 'Du hast gerade keine aktiven Orte.',
+    'ui.terminalserver.doors.recent_heading' => 'Kürzlich in den Crossroads',
+    'ui.terminalserver.doors.recent_footprint' => '{username} spielte {experience} - {time}',
+    'ui.terminalserver.doors.recent_footprint_first' => '{username} spielte zum ersten Mal {experience} - {time}',
+    'ui.terminalserver.doors.recent_time_now' => 'gerade eben',
+    'ui.terminalserver.doors.recent_time_minutes' => 'vor {count}m',
+    'ui.terminalserver.doors.recent_time_hours' => 'vor {count}h',
+    'ui.terminalserver.doors.recent_time_days' => 'vor {count}d',
 
     // --- Experience social layer (People / Conversation) ---
     'ui.terminalserver.doors.detail_action_people' => 'Leute',

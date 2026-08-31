@@ -109,18 +109,54 @@ Participation. A participation that ended or became stale simply disappears
 on refresh. No polling, caching, or RLogin-specific lifecycle behavior is
 introduced.
 
+### Recently in the Crossroads arrival block (telnet)
+
+Between Your Places and the Experiences catalog the arrival shows a short,
+non-selectable **Recently in the Crossroads** block: at most five play
+footprints (`Bard played LORD - 47m ago`, or `first played` when truthful).
+
+It reuses the SAME shared read model as the web arrival —
+`ExperienceActivity::recentAcrossCatalog()` — with the same semantics: play
+activity types only (`webdoor_play` / `dosdoor_play`), one newest footprint per
+distinct `(user, Experience)` pair, distinct-pair selection before the limit,
+newest distinct pairs first, capped at five, system users and deleted users
+excluded, first-play derived from full history. `ExperienceActivity::recent()`
+for individual Experience detail is untouched and keeps its raw semantics.
+
+The allow-list is `$doorList` — the viewer's **authorized, telnet-launchable**
+catalog already built for this arrival — so a Web-only Experience, a hidden or
+admin-only one, or an orphaned backend id can never surface a footprint. It is
+one bounded query joined to the single pre-chooser collection snapshot: no
+second `GameCatalog` discovery, no per-Experience state or activity query.
+
+The block is **historical play evidence, not live presence** — "quiet now" does
+not mean nobody has been here. It carries no "since your last visit" claim, no
+session duration, no leave time, no launch-vs-return, and no surface label. It
+is informational only: no avatars, icons, badges, scores, pagination, refresh,
+or actions.
+
+`DoorHandler::composeRecentFootprints()` is a pure formatter over the read-model
+rows and applies no second dedupe. The lines are attached as
+`section_before_lines` on the first Experience chooser item, so — like the
+`section_before` **Experiences** heading — they render as non-selectable text
+above that row and never enter the item array. Selection indices and the shared
+`chooseFromList()` contract (Live Now `0`, Your Places `1`, Experience
+`$selected - 2`) are therefore unchanged. When there are no qualifying
+footprints the block is omitted entirely; there is no empty-state line.
+
 ### Crossroads arrival presentation
 
 The top-level selector uses the localized **Crossroads** title. Its first two
 rows remain the Live Now and Your Places summaries. `buildExperienceListItem()`
 then emits compact, empty-detail rows for the authorized catalog. The first row
-carries optional `section_before` presentation metadata, which both shell
-renderers draw as a separate, non-selectable **Experiences** heading before the
-numbered row. Every selectable row keeps only the normalized name and a
-localized Gateway, Multiplayer, or Game cue. Because `section_before` never
-enters the item array, selection indices and the shared `chooseFromList()`
-contract remain unchanged. Full descriptions stay exclusively in Experience
-detail.
+carries optional `section_before` presentation metadata (and, when there is
+recent activity, `section_before_lines`), which both shell renderers draw as
+separate, non-selectable lines before the numbered row — the Recently block
+first, then the **Experiences** heading. Every selectable row keeps only the
+normalized name and a localized Gateway, Multiplayer, or Game cue. Because
+neither `section_before` nor `section_before_lines` enters the item array,
+selection indices and the shared `chooseFromList()` contract remain unchanged.
+Full descriptions stay exclusively in Experience detail.
 
 ### Experience detail screen (telnet Crossroads slice 1)
 

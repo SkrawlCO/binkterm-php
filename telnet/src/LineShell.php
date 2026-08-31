@@ -34,10 +34,18 @@ class LineShell implements TerminalShellInterface
     private function normalizeListItem($item): array
     {
         if (is_array($item)) {
+            $sectionBeforeLines = [];
+            if (is_array($item['section_before_lines'] ?? null)) {
+                foreach ($item['section_before_lines'] as $sectionLine) {
+                    $sectionBeforeLines[] = (string)$sectionLine;
+                }
+            }
+
             return [
                 'label' => (string)($item['label'] ?? $item['title'] ?? $item['name'] ?? $item['text'] ?? ''),
                 'detail' => trim((string)($item['detail'] ?? $item['description'] ?? $item['desc'] ?? '')),
                 'section_before' => trim((string)($item['section_before'] ?? '')),
+                'section_before_lines' => $sectionBeforeLines,
             ];
         }
 
@@ -45,6 +53,7 @@ class LineShell implements TerminalShellInterface
             'label' => $this->stripAnsi((string)$item),
             'detail' => '',
             'section_before' => '',
+            'section_before_lines' => [],
         ];
     }
 
@@ -69,6 +78,9 @@ class LineShell implements TerminalShellInterface
         foreach ($slice as $offset => $item) {
             $displayIndex = $offset + 1;
             $itemData = $this->normalizeListItem($item);
+            foreach ($itemData['section_before_lines'] as $sectionLine) {
+                TelnetUtils::writeLine($conn, '  ' . $sectionLine);
+            }
             if ($itemData['section_before'] !== '') {
                 TelnetUtils::writeLine($conn, '  ' . $itemData['section_before']);
             }
