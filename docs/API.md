@@ -556,6 +556,7 @@ Click recording confirmation with redirect URL
 |--------|------|------|---------|
 | `POST` | [`/api/auth/login`](#post-apiauthlogin) | No | Authenticate user with username and password, returning session cookie and CSRF token. |
 | `POST` | [`/api/auth/logout`](#post-apiauthlogout) | No | Invalidate user session and clear authentication cookie. |
+| `GET` | [`/api/auth/csrf`](#get-apiauthcsrf) | Yes | Return the authenticated user's current CSRF token (terminal-daemon only; read-only). |
 | `POST` | [`/api/auth/verify-gateway-token`](#post-apiauthverify-gateway-token) | No | Verify gateway token for external service integration (requires API key). |
 | `POST` | [`/api/auth/gateway-token`](#post-apiauthgateway-token) | Yes | Generate a time-limited gateway token for authenticated user. |
 | `POST` | [`/api/auth/forgot-password`](#post-apiauthforgot-password) | No | Initiate password reset by username or email address. |
@@ -609,6 +610,34 @@ Logout confirmation
 | Field | Type | Description |
 |-------|------|-------------|
 | `success` | boolean | Always true |
+
+---
+
+#### `GET /api/auth/csrf`
+
+Authenticated
+
+Returns the authenticated user's **current** per-user CSRF token. The token is
+stored per user and rotated on every login, so a long-lived terminal/SSH
+session that cached its token at login can have it invalidated by a later
+authentication of the same user. The terminal daemon uses this endpoint to
+re-sync its cached token for the same authenticated session without a new
+login; `TelnetUtils::apiRequest()` calls it automatically after a mutating
+request is rejected with `errors.auth.invalid_csrf_token`, then retries once.
+
+This is read-only — it never mints a session or rotates the token — and does
+not weaken CSRF validation (the server still validates every mutating request
+against the live token, and this value is already exposed to any authenticated
+web page as a Twig global). Access additionally requires the shared terminal
+secret in the `X-Binkterm-Client-Token` header, so a browser cannot probe it;
+requests without it get `403 Forbidden`.
+
+**Response** _(JSON)_
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `success` | boolean | Always true on success |
+| `csrf_token` | string \| null | The user's current CSRF token |
 
 ---
 

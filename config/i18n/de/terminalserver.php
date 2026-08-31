@@ -575,6 +575,20 @@ return [
     'ui.terminalserver.doors.detail_action_back' => 'Zurück',
     'ui.terminalserver.doors.detail_not_found' => 'Diese Erfahrung ist nicht mehr verfügbar.',
 
+    // --- Experience social layer (People / Conversation) ---
+    'ui.terminalserver.doors.detail_action_people' => 'Leute',
+    'ui.terminalserver.doors.detail_action_conversation' => 'Unterhaltung',
+    'ui.terminalserver.doors.people_title' => '{name} - Wer ist hier',
+    'ui.terminalserver.doors.people_empty' => 'Gerade ist niemand hier.',
+    'ui.terminalserver.doors.people_select_hint' => 'Auswählen',
+    'ui.terminalserver.doors.people_node' => '{username}  |  Knoten {node}',
+    'ui.terminalserver.doors.person_action_profile' => 'Profil ansehen',
+    'ui.terminalserver.doors.person_action_message' => 'Nachricht senden',
+    'ui.terminalserver.doors.person_is_you' => 'Das bist du.',
+    'ui.terminalserver.doors.person_unavailable' => 'Diese Person ist nicht mehr verfügbar.',
+    'ui.terminalserver.doors.person_message_unavailable' => 'Nachrichten sind gerade nicht verfügbar.',
+    'ui.terminalserver.doors.conversation_unavailable' => 'Diese Unterhaltung ist gerade nicht verfügbar.',
+
     // --- Message headers ---
     'ui.terminalserver.message.headers_title'          => '=== Nachrichtenkopfzeilen ===',
     'ui.terminalserver.message.no_headers'             => '(Keine Nachrichtenkopfzeilen)',
@@ -711,7 +725,8 @@ return [
     'ui.terminalserver.chat.no_messages'             => 'No chat messages yet.',
     'ui.terminalserver.chat.moderation_hint'         => 'ENTER=DM  K=Kick  B=Ban',
     'ui.terminalserver.chat.dm_hint'                 => 'ENTER opens a DM',
-    'ui.terminalserver.chat.input_help'              => 'TAB focus  Enter send  Ctrl+E multiline  Ctrl+K help  Ctrl+C exit',
+    'ui.terminalserver.chat.input_help'              => 'TAB focus  Enter send  Ctrl+E multiline  Ctrl+K help',
+    'ui.terminalserver.chat.input_exit_hint'              => 'Ctrl+C CHAT VERLASSEN',
     'ui.terminalserver.chat.input_target'            => 'Target: {target}',
     'ui.terminalserver.chat.editor.title'            => 'LOCAL CHAT COMPOSER',
     'ui.terminalserver.chat.editor.saved'            => 'Message saved and ready to send.',

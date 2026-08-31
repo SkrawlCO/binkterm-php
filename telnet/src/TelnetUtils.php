@@ -91,6 +91,20 @@ class TelnetUtils
     private static ?string $clientToken = null;
 
     /**
+     * Per-process authoritative CSRF token for this session's API calls.
+     *
+     * The web side stores the CSRF token per user and rotates it on every
+     * login, so the value BbsSession cached at *its* login can be invalidated
+     * by any later authentication of the same user (another terminal/SSH/web
+     * session). This static is seeded once at login and then transparently
+     * re-synced by {@see apiRequest()} whenever the server rejects a mutating
+     * call with errors.auth.invalid_csrf_token — see {@see refreshCsrfToken()}.
+     * It takes precedence over the per-call $csrfToken argument so a heal in
+     * one call fixes every subsequent call.
+     */
+    private static ?string $csrfToken = null;
+
+    /**
      * Record the connecting user's real IP and the shared terminal secret so
      * subsequent apiRequest() calls carry X-Binkterm-Client-IP / -Client-Token.
      */
@@ -100,6 +114,21 @@ class TelnetUtils
             ? $clientIp
             : null;
         self::$clientToken = ($clientToken !== null && $clientToken !== '') ? $clientToken : null;
+    }
+
+    /**
+     * Seed / update this session's authoritative CSRF token. Called once by
+     * BbsSession after login; {@see apiRequest()} keeps it current thereafter.
+     */
+    public static function setCsrfToken(?string $token): void
+    {
+        self::$csrfToken = ($token !== null && $token !== '') ? $token : null;
+    }
+
+    /** The session's current CSRF token, or null before login. */
+    public static function getCsrfToken(): ?string
+    {
+        return self::$csrfToken;
     }
 
     /**
@@ -313,6 +342,11 @@ class TelnetUtils
     {
         $url = rtrim($base, '/') . $path;
         $attempt = 0;
+        $isMutating = in_array($method, ['POST', 'PUT', 'DELETE', 'PATCH'], true);
+        // Prefer the session-authoritative token (kept current by the self-heal
+        // below) over a stale value a caller may still be passing from $state.
+        $effectiveCsrf = self::$csrfToken ?? $csrfToken;
+        $csrfHealed = false;
 
         while ($attempt < $maxRetries) {
             $attempt++;
@@ -327,8 +361,12 @@ class TelnetUtils
 
             // Tell the web side the real end-user address — the daemon proxies
             // all API traffic through the server. See Auth::resolveClientIp().
-            if (self::$clientIp !== null && self::$clientToken !== null) {
+            // The client token is sent whenever known (it also gates
+            // GET /api/auth/csrf); the IP only when a valid one is known.
+            if (self::$clientIp !== null) {
                 $headers[] = 'X-Binkterm-Client-IP: ' . self::$clientIp;
+            }
+            if (self::$clientToken !== null) {
                 $headers[] = 'X-Binkterm-Client-Token: ' . self::$clientToken;
             }
             curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
@@ -337,7 +375,7 @@ class TelnetUtils
             curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
             curl_setopt($ch, CURLOPT_USERAGENT, 'BinktermPHP-Telnet/1.10.2');
 
-            if (in_array($method, ['POST', 'PUT', 'DELETE', 'PATCH'], true)) {
+            if ($isMutating) {
                 curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $method);
                 if ($payload !== null) {
                     $json    = json_encode($payload);
@@ -345,8 +383,8 @@ class TelnetUtils
                     $headers[] = 'Content-Length: ' . strlen($json);
                     curl_setopt($ch, CURLOPT_POSTFIELDS, $json);
                 }
-                if ($csrfToken !== null) {
-                    $headers[] = 'X-CSRF-Token: ' . $csrfToken;
+                if ($effectiveCsrf !== null) {
+                    $headers[] = 'X-CSRF-Token: ' . $effectiveCsrf;
                 }
             }
 
@@ -380,6 +418,22 @@ class TelnetUtils
                 $data = ['raw' => $response];
             }
 
+            // Self-heal a stale CSRF token: the per-user token was legitimately
+            // rotated by another login of the same user. Re-sync it for THIS
+            // authenticated session and retry the original request once. The
+            // server still validated the request — this only fixes the client's
+            // cached copy; it never bypasses validation.
+            if (self::shouldHealStaleCsrf($isMutating, (int)$httpCode, $data, $csrfHealed, $session, $effectiveCsrf)) {
+                $csrfHealed = true;
+                $fresh = self::refreshCsrfToken($base, (string)$session);
+                if ($fresh !== null && $fresh !== $effectiveCsrf) {
+                    self::$csrfToken = $fresh;
+                    $effectiveCsrf = $fresh;
+                    $attempt--; // this attempt doesn't count against the budget
+                    continue;
+                }
+            }
+
             return [
                 'status' => $httpCode,
                 'data' => $data,
@@ -393,6 +447,45 @@ class TelnetUtils
             'data' => [],
             'error' => 'Max retries exceeded'
         ];
+    }
+
+    /**
+     * Whether an API response is a stale-CSRF rejection that {@see apiRequest()}
+     * should transparently re-sync and retry once. Pure: no I/O.
+     *
+     * @param mixed $data Decoded response body
+     */
+    public static function shouldHealStaleCsrf(
+        bool $isMutating,
+        int $httpStatus,
+        mixed $data,
+        bool $alreadyHealed,
+        ?string $session,
+        ?string $effectiveCsrf
+    ): bool {
+        return $isMutating
+            && $httpStatus === 403
+            && !$alreadyHealed
+            && $session !== null
+            && $session !== ''
+            && $effectiveCsrf !== null
+            && is_array($data)
+            && ($data['error_code'] ?? '') === 'errors.auth.invalid_csrf_token';
+    }
+
+    /**
+     * Fetch this session's current per-user CSRF token from the web side.
+     * Read-only (no rotation); gated server-side on the shared terminal secret.
+     */
+    private static function refreshCsrfToken(string $base, string $session): ?string
+    {
+        $resp = self::apiRequest($base, 'GET', '/api/auth/csrf', null, $session, 1, null);
+        if (($resp['status'] ?? 0) !== 200) {
+            return null;
+        }
+        $token = $resp['data']['csrf_token'] ?? null;
+
+        return (is_string($token) && $token !== '') ? $token : null;
     }
 
     /**

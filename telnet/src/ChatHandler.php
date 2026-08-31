@@ -37,22 +37,74 @@ class ChatHandler
      */
     public function show($conn, array &$state, string $session): void
     {
+        $this->run($conn, $state, $session, null);
+    }
+
+    /**
+     * Open the chat client focused on a specific room (e.g. a Crossroads
+     * experience's canonical conversation room). Returns false when chat is
+     * disabled or the room is not active/accessible — the caller is expected to
+     * show its own contextual alert in that case; true when the chat UI ran.
+     *
+     * @param resource $conn
+     */
+    public function showRoom($conn, array &$state, string $session, int $roomId): bool
+    {
+        return $this->run($conn, $state, $session, ['type' => 'room', 'id' => $roomId]);
+    }
+
+    /**
+     * Open the chat client focused on a direct-message conversation with a
+     * user (e.g. someone selected from a Crossroads People view). Returns false
+     * for a hard input error or when chat is disabled; true when the chat UI
+     * ran (a recipient that has since signed off surfaces as a chat status
+     * message, the same as the normal DM flow).
+     *
+     * @param resource $conn
+     */
+    public function showDirectMessage($conn, array &$state, string $session, int $userId, string $username): bool
+    {
+        return $this->run(
+            $conn,
+            $state,
+            $session,
+            ['type' => 'dm', 'id' => $userId, 'label' => $username]
+        );
+    }
+
+    /**
+     * @param resource $conn
+     * @param array{type:string,id:int,label?:string}|null $preferTarget
+     *        When set, open directly on this room/DM instead of the caller's
+     *        saved/default target.
+     */
+    private function run($conn, array &$state, string $session, ?array $preferTarget): bool
+    {
         if (!\BinktermPHP\BbsConfig::isFeatureEnabled('chat')) {
-            $this->showInfo($conn, $state, $this->t('ui.terminalserver.chat.feature_disabled', 'Local chat is disabled.', $state));
-            return;
+            if ($preferTarget === null) {
+                $this->showInfo($conn, $state, $this->t('ui.terminalserver.chat.feature_disabled', 'Local chat is disabled.', $state));
+            }
+            return false;
         }
 
         $chat = $this->createState($state);
         $this->refreshRooms($chat, $session, $state);
         $this->refreshOnlineUsers($chat, $session);
         $this->refreshCursorAnchor($chat, $session, $state);
-        if (!$this->restoreSavedTarget($chat, $session, $state)) {
+
+        if ($preferTarget !== null) {
+            if (!$this->openPreferredTarget($chat, $session, $state, $preferTarget)) {
+                return false;
+            }
+        } elseif (!$this->restoreSavedTarget($chat, $session, $state)) {
             $this->ensureActiveTarget($chat, $session, $state);
         }
 
         if ($chat['active_target'] === null) {
-            $this->showInfo($conn, $state, $this->t('ui.terminalserver.chat.no_targets', 'No chat rooms or users are available right now.', $state));
-            return;
+            if ($preferTarget === null) {
+                $this->showInfo($conn, $state, $this->t('ui.terminalserver.chat.no_targets', 'No chat rooms or users are available right now.', $state));
+            }
+            return false;
         }
 
         $chat['last_room_refresh'] = time();
@@ -103,19 +155,19 @@ class ChatHandler
 
             [$key, $timedOut, $shouldDisconnect] = $this->server->readKeyWithTimeout($conn, $state, 250);
             if ($shouldDisconnect || $key === null) {
-                return;
+                return true;
             }
             if ($timedOut || $key === '') {
                 continue;
             }
 
             if ($key === 'CTRL_C') {
-                return;
+                return true;
             }
 
             $handled = $this->handleGlobalKey($conn, $state, $session, $chat, $key);
             if ($handled === 'exit') {
-                return;
+                return true;
             }
             if ($handled) {
                 continue;
@@ -506,6 +558,56 @@ class ChatHandler
                 'label' => (string)$user['username'],
             ]);
         }
+    }
+
+    /**
+     * Open a caller-supplied room/DM target (used by showRoom() /
+     * showDirectMessage()). A room must be present in the authorized room list
+     * returned by GET /api/chat/rooms; a DM target only needs a positive user
+     * id and a display label (the roster is the caller's source of truth, and
+     * /api/chat/send re-validates the recipient).
+     *
+     * @param array{type:string,id:int,label?:string} $target
+     * @return bool True when a target was opened.
+     */
+    private function openPreferredTarget(array &$chat, string $session, array &$state, array $target): bool
+    {
+        $type = (string)($target['type'] ?? '');
+        $id = (int)($target['id'] ?? 0);
+        if ($id <= 0) {
+            return false;
+        }
+
+        if ($type === 'room') {
+            if (!isset($chat['room_map'][$id])) {
+                return false;
+            }
+            $this->openTarget($chat, $session, $state, [
+                'type' => 'room',
+                'id' => $id,
+                'label' => (string)($chat['room_map'][$id]['name'] ?? ''),
+            ]);
+            return true;
+        }
+
+        if ($type === 'dm') {
+            $label = trim((string)($target['label'] ?? ''));
+            if (isset($chat['online_map'][$id]['username'])) {
+                $label = (string)$chat['online_map'][$id]['username'];
+            }
+            if ($label === '') {
+                return false;
+            }
+            $this->ensureDmUser($chat, $id, $label);
+            $this->openTarget($chat, $session, $state, [
+                'type' => 'dm',
+                'id' => $id,
+                'label' => $label,
+            ]);
+            return true;
+        }
+
+        return false;
     }
 
     private function openTarget(array &$chat, string $session, array &$state, array $target): void
@@ -1293,11 +1395,25 @@ class ChatHandler
     private function buildInputLines(array $chat, array $state, array $layout): array
     {
         $lines = [];
-        $lines[] = $this->server->colorizeForTerminal($this->t(
-            'ui.terminalserver.chat.input_help',
-            'TAB focus  Enter send  Ctrl+E multiline  Ctrl+K help  Ctrl+C exit',
-            $state
-        ), TelnetUtils::ANSI_YELLOW);
+
+        // Leaving the whole chat screen is a different kind of action from the
+        // compose/editing controls next to it, so give it its own emphasised,
+        // separated segment (a small red "button") and put it first so it
+        // survives truncation on narrow terminals.
+        $exitHint = $this->server->colorizeForTerminal(
+            ' ' . $this->t('ui.terminalserver.chat.input_exit_hint', 'Ctrl+C EXIT CHAT', $state) . ' ',
+            TelnetUtils::ANSI_BG_RED . TelnetUtils::ANSI_BOLD . "\033[37m"
+        );
+        $composeHelp = $this->server->colorizeForTerminal(
+            $this->t(
+                'ui.terminalserver.chat.input_help',
+                'TAB focus  Enter send  Ctrl+E multiline  Ctrl+K help',
+                $state
+            ),
+            TelnetUtils::ANSI_YELLOW
+        );
+        $divider = $this->server->colorizeForTerminal('   ', TelnetUtils::ANSI_DIM);
+        $lines[] = $exitHint . $divider . $composeHelp;
 
         $status = ((time() <= (int)$chat['status_until']) && $chat['status'] !== '')
             ? $this->server->colorizeForTerminal((string)$chat['status'], (string)$chat['status_color'])

@@ -170,11 +170,13 @@ class DoorHandler
             'is_admin' => !empty($state['is_admin']),
         ];
         $viewerId = (int)($state['user_id'] ?? 0);
+        $chatEnabled = \BinktermPHP\BbsConfig::isFeatureEnabled('chat');
 
         // Recompose the shared Crossroads read models on demand. The detail loop
         // calls this once per iteration, so the screen shown after a door exits
-        // reflects the caller's new session/participation state.
-        $reload = function () use ($experienceId, $modelUser, $viewerId, $t): ?array {
+        // (or after a social view) reflects the caller's new
+        // session/participation/roster state.
+        $reload = function () use ($experienceId, $modelUser, $viewerId, $chatEnabled, $t): ?array {
             $experienceState = (new ExperienceState())->getExperienceState(
                 $experienceId,
                 $modelUser,
@@ -201,7 +203,8 @@ class DoorHandler
                 $experienceState,
                 $recentActivity,
                 $viewerPlayer,
-                $t
+                $t,
+                $chatEnabled
             );
         };
 
@@ -222,7 +225,342 @@ class DoorHandler
             );
         };
 
-        $this->runExperienceDetailLoop($conn, $state, $shell, $reload, $onLaunch, $t);
+        $onSocial = function (string $kind, array $view) use ($conn, &$state, $session, $shell, $t): void {
+            if ($kind === 'people') {
+                $this->showExperiencePeople($conn, $state, $session, $view, $shell, $t);
+            } elseif ($kind === 'conversation') {
+                $this->openExperienceConversation($conn, $state, $session, $view, $shell, $t);
+            }
+        };
+
+        $this->runExperienceDetailLoop($conn, $state, $shell, $reload, $onLaunch, $t, $onSocial);
+    }
+
+    /**
+     * Contextual People view for one experience.
+     *
+     * The roster is the snapshot captured by {@see composeExperienceDetailView()}
+     * for this visit — no new presence query. Selecting another caller opens a
+     * small View profile / Send message flow built entirely on existing
+     * infrastructure ({@see fetchPersonProfile()} -> the same public-profile
+     * endpoint Who's Online uses, and {@see invokeDirectMessage()} -> ChatHandler).
+     * Back returns to the experience detail screen, which is then recomposed.
+     *
+     * @param resource $conn
+     * @param array<string,mixed> $state
+     * @param array<string,mixed> $view Detail view model from composeExperienceDetailView()
+     * @param callable(string,array<string,mixed>,string):string $t Translator: (key, params, fallback)
+     */
+    private function showExperiencePeople(
+        $conn,
+        array &$state,
+        string $session,
+        array $view,
+        TerminalShellInterface $shell,
+        callable $t
+    ): void {
+        $roster = is_array($view['roster'] ?? null) ? array_values($view['roster']) : [];
+        $viewerId = (int)($state['user_id'] ?? 0);
+        $title = $t(
+            'ui.terminalserver.doors.people_title',
+            ['name' => (string)($view['name'] ?? '')],
+            '{name} - Who is here'
+        );
+
+        $onPerson = function (array $person) use ($conn, &$state, $session, $shell, $t): void {
+            $this->showPersonActions($conn, $state, $session, $person, $shell, $t);
+        };
+
+        $this->runExperiencePeopleLoop($conn, $state, $shell, $roster, $viewerId, $title, $onPerson, $t);
+    }
+
+    /**
+     * People selection loop. No I/O beyond the shell and the injected
+     * $onPerson callback, so the "select a caller -> act -> Back -> People"
+     * navigation is directly testable.
+     *
+     * @param resource $conn
+     * @param array<string,mixed> $state
+     * @param array<int,array<string,mixed>> $roster Snapshot roster (from the detail view model)
+     * @param callable(array<string,mixed>):void $onPerson Invoked for a selected non-self caller
+     * @param callable(string,array<string,mixed>,string):string $t Translator: (key, params, fallback)
+     */
+    private function runExperiencePeopleLoop(
+        $conn,
+        array &$state,
+        TerminalShellInterface $shell,
+        array $roster,
+        int $viewerId,
+        string $title,
+        callable $onPerson,
+        callable $t
+    ): void {
+        $roster = array_values(array_filter(
+            $roster,
+            static fn ($p): bool => is_array($p) && (int)($p['user_id'] ?? 0) > 0
+        ));
+
+        if ($roster === []) {
+            $shell->showAlert(
+                $conn,
+                $state,
+                $title,
+                $t('ui.terminalserver.doors.people_empty', [], 'Nobody is here right now.'),
+                'info'
+            );
+            return;
+        }
+
+        $items = array_map(function (array $player) use ($viewerId, $t): string {
+            $username = trim((string)($player['username'] ?? ''));
+            $node = $player['node'] ?? null;
+            $label = $node !== null
+                ? $t('ui.terminalserver.doors.people_node', ['username' => $username, 'node' => (int)$node], '{username}  |  node {node}')
+                : $username;
+            if ($viewerId > 0 && (int)($player['user_id'] ?? 0) === $viewerId) {
+                $label .= '  ' . $t('ui.terminalserver.doors.detail_roster_you', [], '(you)');
+            }
+            return $label;
+        }, $roster);
+
+        $selected = 0;
+        while (true) {
+            $result = $shell->showSelectableDialog(
+                $conn,
+                $state,
+                $title,
+                $items,
+                $t('ui.terminalserver.doors.people_select_hint', [], 'Select'),
+                $t('ui.terminalserver.doors.detail_action_back', [], 'Back'),
+                $selected,
+                null
+            );
+
+            if ($result === null || ($result['action'] ?? '') !== 'select') {
+                return;
+            }
+
+            $selected = (int)($result['index'] ?? 0);
+            $person = $roster[$selected] ?? null;
+            if (!is_array($person)) {
+                continue;
+            }
+
+            if ((int)($person['user_id'] ?? 0) === $viewerId) {
+                $shell->showAlert(
+                    $conn,
+                    $state,
+                    (string)($person['username'] ?? ''),
+                    $t('ui.terminalserver.doors.person_is_you', [], 'That is you.'),
+                    'info'
+                );
+                continue;
+            }
+
+            $onPerson($person);
+        }
+    }
+
+    /**
+     * View profile / Send message flow for one roster-selected caller.
+     *
+     * The public profile is fetched once ({@see fetchPersonProfile()}); a 404
+     * means the caller signed off between the roster snapshot and the
+     * selection, surfaced as an alert. Profile rendering is delegated to
+     * {@see TerminalShellInterface::showPublicProfileViewer()} and message
+     * delivery to {@see ChatHandler::showDirectMessage()} — neither is
+     * reimplemented here.
+     *
+     * @param resource $conn
+     * @param array<string,mixed> $state
+     * @param array<string,mixed> $person Roster entry ({user_id, username, ...})
+     * @param callable(string,array<string,mixed>,string):string $t Translator: (key, params, fallback)
+     */
+    private function showPersonActions(
+        $conn,
+        array &$state,
+        string $session,
+        array $person,
+        TerminalShellInterface $shell,
+        callable $t
+    ): void {
+        $userId = (int)($person['user_id'] ?? 0);
+        $username = trim((string)($person['username'] ?? ''));
+
+        $profile = $this->fetchPersonProfile($session, $userId);
+        if ($profile === null) {
+            $shell->showAlert(
+                $conn,
+                $state,
+                $username,
+                $t('ui.terminalserver.doors.person_unavailable', [], 'That person is no longer available.'),
+                'error'
+            );
+            return;
+        }
+
+        $onProfile = function () use ($conn, &$state, $shell, $profile): void {
+            $shell->showPublicProfileViewer($conn, $state, $profile);
+        };
+
+        $onMessage = function () use ($conn, &$state, $session, $userId, $username): bool {
+            return $this->invokeDirectMessage($conn, $state, $session, $userId, $username);
+        };
+
+        $this->runPersonActionLoop($conn, $state, $shell, $username, $onProfile, $onMessage, $t);
+    }
+
+    /**
+     * Person action menu loop. No I/O beyond the shell and the injected
+     * $onProfile / $onMessage callbacks.
+     *
+     * @param resource $conn
+     * @param array<string,mixed> $state
+     * @param callable():void $onProfile Show the person's profile
+     * @param callable():bool $onMessage Open a DM; false surfaces a "not available" alert
+     * @param callable(string,array<string,mixed>,string):string $t Translator: (key, params, fallback)
+     */
+    private function runPersonActionLoop(
+        $conn,
+        array &$state,
+        TerminalShellInterface $shell,
+        string $username,
+        callable $onProfile,
+        callable $onMessage,
+        callable $t
+    ): void {
+        $items = [
+            $t('ui.terminalserver.doors.person_action_profile', [], 'View profile'),
+            $t('ui.terminalserver.doors.person_action_message', [], 'Send message'),
+        ];
+
+        $selected = 0;
+        while (true) {
+            $result = $shell->showSelectableDialog(
+                $conn,
+                $state,
+                $username,
+                $items,
+                $t('ui.terminalserver.doors.people_select_hint', [], 'Select'),
+                $t('ui.terminalserver.doors.detail_action_back', [], 'Back'),
+                $selected,
+                null
+            );
+
+            if ($result === null || ($result['action'] ?? '') !== 'select') {
+                return;
+            }
+
+            $selected = (int)($result['index'] ?? 0);
+            if ($selected === 0) {
+                $onProfile();
+                continue;
+            }
+
+            if (!$onMessage()) {
+                $shell->showAlert(
+                    $conn,
+                    $state,
+                    $username,
+                    $t('ui.terminalserver.doors.person_message_unavailable', [], 'Messaging is not available right now.'),
+                    'error'
+                );
+            }
+        }
+    }
+
+    /**
+     * Enter the experience's canonical conversation room via the existing
+     * telnet chat client. On any normal exit (or when the room is no longer
+     * accessible) control returns to the caller, and
+     * {@see runExperienceDetailLoop()} recomposes the experience detail screen.
+     *
+     * @param resource $conn
+     * @param array<string,mixed> $state
+     * @param array<string,mixed> $view Detail view model from composeExperienceDetailView()
+     * @param callable(string,array<string,mixed>,string):string $t Translator: (key, params, fallback)
+     */
+    private function openExperienceConversation(
+        $conn,
+        array &$state,
+        string $session,
+        array $view,
+        TerminalShellInterface $shell,
+        callable $t
+    ): void {
+        $roomId = (int)($view['actions']['conversation_room_id'] ?? 0);
+
+        if ($roomId > 0 && $this->invokeRoomConversation($conn, $state, $session, $roomId)) {
+            return;
+        }
+
+        $shell->showAlert(
+            $conn,
+            $state,
+            (string)($view['name'] ?? ''),
+            $t('ui.terminalserver.doors.conversation_unavailable', [], 'This conversation is not available right now.'),
+            'error'
+        );
+    }
+
+    /**
+     * Fetch a caller's public profile for the People flow, or null when the
+     * caller is no longer active. Same endpoint Who's Online uses.
+     *
+     * @return array<string,mixed>|null
+     */
+    protected function fetchPersonProfile(string $session, int $userId): ?array
+    {
+        if ($userId <= 0) {
+            return null;
+        }
+
+        $resp = TelnetUtils::apiRequest(
+            $this->apiBase,
+            'GET',
+            '/api/user/public-profile/' . $userId,
+            null,
+            $session
+        );
+
+        $profile = $resp['data']['profile'] ?? null;
+
+        return (($resp['status'] ?? 0) === 200 && is_array($profile)) ? $profile : null;
+    }
+
+    /**
+     * Open a direct-message conversation with a caller via the existing chat
+     * client. Returns false when chat is unavailable.
+     *
+     * @param resource $conn
+     * @param array<string,mixed> $state
+     */
+    protected function invokeDirectMessage(
+        $conn,
+        array &$state,
+        string $session,
+        int $userId,
+        string $username
+    ): bool {
+        return (new ChatHandler($this->server, $this->apiBase))
+            ->showDirectMessage($conn, $state, $session, $userId, $username);
+    }
+
+    /**
+     * Open the experience's conversation room via the existing chat client.
+     * Returns false when chat is disabled or the room is not accessible.
+     *
+     * @param resource $conn
+     * @param array<string,mixed> $state
+     */
+    protected function invokeRoomConversation(
+        $conn,
+        array &$state,
+        string $session,
+        int $roomId
+    ): bool {
+        return (new ChatHandler($this->server, $this->apiBase))
+            ->showRoom($conn, $state, $session, $roomId);
     }
 
     /**
@@ -237,6 +575,7 @@ class DoorHandler
      * @param callable():(array<string,mixed>|null) $reload Recompose the detail view model, or null when gone
      * @param callable(array<string,mixed>):void $onLaunch Launch the experience for the given view model
      * @param callable(string,array<string,mixed>,string):string $t Translator: (key, params, fallback)
+     * @param ?callable(string,array<string,mixed>):void $onSocial Handle a social action ('people'|'conversation')
      */
     private function runExperienceDetailLoop(
         $conn,
@@ -244,7 +583,8 @@ class DoorHandler
         TerminalShellInterface $shell,
         callable $reload,
         callable $onLaunch,
-        callable $t
+        callable $t,
+        ?callable $onSocial = null
     ): void {
         while (true) {
             $view = $reload();
@@ -262,6 +602,19 @@ class DoorHandler
 
             $actions = $view['actions'];
             $launchable = !empty($actions['can_play']) || !empty($actions['can_return']);
+            $canPeople = $onSocial !== null && !empty($actions['can_people']);
+            $canConversation = $onSocial !== null && !empty($actions['can_conversation']);
+
+            $extraKeys = [];
+            if ($launchable) {
+                $extraKeys['g'] = 'launch';
+            }
+            if ($canPeople) {
+                $extraKeys['w'] = 'people';
+            }
+            if ($canConversation) {
+                $extraKeys['c'] = 'conversation';
+            }
 
             $action = $shell->showScrollablePanel(
                 $conn,
@@ -269,13 +622,21 @@ class DoorHandler
                 (string)$view['name'],
                 $view['lines'],
                 [
-                    'extra_keys'      => $launchable ? ['g' => 'launch'] : [],
+                    'extra_keys'      => $extraKeys,
                     'status_segments' => $view['status_segments'],
                 ]
             );
 
             if ($action === 'launch' && $launchable) {
                 $onLaunch($view);
+                continue;
+            }
+            if ($action === 'people' && $canPeople) {
+                $onSocial('people', $view);
+                continue;
+            }
+            if ($action === 'conversation' && $canConversation) {
+                $onSocial('conversation', $view);
                 continue;
             }
 
@@ -298,7 +659,8 @@ class DoorHandler
      * @param array<int,array<string,mixed>> $recentActivity ExperienceActivity::recent() rows
      * @param array<string,mixed>|null $viewerPlayer Viewer's player row when participating
      * @param callable(string,array<string,mixed>,string):string $t Translator: (key, params, fallback)
-     * @return array{experience:array<string,mixed>,name:string,lines:string[],actions:array{can_play:bool,can_return:bool,keys:string[],primary:string},status_segments:array<int,array{text:string,color?:string}>}
+     * @param bool $chatEnabled Whether the local chat feature is enabled (gates the Conversation action)
+     * @return array{experience:array<string,mixed>,name:string,lines:string[],roster:array<int,array<string,mixed>>,actions:array<string,mixed>,status_segments:array<int,array{text:string,color?:string}>}
      */
     public static function composeExperienceDetailView(
         array $experience,
@@ -306,9 +668,10 @@ class DoorHandler
         array $experienceState,
         array $recentActivity,
         ?array $viewerPlayer,
-        callable $t
+        callable $t,
+        bool $chatEnabled = false
     ): array {
-        $actions = self::resolveDetailActions($presentation);
+        $actions = self::resolveDetailActions($presentation, $experienceState, $chatEnabled);
 
         $segments = [];
         if ($actions['can_return']) {
@@ -318,12 +681,28 @@ class DoorHandler
             $segments[] = ['text' => 'G', 'color' => TelnetUtils::ANSI_RED];
             $segments[] = ['text' => ' ' . $t('ui.terminalserver.doors.detail_action_play', [], 'Play') . '  ', 'color' => TelnetUtils::ANSI_BLUE];
         }
+        if ($actions['can_people']) {
+            $segments[] = ['text' => 'W', 'color' => TelnetUtils::ANSI_RED];
+            $segments[] = ['text' => ' ' . $t('ui.terminalserver.doors.detail_action_people', [], 'People') . '  ', 'color' => TelnetUtils::ANSI_BLUE];
+        }
+        if ($actions['can_conversation']) {
+            $segments[] = ['text' => 'C', 'color' => TelnetUtils::ANSI_RED];
+            $segments[] = ['text' => ' ' . $t('ui.terminalserver.doors.detail_action_conversation', [], 'Conversation') . '  ', 'color' => TelnetUtils::ANSI_BLUE];
+        }
         $segments[] = ['text' => 'Q', 'color' => TelnetUtils::ANSI_RED];
         $segments[] = ['text' => ' ' . $t('ui.terminalserver.doors.detail_action_back', [], 'Back'), 'color' => TelnetUtils::ANSI_BLUE];
+
+        $roster = is_array($experienceState['players'] ?? null)
+            ? array_values(array_filter(
+                $experienceState['players'],
+                static fn ($p): bool => is_array($p) && (int)($p['user_id'] ?? 0) > 0
+            ))
+            : [];
 
         return [
             'experience' => $experience,
             'name' => (string)($presentation['name'] ?? ($experience['id'] ?? '')),
+            'roster' => $roster,
             'lines' => self::buildExperienceDetailLines(
                 $presentation,
                 $experienceState,
@@ -494,29 +873,67 @@ class DoorHandler
     }
 
     /**
-     * Resolve the detail screen's action set from the shared presentation.
+     * Resolve the detail screen's action set from the shared read models.
      *
      * Play and Return are mutually exclusive in the normalized contract
      * ({@see ExperiencePresentation::build()} derives them from viewer
      * participation + static launchability); Return wins if both are ever set.
      *
+     * Social actions are additive and read only from data that already exists:
+     *  - People ('w') is offered when the {@see ExperienceState} roster is
+     *    non-empty.
+     *  - Conversation ('c') is offered when the normalized catalog entry carries
+     *    a canonical `capabilities.conversation.room_id` and local chat is
+     *    enabled (the flag is passed in so this stays a pure resolver).
+     *
+     * Keys avoid every character reserved by showScrollablePanel in either
+     * shell (u/d/p/n/q/b, arrows, page/home/end), so 'g'/'w'/'c' work in both
+     * TUI and line shells.
+     *
      * @param array<string,mixed> $presentation ExperiencePresentation::build() result
-     * @return array{can_play:bool,can_return:bool,keys:string[],primary:string}
+     * @param array<string,mixed> $experienceState ExperienceState::getExperienceState() result
+     * @param bool $chatEnabled Whether the local chat feature is enabled
+     * @return array{can_play:bool,can_return:bool,can_people:bool,can_conversation:bool,conversation_room_id:int,keys:string[],primary:string}
      */
-    public static function resolveDetailActions(array $presentation): array
-    {
+    public static function resolveDetailActions(
+        array $presentation,
+        array $experienceState = [],
+        bool $chatEnabled = false
+    ): array {
         $canReturn = !empty($presentation['actions']['return']);
         $canPlay   = !$canReturn && !empty($presentation['actions']['play']);
 
+        $players = is_array($experienceState['players'] ?? null) ? $experienceState['players'] : [];
+        $canPeople = $players !== [];
+
+        $roomId = (int)(
+            $experienceState['experience']['capabilities']['conversation']['room_id']
+            ?? $presentation['conversation']['room_id']
+            ?? 0
+        );
+        $canConversation = $chatEnabled && $roomId > 0;
+
         // Play and Return are mutually exclusive and share one launch key ('g').
-        $keys = ($canReturn || $canPlay) ? ['g', 'q'] : ['q'];
-        $primary = ($canReturn || $canPlay) ? 'g' : 'q';
+        $keys = [];
+        if ($canReturn || $canPlay) {
+            $keys[] = 'g';
+        }
+        if ($canPeople) {
+            $keys[] = 'w';
+        }
+        if ($canConversation) {
+            $keys[] = 'c';
+        }
+        $keys[] = 'q';
 
         return [
-            'can_play'   => $canPlay,
-            'can_return' => $canReturn,
-            'keys'       => $keys,
-            'primary'    => $primary,
+            'can_play'             => $canPlay,
+            'can_return'           => $canReturn,
+            'can_people'           => $canPeople,
+            'can_conversation'     => $canConversation,
+            'conversation_room_id' => $roomId,
+            'keys'                 => $keys,
+            'primary'              => ($canReturn || $canPlay) ? 'g' : 'q',
         ];
     }
 

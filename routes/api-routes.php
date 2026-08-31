@@ -189,6 +189,42 @@ SimpleRouter::group(['prefix' => '/api'], function() {
         echo json_encode(['success' => true]);
     });
 
+    /**
+     * GET /api/auth/csrf
+     *
+     * Return the authenticated user's *current* per-user CSRF token.
+     *
+     * The token is stored per user in UserMeta and rotated on every login
+     * (Auth::createAuthenticatedSession). A long-lived terminal session caches
+     * the token from its own login, so a second authentication of the same user
+     * anywhere (another terminal/SSH/web/QWK login) silently invalidates the
+     * terminal session's cached copy. This endpoint lets the terminal daemon
+     * re-sync that copy for the *same* authenticated session without a new login.
+     *
+     * This does not weaken CSRF validation: the server still validates every
+     * mutating request against the live token, and this value is already
+     * exposed to any authenticated web context (Template.php adds it as a Twig
+     * global). Access is additionally restricted to callers presenting the
+     * shared terminal secret so a browser cannot probe it.
+     */
+    SimpleRouter::get('/auth/csrf', function() {
+        header('Content-Type: application/json');
+        $user = RouteHelper::requireAuth();
+
+        $secret   = trim((string)Config::env('TERMINAL_REGISTRATION_SECRET', ''));
+        $provided = trim((string)($_SERVER['HTTP_X_BINKTERM_CLIENT_TOKEN'] ?? ''));
+        if ($secret === '' || $provided === '' || !hash_equals($secret, $provided)) {
+            http_response_code(403);
+            echo json_encode(['success' => false, 'error' => 'Forbidden']);
+            return;
+        }
+
+        $userId = (int)($user['user_id'] ?? $user['id'] ?? 0);
+        $token  = (new UserMeta())->getValue($userId, 'csrf_token');
+
+        echo json_encode(['success' => true, 'csrf_token' => $token]);
+    });
+
     // Gateway token verification endpoint for external services (bbslinkgateway, etc.)
     SimpleRouter::post('/auth/verify-gateway-token', function() {
         header('Content-Type: application/json');

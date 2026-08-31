@@ -216,12 +216,29 @@ Stats are refreshed from the API after returning from netmail, echomail, or bull
   the screen offers **Return** instead of **Play**. Keys: **G** plays or
   returns, **Q** / **B** goes back to the catalog. Nothing is launched by
   opening the detail screen.
+- The detail screen also exposes **social actions** when they are genuinely
+  available:
+  - **W — People**: shown when at least one caller is currently in the
+    experience. Opens a contextual list of who is here (with node numbers; the
+    current caller is marked `(you)`). Selecting another caller offers **View
+    profile** (the same read-only profile viewer used by Who's Online) and
+    **Send message** (opens the normal Local Chat client focused on a direct
+    message to that caller). Back returns to the People list; Back again returns
+    to the experience detail screen.
+  - **C — Conversation**: shown only when the experience has a canonical chat
+    room configured (via its manifest's `experience.conversation` mapping) and
+    the Local Chat feature is enabled. Opens the normal Local Chat client
+    focused on that room, with the usual history, posting, moderation, and
+    scrollback. Leaving chat returns to the experience detail screen.
+  Social views never launch the door, and leaving any of them returns to the
+  same experience detail screen (recomposed with fresh occupancy/roster/activity).
 - After a door launched from the detail screen exits normally, the caller is
   returned to that same experience's detail screen (not the flat catalog), so
   the occupancy, roster, and activity reflect the session that just ended. From
   the detail screen, Back returns to the Games & Experiences catalog.
 - The detail screen is a point-in-time snapshot taken when it is opened (and
-  refreshed each time it is redrawn after a door exit); it does not live-poll.
+  refreshed each time it is redrawn after a door exit or a social view); it does
+  not live-poll.
 - The shared catalog can describe browser-only Experiences as planned for the
   terminal surface. The current launch menu continues to list only Experiences
   that can run in the terminal.
@@ -352,7 +369,11 @@ Chat controls:
 - **Ctrl+E** — open the full-screen multiline composer
 - **Ctrl+K** — show local chat help
 - **R** — refresh rooms and online users
-- **Ctrl+C** — exit local chat
+- **Ctrl+C** — exit local chat. This is shown as an emphasised **Ctrl+C EXIT CHAT**
+  marker at the start of the compose pane's control line, visually separated from
+  the compose/editing controls, so it is unmistakable as the way to leave the
+  whole chat screen. (In the **Ctrl+E** multiline composer, Ctrl+C instead
+  cancels that draft — unchanged.)
 
 The current wide layout uses:
 

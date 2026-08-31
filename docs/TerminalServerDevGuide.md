@@ -71,22 +71,68 @@ catalog`.
   branch did. Because the loop calls `reload` again after `onLaunch` returns,
   the caller lands back on the same experience's detail screen (the Crossroads
   return destination); `Q`/`B` from there returns to the catalog.
+- **onSocial** — `('people'|'conversation', $view)`; see the social layer below.
+  After it returns, the loop re-runs `reload`, so a social view is also a
+  "return to the same experience" destination.
 
 Pure helpers, unit-tested without a daemon:
 
 - `composeExperienceDetailView()` — assembles the view model (name, body lines,
-  action set, status-bar segments) from the presentation + state snapshot.
+  `roster` snapshot, action set, status-bar segments) from the presentation +
+  state snapshot. Takes a `bool $chatEnabled` so it stays a pure formatter.
 - `buildExperienceDetailLines()` — formats the compact body (description, type,
   status, occupancy/capacity, cost, roster with node numbers and a `(you)`
   marker, recent activity). No business state is decided here.
-- `resolveDetailActions()` — maps `presentation.actions.play` / `.return`
-  (mutually exclusive in the normalized contract) to the single launch key
-  `g` plus back.
+- `resolveDetailActions($presentation, $experienceState, $chatEnabled)` — maps
+  `presentation.actions.play` / `.return` (mutually exclusive in the normalized
+  contract) to the launch key `g`; adds `w` (People) when the roster is
+  non-empty and `c` (Conversation) when `experienceState.experience`
+  `.capabilities.conversation.room_id > 0` **and** chat is enabled. Keys avoid
+  every character `showScrollablePanel` reserves in either shell.
 
 The detail screen is a snapshot on open/redraw; it does not poll. Planned /
 browser-only experiences are still filtered out of the chooser (unchanged) and
 never reach the detail screen. `ExperienceParticipation::end()` /
 `End Participation` is intentionally **not** exposed in this slice.
+
+### Experience social layer (telnet Crossroads slice 2)
+
+The detail screen's `W` / `C` actions hang People, Profile, Message and
+Conversation off the same "place". `DoorHandler` stays navigation glue: the
+`experience -> room` mapping, roster identity, profile data, chat permissions
+and DM delivery all come from existing shared services.
+
+- **`experience -> conversation`** — `GameCatalog::normalizeConversationCapability()`
+  already resolves a manifest's `experience.conversation` (`room_id` or portable
+  `room_name` via `ChatRoomService::resolveActiveRoomByName()`) into the
+  normalized `capabilities.conversation = {type:'chat_room', room_id:int}` on
+  every surface. Web reads the same field. There is no telnet-side room lookup
+  and **no experience-name -> room mapping**.
+- **`roster -> identity`** — `ExperienceState` roster rows carry a stable
+  `user_id` (they JOIN `users`), which is all the profile/DM paths need. The
+  People view uses the `roster` snapshot captured in the detail view model, not
+  a new presence query.
+- **People / person flow** — `showExperiencePeople()` -> `runExperiencePeopleLoop()`
+  (`showSelectableDialog`, self-row marked `(you)` and inert) -> per-person
+  `showPersonActions()` -> `runPersonActionLoop()`. The two `run*Loop` helpers
+  take injected callbacks and touch no live infra, so the navigation is unit
+  tested directly.
+- **thin infra seams** (`protected`, overridden in tests):
+  - `fetchPersonProfile()` -> `GET /api/user/public-profile/{id}` (the endpoint
+    Who's Online uses); `null` on 404 => "no longer available" alert.
+  - `invokeDirectMessage()` -> `ChatHandler::showDirectMessage($conn,$state,$session,$userId,$username)`.
+  - `invokeRoomConversation()` -> `ChatHandler::showRoom($conn,$state,$session,$roomId)`.
+- **`ChatHandler` contextual entrypoints** — `show()` is now a thin wrapper over
+  `run($conn,$state,$session,?array $preferTarget)`. `showRoom()` /
+  `showDirectMessage()` pass a preferred target; `openPreferredTarget()` opens a
+  room only if it is in the authorized `GET /api/chat/rooms` list (the existing
+  access boundary — chat rooms are open to any authenticated user when the chat
+  feature is on), and a DM from just a positive id + label. Both return `bool`
+  (`false` => the caller shows its own contextual alert). No second chat, DM, or
+  profile implementation is introduced.
+- Profile rendering is delegated to
+  `TerminalShellInterface::showPublicProfileViewer()`; conversation/DM rendering,
+  posting, polling, history and moderation stay entirely in `ChatHandler`.
 
 ---
 
@@ -479,6 +525,19 @@ TelnetUtils::apiRequest($base, 'POST', '/api/some/endpoint', $payload, $session)
 ```
 
 GET requests do not need the token.
+
+**Stale-token self-heal.** The CSRF token is stored **per user** and rotated on
+every login, so a long-lived terminal/SSH session's cached `$state['csrf_token']`
+can be silently invalidated by a later authentication of the same user
+(another terminal/SSH/web/QWK session). `BbsSession` seeds
+`TelnetUtils::setCsrfToken()` at login, and `apiRequest()` keeps that
+session-authoritative value current: when a mutating call returns `403` with
+`error_code == errors.auth.invalid_csrf_token`, it fetches the session's live
+token from `GET /api/auth/csrf` (read-only, gated on the terminal secret) and
+retries the original request **once**. This never bypasses validation — the
+server still checks every request against the live token. Callers keep passing
+`$state['csrf_token'] ?? null`; the healed static takes precedence, so one heal
+fixes every subsequent call in the session.
 
 ### Daemon-Side Logging
 

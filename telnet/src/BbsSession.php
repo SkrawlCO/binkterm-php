@@ -391,6 +391,10 @@ class BbsSession
         $loginTime = time();
 
         $state['csrf_token'] = $loginResult['csrf_token'] ?? null;
+        // Seed the API layer's authoritative CSRF token. The per-user token is
+        // rotated by any later login of the same user, so apiRequest() keeps
+        // this value current by re-syncing it after an invalid-CSRF rejection.
+        TelnetUtils::setCsrfToken($state['csrf_token']);
 
         $initResp = TelnetUtils::apiRequest($this->apiBase, 'GET', '/api/config/session-init', null, $session);
         $initData = $initResp['data'] ?? [];
