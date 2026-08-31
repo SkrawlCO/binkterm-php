@@ -3,9 +3,13 @@
 declare(strict_types=1);
 
 use BinktermPHP\TelnetServer\DoorHandler;
+use BinktermPHP\TelnetServer\LineShell;
+use BinktermPHP\TelnetServer\TelnetUtils;
 use PHPUnit\Framework\TestCase;
 
 require_once __DIR__ . '/../../telnet/src/DoorHandler.php';
+require_once __DIR__ . '/../../telnet/src/TerminalShellInterface.php';
+require_once __DIR__ . '/../../telnet/src/LineShell.php';
 
 final class DoorHandlerCatalogContractTest extends TestCase
 {
@@ -55,8 +59,42 @@ final class DoorHandlerCatalogContractTest extends TestCase
             'category' => 'gateway',
         ], null, true);
 
-        self::assertSame('Experiences - DoorParty - Gateway', $item['label']);
+        self::assertSame('Experiences', $item['section_before']);
+        self::assertSame('DoorParty - Gateway', $item['label']);
         self::assertSame('', $item['detail']);
+    }
+
+    public function testLineShellNormalizesSectionSeparatelyFromSelectableLabel(): void
+    {
+        $shell = (new ReflectionClass(LineShell::class))->newInstanceWithoutConstructor();
+        $method = new ReflectionMethod(LineShell::class, 'normalizeListItem');
+        $method->setAccessible(true);
+
+        $row = $method->invoke($shell, [
+            'section_before' => 'Experiences',
+            'label' => 'BBSLink - Gateway',
+            'detail' => '',
+        ]);
+
+        self::assertSame('Experiences', $row['section_before']);
+        self::assertSame('BBSLink - Gateway', $row['label']);
+        self::assertSame('', $row['detail']);
+    }
+
+    public function testTuiNormalizesSectionSeparatelyFromSelectableBlock(): void
+    {
+        $method = new ReflectionMethod(TelnetUtils::class, 'normalizeStructuredSelectableRow');
+        $method->setAccessible(true);
+
+        $block = $method->invoke(null, [
+            'section_before' => 'Experiences',
+            'label' => 'BBSLink - Gateway',
+            'detail' => '',
+        ], 80);
+
+        self::assertSame('Experiences', $block['section_before']);
+        self::assertSame('BBSLink - Gateway', $block['label']);
+        self::assertSame(['BBSLink - Gateway'], $block['lines']);
     }
 
     public function testArrivalUsesCrossroadsTitleAndPreservesSyntheticItemOrder(): void
@@ -78,6 +116,9 @@ final class DoorHandlerCatalogContractTest extends TestCase
         self::assertLessThan($places, $live);
         self::assertLessThan($catalog, $places);
         self::assertStringContainsString('$catalogIndex === 0', $show);
+        self::assertStringContainsString('if ($selected === 0)', $show);
+        self::assertStringContainsString('if ($selected === 1)', $show);
+        self::assertStringContainsString('$entry = $doorList[$selected - 2]', $show);
     }
 
     public function testRawNativeExperienceUsesRawRelayMode(): void

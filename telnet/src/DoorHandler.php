@@ -1466,7 +1466,7 @@ class DoorHandler
      * @param string $experienceId Canonical Experience identifier
      * @param array<string, mixed> $experience Normalized catalog entry
      * @param callable(string,array<string,mixed>,string):string|null $t
-     * @return array{label: string, detail: string}
+     * @return array{label:string,detail:string,section_before?:string}
      */
     public static function buildExperienceListItem(
         string $experienceId,
@@ -1493,16 +1493,21 @@ class DoorHandler
             $metadata = [$t('ui.terminalserver.doors.catalog_multiplayer', [], 'Multiplayer')];
         }
 
-        $label = $name;
-        if ($startsCatalog) {
-            $label = $t('ui.terminalserver.doors.catalog_section', [], 'Experiences') . ' - ' . $label;
-        }
-        $label .= ' - ' . implode(' / ', $metadata);
+        $label = $name . ' - ' . implode(' / ', $metadata);
 
-        return [
+        $item = [
             'label' => $label,
             'detail' => '',
         ];
+        if ($startsCatalog) {
+            $item['section_before'] = $t(
+                'ui.terminalserver.doors.catalog_section',
+                [],
+                'Experiences'
+            );
+        }
+
+        return $item;
     }
 
     /**

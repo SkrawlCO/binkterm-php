@@ -37,12 +37,14 @@ class LineShell implements TerminalShellInterface
             return [
                 'label' => (string)($item['label'] ?? $item['title'] ?? $item['name'] ?? $item['text'] ?? ''),
                 'detail' => trim((string)($item['detail'] ?? $item['description'] ?? $item['desc'] ?? '')),
+                'section_before' => trim((string)($item['section_before'] ?? '')),
             ];
         }
 
         return [
             'label' => $this->stripAnsi((string)$item),
             'detail' => '',
+            'section_before' => '',
         ];
     }
 
@@ -67,6 +69,9 @@ class LineShell implements TerminalShellInterface
         foreach ($slice as $offset => $item) {
             $displayIndex = $offset + 1;
             $itemData = $this->normalizeListItem($item);
+            if ($itemData['section_before'] !== '') {
+                TelnetUtils::writeLine($conn, '  ' . $itemData['section_before']);
+            }
             $prefix = $selectedIndex !== null && ($start + $offset) === $selectedIndex ? '>' : ' ';
             $rowText = $showNumbers
                 ? sprintf('%s%2d) %s', $prefix, $displayIndex, $itemData['label'])

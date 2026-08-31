@@ -224,10 +224,10 @@ Stats are refreshed from the API after returning from netmail, echomail, or bull
   refreshed Your Places list, so ending participation removes the place
   immediately. An empty list is a quiet continuity state, not an error.
 - The arrival selector is titled **Crossroads**. Live Now and Your Places keep
-  their contextual summary lines; the general **Experiences** portion uses one
-  compact selectable line per place (`name - Gateway`, `name - Multiplayer`,
-  or `name - Game`). Full descriptions and detailed metadata remain on the
-  Experience detail screen rather than being repeated in the arrival list.
+  their contextual summary lines. A separate, non-selectable **Experiences**
+  heading introduces one compact selectable line per place (`name - Gateway`,
+  `name - Multiplayer`, or `name - Game`) without consuming a selector number.
+  Full descriptions and detailed metadata remain on the Experience detail.
 - Selecting an experience from the menu opens an **experience detail screen**
   before anything launches. It shows the description, type, availability status,
   how many players are online (and the capacity limit when the experience has

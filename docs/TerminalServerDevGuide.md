@@ -105,13 +105,14 @@ introduced.
 
 The top-level selector uses the localized **Crossroads** title. Its first two
 rows remain the Live Now and Your Places summaries. `buildExperienceListItem()`
-then emits compact, empty-detail rows for the authorized catalog: the first row
-is prefixed with the localized **Experiences** section cue, and every row keeps
-only the normalized name and a localized Gateway, Multiplayer, or Game cue.
-Because selection indices and the shared
-`chooseFromList()` item contract are unchanged, both line and TUI shells retain
-their existing navigation. Full descriptions stay exclusively in the existing
-Experience detail composition.
+then emits compact, empty-detail rows for the authorized catalog. The first row
+carries optional `section_before` presentation metadata, which both shell
+renderers draw as a separate, non-selectable **Experiences** heading before the
+numbered row. Every selectable row keeps only the normalized name and a
+localized Gateway, Multiplayer, or Game cue. Because `section_before` never
+enters the item array, selection indices and the shared `chooseFromList()`
+contract remain unchanged. Full descriptions stay exclusively in Experience
+detail.
 
 ### Experience detail screen (telnet Crossroads slice 1)
 

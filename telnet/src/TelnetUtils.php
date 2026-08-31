@@ -2041,7 +2041,7 @@ class TelnetUtils
      *
      * @param mixed $row
      * @param int $width
-     * @return array{label:string, lines:string[]}
+     * @return array{label:string, lines:string[], section_before:string}
      */
     private static function normalizeStructuredSelectableRow($row, int $width): array
     {
@@ -2049,6 +2049,7 @@ class TelnetUtils
             return [
                 'label' => (string)$row,
                 'lines' => [(string)$row],
+                'section_before' => '',
             ];
         }
 
@@ -2073,6 +2074,7 @@ class TelnetUtils
         return [
             'label' => $label,
             'lines' => $lines,
+            'section_before' => trim((string)($row['section_before'] ?? '')),
         ];
     }
 
@@ -2143,7 +2145,8 @@ class TelnetUtils
                 $used = 0;
                 $seen = false;
                 for ($i = $offset; $i < $count; $i++) {
-                    $height = max(1, count($blocks[$i]['lines'] ?? ['']));
+                    $height = max(1, count($blocks[$i]['lines'] ?? ['']))
+                        + (($blocks[$i]['section_before'] ?? '') !== '' ? 1 : 0);
                     if ($used + $height > $bodyHeight) {
                         break;
                     }
@@ -2182,6 +2185,14 @@ class TelnetUtils
             for ($i = $offset; $i < $count && $screenRow < $inputRow; $i++) {
                 $lines = $blocks[$i]['lines'] ?? [''];
                 $isSelected = ($i === $selectedIndex);
+                $sectionBefore = (string)($blocks[$i]['section_before'] ?? '');
+                if ($sectionBefore !== '') {
+                    self::safeWrite($conn, "\033[{$screenRow};1H\033[K  " . self::truncateAnsi($sectionBefore, max(1, $cols - 3)));
+                    $screenRow++;
+                    if ($screenRow >= $inputRow) {
+                        break;
+                    }
+                }
                 foreach ($lines as $lineIndex => $lineText) {
                     if ($screenRow >= $inputRow) {
                         break 2;
