@@ -141,7 +141,21 @@ class WebDoorController
 
 
     /**
-     * End a WebDoor session
+     * End a WebDoor session.
+     *
+     * When the caller identifies a game (via `?game_id=` or a `game_id` body
+     * field — the host page's unload beacon and the shared SDK both send it),
+     * only that game's active session for this user is ended. This keeps closing
+     * one WebDoor tab from ending a different WebDoor still open in another tab.
+     * Without a game id the historical "most recent active session for this
+     * user" behaviour is retained for backward compatibility.
+     *
+     * Ending a session only clears live presence/participation for the
+     * Experience; game progress lives in per-(user, game, slot) storage and is
+     * untouched, so re-entering the WebDoor resumes from the last save.
+     *
+     * Idempotent: a duplicate delivery finds no active session to end and is a
+     * harmless no-op.
      */
     public function endSession(): array
     {
@@ -154,19 +168,34 @@ class WebDoorController
         $input = $this->getJsonInput();
         $playtimeSeconds = (int)($input['playtime_seconds'] ?? 0);
 
-        // End most recent active session for this user
-        $stmt = $this->db->prepare('
-            UPDATE webdoor_sessions
-            SET ended_at = NOW(), playtime_seconds = ?
-            WHERE user_id = ? AND ended_at IS NULL
-            AND id = (
-                SELECT id FROM webdoor_sessions
+        $requestedGameId = $_GET['game_id'] ?? ($input['game_id'] ?? null);
+        $gameId = is_string($requestedGameId) && trim($requestedGameId) !== ''
+            ? trim($requestedGameId)
+            : null;
+
+        if ($gameId !== null) {
+            // Scoped: end this user's active session(s) for exactly this game.
+            $stmt = $this->db->prepare('
+                UPDATE webdoor_sessions
+                SET ended_at = NOW(), playtime_seconds = ?
+                WHERE user_id = ? AND game_id = ? AND ended_at IS NULL
+            ');
+            $stmt->execute([$playtimeSeconds, $this->user['user_id'], $gameId]);
+        } else {
+            // Legacy fallback: end the most recent active session for this user.
+            $stmt = $this->db->prepare('
+                UPDATE webdoor_sessions
+                SET ended_at = NOW(), playtime_seconds = ?
                 WHERE user_id = ? AND ended_at IS NULL
-                ORDER BY created_at DESC
-                LIMIT 1
-            )
-        ');
-        $stmt->execute([$playtimeSeconds, $this->user['user_id'], $this->user['user_id']]);
+                AND id = (
+                    SELECT id FROM webdoor_sessions
+                    WHERE user_id = ? AND ended_at IS NULL
+                    ORDER BY created_at DESC
+                    LIMIT 1
+                )
+            ');
+            $stmt->execute([$playtimeSeconds, $this->user['user_id'], $this->user['user_id']]);
+        }
 
         return ['success' => true];
     }

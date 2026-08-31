@@ -74,6 +74,27 @@ document.addEventListener('keydown', function(e) {
     }
 });
 
+// Leaving the WebDoor page ends this game's active participation, so Crossroads
+// presence (Live Now, rosters, "Your Places") reflects that the player has left
+// instead of showing them for up to an hour. Mirrors the jsdos host page's
+// beforeunload beacon. Managed DOS/native doors deliberately do NOT do this —
+// they have a live bridge session to reconnect to; a WebDoor does not, and its
+// progress is saved per game+slot, so re-entering resumes from the last save.
+(function () {
+    var WEBDOOR_GAME_ID = {{ game_id|default('')|json_encode|raw }};
+    var ended = false;
+
+    window.addEventListener('beforeunload', function () {
+        if (ended || !WEBDOOR_GAME_ID || !navigator.sendBeacon) {
+            return;
+        }
+        ended = true;
+        navigator.sendBeacon(
+            '/api/webdoor/session/end?game_id=' + encodeURIComponent(WEBDOOR_GAME_ID)
+        );
+    });
+})();
+
 // Refocus input inside the iframe when the WebDoor requests it (e.g. Tab completion).
 // Same-origin iframes allow direct DOM access, so we can focus the element directly.
 window.addEventListener('message', function(e) {

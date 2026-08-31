@@ -340,6 +340,29 @@ Missing, disabled, hidden, requirements-failing, stale, non-WebDoor, and
 otherwise undiscoverable identities are rejected before existing sessions are
 read or new sessions are created.
 
+### Session lifecycle and presence
+
+A `webdoor_sessions` row is a live-presence and resume marker, not a store of
+game state (progress lives in per-`(user, game, slot)` storage). While the row
+is active it makes the player appear in Crossroads presence — Live Now, lobby
+rosters, and "Your Places".
+
+The shared host page (`templates/webdoor_play.twig`) fires a
+`navigator.sendBeacon('/api/webdoor/session/end?game_id=…')` on `beforeunload`,
+so leaving a WebDoor ends that game's participation immediately instead of
+leaving the player shown as active until the session expires. This mirrors the
+JS-DOS host page. Managed DOS/native door players deliberately do **not** do
+this — they have a live bridge session to reconnect to across a refresh; a
+WebDoor does not.
+
+`POST /api/webdoor/session/end` ends the caller's active session for the game
+named by `game_id` (query string or JSON body); closing one WebDoor tab
+therefore never ends a different WebDoor open in another tab. With no `game_id`
+it falls back to ending the user's most recent active session. Re-entering a
+WebDoor after leaving creates a fresh session and resumes from the last save;
+the lobby's primary action reads **Enter** (not **Return**) once participation
+has ended.
+
 ### Storage API
 
 Games requiring persistent storage use the BBS storage API to save/load user data.

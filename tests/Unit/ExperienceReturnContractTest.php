@@ -56,6 +56,29 @@ final class ExperienceReturnContractTest extends TestCase
         );
     }
 
+    public function testWebDoorHostEndsParticipationOnUnloadUnlikeManagedDoors(): void
+    {
+        // A WebDoor has no live runtime to reconnect to and its progress is
+        // saved per game+slot, so leaving the page should end participation
+        // (clearing stale Live Now / roster presence). This is the deliberate
+        // opposite of the managed-door player asserted above.
+        $template = file_get_contents(
+            dirname(__DIR__, 2) . '/templates/webdoor_play.twig'
+        );
+
+        self::assertIsString($template);
+
+        self::assertStringContainsString(
+            "window.addEventListener('beforeunload', function () {",
+            $template
+        );
+        self::assertStringContainsString(
+            "navigator.sendBeacon(\n"
+            . "            '/api/webdoor/session/end?game_id=' + encodeURIComponent(WEBDOOR_GAME_ID)",
+            $template
+        );
+    }
+
     public function testTerminalUsesReturnContractForCleanExitAndEndSession(): void
     {
         $player = file_get_contents(
