@@ -593,6 +593,14 @@ return [
     'ui.terminalserver.doors.live_now_roster_more' => ' + ещё {count}',
     'ui.terminalserver.doors.live_now_prompt' => 'Выберите пространство или Q для возврата: ',
     'ui.terminalserver.doors.live_now_empty' => 'Сейчас больше никто не активен ни в одном пространстве.',
+    'ui.terminalserver.doors.your_places_title' => 'Ваши пространства',
+    'ui.terminalserver.doors.your_places_summary' => 'Активных пространств: {count}',
+    'ui.terminalserver.doors.your_places_summary_1' => '1 активное пространство',
+    'ui.terminalserver.doors.your_places_quiet' => 'Сейчас у вас нет активных пространств.',
+    'ui.terminalserver.doors.your_places_participating' => 'Вы участвуете',
+    'ui.terminalserver.doors.your_places_return_available' => 'Можно вернуться',
+    'ui.terminalserver.doors.your_places_prompt' => 'Выберите пространство или Q для возврата: ',
+    'ui.terminalserver.doors.your_places_empty' => 'Сейчас у вас нет активных пространств.',
 
     // --- Experience social layer (People / Conversation) ---
     'ui.terminalserver.doors.detail_action_people' => 'Люди',

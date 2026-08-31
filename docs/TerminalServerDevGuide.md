@@ -77,6 +77,30 @@ present, the Experience remains in Live Now even when the viewer also
 participates. Authorization and terminal visibility remain owned by the
 collection-state catalog read.
 
+### Your Places arrival view (telnet Crossroads slice 5)
+
+The same authorized `ExperienceState::getExperienceStates($viewer, 'terminal')`
+snapshot used for Live Now and catalog composition also feeds **Your Places**.
+`composeYourPlaces()` includes a state only when
+`ExperienceParticipation::findViewerPlayer($state, $viewerId)` returns the
+authenticated caller's player row. It does not infer participation from
+occupancy, session totals, backend type, or launch data. Multiple sessions for
+the same caller therefore still produce one entry per Experience.
+
+Each entry uses `ExperiencePresentation::build(..., 'telnet', ...)` as the
+source of Return availability. The view adds no participation model or
+per-Experience state query. Viewer-only occupancy remains included, while an
+Experience occupied only by other callers does not qualify; this deliberately
+complements rather than partitions Live Now.
+
+`runYourPlacesLoop()` uses the existing shell `chooseFromList()` widget and
+opens the existing `showExperienceDetail()` flow. Each loop iteration performs
+one fresh authorized collection read. Consequently Back from detail refreshes
+Your Places, including after door return, social interaction, or End
+Participation. A participation that ended or became stale simply disappears
+on refresh. No polling, caching, or RLogin-specific lifecycle behavior is
+introduced.
+
 ### Experience detail screen (telnet Crossroads slice 1)
 
 Selecting an experience in the `DoorHandler` chooser now opens

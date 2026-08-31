@@ -592,6 +592,14 @@ return [
     'ui.terminalserver.doors.live_now_roster_more' => ' +{count} more',
     'ui.terminalserver.doors.live_now_prompt' => 'Select an Experience or Q to return: ',
     'ui.terminalserver.doors.live_now_empty' => 'Nobody else is active in an Experience right now.',
+    'ui.terminalserver.doors.your_places_title' => 'Your Places',
+    'ui.terminalserver.doors.your_places_summary' => '{count} active places',
+    'ui.terminalserver.doors.your_places_summary_1' => '1 active place',
+    'ui.terminalserver.doors.your_places_quiet' => 'You have no active places right now.',
+    'ui.terminalserver.doors.your_places_participating' => 'Participating',
+    'ui.terminalserver.doors.your_places_return_available' => 'Return available',
+    'ui.terminalserver.doors.your_places_prompt' => 'Select an Experience or Q to return: ',
+    'ui.terminalserver.doors.your_places_empty' => 'You have no active places right now.',
 
     // --- Experience social layer (People / Conversation) ---
     'ui.terminalserver.doors.detail_action_people' => 'People',

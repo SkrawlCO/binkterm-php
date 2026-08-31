@@ -588,6 +588,14 @@ return [
     'ui.terminalserver.doors.live_now_roster_more' => ' +{count} más',
     'ui.terminalserver.doors.live_now_prompt' => 'Selecciona una experiencia o Q para volver: ',
     'ui.terminalserver.doors.live_now_empty' => 'No hay nadie más activo en una experiencia ahora mismo.',
+    'ui.terminalserver.doors.your_places_title' => 'Tus lugares',
+    'ui.terminalserver.doors.your_places_summary' => '{count} lugares activos',
+    'ui.terminalserver.doors.your_places_summary_1' => '1 lugar activo',
+    'ui.terminalserver.doors.your_places_quiet' => 'No tienes lugares activos ahora mismo.',
+    'ui.terminalserver.doors.your_places_participating' => 'Participando',
+    'ui.terminalserver.doors.your_places_return_available' => 'Puedes volver',
+    'ui.terminalserver.doors.your_places_prompt' => 'Selecciona una experiencia o Q para volver: ',
+    'ui.terminalserver.doors.your_places_empty' => 'No tienes lugares activos ahora mismo.',
 
     // --- Experience social layer (People / Conversation) ---
     'ui.terminalserver.doors.detail_action_people' => 'Personas',

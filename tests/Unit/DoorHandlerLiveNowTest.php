@@ -258,7 +258,7 @@ final class DoorHandlerLiveNowTest extends TestCase
         $show = $this->between($source, 'public function show(', 'public static function composeLiveNow(');
 
         self::assertStringContainsString("getExperienceStates(\n                \$modelUser,\n                'terminal'", $show);
-        self::assertStringContainsString('$items = [self::buildLiveNowArrivalItem(', $show);
+        self::assertStringContainsString('self::buildLiveNowArrivalItem($liveNow, $t)', $show);
         self::assertStringContainsString('if ($selected === 0)', $show);
         self::assertStringContainsString('$this->showExperienceDetail(', $show);
         self::assertStringNotContainsString('foreach ($experienceStates as', $this->between(

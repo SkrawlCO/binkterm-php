@@ -217,6 +217,12 @@ Stats are refreshed from the API after returning from netmail, echomail, or bull
   Experiences occupied only by the current caller are omitted so Live Now
   describes social activity rather than acting as Continue Playing. A clear
   quiet-state notice is shown when nobody else is active.
+- **Your Places** appears beside Live Now before the general catalog. It lists
+  Experiences where the authenticated caller currently participates, including
+  viewer-only occupancy, and indicates when the shared model permits Return.
+  Selecting a place opens its existing Experience detail. Back returns to a
+  refreshed Your Places list, so ending participation removes the place
+  immediately. An empty list is a quiet continuity state, not an error.
 - Selecting an experience from the menu opens an **experience detail screen**
   before anything launches. It shows the description, type, availability status,
   how many players are online (and the capacity limit when the experience has

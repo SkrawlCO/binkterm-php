@@ -70,9 +70,9 @@ class DoorHandler
         $experienceState = new ExperienceState();
 
         while (true) {
-            // One collection read owns both authorized terminal discovery and
-            // the Live Now arrival snapshot. Returning from either detail or
-            // Live Now reaches this boundary again and refreshes the snapshot.
+            // One collection read owns authorized terminal discovery plus the
+            // Live Now and Your Places arrival snapshots. Returning from a
+            // detail or arrival view reaches this boundary and refreshes it.
             $experienceStates = $experienceState->getExperienceStates(
                 $modelUser,
                 'terminal'
@@ -87,7 +87,7 @@ class DoorHandler
                 $doorList[] = ['id' => (string)$experienceId, 'data' => $experience];
             }
 
-            if ($doorList === []) {
+            if ($experienceStates === []) {
                 $shell->showText(
                     $conn,
                     $state,
@@ -102,7 +102,15 @@ class DoorHandler
                 (int)$modelUser['user_id'],
                 $t
             );
-            $items = [self::buildLiveNowArrivalItem($liveNow, $t)];
+            $yourPlaces = self::composeYourPlaces(
+                $experienceStates,
+                (int)$modelUser['user_id'],
+                $t
+            );
+            $items = [
+                self::buildLiveNowArrivalItem($liveNow, $t),
+                self::buildYourPlacesArrivalItem($yourPlaces, $t),
+            ];
             foreach ($doorList as $entry) {
                 $items[] = self::buildExperienceListItem(
                     $entry['id'],
@@ -139,7 +147,22 @@ class DoorHandler
                 continue;
             }
 
-            $entry = $doorList[$selected - 1];
+            if ($selected === 1) {
+                $reloadYourPlaces = function () use ($experienceState, $modelUser, $t): array {
+                    return self::composeYourPlaces(
+                        $experienceState->getExperienceStates($modelUser, 'terminal'),
+                        (int)$modelUser['user_id'],
+                        $t
+                    );
+                };
+                $openDetail = function (string $experienceId) use ($conn, &$state, $session, $shell): void {
+                    $this->showExperienceDetail($conn, $state, $session, $experienceId, $shell);
+                };
+                $this->runYourPlacesLoop($conn, $state, $shell, $reloadYourPlaces, $openDetail, $t);
+                continue;
+            }
+
+            $entry = $doorList[$selected - 2];
 
             // Selecting an experience now opens a terminal-native detail
             // screen instead of launching immediately. Play/Return happens
@@ -287,6 +310,118 @@ class DoorHandler
         ];
     }
 
+    /**
+     * Compose the caller's active terminal Experiences from the same
+     * authorized collection snapshot used by Live Now and the catalog.
+     *
+     * Membership is owned exclusively by findViewerPlayer(). Viewer-only
+     * occupancy therefore remains visible here, while other-caller-only
+     * occupancy does not qualify.
+     *
+     * @param array<string,array<string,mixed>> $experienceStates
+     * @param callable(string,array<string,mixed>,string):string $t
+     * @return array{summary:string,entries:array<int,array<string,mixed>>,experience_count:int}
+     */
+    public static function composeYourPlaces(
+        array $experienceStates,
+        int $viewerId,
+        callable $t
+    ): array {
+        $entries = [];
+
+        foreach ($experienceStates as $experienceId => $snapshot) {
+            $experience = $snapshot['experience'] ?? null;
+            if (!is_array($experience)) {
+                continue;
+            }
+
+            $viewerPlayer = ExperienceParticipation::findViewerPlayer($snapshot, $viewerId);
+            if ($viewerPlayer === null) {
+                continue;
+            }
+
+            $presentation = ExperiencePresentation::build(
+                $experience,
+                'telnet',
+                $snapshot,
+                $viewerPlayer
+            );
+            $entries[] = [
+                'id' => (string)$experienceId,
+                'experience' => $experience,
+                'viewer_player' => $viewerPlayer,
+                'presentation' => $presentation,
+                'item' => self::buildYourPlacesListItem($presentation, $t),
+            ];
+        }
+
+        usort(
+            $entries,
+            static fn(array $a, array $b): int => strcasecmp(
+                (string)($a['experience']['name'] ?? $a['id']),
+                (string)($b['experience']['name'] ?? $b['id'])
+            )
+        );
+
+        $experienceCount = count($entries);
+        if ($experienceCount === 0) {
+            $summary = $t(
+                'ui.terminalserver.doors.your_places_quiet',
+                [],
+                'You have no active places right now.'
+            );
+        } elseif ($experienceCount === 1) {
+            $summary = $t(
+                'ui.terminalserver.doors.your_places_summary_1',
+                [],
+                '1 active place'
+            );
+        } else {
+            $summary = $t(
+                'ui.terminalserver.doors.your_places_summary',
+                ['count' => $experienceCount],
+                '{count} active places'
+            );
+        }
+
+        return [
+            'summary' => $summary,
+            'entries' => $entries,
+            'experience_count' => $experienceCount,
+        ];
+    }
+
+    /** @return array{label:string,detail:string} */
+    public static function buildYourPlacesArrivalItem(array $yourPlaces, callable $t): array
+    {
+        return [
+            'label' => $t('ui.terminalserver.doors.your_places_title', [], 'Your Places'),
+            'detail' => (string)($yourPlaces['summary'] ?? ''),
+        ];
+    }
+
+    /** @return array{label:string,detail:string} */
+    private static function buildYourPlacesListItem(array $presentation, callable $t): array
+    {
+        $detail = $t(
+            'ui.terminalserver.doors.your_places_participating',
+            [],
+            'Participating'
+        );
+        if (!empty($presentation['actions']['return'])) {
+            $detail .= ' | ' . $t(
+                'ui.terminalserver.doors.your_places_return_available',
+                [],
+                'Return available'
+            );
+        }
+
+        return [
+            'label' => (string)($presentation['name'] ?? $presentation['id'] ?? ''),
+            'detail' => $detail,
+        ];
+    }
+
     /** @return array{label:string,detail:string} */
     private static function buildLiveNowListItem(
         array $experience,
@@ -368,6 +503,52 @@ class DoorHandler
                 [
                     'prompt' => $t('ui.terminalserver.doors.live_now_prompt', [], 'Select an Experience or Q to return: '),
                     'empty_message' => $t('ui.terminalserver.doors.live_now_empty', [], 'Nobody else is active in an Experience right now.'),
+                ]
+            );
+
+            if ($selected === null) {
+                return;
+            }
+
+            $experienceId = (string)($entries[$selected]['id'] ?? '');
+            if ($experienceId !== '') {
+                $openDetail($experienceId);
+            }
+        }
+    }
+
+    /**
+     * Refresh and navigate Your Places. Detail Back returns here; the next
+     * iteration reloads participation from the authorized collection state.
+     *
+     * @param callable():array<string,mixed> $reload
+     * @param callable(string):void $openDetail
+     * @param callable(string,array<string,mixed>,string):string $t
+     */
+    private function runYourPlacesLoop(
+        $conn,
+        array &$state,
+        TerminalShellInterface $shell,
+        callable $reload,
+        callable $openDetail,
+        callable $t
+    ): void {
+        while (true) {
+            $yourPlaces = $reload();
+            $entries = is_array($yourPlaces['entries'] ?? null) ? $yourPlaces['entries'] : [];
+            $items = array_values(array_map(
+                static fn(array $entry): array => $entry['item'],
+                $entries
+            ));
+
+            $selected = $shell->chooseFromList(
+                $conn,
+                $state,
+                $t('ui.terminalserver.doors.your_places_title', [], 'Your Places'),
+                $items,
+                [
+                    'prompt' => $t('ui.terminalserver.doors.your_places_prompt', [], 'Select an Experience or Q to return: '),
+                    'empty_message' => $t('ui.terminalserver.doors.your_places_empty', [], 'You have no active places right now.'),
                 ]
             );
 
