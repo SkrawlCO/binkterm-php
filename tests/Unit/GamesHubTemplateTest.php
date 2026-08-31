@@ -13,7 +13,7 @@ final class GamesHubTemplateTest extends TestCase
 {
     private function renderHub(
         array $games,
-        array $continuePlaying = [],
+        array $yourPlaces = [],
         array $liveExperiences = [],
         array $leaderboard = [],
         bool $scoreboardExpanded = false,
@@ -26,15 +26,16 @@ final class GamesHubTemplateTest extends TestCase
     ): string {
         $twig = new Environment(new FilesystemLoader(dirname(__DIR__, 2) . '/templates'));
         $translations = [
-            'ui.webdoors.page_title' => 'Experiences',
-            'ui.webdoors.heading' => 'Experiences',
-            'ui.webdoors.description' => 'Games, doors, gateways, and shared spaces across the BBS.',
-            'ui.webdoors.continue_playing' => 'Continue Playing',
-            'ui.webdoors.continue_playing_description' => 'Resume description',
+            'ui.webdoors.page_title' => 'Crossroads',
+            'ui.webdoors.heading' => 'Crossroads',
+            'ui.webdoors.description' => 'Where the people, games, and worlds of {system_name} come together.',
+            'ui.webdoors.your_places' => 'Your Places',
+            'ui.webdoors.your_places_description' => 'Resume description',
             'ui.webdoors.participating_now' => 'You are participating now',
             'ui.webdoors.live_now' => 'Live Now',
             'ui.webdoors.live_now_description' => 'Live description',
             'ui.webdoors.live' => 'Live',
+            'ui.webdoors.experiences' => 'Experiences',
             'ui.webdoors.all_experiences' => 'All Experiences',
             'ui.webdoors.all_experiences_description' => 'All description',
             'ui.webdoors.filter_controls' => 'Filter Experiences',
@@ -68,7 +69,7 @@ final class GamesHubTemplateTest extends TestCase
             'ui.webdoors.around_active_1e' => '{players} players in 1 Experience right now',
             'ui.webdoors.around_active_1p' => '1 player in {experiences} Experiences right now',
             'ui.webdoors.around_active_1p_1e' => '1 player in 1 Experience right now',
-            'ui.webdoors.around_quiet' => "It's quiet right now. Start something.",
+            'ui.webdoors.around_quiet' => 'The Crossroads are quiet right now.',
             'ui.webdoors.free' => 'Free',
             'ui.webdoors.credit_cost' => '{count} credits',
             'ui.webdoors.surface_web' => 'Web',
@@ -134,7 +135,7 @@ final class GamesHubTemplateTest extends TestCase
         return $twig->render('webdoors.twig', [
             'system_name' => 'L33Test Gaming',
             'games' => $games,
-            'continue_playing' => $continuePlaying,
+            'your_places' => $yourPlaces,
             'live_experiences' => $liveExperiences,
             'experience_states' => $experienceStates,
             'current_user' => $currentUser,
@@ -148,47 +149,54 @@ final class GamesHubTemplateTest extends TestCase
         ]);
     }
 
-    public function testPageUsesApprovedExperienceHierarchy(): void
+    public function testPageUsesApprovedCrossroadsHierarchy(): void
     {
-        $game = $this->game('library-entry');
-        $html = $this->renderHub([$game], [$game], [$this->game('live-entry', 2)]);
+        $mine = $this->game('mine', 1, true);
+        $html = $this->renderHub(
+            [$this->game('library-entry')],
+            [$mine],
+            [$this->game('live-entry', 2)]
+        );
 
-        self::assertStringContainsString('<title>Experiences - L33Test Gaming</title>', $html);
-        self::assertStringContainsString('>Experiences</h1>', $html);
-        $continue = strpos($html, 'Continue Playing');
-        $live = strpos($html, 'Live Now');
-        $all = strpos($html, 'All Experiences');
-        $scoreboard = strpos($html, 'Community Scoreboard');
-        self::assertNotFalse($continue);
+        // Crossroads is the human-facing identity of the place.
+        self::assertStringContainsString('<title>Crossroads - L33Test Gaming</title>', $html);
+        self::assertStringContainsString('>Crossroads</h1>', $html);
+
+        // Who is around? -> Where do I belong? -> What else is here? -> scores.
+        $live = strpos($html, 'id="live-now-title"');
+        $places = strpos($html, 'id="your-places-title"');
+        $experiences = strpos($html, 'id="experiences-title"');
+        $scoreboard = strpos($html, 'id="community-scoreboard-title"');
         self::assertNotFalse($live);
-        self::assertNotFalse($all);
+        self::assertNotFalse($places);
+        self::assertNotFalse($experiences);
         self::assertNotFalse($scoreboard);
-        self::assertLessThan($live, $continue);
-        self::assertLessThan($all, $live);
-        self::assertLessThan($scoreboard, $all);
+        self::assertLessThan($places, $live);
+        self::assertLessThan($experiences, $places);
+        self::assertLessThan($scoreboard, $experiences);
     }
 
-    public function testOptionalCommunitySectionsAreOmittedWhenEmpty(): void
+    public function testOptionalContextualSectionsAreOmittedWhenEmpty(): void
     {
         $html = $this->renderHub([$this->game('only-entry')]);
-        self::assertStringNotContainsString('id="continue-playing-title"', $html);
+        self::assertStringNotContainsString('id="your-places-title"', $html);
         self::assertStringNotContainsString('id="live-now-title"', $html);
-        self::assertStringContainsString('All Experiences', $html);
+        self::assertStringContainsString('id="experiences-title"', $html);
     }
 
-    public function testContinuePlayingPrioritizesReturnOverPlay(): void
+    public function testYourPlacesPrioritizesReturnOverPlay(): void
     {
         $participating = $this->game('resume-me', 1, true);
         $section = $this->between(
             $this->renderHub([$participating], [$participating]),
-            'Continue Playing',
-            'All Experiences'
+            'id="your-places-title"',
+            'id="experiences-title"'
         );
         self::assertStringContainsString('href="/experiences/resume-me"', $section);
         self::assertStringContainsString('>Return</a>', $section);
         self::assertStringNotContainsString('>Play</a>', $section);
 
-        // Continue Playing "Return" is a text-only Crossroads action: no
+        // Your Places "Return" is a text-only Crossroads action: no
         // door/fuel-pump icon, no replacement icon on the fidonet button.
         self::assertStringContainsString(
             '<a href="/experiences/resume-me" class="btn btn-fidonet btn-sm">Return</a>',
@@ -212,23 +220,23 @@ final class GamesHubTemplateTest extends TestCase
         $offline = $this->game('offline');
         $section = $this->between(
             $this->renderHub([$live, $offline], [], [$live]),
-            'Live Now',
-            'All Experiences'
+            'id="live-now-title"',
+            'id="experiences-title"'
         );
         self::assertStringContainsString('/experiences/occupied', $section);
         self::assertStringNotContainsString('/experiences/offline', $section);
         self::assertStringContainsString('2 online', $section);
     }
 
-    public function testAllExperiencesContainsCompleteVisibleCatalog(): void
+    public function testExperiencesSectionContainsCompleteVisibleCatalog(): void
     {
         $one = $this->game('one', 1, true);
         $two = $this->game('two', 2);
         $three = $this->game('three');
         $section = $this->between(
             $this->renderHub([$one, $two, $three], [$one], [$two]),
-            'All Experiences',
-            'Community Scoreboard'
+            'id="experiences-title"',
+            'id="community-scoreboard-title"'
         );
         self::assertStringContainsString('/experiences/one', $section);
         self::assertStringContainsString('/experiences/two', $section);
@@ -256,8 +264,8 @@ final class GamesHubTemplateTest extends TestCase
 
         $section = $this->between(
             $this->renderHub([$game]),
-            'All Experiences',
-            'Community Scoreboard'
+            'id="experiences-title"',
+            'id="community-scoreboard-title"'
         );
 
         self::assertStringContainsString('data-experience-filter-controls', $section);
@@ -275,25 +283,25 @@ final class GamesHubTemplateTest extends TestCase
         );
     }
 
-    public function testFiltersTargetOnlyAllExperiences(): void
+    public function testFiltersTargetOnlyTheExperiencesSection(): void
     {
         $library = $this->game('library-only');
-        $continue = $this->game('continue-only', 1, true);
+        $mine = $this->game('mine-only', 1, true);
         $live = $this->game('live-only', 2);
-        $html = $this->renderHub([$library], [$continue], [$live]);
+        $html = $this->renderHub([$library], [$mine], [$live]);
 
         self::assertSame(1, substr_count($html, 'data-filter-name="'));
         self::assertStringNotContainsString(
             'data-experience-filter-item',
-            $this->between($html, 'Continue Playing', 'Live Now')
+            $this->between($html, 'id="live-now-title"', 'id="your-places-title"')
         );
         self::assertStringNotContainsString(
             'data-experience-filter-item',
-            $this->between($html, 'Live Now', 'All Experiences')
+            $this->between($html, 'id="your-places-title"', 'id="experiences-title"')
         );
         self::assertStringNotContainsString(
             'data-filter-name="',
-            $this->between($html, 'Community Scoreboard', '</section>')
+            $this->between($html, 'id="community-scoreboard-title"', '</section>')
         );
     }
 
@@ -583,6 +591,20 @@ final class GamesHubTemplateTest extends TestCase
         self::assertStringContainsString("getEnabledGames(\$user, 'web')", $route);
         self::assertStringContainsString('ExperienceScoreboard())->getMonthlyScores(', $route);
         self::assertStringNotContainsString('ucfirst($row[\'game_id\'])', $route);
+
+        // Crossroads arrival: Your Places is canonical viewer participation,
+        // Live Now is the shared "distinct other caller" predicate, and the two
+        // lists are populated by independent `if` blocks (no `elseif`) so an
+        // Experience the viewer shares with another caller lands in both.
+        $loop = $this->between($route, '$viewerIsParticipating = false;', 'unset($game);');
+        self::assertStringContainsString('if ($viewerPlayer !== null) {', $loop);
+        self::assertStringContainsString('$yourPlaces[] = $game;', $loop);
+        self::assertStringContainsString(
+            'if (\BinktermPHP\ExperienceParticipation::hasDistinctOtherPlayer(',
+            $loop
+        );
+        self::assertStringContainsString('$liveExperiences[] = $game;', $loop);
+        self::assertStringNotContainsString('elseif', $loop);
     }
 
     // ---- Slice 5D: people on the hub ----
@@ -600,7 +622,7 @@ final class GamesHubTemplateTest extends TestCase
             ['green-dragon' => $this->rosterState('green-dragon', ['Skrawl', 'Bard', 'Rogue'])]
         );
 
-        $liveSection = $this->between($html, 'id="live-now-title"', 'id="all-experiences-title"');
+        $liveSection = $this->between($html, 'id="live-now-title"', 'id="experiences-title"');
 
         self::assertStringContainsString('experience-hub-roster', $liveSection);
         self::assertStringContainsString('href="/profile/Skrawl"', $liveSection);
@@ -632,7 +654,7 @@ final class GamesHubTemplateTest extends TestCase
             )]
         );
 
-        $liveSection = $this->between($html, 'id="live-now-title"', 'id="all-experiences-title"');
+        $liveSection = $this->between($html, 'id="live-now-title"', 'id="experiences-title"');
 
         // First 4 shown, 5th+ collapsed.
         self::assertStringContainsString('href="/profile/Alice"', $liveSection);
@@ -658,7 +680,7 @@ final class GamesHubTemplateTest extends TestCase
             ['user_id' => 1] // Skrawl
         );
 
-        $resumeSection = $this->between($html, 'id="continue-playing-title"', 'id="all-experiences-title"');
+        $resumeSection = $this->between($html, 'id="your-places-title"', 'id="experiences-title"');
 
         self::assertStringContainsString('Playing with', $resumeSection);
         self::assertStringContainsString('href="/profile/Bard"', $resumeSection);
@@ -681,7 +703,7 @@ final class GamesHubTemplateTest extends TestCase
             ['user_id' => 1]
         );
 
-        $resumeSection = $this->between($html, 'id="continue-playing-title"', 'id="all-experiences-title"');
+        $resumeSection = $this->between($html, 'id="your-places-title"', 'id="experiences-title"');
 
         self::assertStringNotContainsString('Playing with', $resumeSection);
         self::assertStringNotContainsString('experience-hub-roster', $resumeSection);
@@ -692,7 +714,7 @@ final class GamesHubTemplateTest extends TestCase
         $game = $this->game('green-dragon', 2);
         $html = $this->renderHub([$game], [], [$game], [], false, [], []); // no experience_states
 
-        $liveSection = $this->between($html, 'id="live-now-title"', 'id="all-experiences-title"');
+        $liveSection = $this->between($html, 'id="live-now-title"', 'id="experiences-title"');
 
         self::assertStringNotContainsString('experience-hub-roster', $liveSection);
     }
@@ -756,7 +778,7 @@ final class GamesHubTemplateTest extends TestCase
         return html_entity_decode(trim($m[1]), ENT_QUOTES);
     }
 
-    public function testAroundSummaryIsPositionedBelowHeaderAboveContinuePlaying(): void
+    public function testAroundSummaryIsPositionedBelowHeaderAboveContextualSections(): void
     {
         $game = $this->game('green-dragon', 2);
         $html = $this->renderHub(
@@ -771,13 +793,13 @@ final class GamesHubTemplateTest extends TestCase
 
         $headerPos = strpos($html, 'experiences-library-header');
         $aroundPos = strpos($html, 'experiences-around');
-        $continuePos = strpos($html, 'id="continue-playing-title"');
         $livePos = strpos($html, 'id="live-now-title"');
+        $placesPos = strpos($html, 'id="your-places-title"');
 
         self::assertNotFalse($aroundPos);
         self::assertLessThan($aroundPos, $headerPos);
-        self::assertLessThan($continuePos, $aroundPos);
-        self::assertLessThan($livePos, $continuePos);
+        self::assertLessThan($livePos, $aroundPos);
+        self::assertLessThan($placesPos, $livePos);
     }
 
     public function testAroundSummaryShowsAggregateWhenPlayersAreActive(): void
@@ -800,11 +822,14 @@ final class GamesHubTemplateTest extends TestCase
         self::assertStringContainsString('experiences-around--active', $html);
     }
 
-    public function testAroundSummaryShowsQuietInvitationWhenNobodyIsActive(): void
+    public function testAroundSummaryShowsSingleTruthfulQuietStateWhenNobodyIsActive(): void
     {
         $html = $this->renderHub([$this->game('a', 0)], [], [], [], false, [], []);
 
-        self::assertSame("It's quiet right now. Start something.", $this->aroundLine($html));
+        self::assertSame('The Crossroads are quiet right now.', $this->aroundLine($html));
+        // The "Around" line is the only quiet message: Live Now renders nothing.
+        self::assertStringNotContainsString('id="live-now-title"', $html);
+        self::assertStringNotContainsString('id="your-places-title"', $html);
         // Quiet state carries no "active" modifier (no green dot).
         self::assertStringNotContainsString('experiences-around--active', $html);
         // Not a Bootstrap alert.
@@ -819,7 +844,7 @@ final class GamesHubTemplateTest extends TestCase
         $game = $this->game('lateania', 1, true);
         $html = $this->renderHub(
             games: [$game],
-            continuePlaying: [$game],
+            yourPlaces: [$game],
             experienceStates: [
                 'lateania' => $this->rosterState('lateania', ['Skrawl']),
             ],
@@ -830,8 +855,8 @@ final class GamesHubTemplateTest extends TestCase
 
         $continueSection = $this->between(
             $html,
-            'id="continue-playing-title"',
-            'id="all-experiences-title"'
+            'id="your-places-title"',
+            'id="experiences-title"'
         );
         self::assertStringContainsString('You are participating now', $continueSection);
         self::assertStringContainsString('>Return</a>', $continueSection);
@@ -850,7 +875,7 @@ final class GamesHubTemplateTest extends TestCase
         $game = $this->game('lateania', 2, true);
         $html = $this->renderHub(
             games: [$game],
-            continuePlaying: [$game],
+            yourPlaces: [$game],
             experienceStates: [
                 'lateania' => $this->rosterState('lateania', ['Skrawl', 'Bard']),
             ],
@@ -858,7 +883,7 @@ final class GamesHubTemplateTest extends TestCase
         );
 
         self::assertSame('2 players in 1 Experience right now', $this->aroundLine($html));
-        self::assertStringContainsString('id="continue-playing-title"', $html);
+        self::assertStringContainsString('id="your-places-title"', $html);
         self::assertStringNotContainsString('id="live-now-title"', $html);
     }
 
@@ -868,7 +893,7 @@ final class GamesHubTemplateTest extends TestCase
         $otherGame = $this->game('trade-wars', 1);
         $html = $this->renderHub(
             games: [$viewerGame, $otherGame],
-            continuePlaying: [$viewerGame],
+            yourPlaces: [$viewerGame],
             liveExperiences: [$otherGame],
             experienceStates: [
                 'lateania' => $this->rosterState('lateania', ['Skrawl'], 1),
@@ -878,7 +903,7 @@ final class GamesHubTemplateTest extends TestCase
         );
 
         self::assertSame('2 players in 2 Experiences right now', $this->aroundLine($html));
-        self::assertStringContainsString('id="continue-playing-title"', $html);
+        self::assertStringContainsString('id="your-places-title"', $html);
         self::assertStringContainsString('id="live-now-title"', $html);
     }
 
@@ -895,7 +920,7 @@ final class GamesHubTemplateTest extends TestCase
         );
 
         self::assertSame('1 player in 1 Experience right now', $this->aroundLine($html));
-        self::assertStringNotContainsString('id="continue-playing-title"', $html);
+        self::assertStringNotContainsString('id="your-places-title"', $html);
         self::assertStringContainsString('id="live-now-title"', $html);
     }
 

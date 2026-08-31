@@ -102,6 +102,89 @@ final class ExperienceParticipationTest extends TestCase
         );
     }
 
+    public function testHasDistinctOtherPlayerDetectsAnotherActiveCaller(): void
+    {
+        $state = [
+            'players' => [
+                ['user_id' => 3, 'session_id' => 'mine'],
+                ['user_id' => 7, 'session_id' => 'theirs'],
+            ],
+        ];
+
+        self::assertTrue(
+            ExperienceParticipation::hasDistinctOtherPlayer($state, 3)
+        );
+    }
+
+    public function testHasDistinctOtherPlayerIsFalseWhenOnlyTheViewerIsPresent(): void
+    {
+        $state = [
+            'players' => [
+                ['user_id' => 3, 'session_id' => 'node1'],
+                // Same account on a second node: still just the viewer.
+                ['user_id' => 3, 'session_id' => 'node2'],
+            ],
+        ];
+
+        self::assertFalse(
+            ExperienceParticipation::hasDistinctOtherPlayer($state, 3)
+        );
+    }
+
+    public function testHasDistinctOtherPlayerCollapsesDuplicateOtherSessions(): void
+    {
+        $state = [
+            'players' => [
+                ['user_id' => 7, 'session_id' => 'node1'],
+                ['user_id' => 7, 'session_id' => 'node2'],
+            ],
+        ];
+
+        // Two sessions, one other person — the predicate is a boolean and must
+        // still report "someone else is here".
+        self::assertTrue(
+            ExperienceParticipation::hasDistinctOtherPlayer($state, 3)
+        );
+    }
+
+    public function testHasDistinctOtherPlayerTreatsEveryRealPlayerAsOtherWhenThereIsNoViewer(): void
+    {
+        $state = [
+            'players' => [
+                ['user_id' => 3, 'session_id' => 'a'],
+            ],
+        ];
+
+        self::assertTrue(
+            ExperienceParticipation::hasDistinctOtherPlayer($state, 0)
+        );
+    }
+
+    public function testHasDistinctOtherPlayerHandlesMissingEmptyAndMalformedRostersSafely(): void
+    {
+        self::assertFalse(
+            ExperienceParticipation::hasDistinctOtherPlayer(null, 3)
+        );
+        self::assertFalse(
+            ExperienceParticipation::hasDistinctOtherPlayer([], 3)
+        );
+        self::assertFalse(
+            ExperienceParticipation::hasDistinctOtherPlayer(['players' => []], 3)
+        );
+        self::assertFalse(
+            ExperienceParticipation::hasDistinctOtherPlayer(
+                ['players' => 'not-an-array'],
+                3
+            )
+        );
+        self::assertFalse(
+            ExperienceParticipation::hasDistinctOtherPlayer(
+                ['players' => ['bare-string', ['user_id' => 0], ['user_id' => null]]],
+                3
+            )
+        );
+    }
+
     public function testJsdosEndIsScopedToViewerAndExperience(): void
     {
         $db = new PDO('sqlite::memory:');

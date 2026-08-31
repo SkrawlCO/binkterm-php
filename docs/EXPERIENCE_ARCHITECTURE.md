@@ -125,33 +125,51 @@ the authorized catalog rather than issue one state query per card.
 `ExperienceParticipation` interprets that state for the current viewer using
 numeric user identity. It owns the normalized semantics of Play, Return, and
 End actions, including explicit participation termination; it does not replace
-backend session ownership. `ExperienceLaunch` resolves static surface support
-and canonical launch targets. A resolved target means that presentation may
-offer an action, not that launch is guaranteed: backend launch and session
-routes remain authoritative for runtime authorization, credits, capacity, and
-session creation.
+backend session ownership. It also exposes two pure, transport-agnostic
+predicates used to compose arrival surfaces: `findViewerPlayer()` (does the
+numeric viewer identity have an active session here?) and
+`hasDistinctOtherPlayer()` (is at least one distinct account other than the
+viewer active here?). Multiple sessions held by one account collapse to one
+person in both. `ExperienceLaunch` resolves static surface support and
+canonical launch targets. A resolved target means that presentation may offer
+an action, not that launch is guaranteed: backend launch and session routes
+remain authoritative for runtime authorization, credits, capacity, and session
+creation.
 
-The web `/games` route presents this model as the Experiences library. It uses
-one collection-level `ExperienceState` read to derive optional Continue Playing
-and Live Now sections, then renders the complete authorized web catalog under
-All Experiences. Viewer participation is matched by numeric user identity.
-Hidden entries remain absent because library composition occurs only after
-`GameCatalog` applies web discovery policy. The Community Scoreboard remains a
-separate score-oriented view and must not be treated as popularity metadata.
+### Authenticated web arrival ("Crossroads")
 
-The library sections have distinct membership rules:
+The web `/games` route presents this model as **Crossroads** — the human-facing
+identity of the place that contains the Experiences. "Experience" remains the
+domain term for the things within it. The arrival answers, in order: who is
+around, where do I belong, and what else is here. It uses one collection-level
+`ExperienceState` read to derive two optional contextual sections, then renders
+the complete authorized web catalog under Experiences. Hidden entries remain
+absent because composition occurs only after `GameCatalog` applies web
+discovery policy. The Community Scoreboard remains a separate score-oriented
+view and must not be treated as popularity metadata.
 
-- **Continue Playing** contains every visible, authorized web Experience in
-  which the numeric viewer identity has active participation. Return takes
-  priority over Play.
-- **Live Now** contains other visible web Experiences with a player count
-  greater than zero. Continue Playing entries are excluded to avoid adjacent
-  duplication.
-- **All Experiences** is the complete visible, authorized web inventory,
-  including entries already shown in the optional activity sections. Its
-  browser-side filters narrow only these already-authorized rendered entries;
-  they do not rediscover Experiences, alter catalog order, or affect the other
-  library sections.
+The sections render in this order, with distinct membership rules:
+
+- **Live Now** — "where are other people?" Contains every visible, authorized
+  web Experience for which `hasDistinctOtherPlayer()` is true against the
+  numeric viewer identity. Viewer-only occupancy never qualifies. When empty it
+  renders nothing; the one-line "Around the Crossroads" presence summary above
+  the sections carries the single truthful quiet state.
+- **Your Places** — "where am I participating?" Contains every visible,
+  authorized web Experience for which `findViewerPlayer()` is non-null. Viewer-
+  only occupancy qualifies. Membership is independent of whether Return is
+  currently launchable (`ExperiencePresentation` owns that), and Return takes
+  priority over Play. Omitted entirely when empty.
+- **Live Now and Your Places overlap intentionally.** An Experience the viewer
+  shares with another distinct caller satisfies both questions and appears in
+  both sections; the two lists are populated by independent checks, not an
+  either/or. This is a semantic decision, not accidental duplication — if the
+  composition later reads as too repetitive it is solved as a presentation
+  problem, not by narrowing membership.
+- **Experiences** is the complete visible, authorized web inventory, including
+  every entry already shown in the contextual sections. Its browser-side
+  filters narrow only these already-authorized rendered entries; they do not
+  rediscover Experiences, alter catalog order, or affect the other sections.
 - **Community Scoreboard** reports submitted scores for the selected month.
   Scores are not evidence of current occupancy or popularity. Viewer-facing
   scoreboards and leaderboards use the requested surface's authorized catalog

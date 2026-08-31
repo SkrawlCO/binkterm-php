@@ -11,12 +11,14 @@
     <header class="experiences-library-header mb-4">
         <div class="experiences-eyebrow">{{ system_name }} // {{ t('ui.webdoors.heading', {}, locale, ['common']) }}</div>
         <h1 class="h2 mb-1"><i class="fas fa-compass me-2" aria-hidden="true"></i>{{ t('ui.webdoors.heading', {}, locale, ['common']) }}</h1>
-        <p class="text-muted mb-0">{{ t('ui.webdoors.description', {}, locale, ['common']) }}</p>
+        <p class="text-muted mb-0">{{ t('ui.webdoors.description', {'system_name': system_name}, locale, ['common']) }}</p>
     </header>
 
-    {# Slice 5E: "Around the Crossroads" — one quiet line answering "is anyone
-       around?" from the server-rendered ExperienceState snapshot. Counts only;
-       player names live in Live Now / Continue Playing. #}
+    {# "Around the Crossroads" — one quiet line answering "is anyone around?"
+       from the server-rendered ExperienceState snapshot. Counts only; player
+       names live in the Live Now and Your Places sections. This line also
+       carries the single truthful quiet state ("The Crossroads are quiet
+       right now."), so Live Now itself renders nothing when empty. #}
     {% set around_players = around_active_players|default(0) %}
     {% set around_experiences = around_active_experiences|default(0) %}
     {% if show_global_presence_summary is not defined or show_global_presence_summary %}
@@ -37,46 +39,12 @@
     </p>
     {% endif %}
 
-    {% if continue_playing|default([])|length > 0 %}
-    <section class="experience-section mb-4" aria-labelledby="continue-playing-title">
-        <div class="experience-section-heading">
-            <div>
-                <h2 id="continue-playing-title" class="h4 mb-1">{{ t('ui.webdoors.continue_playing', {}, locale, ['common']) }}</h2>
-                <p class="text-muted small mb-0">{{ t('ui.webdoors.continue_playing_description', {}, locale, ['common']) }}</p>
-            </div>
-        </div>
-        <div class="d-grid gap-2 mt-3">
-            {% for game in continue_playing %}
-                {% set view = game.experience_presentation %}
-                <article class="card experience-resume-card mb-0">
-                    <div class="card-body d-flex flex-column flex-md-row align-items-md-center gap-3 py-3">
-                        <img class="experience-resume-icon" src="{{ view.presentation.icon_url|default('/favicon.svg') }}" alt="" onerror="this.src='/favicon.svg'">
-                        <div class="flex-grow-1 min-w-0">
-                            <h3 class="h5 mb-1">{{ view.name }}</h3>
-                            <div class="text-muted small">
-                                {{ t('ui.webdoors.participating_now', {}, locale, ['common']) }}
-                                {% if view.runtime.player_count > 0 %} · {{ t('ui.webdoors.players_online', {'count': view.runtime.player_count}, locale, ['common']) }}{% endif %}
-                            </div>
-                            {% include 'partials/experience_hub_roster.twig' with {
-                                players: experience_states[game.id].players|default([]),
-                                experience_id: view.id,
-                                exclude_user_id: (current_user.user_id ?? current_user.id ?? 0),
-                                prefix: t('ui.webdoors.playing_with', {}, locale, ['common'])
-                            } %}
-                        </div>
-                        <div class="d-flex gap-2 flex-shrink-0">
-                            <a href="/experiences/{{ view.id }}" class="btn btn-outline-secondary btn-sm">{{ t('ui.webdoors.details', {}, locale, ['common']) }}</a>
-                            {% if view.actions.return and game.launch %}
-                            <a href="/experiences/{{ view.id }}" class="btn btn-fidonet btn-sm">{{ t('ui.webdoors.return', {}, locale, ['common']) }}</a>
-                            {% endif %}
-                        </div>
-                    </div>
-                </article>
-            {% endfor %}
-        </div>
-    </section>
-    {% endif %}
-
+    {# Live Now — "where are other people?" Composed server-side from the one
+       authorized ExperienceState collection read: an Experience appears here
+       when at least one distinct caller other than the viewer is active, even
+       when the viewer is also participating (it then also appears in Your
+       Places below — intentional overlap). Empty renders nothing; the
+       "Around the Crossroads" line above is the quiet state. #}
     {% if live_experiences|default([])|length > 0 %}
     <section class="experience-section mb-4" aria-labelledby="live-now-title">
         <div class="experience-section-heading">
@@ -109,10 +77,55 @@
     </section>
     {% endif %}
 
-    <section class="experience-section mb-5" aria-labelledby="all-experiences-title">
+    {# Your Places — "where am I participating?" Membership is canonical viewer
+       participation (ExperienceParticipation::findViewerPlayer). It is
+       deliberately independent of whether Return is currently launchable, and
+       overlaps Live Now when another caller shares the Experience. Omitted
+       entirely when empty, matching the existing quiet-section convention. #}
+    {% if your_places|default([])|length > 0 %}
+    <section class="experience-section mb-4" aria-labelledby="your-places-title">
         <div class="experience-section-heading">
             <div>
-                <h2 id="all-experiences-title" class="h4 mb-1">{{ t('ui.webdoors.all_experiences', {}, locale, ['common']) }}</h2>
+                <h2 id="your-places-title" class="h4 mb-1">{{ t('ui.webdoors.your_places', {}, locale, ['common']) }}</h2>
+                <p class="text-muted small mb-0">{{ t('ui.webdoors.your_places_description', {}, locale, ['common']) }}</p>
+            </div>
+        </div>
+        <div class="d-grid gap-2 mt-3">
+            {% for game in your_places %}
+                {% set view = game.experience_presentation %}
+                <article class="card experience-resume-card mb-0">
+                    <div class="card-body d-flex flex-column flex-md-row align-items-md-center gap-3 py-3">
+                        <img class="experience-resume-icon" src="{{ view.presentation.icon_url|default('/favicon.svg') }}" alt="" onerror="this.src='/favicon.svg'">
+                        <div class="flex-grow-1 min-w-0">
+                            <h3 class="h5 mb-1">{{ view.name }}</h3>
+                            <div class="text-muted small">
+                                {{ t('ui.webdoors.participating_now', {}, locale, ['common']) }}
+                                {% if view.runtime.player_count > 0 %} · {{ t('ui.webdoors.players_online', {'count': view.runtime.player_count}, locale, ['common']) }}{% endif %}
+                            </div>
+                            {% include 'partials/experience_hub_roster.twig' with {
+                                players: experience_states[game.id].players|default([]),
+                                experience_id: view.id,
+                                exclude_user_id: (current_user.user_id ?? current_user.id ?? 0),
+                                prefix: t('ui.webdoors.playing_with', {}, locale, ['common'])
+                            } %}
+                        </div>
+                        <div class="d-flex gap-2 flex-shrink-0">
+                            <a href="/experiences/{{ view.id }}" class="btn btn-outline-secondary btn-sm">{{ t('ui.webdoors.details', {}, locale, ['common']) }}</a>
+                            {% if view.actions.return and game.launch %}
+                            <a href="/experiences/{{ view.id }}" class="btn btn-fidonet btn-sm">{{ t('ui.webdoors.return', {}, locale, ['common']) }}</a>
+                            {% endif %}
+                        </div>
+                    </div>
+                </article>
+            {% endfor %}
+        </div>
+    </section>
+    {% endif %}
+
+    <section class="experience-section mb-5" aria-labelledby="experiences-title">
+        <div class="experience-section-heading">
+            <div>
+                <h2 id="experiences-title" class="h4 mb-1">{{ t('ui.webdoors.experiences', {}, locale, ['common']) }}</h2>
                 <p class="text-muted small mb-0">{{ t('ui.webdoors.all_experiences_description', {}, locale, ['common']) }}</p>
             </div>
             <span class="experience-count" aria-live="polite" aria-atomic="true">{{ games|length }}</span>
@@ -217,7 +230,7 @@
     const filterInputs = Array.from(document.querySelectorAll('[data-experience-filter]'));
     const filterResetButtons = Array.from(document.querySelectorAll('[data-experience-filter-reset]'));
     const filterEmpty = document.querySelector('[data-experience-filter-empty]');
-    const filterCount = document.querySelector('#all-experiences-title')
+    const filterCount = document.querySelector('#experiences-title')
         ?.closest('.experience-section-heading')
         ?.querySelector('.experience-count');
     const presenceElements = document.querySelectorAll('.experience-presence');

@@ -165,7 +165,7 @@ SimpleRouter::get('/games', function() {
     $aroundActivePlayers = count($aroundActiveUserIds);
 
     $currentUserId = (int)($user['user_id'] ?? $user['id'] ?? 0);
-    $continuePlaying = [];
+    $yourPlaces = [];
     $liveExperiences = [];
     $viewerIsParticipating = false;
 
@@ -186,15 +186,24 @@ SimpleRouter::get('/games', function() {
                 $viewerPlayer
             );
 
+        // Live Now and Your Places answer different questions and are
+        // intentionally allowed to overlap. An Experience the viewer shares
+        // with another distinct caller truthfully belongs in both:
+        //
+        //   Live Now    -> where are other people?
+        //   Your Places -> where am I participating?
+        //
+        // Participation membership stays independent of whether Return is
+        // currently launchable; ExperiencePresentation owns that decision.
         if ($viewerPlayer !== null) {
             $viewerIsParticipating = true;
-            $continuePlaying[] = $game;
-        } elseif (
-            (int)($game['experience_presentation']['runtime']['player_count'] ?? 0) > 0
-        ) {
-            // Continue Playing already communicates the viewer's live entry;
-            // avoid repeating it in the adjacent Live Now section. All
-            // Experiences remains the complete canonical collection below.
+            $yourPlaces[] = $game;
+        }
+
+        if (\BinktermPHP\ExperienceParticipation::hasDistinctOtherPlayer(
+            $experienceState,
+            $currentUserId
+        )) {
             $liveExperiences[] = $game;
         }
     }
@@ -213,7 +222,7 @@ SimpleRouter::get('/games', function() {
     usort($games, function($a, $b) {
         return strcasecmp($a['name'], $b['name']);
     });
-    usort($continuePlaying, function($a, $b) {
+    usort($yourPlaces, function($a, $b) {
         return strcasecmp($a['name'], $b['name']);
     });
     usort($liveExperiences, function($a, $b) {
@@ -265,7 +274,7 @@ SimpleRouter::get('/games', function() {
     $template = new Template();
     $template->renderResponse('webdoors.twig', [
         'games' => $games,
-        'continue_playing' => $continuePlaying,
+        'your_places' => $yourPlaces,
         'live_experiences' => $liveExperiences,
         'experience_states' => $experienceStates,
         'around_active_players' => $aroundActivePlayers,

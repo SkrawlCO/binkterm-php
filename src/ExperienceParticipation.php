@@ -52,6 +52,55 @@ final class ExperienceParticipation
     }
 
     /**
+     * Whether an Experience state snapshot contains at least one active user
+     * other than the given viewer.
+     *
+     * This is the canonical "is anyone else here?" predicate. It powers the
+     * web Crossroads "Live Now" section, which asks *where are other people*,
+     * as distinct from participation membership (see {@see findViewerPlayer()}).
+     * The two questions overlap intentionally: an Experience the viewer shares
+     * with another caller satisfies both.
+     *
+     * Multiple concurrent sessions held by one account collapse to one person,
+     * so a roster containing only the viewer's own sessions is not "live". A
+     * null, empty, or malformed roster is treated as nobody present, and player
+     * rows without a positive integer user id are ignored.
+     *
+     * @param array<string,mixed>|null $state An ExperienceState snapshot, i.e.
+     *     the shape produced by {@see \BinktermPHP\ExperienceState}.
+     * @param int $viewerId Numeric id of the authenticated viewer, or 0 when
+     *     there is no viewer (any real player then counts as "other").
+     */
+    public static function hasDistinctOtherPlayer(
+        ?array $state,
+        int $viewerId
+    ): bool {
+        if ($state === null) {
+            return false;
+        }
+
+        $players = $state['players'] ?? null;
+
+        if (!is_array($players)) {
+            return false;
+        }
+
+        foreach ($players as $player) {
+            if (!is_array($player)) {
+                continue;
+            }
+
+            $playerId = (int)($player['user_id'] ?? 0);
+
+            if ($playerId > 0 && $playerId !== $viewerId) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * Normalized actions available to the current viewer.
      *
      * @param array<string,mixed> $experience
