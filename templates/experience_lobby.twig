@@ -834,11 +834,15 @@ function formatExperienceActivityTime(value, nowValue = new Date()) {
         const elapsedHours = Math.floor(elapsedMinutes / 60);
 
         if (elapsedHours < 24) {
+            // The plural suffix is a formatting fragment, not a displayed
+            // string. time.suffix_singular is legitimately '' and window.t()
+            // returns the key when a catalog miss coincides with an empty
+            // fallback, so read the server-rendered value directly here.
             return lobbyT('time.hours_ago', 'time_hours_ago', {
                 count: elapsedHours,
                 suffix: elapsedHours === 1
-                    ? lobbyT('time.suffix_singular', 'time_suffix_singular')
-                    : lobbyT('time.suffix_plural', 'time_suffix_plural')
+                    ? EXPERIENCE_LOBBY_I18N.time_suffix_singular
+                    : EXPERIENCE_LOBBY_I18N.time_suffix_plural
             });
         }
     }
