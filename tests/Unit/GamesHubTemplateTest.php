@@ -22,7 +22,8 @@ final class GamesHubTemplateTest extends TestCase
         ?array $currentUser = null,
         ?int $aroundActivePlayers = null,
         ?int $aroundActiveExperiences = null,
-        ?bool $showGlobalPresenceSummary = null
+        ?bool $showGlobalPresenceSummary = null,
+        array $recentActivity = []
     ): string {
         $twig = new Environment(new FilesystemLoader(dirname(__DIR__, 2) . '/templates'));
         $translations = [
@@ -35,9 +36,20 @@ final class GamesHubTemplateTest extends TestCase
             'ui.webdoors.live_now' => 'Live Now',
             'ui.webdoors.live_now_description' => 'Live description',
             'ui.webdoors.live' => 'Live',
+            'ui.webdoors.recent_activity' => 'Recently in the Crossroads',
+            'ui.webdoors.recent_activity_description' => 'Recent footprints description',
+            'ui.webdoors.recent_activity_played' => 'played',
+            'ui.webdoors.recent_activity_first_played' => 'first played',
             'ui.webdoors.experiences' => 'Experiences',
             'ui.webdoors.all_experiences' => 'All Experiences',
             'ui.webdoors.all_experiences_description' => 'All description',
+            'time.just_now' => 'just now',
+            'time.minutes_ago' => '{count} minutes ago',
+            'time.hours_ago' => '{count} hour{suffix} ago',
+            'time.yesterday' => 'yesterday',
+            'time.days_ago' => '{count} days ago',
+            'time.suffix_singular' => '',
+            'time.suffix_plural' => 's',
             'ui.webdoors.filter_controls' => 'Filter Experiences',
             'ui.webdoors.filter_search_label' => 'Search Experiences',
             'ui.webdoors.filter_search_placeholder' => 'Search by name or description',
@@ -137,6 +149,7 @@ final class GamesHubTemplateTest extends TestCase
             'games' => $games,
             'your_places' => $yourPlaces,
             'live_experiences' => $liveExperiences,
+            'recent_activity' => $recentActivity,
             'experience_states' => $experienceStates,
             'current_user' => $currentUser,
             'around_active_players' => $aroundActivePlayers,
@@ -155,24 +168,29 @@ final class GamesHubTemplateTest extends TestCase
         $html = $this->renderHub(
             [$this->game('library-entry')],
             [$mine],
-            [$this->game('live-entry', 2)]
+            [$this->game('live-entry', 2)],
+            recentActivity: [$this->recentEntry('Bard', 'live-entry', 'Live Entry')]
         );
 
         // Crossroads is the human-facing identity of the place.
         self::assertStringContainsString('<title>Crossroads - L33Test Gaming</title>', $html);
         self::assertStringContainsString('>Crossroads</h1>', $html);
 
-        // Who is around? -> Where do I belong? -> What else is here? -> scores.
+        // Who is around? -> Where do I belong? -> Who has been through? ->
+        // What else is here? -> scores.
         $live = strpos($html, 'id="live-now-title"');
         $places = strpos($html, 'id="your-places-title"');
+        $recent = strpos($html, 'id="recent-activity-title"');
         $experiences = strpos($html, 'id="experiences-title"');
         $scoreboard = strpos($html, 'id="community-scoreboard-title"');
         self::assertNotFalse($live);
         self::assertNotFalse($places);
+        self::assertNotFalse($recent);
         self::assertNotFalse($experiences);
         self::assertNotFalse($scoreboard);
         self::assertLessThan($places, $live);
-        self::assertLessThan($experiences, $places);
+        self::assertLessThan($recent, $places);
+        self::assertLessThan($experiences, $recent);
         self::assertLessThan($scoreboard, $experiences);
     }
 
@@ -181,7 +199,98 @@ final class GamesHubTemplateTest extends TestCase
         $html = $this->renderHub([$this->game('only-entry')]);
         self::assertStringNotContainsString('id="your-places-title"', $html);
         self::assertStringNotContainsString('id="live-now-title"', $html);
+        self::assertStringNotContainsString('id="recent-activity-title"', $html);
         self::assertStringContainsString('id="experiences-title"', $html);
+    }
+
+    public function testRecentActivityListsExistingPlayFootprints(): void
+    {
+        $html = $this->renderHub(
+            [$this->game('lord'), $this->game('usurper')],
+            recentActivity: [
+                $this->recentEntry('Bard', 'lord', 'Legend of the Red Dragon', 'play', 1200),
+                $this->recentEntry('Skrawl', 'usurper', 'Usurper Reborn', 'first_play', 7200),
+            ]
+        );
+
+        $section = $this->between(
+            $html,
+            'id="recent-activity-title"',
+            'id="experiences-title"'
+        );
+
+        self::assertStringContainsString('Bard', $section);
+        self::assertStringContainsString('played', $section);
+        self::assertStringContainsString(
+            '<a href="/experiences/lord" class="text-decoration-none">Legend of the Red Dragon</a>',
+            $section
+        );
+        self::assertStringContainsString('Skrawl', $section);
+        self::assertStringContainsString('first played', $section);
+        self::assertStringContainsString(
+            '<a href="/experiences/usurper" class="text-decoration-none">Usurper Reborn</a>',
+            $section
+        );
+
+        // Deliberately quiet: no cards, avatars, reactions, counts, durations,
+        // surface labels, or pagination.
+        self::assertStringNotContainsString('experience-live-card', $section);
+        self::assertStringNotContainsString('experience-resume-card', $section);
+        self::assertStringNotContainsString('data-experience-filter-item', $section);
+        self::assertStringNotContainsString('load more', strtolower($section));
+        self::assertStringNotContainsString('minutes online', $section);
+    }
+
+    public function testRecentActivityRendersRelativeTimeFromOccurredAt(): void
+    {
+        $html = $this->renderHub(
+            [$this->game('lord')],
+            recentActivity: [
+                $this->recentEntry('Bard', 'lord', 'Legend of the Red Dragon', 'play', 1500),
+            ]
+        );
+
+        // ~25 minutes ago -> the existing time.minutes_ago convention.
+        self::assertMatchesRegularExpression('/\b2[0-9] minutes ago\b/', $html);
+    }
+
+    public function testRecentActivityIsHiddenWhenNoRows(): void
+    {
+        $html = $this->renderHub([$this->game('lord')], recentActivity: []);
+        self::assertStringNotContainsString('id="recent-activity-title"', $html);
+        self::assertStringNotContainsString('experience-recent-activity', $html);
+        // No empty-state card either.
+        self::assertStringNotContainsString('Recently in the Crossroads', $html);
+    }
+
+    public function testRecentActivityRendersAtMostFiveRows(): void
+    {
+        $entries = [];
+        foreach (range(1, 9) as $i) {
+            $entries[] = $this->recentEntry('User' . $i, 'lord', 'Legend of the Red Dragon', 'play', $i * 300);
+        }
+
+        $html = $this->renderHub([$this->game('lord')], recentActivity: $entries);
+        $section = $this->between($html, 'id="recent-activity-title"', 'id="experiences-title"');
+
+        self::assertSame(5, substr_count($section, '<li class="text-muted small py-1">'));
+    }
+
+    public function testRecentActivityDoesNotDeduplicateRepeatedRawRows(): void
+    {
+        // The WebDoor session endpoint can record repeated webdoor_play rows on
+        // player reload. This slice preserves truthful raw ordering — the read
+        // model does not invent a de-duplication window. Documented behavior.
+        $entries = [
+            $this->recentEntry('Bard', 'lord', 'Legend of the Red Dragon', 'play', 30),
+            $this->recentEntry('Bard', 'lord', 'Legend of the Red Dragon', 'play', 45),
+            $this->recentEntry('Bard', 'lord', 'Legend of the Red Dragon', 'play', 60),
+        ];
+
+        $html = $this->renderHub([$this->game('lord')], recentActivity: $entries);
+        $section = $this->between($html, 'id="recent-activity-title"', 'id="experiences-title"');
+
+        self::assertSame(3, substr_count($section, '<li class="text-muted small py-1">'));
     }
 
     public function testYourPlacesPrioritizesReturnOverPlay(): void
@@ -588,9 +697,16 @@ final class GamesHubTemplateTest extends TestCase
         self::assertNotFalse($end);
         $route = substr($source, $start, $end - $start);
         self::assertSame(1, substr_count($route, 'getExperienceStates('));
-        self::assertStringContainsString("getEnabledGames(\$user, 'web')", $route);
+        self::assertSame(1, substr_count($route, "getEnabledGames(\$user, 'web')"));
         self::assertStringContainsString('ExperienceScoreboard())->getMonthlyScores(', $route);
         self::assertStringNotContainsString('ucfirst($row[\'game_id\'])', $route);
+
+        // Recently in the Crossroads: exactly one bounded recent-activity read,
+        // reusing the already-authorized $games catalog — no extra discovery,
+        // no collection ExperienceState read, no per-Experience query.
+        self::assertSame(1, substr_count($route, 'recentAcrossCatalog('));
+        self::assertStringContainsString('->recentAcrossCatalog($games, 5)', $route);
+        self::assertStringContainsString("'recent_activity' => \$recentActivity", $route);
 
         // Crossroads arrival: Your Places is canonical viewer participation,
         // Live Now is the shared "distinct other caller" predicate, and the two
@@ -1148,6 +1264,28 @@ final class GamesHubTemplateTest extends TestCase
     private function score(int $rank): array
     {
         return ['rank' => $rank, 'display_name' => 'Player' . $rank, 'score' => 1000 - $rank, 'game_id' => 'score-game', 'game_name' => 'Score Game', 'game_launch' => ['url' => '/games/score-game'], 'board' => 'default', 'date' => '2026-08-26'];
+    }
+
+    /**
+     * One row as composed by ExperienceActivity::recentAcrossCatalog().
+     * $secondsAgo controls the rendered relative time.
+     */
+    private function recentEntry(
+        string $username,
+        string $experienceId,
+        string $experienceName,
+        string $type = 'play',
+        int $secondsAgo = 600
+    ): array {
+        return [
+            'id' => random_int(1, 1_000_000),
+            'type' => $type,
+            'user_id' => random_int(2, 9999),
+            'username' => $username,
+            'experience_id' => $experienceId,
+            'experience_name' => $experienceName,
+            'occurred_at' => gmdate('Y-m-d H:i:s', time() - $secondsAgo) . '+00',
+        ];
     }
 
     private function between(string $html, string $start, string $end): string

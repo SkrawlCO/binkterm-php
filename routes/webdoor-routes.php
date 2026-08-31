@@ -271,11 +271,22 @@ SimpleRouter::get('/games', function() {
         getServerLogger()->error('Failed to load WebDoor leaderboard: ' . $e->getMessage());
     }
 
+    // "Recently in the Crossroads" — a handful of truthful play footprints from
+    // the existing activity history (webdoor_play / dosdoor_play only), filtered
+    // through the viewer's already-authorized catalog ($games above; no second
+    // discovery). Historical evidence that the place is used even when nobody is
+    // here right now — not live presence, not a feed. One bounded read; system
+    // users, deleted users, and orphaned/renamed backend ids are dropped inside
+    // the read model. Capped at five for this page.
+    $recentActivity = (new \BinktermPHP\ExperienceActivity())
+        ->recentAcrossCatalog($games, 5);
+
     $template = new Template();
     $template->renderResponse('webdoors.twig', [
         'games' => $games,
         'your_places' => $yourPlaces,
         'live_experiences' => $liveExperiences,
+        'recent_activity' => $recentActivity,
         'experience_states' => $experienceStates,
         'around_active_players' => $aroundActivePlayers,
         'around_active_experiences' => $aroundActiveExperiences,

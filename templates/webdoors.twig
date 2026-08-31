@@ -122,6 +122,49 @@
     </section>
     {% endif %}
 
+    {# Recently in the Crossroads — a handful of truthful footprints from the
+       existing play-activity history (webdoor_play / dosdoor_play), composed
+       server-side and filtered to the viewer's authorized catalog in the route.
+       Historical, not live presence: "quiet now" does not mean the place is
+       dead. Bounded to five in the route. Hidden entirely when there is nothing
+       to show — no empty-state card. Not a feed: no avatars, reactions, counts,
+       durations, surfaces, pagination, or live updating. #}
+    {% if recent_activity|default([])|length > 0 %}
+    <section class="experience-section mb-4" aria-labelledby="recent-activity-title">
+        <div class="experience-section-heading">
+            <div>
+                <h2 id="recent-activity-title" class="h4 mb-1">{{ t('ui.webdoors.recent_activity', {}, locale, ['common']) }}</h2>
+                <p class="text-muted small mb-0">{{ t('ui.webdoors.recent_activity_description', {}, locale, ['common']) }}</p>
+            </div>
+        </div>
+        <ul class="list-unstyled mt-3 mb-0 experience-recent-activity">
+            {# Route bounds this to five; slice defensively so the section stays
+               a handful of footprints regardless of the payload. #}
+            {% for entry in recent_activity|slice(0, 5) %}
+                {% set elapsed = ('now'|date('U')) - (entry.occurred_at|date('U')) %}
+                {%- if elapsed < 60 -%}
+                    {% set relative_time = t('time.just_now', {}, locale, ['common']) %}
+                {%- elseif elapsed < 3600 -%}
+                    {% set relative_time = t('time.minutes_ago', {'count': (elapsed // 60)}, locale, ['common']) %}
+                {%- elseif elapsed < 86400 -%}
+                    {% set elapsed_hours = elapsed // 3600 %}
+                    {% set relative_time = t('time.hours_ago', {'count': elapsed_hours, 'suffix': (elapsed_hours == 1 ? t('time.suffix_singular', {}, locale, ['common']) : t('time.suffix_plural', {}, locale, ['common']))}, locale, ['common']) %}
+                {%- elseif elapsed < 172800 -%}
+                    {% set relative_time = t('time.yesterday', {}, locale, ['common']) %}
+                {%- else -%}
+                    {% set relative_time = t('time.days_ago', {'count': (elapsed // 86400)}, locale, ['common']) %}
+                {%- endif -%}
+                <li class="text-muted small py-1">
+                    {{ entry.username }}
+                    {{ entry.type == 'first_play' ? t('ui.webdoors.recent_activity_first_played', {}, locale, ['common']) : t('ui.webdoors.recent_activity_played', {}, locale, ['common']) }}
+                    <a href="/experiences/{{ entry.experience_id }}" class="text-decoration-none">{{ entry.experience_name }}</a>
+                    · {{ relative_time }}
+                </li>
+            {% endfor %}
+        </ul>
+    </section>
+    {% endif %}
+
     <section class="experience-section mb-5" aria-labelledby="experiences-title">
         <div class="experience-section-heading">
             <div>

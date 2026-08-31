@@ -141,8 +141,9 @@ creation.
 The web `/games` route presents this model as **Crossroads** — the human-facing
 identity of the place that contains the Experiences. "Experience" remains the
 domain term for the things within it. The arrival answers, in order: who is
-around, where do I belong, and what else is here. It uses one collection-level
-`ExperienceState` read to derive two optional contextual sections, then renders
+around, where do I belong, who has been through recently, and what else is
+here. It uses one collection-level `ExperienceState` read to derive two
+optional present-tense sections plus one bounded historical read, then renders
 the complete authorized web catalog under Experiences. Hidden entries remain
 absent because composition occurs only after `GameCatalog` applies web
 discovery policy. The Community Scoreboard remains a separate score-oriented
@@ -166,6 +167,26 @@ The sections render in this order, with distinct membership rules:
   either/or. This is a semantic decision, not accidental duplication — if the
   composition later reads as too repetitive it is solved as a presentation
   problem, not by narrowing membership.
+- **Recently in the Crossroads** — "who has been through recently?" A handful
+  (at most five, newest first) of play footprints drawn only from the existing
+  play activity already visible in authorized Experience lobbies
+  (`ActivityTracker` types `webdoor_play` / `dosdoor_play`), composed by
+  `ExperienceActivity::recentAcrossCatalog()`. It is **authenticated-only** and
+  never appears on the anonymous `/crossroads` window. Every row is filtered
+  through the viewer's own authorized `GameCatalog` result, so activity for a
+  hidden, admin-only, disabled, removed, or renamed/orphaned Experience simply
+  never resolves; the current catalog name is shown, not the stale snapshot.
+  System users (e.g. `_guest`) are excluded, and rows whose user has been
+  deleted are dropped rather than shown as "Unknown user". The first-play
+  distinction is preserved. It is **historical evidence, not live presence** —
+  "quiet now" does not mean the place is dead. It carries no "since your last
+  visit" semantics, no session duration, no leave/logout time, no launch-vs-
+  return, and no surface label, because the underlying activity data does not
+  record those as lifecycle truth. Known activity-data limitations (managed
+  doors record a play on a fresh session but not on resume; the WebDoor session
+  endpoint can record repeated `webdoor_play` rows on player reload) are not
+  corrected here; raw ordering is preserved. Hidden entirely when there is
+  nothing to show — it is not an empty-state card, and it is not a feed.
 - **Experiences** is the complete visible, authorized web inventory, including
   every entry already shown in the contextual sections. Its browser-side
   filters narrow only these already-authorized rendered entries; they do not
