@@ -233,7 +233,15 @@ class DoorHandler
             }
         };
 
-        $this->runExperienceDetailLoop($conn, $state, $shell, $reload, $onLaunch, $t, $onSocial);
+        $onEnd = function (array $view) use ($session, $experienceId, &$state): ?string {
+            return $this->endExperienceParticipation(
+                $session,
+                $experienceId,
+                $state['csrf_token'] ?? null
+            );
+        };
+
+        $this->runExperienceDetailLoop($conn, $state, $shell, $reload, $onLaunch, $t, $onSocial, $onEnd);
     }
 
     /**
@@ -564,6 +572,39 @@ class DoorHandler
     }
 
     /**
+     * End the caller's participation through the shared authenticated API.
+     *
+     * @return string|null Null on success, otherwise a user-facing error.
+     */
+    protected function endExperienceParticipation(
+        string $session,
+        string $experienceId,
+        ?string $csrfToken
+    ): ?string {
+        $response = TelnetUtils::apiRequest(
+            $this->apiBase,
+            'POST',
+            '/api/experiences/' . rawurlencode($experienceId) . '/end',
+            null,
+            $session,
+            3,
+            $csrfToken
+        );
+
+        if (
+            ($response['status'] ?? 0) >= 200
+            && ($response['status'] ?? 0) < 300
+            && !empty($response['data']['success'])
+        ) {
+            return null;
+        }
+
+        $message = trim((string)($response['data']['error'] ?? $response['error'] ?? ''));
+
+        return $message !== '' ? $message : 'Unable to end active participation';
+    }
+
+    /**
      * Drive the experience detail screen: render, read an action, and either
      * launch (then recompose and redraw — the Crossroads return destination)
      * or fall back to the catalog. No I/O beyond the shell and the injected
@@ -576,6 +617,7 @@ class DoorHandler
      * @param callable(array<string,mixed>):void $onLaunch Launch the experience for the given view model
      * @param callable(string,array<string,mixed>,string):string $t Translator: (key, params, fallback)
      * @param ?callable(string,array<string,mixed>):void $onSocial Handle a social action ('people'|'conversation')
+     * @param ?callable(array<string,mixed>):(?string) $onEnd End participation; null means success, string means failure
      */
     private function runExperienceDetailLoop(
         $conn,
@@ -584,7 +626,8 @@ class DoorHandler
         callable $reload,
         callable $onLaunch,
         callable $t,
-        ?callable $onSocial = null
+        ?callable $onSocial = null,
+        ?callable $onEnd = null
     ): void {
         while (true) {
             $view = $reload();
@@ -604,6 +647,7 @@ class DoorHandler
             $launchable = !empty($actions['can_play']) || !empty($actions['can_return']);
             $canPeople = $onSocial !== null && !empty($actions['can_people']);
             $canConversation = $onSocial !== null && !empty($actions['can_conversation']);
+            $canEnd = $onEnd !== null && !empty($actions['can_end']);
 
             $extraKeys = [];
             if ($launchable) {
@@ -614,6 +658,9 @@ class DoorHandler
             }
             if ($canConversation) {
                 $extraKeys['c'] = 'conversation';
+            }
+            if ($canEnd) {
+                $extraKeys['e'] = 'end_participation';
             }
 
             $action = $shell->showScrollablePanel(
@@ -637,6 +684,33 @@ class DoorHandler
             }
             if ($action === 'conversation' && $canConversation) {
                 $onSocial('conversation', $view);
+                continue;
+            }
+            if ($action === 'end_participation' && $canEnd) {
+                $confirmed = $shell->showConfirmDialog(
+                    $conn,
+                    $state,
+                    $t('ui.terminalserver.doors.end_confirm_title', [], 'End participation?'),
+                    $t('ui.terminalserver.doors.end_confirm_message', ['name' => (string)$view['name']], 'End your active participation in {name}?'),
+                    [
+                        'y' => $t('ui.terminalserver.server.confirm_yes', [], 'Confirm'),
+                        'n' => $t('ui.terminalserver.server.confirm_no', [], 'Cancel'),
+                    ],
+                    'n'
+                );
+
+                if ($confirmed === 'y') {
+                    $error = $onEnd($view);
+                    if (is_string($error) && $error !== '') {
+                        $shell->showAlert(
+                            $conn,
+                            $state,
+                            (string)$view['name'],
+                            $t('ui.terminalserver.doors.end_failed', ['error' => $error], 'Unable to end participation: {error}'),
+                            'error'
+                        );
+                    }
+                }
                 continue;
             }
 
@@ -688,6 +762,10 @@ class DoorHandler
         if ($actions['can_conversation']) {
             $segments[] = ['text' => 'C', 'color' => TelnetUtils::ANSI_RED];
             $segments[] = ['text' => ' ' . $t('ui.terminalserver.doors.detail_action_conversation', [], 'Conversation') . '  ', 'color' => TelnetUtils::ANSI_BLUE];
+        }
+        if ($actions['can_end']) {
+            $segments[] = ['text' => 'E', 'color' => TelnetUtils::ANSI_RED];
+            $segments[] = ['text' => ' ' . $t('ui.terminalserver.doors.detail_action_end', [], 'End Participation') . '  ', 'color' => TelnetUtils::ANSI_BLUE];
         }
         $segments[] = ['text' => 'Q', 'color' => TelnetUtils::ANSI_RED];
         $segments[] = ['text' => ' ' . $t('ui.terminalserver.doors.detail_action_back', [], 'Back'), 'color' => TelnetUtils::ANSI_BLUE];
@@ -887,13 +965,13 @@ class DoorHandler
      *    enabled (the flag is passed in so this stays a pure resolver).
      *
      * Keys avoid every character reserved by showScrollablePanel in either
-     * shell (u/d/p/n/q/b, arrows, page/home/end), so 'g'/'w'/'c' work in both
-     * TUI and line shells.
+     * shell (u/d/p/n/q/b, arrows, page/home/end), so 'g'/'w'/'c'/'e' work in
+     * both TUI and line shells.
      *
      * @param array<string,mixed> $presentation ExperiencePresentation::build() result
      * @param array<string,mixed> $experienceState ExperienceState::getExperienceState() result
      * @param bool $chatEnabled Whether the local chat feature is enabled
-     * @return array{can_play:bool,can_return:bool,can_people:bool,can_conversation:bool,conversation_room_id:int,keys:string[],primary:string}
+     * @return array{can_play:bool,can_return:bool,can_end:bool,can_people:bool,can_conversation:bool,conversation_room_id:int,keys:string[],primary:string}
      */
     public static function resolveDetailActions(
         array $presentation,
@@ -902,6 +980,7 @@ class DoorHandler
     ): array {
         $canReturn = !empty($presentation['actions']['return']);
         $canPlay   = !$canReturn && !empty($presentation['actions']['play']);
+        $canEnd    = !empty($presentation['actions']['end_participation']);
 
         $players = is_array($experienceState['players'] ?? null) ? $experienceState['players'] : [];
         $canPeople = $players !== [];
@@ -924,11 +1003,15 @@ class DoorHandler
         if ($canConversation) {
             $keys[] = 'c';
         }
+        if ($canEnd) {
+            $keys[] = 'e';
+        }
         $keys[] = 'q';
 
         return [
             'can_play'             => $canPlay,
             'can_return'           => $canReturn,
+            'can_end'              => $canEnd,
             'can_people'           => $canPeople,
             'can_conversation'     => $canConversation,
             'conversation_room_id' => $roomId,

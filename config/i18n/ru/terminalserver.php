@@ -575,8 +575,12 @@ return [
     'ui.terminalserver.doors.detail_activity_none' => '  Пока ничего - будьте первым.',
     'ui.terminalserver.doors.detail_action_play' => 'Играть',
     'ui.terminalserver.doors.detail_action_return' => 'Вернуться к сессии',
+    'ui.terminalserver.doors.detail_action_end' => 'Завершить участие',
     'ui.terminalserver.doors.detail_action_back' => 'Назад',
     'ui.terminalserver.doors.detail_not_found' => 'Этот опыт больше недоступен.',
+    'ui.terminalserver.doors.end_confirm_title' => 'Завершить участие?',
+    'ui.terminalserver.doors.end_confirm_message' => 'Завершить активное участие в {name}?',
+    'ui.terminalserver.doors.end_failed' => 'Не удалось завершить участие: {error}',
 
     // --- Experience social layer (People / Conversation) ---
     'ui.terminalserver.doors.detail_action_people' => 'Люди',

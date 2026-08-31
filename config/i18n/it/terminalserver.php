@@ -574,8 +574,12 @@ return [
     'ui.terminalserver.doors.detail_activity_none' => '  Ancora niente: sii il primo.',
     'ui.terminalserver.doors.detail_action_play' => 'Gioca',
     'ui.terminalserver.doors.detail_action_return' => 'Torna alla tua sessione',
+    'ui.terminalserver.doors.detail_action_end' => 'Termina partecipazione',
     'ui.terminalserver.doors.detail_action_back' => 'Indietro',
     'ui.terminalserver.doors.detail_not_found' => 'Questa esperienza non è più disponibile.',
+    'ui.terminalserver.doors.end_confirm_title' => 'Terminare la partecipazione?',
+    'ui.terminalserver.doors.end_confirm_message' => 'Terminare la partecipazione attiva a {name}?',
+    'ui.terminalserver.doors.end_failed' => 'Impossibile terminare la partecipazione: {error}',
 
     // --- Experience social layer (People / Conversation) ---
     'ui.terminalserver.doors.detail_action_people' => 'Persone',

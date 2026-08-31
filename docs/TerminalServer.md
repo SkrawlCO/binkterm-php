@@ -216,6 +216,14 @@ Stats are refreshed from the API after returning from netmail, echomail, or bull
   the screen offers **Return** instead of **Play**. Keys: **G** plays or
   returns, **Q** / **B** goes back to the catalog. Nothing is launched by
   opening the detail screen.
+- When the shared experience backend supports explicitly ending the caller's
+  active participation, the detail screen also offers **E — End
+  Participation**. It always asks for confirmation, with Cancel as the default.
+  Cancelling changes nothing. After a successful end, the same detail screen is
+  refreshed so its status, occupancy, roster, and actions reflect the ended
+  session. A failure is shown as an error without leaving the detail screen.
+  RLogin experiences do not offer this action because their participation
+  lifecycle does not currently support explicit termination.
 - The detail screen also exposes **social actions** when they are genuinely
   available:
   - **W — People**: shown when at least one caller is currently in the

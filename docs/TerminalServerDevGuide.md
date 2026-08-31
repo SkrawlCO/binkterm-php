@@ -55,7 +55,7 @@ Selecting an experience in the `DoorHandler` chooser now opens
 journey is `catalog -> detail -> Play/Return -> door -> detail -> Back ->
 catalog`.
 
-`showExperienceDetail()` wires up three collaborators and hands them to
+`showExperienceDetail()` wires up four collaborators and hands them to
 `runExperienceDetailLoop()`:
 
 - **reload** — recomposes the shared read models on every iteration:
@@ -74,6 +74,12 @@ catalog`.
 - **onSocial** — `('people'|'conversation', $view)`; see the social layer below.
   After it returns, the loop re-runs `reload`, so a social view is also a
   "return to the same experience" destination.
+- **onEnd** — posts to the existing authenticated
+  `POST /api/experiences/{experienceId}/end` lifecycle with the terminal
+  session and CSRF token. The API remains authoritative and delegates to
+  `ExperienceParticipation::end()`. Success returns to the loop and reloads the
+  same detail; failure is shown through the shell alert and also returns to the
+  same detail.
 
 Pure helpers, unit-tested without a daemon:
 
@@ -85,15 +91,35 @@ Pure helpers, unit-tested without a daemon:
   marker, recent activity). No business state is decided here.
 - `resolveDetailActions($presentation, $experienceState, $chatEnabled)` — maps
   `presentation.actions.play` / `.return` (mutually exclusive in the normalized
-  contract) to the launch key `g`; adds `w` (People) when the roster is
+  contract) to the launch key `g`; maps
+  `presentation.actions.end_participation` to `e` (End Participation); adds
+  `w` (People) when the roster is
   non-empty and `c` (Conversation) when `experienceState.experience`
   `.capabilities.conversation.room_id > 0` **and** chat is enabled. Keys avoid
   every character `showScrollablePanel` reserves in either shell.
 
 The detail screen is a snapshot on open/redraw; it does not poll. Planned /
 browser-only experiences are still filtered out of the chooser (unchanged) and
-never reach the detail screen. `ExperienceParticipation::end()` /
-`End Participation` is intentionally **not** exposed in this slice.
+never reach the detail screen.
+
+### End Participation (telnet Crossroads slice 3)
+
+The detail screen offers **E — End Participation** only when the shared
+`ExperiencePresentation` action is true. That action comes from
+`ExperienceParticipation::viewerActions()`, including its `canEnd()` backend
+boundary; `DoorHandler` does not infer support from backend type.
+
+`E` opens `TerminalShellInterface::showConfirmDialog()` with Cancel as the
+default. Cancel performs no mutation and returns to the same detail. Confirm
+calls the existing API through `TelnetUtils::apiRequest()` with the session and
+CSRF token. After success, the loop's normal `reload` path refreshes viewer
+participation, occupancy, roster, and available actions for the same
+experience. API failure opens a terminal-native error alert and then reloads
+the same detail so navigation remains available.
+
+`ExperienceParticipation::canEnd()` currently supports native, DOS, JS-DOS,
+and WebDoor backends. RLogin is deliberately absent: the terminal surface does
+not invent a lifecycle that the shared backend does not support.
 
 ### Experience social layer (telnet Crossroads slice 2)
 
