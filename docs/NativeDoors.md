@@ -51,6 +51,15 @@ For full setup instructions including production service configuration, environm
 4. A DOOR.SYS drop file is written to `native-doors/drops/NODE{n}/DOOR.SYS` and user data is injected as environment variables.
 5. When the door exits (or the user disconnects), the PTY is killed and the session is cleaned up.
 
+Session admission — checking the door's `max_nodes` against the current
+active-session count, picking a free node number from the global pool
+(`1..DOSDOOR_MAX_SESSIONS`), and writing the `door_sessions` row — happens in a
+single transaction serialized by a global PostgreSQL advisory lock. Concurrent
+launches are therefore admitted one at a time: the door can never exceed
+`max_nodes`, and two sessions can never hold the same node number. A launch that
+loses the race for the last slot receives HTTP 503
+(`errors.door.capacity_reached_detail`).
+
 ## File Structure
 
 ```
@@ -191,7 +200,7 @@ The door will now appear in the `/games` game library.
 | `launch_command` | string | No | Full command to run. Supports `{node}`, `{dropfile}`, `{user_number}`, and `{homedir}` placeholders (see below). Defaults to `executable` |
 | `dropfile_format` | string | No | Drop file format. `"DOOR.SYS"` (default) or `"DOOR32.SYS"` |
 | `output_encoding` | string | No | Character encoding of the door's output. `"utf8"` (default) or `"cp437"`. Use `"cp437"` for legacy DOS-style doors that output CP437 box-drawing and ANSI art |
-| `max_nodes` | integer | No | Maximum simultaneous sessions. Defaults to `10` |
+| `max_nodes` | integer | No | Maximum simultaneous sessions. Defaults to `10`. Enforced atomically at session admission (see [How It Works](#how-it-works)); a launch that would exceed it is rejected with HTTP 503 |
 | `ansi_required` | boolean | No | Whether ANSI is required. Defaults to `true` |
 | `time_per_day` | integer | No | Time limit in minutes per day. Defaults to `30` |
 

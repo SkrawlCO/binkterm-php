@@ -31,6 +31,23 @@ class DoorSessionManager
     private const WS_PORT_BASE = 6000;
 
     /**
+     * Transaction-level advisory lock key that serializes the authoritative
+     * door-session admission and node-allocation critical section across every
+     * caller and every door.
+     *
+     * Node numbers are drawn from a single global pool (1..DOSDOOR_MAX_SESSIONS)
+     * and per-door `max_nodes` is enforced inside the same transaction, so one
+     * global lock — not a per-door lock — is what protects both invariants. The
+     * value is an arbitrary fixed 63-bit constant chosen not to collide with any
+     * other advisory-lock user (there are currently none). It is public so that
+     * operational tooling and tests can observe or serialize against the same
+     * critical section (e.g. inspecting `pg_locks` for `locktype = 'advisory'`).
+     *
+     * @see findAvailableNode()
+     */
+    public const ADMISSION_LOCK_KEY = 4017538266112247;
+
+    /**
      * Constructor
      *
      * @param string|null $basePath Base path for BinktermPHP
@@ -109,9 +126,23 @@ class DoorSessionManager
 
         $doorDisplayName = $doorInfo['name'] ?? $doorName;
 
+        // Authoritative per-door concurrency limit, resolved exactly the way the
+        // HTTP routes resolve it: manifest `max_nodes`, else `config.max_sessions`.
+        // Re-checked inside the admission transaction (findAvailableNode()); any
+        // route-level COUNT is only a fast-path pre-filter, never the guard.
+        $maxNodes = null;
+        if (isset($doorInfo['max_nodes']) && is_numeric($doorInfo['max_nodes'])) {
+            $maxNodes = (int)$doorInfo['max_nodes'];
+        } elseif (isset($doorInfo['config']['max_sessions']) && is_numeric($doorInfo['config']['max_sessions'])) {
+            $maxNodes = (int)$doorInfo['config']['max_sessions'];
+        }
+
         try {
-            // Find available node number (starts transaction with row-level lock)
-            $node = $this->findAvailableNode();
+            // Reserve a node inside the serialized admission transaction. This
+            // enforces per-door capacity and allocates a globally-unique node
+            // number in one critical section (throws DoorCapacityException when
+            // the door is already full).
+            $node = $this->findAvailableNode($doorName, $maxNodes);
             if ($node === null) {
                 $this->logger->error("[StartSession] No available nodes (max {$this->maxSessions} sessions)");
                 // Transaction already rolled back in findAvailableNode()
@@ -747,21 +778,62 @@ class DoorSessionManager
     }
 
     /**
-     * Find available node number
+     * Reserve a node number for a new session inside a serialized admission
+     * transaction.
      *
-     * Uses row-level locking to prevent race conditions when multiple
-     * sessions start concurrently.
+     * The transaction's first action is a global transaction-level advisory lock
+     * ({@see self::ADMISSION_LOCK_KEY}), so only one admission runs at a time
+     * across every caller and every door. Inside that critical section it:
      *
-     * @return int|null Node number or null if none available
+     *   1. re-checks the per-door active-session count against `$maxNodes` and
+     *      throws {@see DoorCapacityException} if the door is already full, then
+     *   2. allocates the lowest free node number from the global pool
+     *      (1..DOSDOOR_MAX_SESSIONS), "free" meaning not held by any session
+     *      with `ended_at IS NULL`.
+     *
+     * The caller must INSERT the `door_sessions` row and commit on this same
+     * connection; the advisory lock and the transaction release together at
+     * commit/rollback.
+     *
+     * A plain `SELECT ... FOR UPDATE` is not a sufficient mutex here: with no
+     * active sessions it locks no rows, so two concurrent allocators each see an
+     * empty pool and pick the same node, and each passes a per-door COUNT that
+     * runs before the other's INSERT is visible under READ COMMITTED.
+     *
+     * @param string|null $doorId   Door being launched, for the per-door check
+     * @param int|null    $maxNodes Per-door concurrency limit, or null to skip it
+     * @return int|null Allocated node number, or null if the global pool is full
+     * @throws DoorCapacityException If the door already has `$maxNodes` sessions
      */
-    private function findAvailableNode(): ?int
+    private function findAvailableNode(?string $doorId = null, ?int $maxNodes = null): ?int
     {
-        // Start a transaction with row-level locking to prevent race conditions
         $this->db->beginTransaction();
 
         try {
-            // Lock active sessions for reading (prevents concurrent allocation of same node)
-            // FOR UPDATE locks the rows, preventing other transactions from modifying them
+            // Global admission critical section. Held until this transaction
+            // commits or rolls back; serializes every concurrent launch.
+            $this->db->query('SELECT pg_advisory_xact_lock(' . self::ADMISSION_LOCK_KEY . ')')->closeCursor();
+
+            // Authoritative per-door capacity check. Runs under the advisory
+            // lock and after any expired-session cleanup, so the count cannot be
+            // raced by another admission.
+            if ($doorId !== null && $maxNodes !== null) {
+                $capStmt = $this->db->prepare("
+                    SELECT COUNT(*) FROM door_sessions
+                    WHERE door_id = ? AND ended_at IS NULL AND expires_at > NOW()
+                ");
+                $capStmt->execute([$doorId]);
+                $activeForDoor = (int)$capStmt->fetchColumn();
+
+                if ($activeForDoor >= $maxNodes) {
+                    $this->db->rollBack();
+                    $this->logger->warning("[NodeAlloc] Door '$doorId' at capacity ($activeForDoor/$maxNodes)");
+                    throw new DoorCapacityException($doorId, $maxNodes, $activeForDoor);
+                }
+            }
+
+            // Allocate the lowest free node from the global pool. FOR UPDATE is
+            // kept as defence in depth; the advisory lock is the real mutex.
             $stmt = $this->db->query("
                 SELECT node_number FROM door_sessions
                 WHERE ended_at IS NULL
@@ -786,8 +858,13 @@ class DoorSessionManager
             $this->logger->warning("[NodeAlloc] No available nodes (max " . $this->maxSessions . ")");
             return null;
 
+        } catch (DoorCapacityException $e) {
+            // Already rolled back above; surface as-is for the HTTP layer.
+            throw $e;
         } catch (\Exception $e) {
-            $this->db->rollBack();
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
             $this->logger->error("[NodeAlloc] Error: " . $e->getMessage());
             throw $e;
         }

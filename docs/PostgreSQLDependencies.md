@@ -216,6 +216,29 @@ Representative examples:
 - Difficulty:
   - medium
 
+### Transaction-level advisory locks (`pg_advisory_xact_lock`)
+
+- Why PostgreSQL-specific:
+  - `pg_advisory_xact_lock` / `pg_advisory_lock` are PostgreSQL application-level
+    lock primitives with no portable SQL equivalent
+- Current locations:
+  - `src/DoorSessionManager.php` — `DoorSessionManager::findAvailableNode()` takes
+    one fixed global key (`DoorSessionManager::ADMISSION_LOCK_KEY`) at the start
+    of the door-session admission transaction so that the per-door `max_nodes`
+    check, the global node-number allocation, and the `door_sessions` INSERT are
+    serialized against concurrent launches
+  - `tests/Integration/CrossroadsManagedDoorConcurrencyTest.php` and
+    `tests/Integration/DoorSessionManagerAdmissionTest.php` acquire the same key
+    to force overlap in tests
+- Likely future strategy:
+  - wrap the critical section behind a small "named lock" abstraction on the
+    platform layer; a MariaDB backend would map it to `GET_LOCK()` / `RELEASE_LOCK()`
+  - a partial unique index on `door_sessions (node_number) WHERE ended_at IS NULL`
+    would provide a portable defence-in-depth backstop for the node-uniqueness
+    half of the invariant (but cannot enforce arbitrary `max_nodes`)
+- Difficulty:
+  - low
+
 ## Schema And Type Dependencies
 
 ### `SERIAL` and `BIGSERIAL`

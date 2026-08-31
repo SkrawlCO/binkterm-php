@@ -70,6 +70,15 @@ The DOS door system uses a **multiplexing bridge** architecture where a single l
    - Creates session record in database
    - **Bridge handles everything else** (port allocation, drop file creation, config generation, DOSBox launch)
 
+   Admission (the per-door `max_nodes` check plus node allocation and the
+   session `INSERT`) runs inside a single transaction guarded by a global
+   PostgreSQL advisory lock (`pg_advisory_xact_lock`), so two launches that
+   arrive at the same instant cannot both pass a stale capacity check or be
+   handed the same node number. Any capacity check in the HTTP route is only a
+   fast-path pre-filter; the authoritative decision is made under the lock. A
+   launch that loses the race for the last slot raises `DoorCapacityException`,
+   which the route returns as HTTP 503 `errors.door.capacity_reached_detail`.
+
 **Data Flow:**
 1. User clicks door game link
 2. PHP allocates node, generates unique token

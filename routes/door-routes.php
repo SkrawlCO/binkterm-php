@@ -11,6 +11,7 @@ use BinktermPHP\ExperiencePresence;
 use BinktermPHP\ExperienceLaunch;
 use BinktermPHP\GameCatalog;
 use BinktermPHP\DoorSessionManager;
+use BinktermPHP\DoorCapacityException;
 use BinktermPHP\DoorManager;
 use BinktermPHP\NativeDoorManager;
 use BinktermPHP\RLoginDoorManager;
@@ -434,6 +435,14 @@ SimpleRouter::post('/api/door/launch', function() {
             ]
         ]);
 
+    } catch (DoorCapacityException $e) {
+        // Authoritative per-door capacity rejection from the admission
+        // transaction. Same shape as the fast-path COUNT check above.
+        getDoorLogger()->warning("DOSDOOR: [API] Door '$doorName' at capacity: " . $e->getMessage());
+        doorApiError('errors.door.capacity_reached_detail', 'Door at capacity', 503, [
+            'active_sessions' => $e->activeSessions,
+            'max_nodes' => $e->maxNodes,
+        ]);
     } catch (Exception $e) {
         getDoorLogger()->error("DOSDOOR: [API] Launch failed for '$doorName': " . $e->getMessage());
         doorApiError('errors.door.launch_failed', 'Failed to start door session', 500);
@@ -571,6 +580,13 @@ SimpleRouter::post('/api/door/guest/launch', function() {
             ],
         ]);
 
+    } catch (DoorCapacityException $e) {
+        http_response_code(503);
+        echo json_encode([
+            'success' => false,
+            'error'   => 'Door at capacity',
+            'message' => "This door is currently full ({$e->maxNodes} player(s) maximum). Please try again later.",
+        ]);
     } catch (Exception $e) {
         http_response_code(500);
         echo json_encode([
