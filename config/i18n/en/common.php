@@ -4076,6 +4076,10 @@ return [
     'ui.dashboard.card.echo_areas' => 'Echo Areas',
     'ui.dashboard.card.referral' => 'Referral Link',
     'ui.dashboard.card.packetbbs_status' => 'PacketBBS Nodes',
+    'ui.dashboard.card.crossroads' => 'Crossroads',
+    'ui.dashboard.crossroads.you_are_in' => 'You\'re in',
+    'ui.dashboard.crossroads.playing' => 'is playing',
+    'ui.dashboard.crossroads.enter' => 'Enter the Crossroads',
 
     // Settings
     'ui.settings.title' => 'Settings',

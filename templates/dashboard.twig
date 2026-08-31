@@ -277,6 +277,10 @@
         </div>
         </div>{# /dash-card-wrapper system_news #}
 
+        {% if crossroads_available|default(false) %}
+        {% include 'partials/dashboard_crossroads_pulse.twig' %}
+        {% endif %}
+
         {% if bbs_feature_enabled('shoutbox') %}
         <div class="dash-card-wrapper" data-card-id="shoutbox">
         <div class="card">

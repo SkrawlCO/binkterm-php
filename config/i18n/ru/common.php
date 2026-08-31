@@ -4079,6 +4079,10 @@ return [
     'ui.dashboard.card.echo_areas' => 'Эхи',
     'ui.dashboard.card.referral' => 'Реферальная ссылка',
     'ui.dashboard.card.packetbbs_status' => 'Ноды PacketBBS',
+    'ui.dashboard.card.crossroads' => 'Crossroads',
+    'ui.dashboard.crossroads.you_are_in' => 'Вы в',
+    'ui.dashboard.crossroads.playing' => 'играет в',
+    'ui.dashboard.crossroads.enter' => 'Войти в Crossroads',
 
     // Настройки
     'ui.settings.title' => 'Настройки',

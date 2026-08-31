@@ -217,6 +217,30 @@ The sections render in this order, with distinct membership rules:
   Filtering affects presentation and score submission authorization only;
   historical score records remain stored.
 
+### Dashboard Crossroads pulse
+
+The authenticated dashboard (`/`) carries a small, optional **Crossroads pulse**
+card — a truthful glimpse that Crossroads exists and has continuity, so the
+arrival is not silent about community life. It is deliberately not a catalogue:
+no card grid, filters, scoreboard, occupancy/capacity numbers, credit costs,
+bare online count, realtime, or new endpoint.
+
+It is a `DashboardCardRegistry` card (`id: crossroads`, main zone, optional,
+hideable/reorderable) gated on the same conditions as the authenticated
+Crossroads navigation link. The `/` route composes it — only when the card is
+available and the viewer has not hidden it — from **one**
+`ExperienceState::getExperienceStates($user, 'web')` read plus **one** bounded
+`ExperienceActivity::recentAcrossCatalog(…, 1)` read, reduced by the pure
+`BinktermPHP\Crossroads\DashboardPulse::compose()` view model. It shows exactly
+one state, in priority order: the viewer's own active participation (Return);
+else distinct other people currently participating (at most three
+`{username} is playing {Experience}` rows, the viewer never counted as
+another); else the newest authorized recent footprint; else a quiet line. Every
+row links to the canonical `/experiences/{id}` lobby, and every state offers
+`Enter the Crossroads` → `/games`. Authorization and naming come entirely from
+the authorized `getExperienceStates()` snapshot and `recentAcrossCatalog()`
+result, so a hidden, admin-only, disabled, or renamed Experience never surfaces.
+
 ## SysOp Configuration and Customization
 
 Slice-level Experience behavior is core BinktermPHP functionality. Individual

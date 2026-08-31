@@ -24,6 +24,7 @@ class DashboardCardRegistry
         return [
             'unread'         => ['label_key' => 'ui.dashboard.card.unread',         'default_zone' => 'main',    'required' => true],
             'system_news'    => ['label_key' => 'ui.dashboard.card.system_news',    'default_zone' => 'main',    'required' => false],
+            'crossroads'     => ['label_key' => 'ui.dashboard.card.crossroads',     'default_zone' => 'main',    'required' => false, 'conditional' => 'crossroads_available'],
             'shoutbox'       => ['label_key' => 'ui.dashboard.card.shoutbox',       'default_zone' => 'main',    'required' => false, 'feature' => 'shoutbox'],
             'advertising'    => ['label_key' => 'ui.dashboard.card.advertising',    'default_zone' => 'main',    'required' => false, 'feature' => 'advertising'],
             'bulletins'      => ['label_key' => 'ui.dashboard.card.bulletins',      'default_zone' => 'sidebar', 'required' => false],
@@ -33,6 +34,34 @@ class DashboardCardRegistry
             'packetbbs_status' => ['label_key' => 'ui.dashboard.card.packetbbs_status', 'default_zone' => 'sidebar', 'required' => false, 'conditional' => 'packetbbs_nodes_exist'],
             'echo_areas'       => ['label_key' => 'ui.dashboard.card.echo_areas',       'default_zone' => 'sidebar', 'required' => false],
             'referral'       => ['label_key' => 'ui.dashboard.card.referral',       'default_zone' => 'sidebar', 'required' => false, 'conditional' => 'referral_enabled'],
+        ];
+    }
+
+    /**
+     * Resolve the runtime `conditional` flags for every conditionally-available
+     * card.
+     *
+     * Both the dashboard render (`GET /`) and the layout-save endpoint
+     * (`POST /api/dashboard/layout`) MUST build their available-card set from
+     * this same map. If they diverge, {@see validateLayout()} filters a
+     * conditional card the save endpoint does not know about out of the user's
+     * submitted layout, so the user's chosen ordering/visibility for that card
+     * is silently discarded and it reappears at its registry default position on
+     * the next load.
+     *
+     * @return array<string,bool>
+     */
+    public static function resolveConditions(): array
+    {
+        $creditsConfig = BbsConfig::getConfig()['credits'] ?? [];
+
+        return [
+            'referral_enabled' => !empty($creditsConfig['enabled'])
+                && !empty($creditsConfig['referral_enabled']),
+            'packetbbs_nodes_exist' =>
+                (new \BinktermPHP\PacketBbs\PacketBbsNodeService())->getNodeCount() > 0,
+            'crossroads_available' => GameConfig::isGameSystemEnabled()
+                && BbsConfig::isFeatureEnabled('webdoors'),
         ];
     }
 

@@ -4058,6 +4058,10 @@ return [
     'ui.dashboard.card.echo_areas' => 'Áreas de eco',
     'ui.dashboard.card.referral' => 'Enlace de referido',
     'ui.dashboard.card.packetbbs_status' => 'Nodos PacketBBS',
+    'ui.dashboard.card.crossroads' => 'Crossroads',
+    'ui.dashboard.crossroads.you_are_in' => 'Estás en',
+    'ui.dashboard.crossroads.playing' => 'está jugando a',
+    'ui.dashboard.crossroads.enter' => 'Entrar al Crossroads',
 
     // Settings
     'ui.settings.title' => 'Configuracion',

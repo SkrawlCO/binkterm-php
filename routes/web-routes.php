@@ -426,14 +426,12 @@ SimpleRouter::get('/', function() {
         $totalEchomailCount = $adminController->getTotalEchomailCount();
     }
 
-    // Build dashboard card registry and layout
-    $creditsConfig = $bbsConfig['credits'] ?? [];
-    $referralEnabled = !empty($creditsConfig['enabled']) && !empty($creditsConfig['referral_enabled']);
-    $packetBbsNodesExist = (new \BinktermPHP\PacketBbs\PacketBbsNodeService())->getNodeCount() > 0;
-    $cardConditions = [
-        'referral_enabled'     => $referralEnabled,
-        'packetbbs_nodes_exist' => $packetBbsNodesExist,
-    ];
+    // Build dashboard card registry and layout. The layout-save endpoint
+    // (POST /api/dashboard/layout) resolves conditions the same way — see
+    // DashboardCardRegistry::resolveConditions().
+    $cardConditions = \BinktermPHP\DashboardCardRegistry::resolveConditions();
+    $packetBbsNodesExist = $cardConditions['packetbbs_nodes_exist'];
+    $crossroadsAvailable = $cardConditions['crossroads_available'];
     $availableCards = \BinktermPHP\DashboardCardRegistry::getAvailableCards($user, $cardConditions);
     $savedLayoutRaw = $userSettings['dashboard_layout'] ?? null;
     if ($savedLayoutRaw) {
@@ -446,7 +444,32 @@ SimpleRouter::get('/', function() {
         $dashboardLayout = \BinktermPHP\DashboardCardRegistry::getDefaultLayout($availableCards);
     }
 
+    // Compose the Crossroads pulse only when the card is available AND the
+    // viewer has not hidden it — one ExperienceState read + one bounded
+    // recent-footprint read, reduced by a pure view-model builder. No new
+    // queries, endpoint, cache, or realtime.
+    $crossroadsPulse = null;
+    if (\BinktermPHP\Crossroads\DashboardPulse::shouldCompose($crossroadsAvailable, $dashboardLayout)) {
+        try {
+            $experienceStates = (new ExperienceState())->getExperienceStates($user, 'web');
+            $recentFootprints = (new \BinktermPHP\ExperienceActivity())->recentAcrossCatalog(
+                array_column($experienceStates, 'experience'),
+                1
+            );
+            $crossroadsPulse = \BinktermPHP\Crossroads\DashboardPulse::compose(
+                $experienceStates,
+                $userId,
+                $recentFootprints
+            );
+        } catch (\Throwable $e) {
+            getServerLogger()->warning('Dashboard Crossroads pulse failed: ' . $e->getMessage());
+            $crossroadsPulse = null;
+        }
+    }
+
     $template->renderResponse('dashboard.twig', [
+        'crossroads_available' => $crossroadsAvailable,
+        'crossroads_pulse' => $crossroadsPulse,
         'system_news_content' => $systemNewsContent,
         'dashboard_ad' => $ad,
         'dashboard_ads' => $dashboardAds,

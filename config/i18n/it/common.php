@@ -4057,6 +4057,10 @@ return [
     'ui.dashboard.card.echo_areas' => 'Aree echo',
     'ui.dashboard.card.referral' => 'Link referral',
     'ui.dashboard.card.packetbbs_status' => 'Nodi PacketBBS',
+    'ui.dashboard.card.crossroads' => 'Crossroads',
+    'ui.dashboard.crossroads.you_are_in' => 'Sei in',
+    'ui.dashboard.crossroads.playing' => 'sta giocando a',
+    'ui.dashboard.crossroads.enter' => 'Entra nel Crossroads',
 
     // Settings
     'ui.settings.title' => 'Impostazioni',

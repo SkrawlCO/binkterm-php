@@ -4055,6 +4055,10 @@ Dies ist eine **eigene Splash-Nachricht**.',
     'ui.dashboard.card.echo_areas' => 'Echo-Bereiche',
     'ui.dashboard.card.referral' => 'Empfehlungslink',
     'ui.dashboard.card.packetbbs_status' => 'PacketBBS-Knoten',
+    'ui.dashboard.card.crossroads' => 'Crossroads',
+    'ui.dashboard.crossroads.you_are_in' => 'Du bist in',
+    'ui.dashboard.crossroads.playing' => 'spielt gerade',
+    'ui.dashboard.crossroads.enter' => 'Zum Crossroads',
 
     // Settings
     'ui.settings.title' => 'Einstellungen',

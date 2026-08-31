@@ -865,11 +865,13 @@ SimpleRouter::group(['prefix' => '/api'], function() {
             return;
         }
 
-        $bbsConfig = \BinktermPHP\BbsConfig::getConfig();
-        $creditsConfig = $bbsConfig['credits'] ?? [];
-        $referralEnabled = !empty($creditsConfig['enabled']) && !empty($creditsConfig['referral_enabled']);
-        $conditions = ['referral_enabled' => $referralEnabled];
-        $availableCards = \BinktermPHP\DashboardCardRegistry::getAvailableCards($user, $conditions);
+        // Same condition resolution the dashboard render uses, so a user's
+        // ordering/visibility choice for a conditionally-available card
+        // (crossroads, packetbbs_status, referral) is not filtered out on save.
+        $availableCards = \BinktermPHP\DashboardCardRegistry::getAvailableCards(
+            $user,
+            \BinktermPHP\DashboardCardRegistry::resolveConditions()
+        );
 
         $layout = \BinktermPHP\DashboardCardRegistry::validateLayout($body, $availableCards);
         if ($layout === null) {

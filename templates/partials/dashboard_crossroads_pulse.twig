@@ -1,0 +1,67 @@
+{#
+    Dashboard Crossroads pulse card.
+
+    A small, truthful glimpse on the authenticated web arrival that Crossroads
+    exists and has continuity — NOT a game catalogue. Server-rendered snapshot,
+    no JavaScript, no polling.
+
+    The `crossroads_pulse` view model is composed by
+    BinktermPHP\Crossroads\DashboardPulse::compose() in the `/` route, only when
+    Crossroads is available and the viewer has not hidden this card. When it is
+    absent the card body simply shows the quiet line.
+
+    Priority: participating > others > recent > quiet.
+#}
+{% set pulse = crossroads_pulse|default({'state': 'quiet'}) %}
+<div class="dash-card-wrapper" data-card-id="crossroads">
+<div class="card">
+    <div class="card-header">
+        <h6 class="mb-0">
+            <i class="fas fa-compass me-2" aria-hidden="true"></i>
+            {{ t('ui.dashboard.card.crossroads', {}, locale, ['common']) }}
+        </h6>
+    </div>
+    <div class="card-body">
+        {% if pulse.state == 'participating' %}
+            <div class="d-flex justify-content-between align-items-center gap-2">
+                <div class="min-w-0">
+                    <div class="small text-muted">{{ t('ui.dashboard.crossroads.you_are_in', {}, locale, ['common']) }}</div>
+                    <div class="fw-semibold text-truncate">
+                        <a class="text-decoration-none" href="/experiences/{{ pulse.viewer.experience_id|url_encode }}">{{ pulse.viewer.experience_name }}</a>
+                    </div>
+                </div>
+                <a class="btn btn-primary btn-sm flex-shrink-0" href="/experiences/{{ pulse.viewer.experience_id|url_encode }}">
+                    {{ t('ui.webdoors.return', {}, locale, ['common']) }}
+                </a>
+            </div>
+        {% elseif pulse.state == 'others' %}
+            <ul class="list-unstyled small mb-0">
+                {% for row in pulse.others %}
+                <li class="py-1 text-truncate">
+                    <span class="fw-semibold">{{ row.username }}</span>
+                    {{ t('ui.dashboard.crossroads.playing', {}, locale, ['common']) }}
+                    <a class="text-decoration-none" href="/experiences/{{ row.experience_id|url_encode }}">{{ row.experience_name }}</a>
+                </li>
+                {% endfor %}
+            </ul>
+        {% elseif pulse.state == 'recent' %}
+            <div class="small text-muted">
+                <span class="fw-semibold">{{ pulse.recent.username }}</span>
+                {{ pulse.recent.first_play
+                    ? t('ui.webdoors.recent_activity_first_played', {}, locale, ['common'])
+                    : t('ui.webdoors.recent_activity_played', {}, locale, ['common']) }}
+                <a class="text-decoration-none" href="/experiences/{{ pulse.recent.experience_id|url_encode }}">{{ pulse.recent.experience_name }}</a>
+            </div>
+        {% else %}
+            <div class="small text-muted">{{ t('ui.webdoors.around_quiet', {}, locale, ['common']) }}</div>
+        {% endif %}
+
+        <div class="mt-3">
+            <a class="small text-decoration-none" href="/games">
+                {{ t('ui.dashboard.crossroads.enter', {}, locale, ['common']) }}
+                <i class="fas fa-arrow-right ms-1" aria-hidden="true"></i>
+            </a>
+        </div>
+    </div>
+</div>
+</div>{# /dash-card-wrapper crossroads #}
