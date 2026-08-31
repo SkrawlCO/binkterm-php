@@ -336,6 +336,29 @@ The `terminal_size` setting is read from `config/nativedoors.json` (the admin-co
   ```
 - Use the full path to an interpreter if it is not on `PATH`
 
+### Runtime dependencies (interpreters)
+
+A native door that wraps an interpreter or emulator (a Z-machine interpreter, a
+BASIC runtime, `dosbox` for a DOS door launched from a native wrapper, and so
+on) depends on that program being installed on the host. BinktermPHP does **not**
+bundle these, and does not install them by default — a door you never enable
+should never pull in a dependency. Each door documents its own requirement in
+its `README.md`.
+
+- **Bare-metal / VM:** install the distro package before enabling the door
+  (for example `apt-get install frotz`, which provides `/usr/games/dfrotz` for
+  the bundled *Tristam Island* interactive-fiction door).
+- **Container deployments:** add the package to your image's package list
+  (next to `dosbox-x` / `dosbox`) and rebuild. Installing it into a running
+  container is **not** reproducible — it is lost on the next image rebuild or
+  container recreate.
+- **Wrapper preflight:** a door wrapper should check for its interpreter up
+  front and exit with a clear "not installed — contact the sysop" message
+  rather than failing cryptically. Keep the discovery order permissive
+  (`command -v <bin>`, then the well-known absolute paths such as
+  `/usr/games/<bin>` and `/usr/bin/<bin>`) because the multiplexing bridge's
+  `PATH` does not always include `/usr/games`.
+
 ---
 
 ## Configuration File
