@@ -1,0 +1,40 @@
+{
+  "type": "nativedoor",
+  "version": "1.0",
+  "game": {
+    "name": "Tristam Island",
+    "short_name": "TRISTAM",
+    "author": "Hugo Labrande",
+    "version": "1.0",
+    "release_year": 2020,
+    "description": "1901. Your seaplane goes down in the North Atlantic and you wash ashore on a small island that the maps say is uninhabited. Hungry and alone, you soon suspect the maps are wrong. A full-length, classic-style parser adventure by Hugo Labrande, released free and open source under CC0. Runs on the Frotz Z-machine interpreter.",
+    "genre": ["Interactive Fiction", "Adventure"],
+    "players": "Single-player",
+    "icon": null,
+    "screenshot": null
+  },
+  "door": {
+    "executable": "run.sh",
+    "launch_command": "/bin/bash run.sh",
+    "dropfile_format": "DOOR.SYS",
+    "output_encoding": "utf8",
+    "terminal_mode": "raw",
+    "max_nodes": 10,
+    "ansi_required": false,
+    "time_per_day": 120
+  },
+  "requirements": {
+    "admin_only": false
+  },
+  "experience": {
+    "category": "game",
+    "multiplayer": false,
+    "participant_messaging": false
+  },
+  "config": {
+    "enabled": false,
+    "credit_cost": 0,
+    "max_time_minutes": 120,
+    "max_sessions": 10
+  }
+}
