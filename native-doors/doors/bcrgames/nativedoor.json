@@ -1,0 +1,41 @@
+{
+  "type": "nativedoor",
+  "version": "1.0",
+  "game": {
+    "name": "BCR Games Server",
+    "short_name": "BCRGAMES",
+    "author": "Shooter Jennings / Black Country Rock",
+    "description": "Enter Shooter Jennings' Black Country Rock Games Server, home to From Here To Eternity, Freedom Train, 1NS0MN1A, and shared BCR community features.",
+    "genre": ["BBS", "Games"],
+    "players": "Multiplayer",
+    "icon": null,
+    "screenshot": null
+  },
+  "door": {
+    "executable": "bcr.sh",
+    "launch_command": "/bin/bash bcr.sh",
+    "dropfile_format": "DOOR.SYS",
+    "output_encoding": "utf8",
+    "terminal_mode": "raw",
+    "ansi_required": true,
+    "max_nodes": 10,
+    "time_per_day": 120
+  },
+  "requirements": {
+    "admin_only": false,
+    "platform": ["linux"]
+  },
+  "experience": {
+    "category": "gateway",
+    "multiplayer": false,
+    "participant_messaging": false
+  },
+  "config": {
+    "enabled": false,
+    "credit_cost": 0,
+    "max_time_minutes": 120,
+    "max_sessions": 10,
+    "allow_anonymous": false,
+    "guest_max_sessions": 0
+  }
+}
