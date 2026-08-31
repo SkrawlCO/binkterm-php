@@ -272,7 +272,7 @@ return [
     'ui.base.email_link' => 'E-mail',
     'ui.base.local_chat' => 'Chat local',
     'ui.base.mrc_chat' => 'Chat MRC',
-    'ui.base.doors_games' => 'Experiencias',
+    'ui.base.doors_games' => 'Crossroads',
     'ui.base.files' => 'Archivos',
     'ui.base.file_approvals' => 'Aprobaciones de archivos',
     'ui.base.file_requests' => 'Solicitudes de archivos',

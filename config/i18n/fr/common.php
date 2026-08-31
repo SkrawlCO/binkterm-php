@@ -246,7 +246,7 @@ return [
     'ui.base.email_link' => 'E-mail',
     'ui.base.local_chat' => 'Chat local',
     'ui.base.mrc_chat' => 'Chat MRC',
-    'ui.base.doors_games' => 'Expériences',
+    'ui.base.doors_games' => 'Crossroads',
     'ui.base.files' => 'Fichiers',
     'ui.base.file_approvals' => 'Approbations de fichiers',
     'ui.base.file_requests' => 'Demandes de fichiers',
