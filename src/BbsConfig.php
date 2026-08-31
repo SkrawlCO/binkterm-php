@@ -73,6 +73,7 @@ class BbsConfig
                 'advertising' => true,
                 'voting_booth' => true,
                 'pgp' => false,
+                'pgp_public_keyserver' => true,
                 'pgp_managed_keys' => false
             ]
         ];
@@ -352,6 +353,16 @@ class BbsConfig
     }
 
     /**
+     * Whether this system publishes its local PGP keys through the public web
+     * keyserver and HKP-compatible routes.
+     */
+    public static function isPgpPublicKeyserverEnabled(): bool
+    {
+        return self::isFeatureEnabled('pgp')
+            && self::isFeatureEnabled('pgp_public_keyserver');
+    }
+
+    /**
      * Whether logged-out visitors may browse a read-only Experience discovery
      * surface (the public /crossroads window).
      *
@@ -445,4 +456,3 @@ class BbsConfig
         return true;
     }
 }
-

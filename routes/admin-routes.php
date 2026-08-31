@@ -2148,9 +2148,13 @@ SimpleRouter::group(['prefix' => '/admin'], function() {
                 }
 
                 if (array_key_exists('features', $config) && is_array($config['features'])) {
-                    if (array_key_exists('pgp', $config['features']) || array_key_exists('pgp_managed_keys', $config['features'])) {
+                    if (array_key_exists('pgp', $config['features'])
+                        || array_key_exists('pgp_public_keyserver', $config['features'])
+                        || array_key_exists('pgp_managed_keys', $config['features'])) {
                         $pgpEnabled = !empty($config['features']['pgp']);
                         $config['features']['pgp'] = $pgpEnabled;
+                        $config['features']['pgp_public_keyserver'] = $pgpEnabled
+                            && !empty($config['features']['pgp_public_keyserver']);
                         $config['features']['pgp_managed_keys'] = $pgpEnabled && !empty($config['features']['pgp_managed_keys']);
                     }
                 }
@@ -10785,4 +10789,3 @@ SimpleRouter::post('/admin/api/msg', function () {
 
     echo json_encode(['success' => true]);
 });
-

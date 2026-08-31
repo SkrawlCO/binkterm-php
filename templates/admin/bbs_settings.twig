@@ -162,6 +162,11 @@
                             <div><small class="text-muted">{{ t('ui.admin.bbs_settings.features.pgp_help', {}, locale, ['common']) }}</small></div>
                         </div>
                         <div class="form-check mb-3 ms-4">
+                            <input class="form-check-input" type="checkbox" id="bbsPgpPublicKeyserver">
+                            <label class="form-check-label" for="bbsPgpPublicKeyserver">{{ t('ui.admin.bbs_settings.features.enable_pgp_public_keyserver', {}, locale, ['common']) }}</label>
+                            <div><small class="text-muted">{{ t('ui.admin.bbs_settings.features.pgp_public_keyserver_help', {}, locale, ['common']) }}</small></div>
+                        </div>
+                        <div class="form-check mb-3 ms-4">
                             <input class="form-check-input" type="checkbox" id="bbsPgpManagedKeys">
                             <label class="form-check-label" for="bbsPgpManagedKeys">{{ t('ui.admin.bbs_settings.features.enable_pgp_managed_keys', {}, locale, ['common']) }}</label>
                             <div><small class="text-muted">{{ t('ui.admin.bbs_settings.features.pgp_managed_keys_help', {}, locale, ['common']) }}</small></div>
@@ -499,7 +504,7 @@ document.addEventListener('DOMContentLoaded', function() {
         loadAdminUsers('bbsSystemSysop');
         loadBbsTaglines();
         loadBbsScreening();
-        document.getElementById('bbsPgp')?.addEventListener('change', syncPgpManagedKeysToggle);
+        document.getElementById('bbsPgp')?.addEventListener('change', syncPgpDependentToggles);
     });
 });
 
@@ -522,9 +527,10 @@ function loadBbsSettings() {
             document.getElementById('bbsBbsDirectory').checked = features.bbs_directory !== false;
             document.getElementById('bbsQwk').checked = !!features.qwk;
             document.getElementById('bbsPgp').checked = !!features.pgp;
+            document.getElementById('bbsPgpPublicKeyserver').checked = !!features.pgp_public_keyserver;
             document.getElementById('bbsPgpManagedKeys').checked = !!features.pgp_managed_keys;
             document.getElementById('bbsQwkBbsId').value = data.config?.qwk?.bbs_id || '';
-            syncPgpManagedKeysToggle();
+            syncPgpDependentToggles();
             const bbsPublicFilesIndexEl = document.getElementById('bbsPublicFilesIndex');
             if (bbsPublicFilesIndexEl) bbsPublicFilesIndexEl.checked = !!features.public_files_index;
             document.getElementById('bbsDefaultEchoInterface').value = data.config?.default_echo_interface || 'echolist';
@@ -641,6 +647,7 @@ function saveBbsSettings() {
                     public_files_index: document.getElementById('bbsPublicFilesIndex') ? document.getElementById('bbsPublicFilesIndex').checked : false,
                     qwk: document.getElementById('bbsQwk').checked,
                     pgp: document.getElementById('bbsPgp').checked,
+                    pgp_public_keyserver: document.getElementById('bbsPgpPublicKeyserver').checked,
                     pgp_managed_keys: document.getElementById('bbsPgpManagedKeys').checked
                 },
                 credits: credits,
@@ -1200,17 +1207,21 @@ function showBbsScreeningAlert(message, type) {
     `;
 }
 
-function syncPgpManagedKeysToggle() {
+function syncPgpDependentToggles() {
     const pgpEnabled = !!document.getElementById('bbsPgp')?.checked;
-    const managedToggle = document.getElementById('bbsPgpManagedKeys');
-    if (!managedToggle) {
-        return;
-    }
-
-    managedToggle.disabled = !pgpEnabled;
-    if (!pgpEnabled) {
-        managedToggle.checked = false;
-    }
+    const dependentToggles = [
+        document.getElementById('bbsPgpPublicKeyserver'),
+        document.getElementById('bbsPgpManagedKeys')
+    ];
+    dependentToggles.forEach(function(toggle) {
+        if (!toggle) {
+            return;
+        }
+        toggle.disabled = !pgpEnabled;
+        if (!pgpEnabled) {
+            toggle.checked = false;
+        }
+    });
 }
 
 function loadAdminUsers(selectId) {

@@ -45,21 +45,23 @@ that come with allowing the BBS to host encrypted private-key blobs.
 
 ## Default State
 
-PGP is disabled by default. Fresh installations start with both of these BBS settings turned off:
+PGP is disabled by default. Fresh installations start with core PGP and managed private keys turned off. Public keyserver publication is enabled as a policy default, but has no effect until core PGP is enabled:
 
 - `Enable PGP`
+- `Publish keys through the public keyserver` (effective only when PGP is enabled)
 - `Allow BBS-managed private keys`
 
-That means a sysop must explicitly turn the feature on before users see the PGP settings tab or the public keyserver routes.
+That means a sysop must explicitly turn on PGP before users see the PGP settings tab. The public routes are active only when both PGP and public keyserver publication are enabled.
 
 ## Enabling PGP
 
 Open **Admin -> BBS Settings** and enable:
 
-- `Enable PGP` to expose user key management and the public keyserver
+- `Enable PGP` to expose user key management and message cryptography
+- `Publish keys through the public keyserver` if saved keys should be available through unauthenticated web and HKP routes
 - `Allow BBS-managed private keys` only if you want the system to host encrypted private keys for users
 
-The second setting depends on the first one. If PGP is disabled, managed-key generation is also unavailable.
+The publication and managed-key settings depend on the first one. If PGP is disabled, both public keyserver publication and managed-key generation are unavailable.
 
 ## User-Facing Behavior
 
@@ -69,9 +71,9 @@ When `Enable PGP` is on:
 - users can upload armored public keys
 - users can select a preferred key from a dropdown/list
 - users can view, copy, or download their saved public key material
-- the public keyserver becomes available
+- local authenticated message lookup and cryptography remain available
 
-The keyserver publishes the user's preferred key and key listings for lookup.
+When public keyserver publication is also enabled, the keyserver publishes all saved public keys. The primary key is ordered and selected as the account's preferred/default key; it is not a publication-consent field.
 
 In this mode, users can still use the system as a public-key directory while doing
 their actual encryption and decryption locally with their own OpenPGP software and
@@ -114,7 +116,7 @@ fall back to the local published public-key store.
 
 If managed keys are disabled, the PGP tab still works for public-key upload and preferred-key selection, but the generator section is replaced with a notice.
 
-If `Allow BBS-managed private keys` is off, the server does not provide the stored private key material needed for browser-side signing or decryption. In that mode, users can still publish public keys and choose a primary key, and they can still encrypt outgoing netmail to a published recipient public key from the compose screen, but browser-side signing and reader-side decryption stay unavailable.
+If `Allow BBS-managed private keys` is off, the server does not provide the stored private key material needed for browser-side signing or decryption. In that mode, users can still save public keys and choose a primary key, and they can still encrypt outgoing netmail to a locally stored or remotely discovered recipient public key from the compose screen, but browser-side signing and reader-side decryption stay unavailable. Publishing local keys additionally requires the public keyserver setting.
 
 ## Compose Lookup
 
@@ -154,7 +156,7 @@ Netmail encryption does not require the sender to have a managed private key. It
 
 ## Public Endpoints
 
-When PGP is enabled, the following routes are active:
+When both PGP and `Publish keys through the public keyserver` are enabled, the following routes are active:
 
 - `/keyserver`
 - `/pks/lookup`
@@ -163,7 +165,7 @@ When PGP is enabled, the following routes are active:
 - `/pks/download/{fingerprint}`
 - `/.well-known/openpgpkey/{domain}/hkps`
 
-These are the public-facing keyserver routes used for discovery and retrieval.
+These are the public-facing keyserver routes used for discovery, submission, and retrieval. `/pks/add` still requires authentication, but it is disabled with the rest of the public keyserver protocol surface so users use the core authenticated key-management API when publication is off.
 
 The `.well-known` HKPS discovery file advertises the local keyserver using the
 same site host configured for BinktermPHP. Clients that follow it can then use
@@ -211,7 +213,7 @@ is useful for testing node resolution and HKPS discovery outside the browser.
 - Use the admin UI to change the BBS settings. The feature flags live in `config/bbs.json`, but the supported path is **Admin -> BBS Settings**.
 - If the PGP tab is missing from user settings, confirm that `Enable PGP` is on.
 - If users can upload keys but cannot generate managed keys, confirm that `Allow BBS-managed private keys` is on.
-- Changing the preferred key affects which key is published and used as the user's primary public key.
+- Changing the preferred key affects default local selection and result ordering. It does not control whether an individual key is published when the public keyserver is enabled.
 - Netmail encryption only requires the recipient public key. Echomail signing and reader-side decryption require managed private keys. If you leave managed keys disabled, the signing and decrypt flows stay unavailable, but users can still use compose-time netmail encryption against published recipient keys.
 - If users see address-book results but not local user matches in the compose autocomplete, confirm the address-book search route is returning both saved entries and local-user matches.
 

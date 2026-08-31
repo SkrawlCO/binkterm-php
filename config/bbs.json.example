@@ -12,6 +12,7 @@
         "public_files_index": false,
         "qwk": true,
         "pgp": false,
+        "pgp_public_keyserver": true,
         "pgp_managed_keys": false
     },
     "default_echo_interface": "echolist",

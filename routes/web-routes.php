@@ -1274,6 +1274,7 @@ SimpleRouter::get('/settings', function() {
         'mcp_server_url' => \BinktermPHP\Config::env('MCP_SERVER_URL', ''),
         'mcp_service_running' => (bool)((\BinktermPHP\SystemStatus::getDaemonStatus()['mcp_server']['running'] ?? false)),
         'pgp_enabled' => \BinktermPHP\BbsConfig::isFeatureEnabled('pgp'),
+        'pgp_public_keyserver_enabled' => \BinktermPHP\BbsConfig::isPgpPublicKeyserverEnabled(),
         'pgp_managed_keys_enabled' => \BinktermPHP\BbsConfig::isFeatureEnabled('pgp_managed_keys'),
     ];
 
@@ -1282,7 +1283,7 @@ SimpleRouter::get('/settings', function() {
 });
 
 SimpleRouter::get('/keyserver', function() {
-    if (!\BinktermPHP\BbsConfig::isFeatureEnabled('pgp')) {
+    if (!\BinktermPHP\BbsConfig::isPgpPublicKeyserverEnabled()) {
         http_response_code(404);
         return;
     }
@@ -1304,7 +1305,7 @@ SimpleRouter::get('/keyserver', function() {
 });
 
 SimpleRouter::get('/pks/lookup', function() {
-    if (!\BinktermPHP\BbsConfig::isFeatureEnabled('pgp')) {
+    if (!\BinktermPHP\BbsConfig::isPgpPublicKeyserverEnabled()) {
         http_response_code(404);
         header('Content-Type: text/plain; charset=UTF-8');
         echo 'Not found';
@@ -1348,7 +1349,7 @@ SimpleRouter::get('/pks/lookup', function() {
 });
 
 SimpleRouter::get('/pks/lookup/v1/get/{search}', function($search) {
-    if (!\BinktermPHP\BbsConfig::isFeatureEnabled('pgp')) {
+    if (!\BinktermPHP\BbsConfig::isPgpPublicKeyserverEnabled()) {
         http_response_code(404);
         header('Content-Type: text/plain; charset=UTF-8');
         echo 'Not found';
@@ -1374,7 +1375,7 @@ SimpleRouter::get('/pks/lookup/v1/get/{search}', function($search) {
 })->where(['search' => '[^\/]+']);
 
 SimpleRouter::get('/.well-known/openpgpkey/{domain}/hkps', function($domain) {
-    if (!\BinktermPHP\BbsConfig::isFeatureEnabled('pgp')) {
+    if (!\BinktermPHP\BbsConfig::isPgpPublicKeyserverEnabled()) {
         http_response_code(404);
         header('Content-Type: text/plain; charset=UTF-8');
         echo 'Not found';
@@ -1413,7 +1414,7 @@ SimpleRouter::get('/.well-known/openpgpkey/{domain}/hkps', function($domain) {
 })->where(['domain' => '[A-Za-z0-9.-]+']);
 
 SimpleRouter::post('/pks/add', function() {
-    if (!\BinktermPHP\BbsConfig::isFeatureEnabled('pgp')) {
+    if (!\BinktermPHP\BbsConfig::isPgpPublicKeyserverEnabled()) {
         http_response_code(404);
         header('Content-Type: text/plain; charset=UTF-8');
         echo 'Not found';
@@ -1444,7 +1445,7 @@ SimpleRouter::post('/pks/add', function() {
 });
 
 SimpleRouter::get('/pks/download/{fingerprint}', function($fingerprint) {
-    if (!\BinktermPHP\BbsConfig::isFeatureEnabled('pgp')) {
+    if (!\BinktermPHP\BbsConfig::isPgpPublicKeyserverEnabled()) {
         http_response_code(404);
         echo 'Not found';
         return;

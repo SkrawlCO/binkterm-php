@@ -685,9 +685,11 @@
                 <div class="card">
                     <div class="card-header d-flex justify-content-between align-items-center">
                         <h5 class="mb-0">{{ t('ui.settings.pgp.saved_keys_heading', {}, locale, ['common']) }}</h5>
+                        {% if pgp_public_keyserver_enabled %}
                         <a class="btn btn-sm btn-outline-secondary" href="/keyserver">
                             <i class="fas fa-search me-1"></i>{{ t('ui.settings.pgp.keyserver_button', {}, locale, ['common']) }}
                         </a>
+                        {% endif %}
                     </div>
                     <div class="card-body p-0">
                         <div id="pgpKeysContainer">
@@ -1213,7 +1215,7 @@ function renderPgpKeys(keys) {
                 return `<option value="${escapeHtml(key.fingerprint)}"${selected}>${escapeHtml(label)}${escapeHtml(suffix)}</option>`;
             }).join('')}
         </select>
-        <div class="form-text mt-2">${uiT('ui.settings.pgp.primary_help', 'Pick a key here, or use the Make Primary button in the table below, to change which public key is listed as your preferred key on the keyserver.')}</div>
+        <div class="form-text mt-2">${uiT('ui.settings.pgp.primary_help', 'Pick a key here, or use the Make Primary button in the table below, to choose the preferred/default key for your account.')}</div>
     </div>
     <div class="table-responsive"><table class="table table-hover mb-0">
         <thead>
