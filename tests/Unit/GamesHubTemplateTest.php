@@ -37,7 +37,6 @@ final class GamesHubTemplateTest extends TestCase
             'ui.webdoors.live_now_description' => 'Live description',
             'ui.webdoors.live' => 'Live',
             'ui.webdoors.recent_activity' => 'Recently in the Crossroads',
-            'ui.webdoors.recent_activity_description' => 'Recent footprints description',
             'ui.webdoors.recent_activity_played' => 'played',
             'ui.webdoors.recent_activity_first_played' => 'first played',
             'ui.webdoors.experiences' => 'Experiences',
@@ -241,6 +240,22 @@ final class GamesHubTemplateTest extends TestCase
         self::assertStringNotContainsString('minutes online', $section);
     }
 
+    public function testRecentActivitySectionHasNoSubtitle(): void
+    {
+        $html = $this->renderHub(
+            [$this->game('lord')],
+            recentActivity: [$this->recentEntry('Bard', 'lord', 'Legend of the Red Dragon')],
+            translationOverrides: ['ui.webdoors.recent_activity_description' => 'SHOULD NOT RENDER']
+        );
+
+        $heading = $this->between($html, 'aria-labelledby="recent-activity-title"', '<ul class="list-unstyled');
+        // Only the h2 title, no descriptive <p> beneath it.
+        self::assertStringContainsString('>Recently in the Crossroads</h2>', $heading);
+        self::assertStringNotContainsString('SHOULD NOT RENDER', $html);
+        self::assertStringNotContainsString('recent_activity_description', $html);
+        self::assertStringNotContainsString('<p ', $heading);
+    }
+
     public function testRecentActivityRendersRelativeTimeFromOccurredAt(): void
     {
         $html = $this->renderHub(
@@ -276,21 +291,29 @@ final class GamesHubTemplateTest extends TestCase
         self::assertSame(5, substr_count($section, '<li class="text-muted small py-1">'));
     }
 
-    public function testRecentActivityDoesNotDeduplicateRepeatedRawRows(): void
+    public function testRecentActivityTemplateRendersEachSuppliedFootprint(): void
     {
-        // The WebDoor session endpoint can record repeated webdoor_play rows on
-        // player reload. This slice preserves truthful raw ordering — the read
-        // model does not invent a de-duplication window. Documented behavior.
+        // Collapsing repeated same-user/same-Experience plays is the read
+        // model's job (ExperienceActivity::recentAcrossCatalog(), covered in
+        // ExperienceActivityTest). The template renders exactly the already
+        // distinct footprints the route hands it, in order.
         $entries = [
-            $this->recentEntry('Bard', 'lord', 'Legend of the Red Dragon', 'play', 30),
-            $this->recentEntry('Bard', 'lord', 'Legend of the Red Dragon', 'play', 45),
-            $this->recentEntry('Bard', 'lord', 'Legend of the Red Dragon', 'play', 60),
+            $this->recentEntry('Bard', 'lord', 'Legend of the Red Dragon', 'play', 2460),
+            $this->recentEntry('Skrawl', 'lord', 'Legend of the Red Dragon', 'play', 2520),
+            $this->recentEntry('Bard', 'usurper', 'Usurper Reborn', 'play', 10800),
         ];
 
-        $html = $this->renderHub([$this->game('lord')], recentActivity: $entries);
+        $html = $this->renderHub(
+            [$this->game('lord'), $this->game('usurper')],
+            recentActivity: $entries
+        );
         $section = $this->between($html, 'id="recent-activity-title"', 'id="experiences-title"');
 
         self::assertSame(3, substr_count($section, '<li class="text-muted small py-1">'));
+        self::assertLessThan(
+            strpos($section, 'Usurper Reborn'),
+            strpos($section, 'Legend of the Red Dragon')
+        );
     }
 
     public function testYourPlacesPrioritizesReturnOverPlay(): void

@@ -125,16 +125,18 @@
     {# Recently in the Crossroads — a handful of truthful footprints from the
        existing play-activity history (webdoor_play / dosdoor_play), composed
        server-side and filtered to the viewer's authorized catalog in the route.
-       Historical, not live presence: "quiet now" does not mean the place is
-       dead. Bounded to five in the route. Hidden entirely when there is nothing
-       to show — no empty-state card. Not a feed: no avatars, reactions, counts,
-       durations, surfaces, pagination, or live updating. #}
+       Repeated plays by the same person in the same Experience collapse to that
+       pair's newest footprint (read-model semantics; not time-window). No
+       subtitle — the heading and the rows say everything. Historical, not live
+       presence: "quiet now" does not mean the place is dead. Bounded to five in
+       the route. Hidden entirely when there is nothing to show — no empty-state
+       card. Not a feed: no avatars, reactions, counts, durations, surfaces,
+       pagination, or live updating. #}
     {% if recent_activity|default([])|length > 0 %}
     <section class="experience-section mb-4" aria-labelledby="recent-activity-title">
         <div class="experience-section-heading">
             <div>
-                <h2 id="recent-activity-title" class="h4 mb-1">{{ t('ui.webdoors.recent_activity', {}, locale, ['common']) }}</h2>
-                <p class="text-muted small mb-0">{{ t('ui.webdoors.recent_activity_description', {}, locale, ['common']) }}</p>
+                <h2 id="recent-activity-title" class="h4 mb-0">{{ t('ui.webdoors.recent_activity', {}, locale, ['common']) }}</h2>
             </div>
         </div>
         <ul class="list-unstyled mt-3 mb-0 experience-recent-activity">

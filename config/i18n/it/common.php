@@ -3843,7 +3843,6 @@ return [
     'ui.webdoors.live_now_description' => 'Dove sono le altre persone in questo momento.',
     'ui.webdoors.live' => 'Dal vivo',
     'ui.webdoors.recent_activity' => 'Di recente a Crossroads',
-    'ui.webdoors.recent_activity_description' => 'Chi è passato da Crossroads di recente.',
     'ui.webdoors.recent_activity_played' => 'ha giocato a',
     'ui.webdoors.recent_activity_first_played' => 'ha giocato per la prima volta a',
     'ui.webdoors.all_experiences' => 'Tutte le esperienze',

@@ -172,20 +172,32 @@ The sections render in this order, with distinct membership rules:
   play activity already visible in authorized Experience lobbies
   (`ActivityTracker` types `webdoor_play` / `dosdoor_play`), composed by
   `ExperienceActivity::recentAcrossCatalog()`. It is **authenticated-only** and
-  never appears on the anonymous `/crossroads` window. Every row is filtered
+  never appears on the anonymous `/crossroads` window. The section has no
+  subtitle — the heading and the rows carry the meaning. Every row is filtered
   through the viewer's own authorized `GameCatalog` result, so activity for a
   hidden, admin-only, disabled, removed, or renamed/orphaned Experience simply
   never resolves; the current catalog name is shown, not the stale snapshot.
   System users (e.g. `_guest`) are excluded, and rows whose user has been
-  deleted are dropped rather than shown as "Unknown user". The first-play
-  distinction is preserved. It is **historical evidence, not live presence** —
-  "quiet now" does not mean the place is dead. It carries no "since your last
-  visit" semantics, no session duration, no leave/logout time, no launch-vs-
-  return, and no surface label, because the underlying activity data does not
-  record those as lifecycle truth. Known activity-data limitations (managed
-  doors record a play on a fresh session but not on resume; the WebDoor session
-  endpoint can record repeated `webdoor_play` rows on player reload) are not
-  corrected here; raw ordering is preserved. Hidden entirely when there is
+  deleted are dropped rather than shown as "Unknown user".
+  For arrival-page composition only, repeated plays by the **same user in the
+  same Experience** collapse to that pair's single newest footprint, and the
+  five newest distinct `(user, Experience)` pairs are returned — a purely
+  structural rule, **not** time-window de-duplication. The same user may appear
+  for different Experiences; different users may appear for the same Experience.
+  `ExperienceActivity::recent()` for individual Experience detail is untouched
+  and keeps its raw activity semantics. Distinct-pair selection happens in SQL
+  before the five-row limit, so the result is always the five newest distinct
+  footprints, never five raw rows deduped down afterward. First-play status is
+  derived from the **full** matching history alongside a recency window in the
+  same query (no N+1): the surviving footprint renders "first played" only when
+  it is genuinely that user's first-ever recorded play, and ordinary "played"
+  when older plays exist even though they collapsed out.
+  It is **historical evidence, not live presence** — "quiet now" does not mean
+  the place is dead. It carries no "since your last visit" semantics, no session
+  duration, no leave/logout time, no launch-vs-return, and no surface label,
+  because the underlying activity data does not record those as lifecycle truth.
+  The known activity-data limitation that managed doors record a play on a fresh
+  session but not on resume is not corrected here. Hidden entirely when there is
   nothing to show — it is not an empty-state card, and it is not a feed.
 - **Experiences** is the complete visible, authorized web inventory, including
   every entry already shown in the contextual sections. Its browser-side

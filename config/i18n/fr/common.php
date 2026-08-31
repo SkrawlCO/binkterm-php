@@ -3186,7 +3186,6 @@ Vous pouvez envoyer des rappels individuels en utilisant les boutons « Rappeler
     'ui.webdoors.live_now_description' => 'Où se trouvent les autres en ce moment.',
     'ui.webdoors.live' => 'En direct',
     'ui.webdoors.recent_activity' => 'Récemment au Crossroads',
-    'ui.webdoors.recent_activity_description' => 'Qui est passé par le Crossroads récemment.',
     'ui.webdoors.recent_activity_played' => 'a joué à',
     'ui.webdoors.recent_activity_first_played' => 'a joué pour la première fois à',
     'ui.webdoors.all_experiences' => 'Toutes les expériences',

@@ -298,7 +298,7 @@ final class ExperienceActivityTest extends TestCase
         ");
     }
 
-    public function testRecentAcrossCatalogReturnsAuthorizedFootprintsNewestFirst(): void
+    public function testRecentAcrossCatalogReturnsDistinctFootprintsNewestFirst(): void
     {
         $db = $this->database();
         $this->seedPlays($db);
@@ -311,17 +311,114 @@ final class ExperienceActivityTest extends TestCase
 
         $rows = (new ExperienceActivity($db))->recentAcrossCatalog($catalog, 5);
 
-        // Newest first; hidden-door (unauthorized), _guest (system) and user 99
-        // (deleted -> not in users) are all absent.
+        // One footprint per (user, Experience) pair, newest first. Bard's two
+        // 'lord' plays (09:00, 11:00) collapse to the 11:00 one. hidden-door
+        // (unauthorized), _guest (system) and user 99 (deleted) are all absent.
         self::assertSame(
-            ['blackjack', 'lord', 'usurper', 'lord'],
+            ['blackjack', 'lord', 'usurper'],
             array_column($rows, 'experience_id')
         );
-        self::assertSame(['Skrawl', 'Bard', 'Skrawl', 'Bard'], array_column($rows, 'username'));
+        self::assertSame(['Skrawl', 'Bard', 'Skrawl'], array_column($rows, 'username'));
         // Current catalog name, not the raw object_name snapshot.
         self::assertSame('Legend of the Red Dragon', $rows[1]['experience_name']);
-        // Durable timestamps, unmodified.
+        // Durable timestamps, unmodified; Bard's collapsed footprint is the newest.
         self::assertSame('2026-08-30 12:00:00+00', $rows[0]['occurred_at']);
+        self::assertSame('2026-08-30 11:00:00+00', $rows[1]['occurred_at']);
+    }
+
+    public function testRecentAcrossCatalogCollapsesRepeatedSamePairToNewest(): void
+    {
+        $db = $this->database();
+        $db->exec("
+            INSERT INTO users (id, username) VALUES (7, 'Bard');
+            INSERT INTO user_activity_log (user_id, activity_type_id, object_name, created_at) VALUES
+                (7, " . ActivityTracker::TYPE_WEBDOOR_PLAY . ", 'lord', '2026-08-30 12:00:00+00'),
+                (7, " . ActivityTracker::TYPE_WEBDOOR_PLAY . ", 'lord', '2026-08-30 12:00:30+00'),
+                (7, " . ActivityTracker::TYPE_WEBDOOR_PLAY . ", 'lord', '2026-08-30 12:01:00+00'),
+                (7, " . ActivityTracker::TYPE_WEBDOOR_PLAY . ", 'lord', '2026-08-30 12:15:00+00');
+        ");
+
+        $rows = (new ExperienceActivity($db))->recentAcrossCatalog([
+            'lord' => $this->experience('lord', 'Legend of the Red Dragon'),
+        ], 5);
+
+        // Four raw plays -> exactly one footprint, the newest.
+        self::assertCount(1, $rows);
+        self::assertSame('2026-08-30 12:15:00+00', $rows[0]['occurred_at']);
+        // The pair has older plays, so the surviving footprint is ordinary play.
+        self::assertSame('play', $rows[0]['type']);
+    }
+
+    public function testRecentAcrossCatalogKeepsSameUserAcrossDifferentExperiences(): void
+    {
+        $db = $this->database();
+        $db->exec("
+            INSERT INTO users (id, username) VALUES (7, 'Bard');
+            INSERT INTO user_activity_log (user_id, activity_type_id, object_name, created_at) VALUES
+                (7, " . ActivityTracker::TYPE_DOSDOOR_PLAY . ", 'lord',    '2026-08-30 12:00:00+00'),
+                (7, " . ActivityTracker::TYPE_DOSDOOR_PLAY . ", 'usurper', '2026-08-30 09:00:00+00');
+        ");
+
+        $rows = (new ExperienceActivity($db))->recentAcrossCatalog([
+            'lord'    => $this->experience('lord', 'Legend of the Red Dragon'),
+            'usurper' => $this->experience('usurper', 'Usurper Reborn'),
+        ], 5);
+
+        self::assertSame(['lord', 'usurper'], array_column($rows, 'experience_id'));
+        self::assertSame(['Bard', 'Bard'], array_column($rows, 'username'));
+    }
+
+    public function testRecentAcrossCatalogKeepsDifferentUsersInTheSameExperience(): void
+    {
+        $db = $this->database();
+        $db->exec("
+            INSERT INTO users (id, username) VALUES (3, 'Skrawl'), (7, 'Bard');
+            INSERT INTO user_activity_log (user_id, activity_type_id, object_name, created_at) VALUES
+                (7, " . ActivityTracker::TYPE_DOSDOOR_PLAY . ", 'lord', '2026-08-30 12:00:00+00'),
+                (3, " . ActivityTracker::TYPE_DOSDOOR_PLAY . ", 'lord', '2026-08-30 11:00:00+00');
+        ");
+
+        $rows = (new ExperienceActivity($db))->recentAcrossCatalog([
+            'lord' => $this->experience('lord', 'Legend of the Red Dragon'),
+        ], 5);
+
+        self::assertSame(['lord', 'lord'], array_column($rows, 'experience_id'));
+        self::assertSame(['Bard', 'Skrawl'], array_column($rows, 'username'));
+    }
+
+    public function testRecentAcrossCatalogSelectsDistinctPairsBeforeApplyingLimit(): void
+    {
+        $db = $this->database();
+        $db->exec("
+            INSERT INTO users (id, username) VALUES
+                (10, 'userA'), (11, 'userB'), (12, 'userC'),
+                (13, 'userD'), (14, 'userE'), (15, 'userF');
+        ");
+        $dos = ActivityTracker::TYPE_DOSDOOR_PLAY;
+        $values = [];
+        // userA played 'lord' eight times, all more recent than everyone else.
+        foreach (range(0, 7) as $m) {
+            $ts = sprintf('2026-08-30 12:%02d:00+00', $m);
+            $values[] = "(10, {$dos}, 'lord', '{$ts}')";
+        }
+        // Five other users each played 'lord' once, older, one per hour.
+        foreach ([11 => 11, 12 => 10, 13 => 9, 14 => 8, 15 => 7] as $uid => $hour) {
+            $ts = sprintf('2026-08-30 %02d:00:00+00', $hour);
+            $values[] = "({$uid}, {$dos}, 'lord', '{$ts}')";
+        }
+        $db->exec("INSERT INTO user_activity_log (user_id, activity_type_id, object_name, created_at) VALUES " . implode(',', $values));
+
+        $rows = (new ExperienceActivity($db))->recentAcrossCatalog([
+            'lord' => $this->experience('lord', 'Legend of the Red Dragon'),
+        ], 5);
+
+        // Six distinct pairs exist. If de-dup happened AFTER the limit the
+        // result would be just [userA] (five raw rows all belong to userA's
+        // pair). Distinct-pair-then-limit yields the five newest distinct
+        // pairs: userA (newest of its eight), then userB..userE. userF drops.
+        self::assertCount(5, $rows);
+        self::assertSame(['userA', 'userB', 'userC', 'userD', 'userE'], array_column($rows, 'username'));
+        self::assertSame('2026-08-30 12:07:00+00', $rows[0]['occurred_at']);
     }
 
     public function testRecentAcrossCatalogHidesUnauthorizedExperienceActivity(): void
@@ -337,7 +434,8 @@ final class ExperienceActivityTest extends TestCase
         foreach ($rows as $row) {
             self::assertNotSame('hidden-door', $row['experience_id']);
         }
-        self::assertSame(['lord', 'lord'], array_column($rows, 'experience_id'));
+        // Bard's two 'lord' plays collapse to one footprint.
+        self::assertSame(['lord'], array_column($rows, 'experience_id'));
     }
 
     public function testRecentAcrossCatalogDropsOrphanedBackendIds(): void
@@ -376,7 +474,7 @@ final class ExperienceActivityTest extends TestCase
             'lord' => $this->experience('lord', 'Legend of the Red Dragon'),
         ], 5);
 
-        self::assertCount(2, $rows);
+        self::assertCount(1, $rows);
         foreach ($rows as $row) {
             self::assertNotSame(99, $row['user_id']);
             self::assertNotNull($row['username']);
@@ -386,28 +484,29 @@ final class ExperienceActivityTest extends TestCase
     public function testRecentAcrossCatalogEnforcesHardLimit(): void
     {
         $db = $this->database();
-        $db->exec("INSERT INTO users (id, username) VALUES (3, 'Skrawl');");
-        $values = [];
-        foreach (range(1, 12) as $i) {
-            $ts = sprintf('2026-08-30 %02d:00:00+00', $i);
-            $values[] = "(3, " . ActivityTracker::TYPE_DOSDOOR_PLAY . ", 'lord', '{$ts}')";
+        $dos = ActivityTracker::TYPE_DOSDOOR_PLAY;
+
+        // 30 distinct (user, 'lord') pairs.
+        $userValues = [];
+        $logValues = [];
+        foreach (range(1, 30) as $i) {
+            $userValues[] = "({$i}, 'user{$i}')";
+            $ts = sprintf('2026-08-%02d 12:00:00+00', $i);
+            $logValues[] = "({$i}, {$dos}, 'lord', '{$ts}')";
         }
-        $db->exec("INSERT INTO user_activity_log (user_id, activity_type_id, object_name, created_at) VALUES " . implode(',', $values));
+        $db->exec("INSERT INTO users (id, username) VALUES " . implode(',', $userValues));
+        $db->exec("INSERT INTO user_activity_log (user_id, activity_type_id, object_name, created_at) VALUES " . implode(',', $logValues));
 
-        $rows = (new ExperienceActivity($db))->recentAcrossCatalog([
-            'lord' => $this->experience('lord', 'Legend of the Red Dragon'),
-        ], 5);
+        $catalog = ['lord' => $this->experience('lord', 'Legend of the Red Dragon')];
 
-        self::assertCount(5, $rows);
+        self::assertCount(5, (new ExperienceActivity($db))->recentAcrossCatalog($catalog, 5));
 
         // Requesting more than the defensive ceiling is clamped, not honored.
-        $clamped = (new ExperienceActivity($db))->recentAcrossCatalog([
-            'lord' => $this->experience('lord', 'Legend of the Red Dragon'),
-        ], 9999);
+        $clamped = (new ExperienceActivity($db))->recentAcrossCatalog($catalog, 9999);
         self::assertLessThanOrEqual(25, count($clamped));
     }
 
-    public function testRecentAcrossCatalogPreservesFirstPlayDistinction(): void
+    public function testRecentAcrossCatalogFirstPlayStatusUsesFullHistoryNotTheCollapsedResult(): void
     {
         $db = $this->database();
         $db->exec("
@@ -422,10 +521,12 @@ final class ExperienceActivityTest extends TestCase
             'lord' => $this->experience('lord', 'Legend of the Red Dragon'),
         ], 5);
 
-        // Newest first: Bard's only play (his first), Skrawl's recent play (not
-        // his first), Skrawl's original play back on Aug 1 (his first).
-        self::assertSame(['Bard', 'Skrawl', 'Skrawl'], array_column($rows, 'username'));
-        self::assertSame(['first_play', 'play', 'first_play'], array_column($rows, 'type'));
+        // One footprint per pair: Bard (his only, ever -> first_play), Skrawl
+        // (his newest, but he has an older Aug 1 play -> ordinary play, NOT
+        // first_play just because the older row collapsed out).
+        self::assertSame(['Bard', 'Skrawl'], array_column($rows, 'username'));
+        self::assertSame(['first_play', 'play'], array_column($rows, 'type'));
+        self::assertSame('2026-08-30 10:00:00+00', $rows[1]['occurred_at']);
     }
 
     public function testRecentAcrossCatalogReturnsEmptyForEmptyCatalog(): void
@@ -461,7 +562,8 @@ final class ExperienceActivityTest extends TestCase
         ], 5);
 
         self::assertNotSame([], $rows);
-        self::assertSame(['lord', 'usurper', 'lord'], array_column($rows, 'experience_id'));
+        // Bard/lord (collapsed to 11:00) then Skrawl/usurper (10:00).
+        self::assertSame(['lord', 'usurper'], array_column($rows, 'experience_id'));
     }
 
 }

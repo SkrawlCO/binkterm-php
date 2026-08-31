@@ -3866,7 +3866,6 @@ return [
     'ui.webdoors.live_now_description' => 'Где сейчас находятся другие.',
     'ui.webdoors.live' => 'Активно',
     'ui.webdoors.recent_activity' => 'Недавно в Crossroads',
-    'ui.webdoors.recent_activity_description' => 'Кто недавно заходил в Crossroads.',
     'ui.webdoors.recent_activity_played' => 'сыграл в',
     'ui.webdoors.recent_activity_first_played' => 'впервые сыграл в',
     'ui.webdoors.all_experiences' => 'Все впечатления',

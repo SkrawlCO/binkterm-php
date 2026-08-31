@@ -275,9 +275,11 @@ SimpleRouter::get('/games', function() {
     // the existing activity history (webdoor_play / dosdoor_play only), filtered
     // through the viewer's already-authorized catalog ($games above; no second
     // discovery). Historical evidence that the place is used even when nobody is
-    // here right now — not live presence, not a feed. One bounded read; system
-    // users, deleted users, and orphaned/renamed backend ids are dropped inside
-    // the read model. Capped at five for this page.
+    // here right now — not live presence, not a feed. One bounded read; repeated
+    // plays by the same person in the same Experience collapse to that pair's
+    // newest footprint before the limit, and system users, deleted users, and
+    // orphaned/renamed backend ids are dropped inside the read model. Capped at
+    // five for this page.
     $recentActivity = (new \BinktermPHP\ExperienceActivity())
         ->recentAcrossCatalog($games, 5);
 

@@ -101,8 +101,9 @@ final class ExperienceActivity
     }
 
     /**
-     * Return a small, bounded set of the most recent play footprints across an
-     * already-authorized Experience catalog.
+     * Return a small, bounded set of the most recent DISTINCT
+     * person + Experience play footprints across an already-authorized
+     * Experience catalog.
      *
      * This is the read model for the authenticated web Crossroads "Recently in
      * the Crossroads" section: truthful historical evidence that the place is
@@ -112,6 +113,16 @@ final class ExperienceActivity
      * Only the existing play activity types are consulted
      * ({@see ActivityTracker::TYPE_WEBDOOR_PLAY},
      * {@see ActivityTracker::TYPE_DOSDOOR_PLAY}) — no new event semantics.
+     *
+     * Distinct-pair collapsing (arrival-page composition only): repeated plays
+     * by the SAME user in the SAME Experience collapse to that pair's single
+     * newest qualifying footprint, and the five newest distinct pairs overall
+     * are returned. This is a purely structural rule — one newest footprint per
+     * (user, backend id) pair — NOT time-window de-duplication (no "once per
+     * N minutes / per session / per day"). A user may appear more than once for
+     * different Experiences; different users may appear for the same Experience.
+     * {@see recent()} for individual Experience detail is untouched and keeps
+     * its existing raw activity semantics.
      *
      * The caller passes its own authorized `GameCatalog::getEnabledGames()`
      * result. Every returned row is therefore guaranteed to belong to an
@@ -126,19 +137,21 @@ final class ExperienceActivity
      *   - rows whose user has been deleted (`user_id` nulled by
      *     `ON DELETE SET NULL`) are dropped rather than shown as "Unknown user".
      *
-     * The first-play distinction is preserved without an N+1 query: a single
-     * window function partitions by (user, backend id) over the full matching
-     * history, so a row is `first_play` when it is that user's chronologically
-     * earliest recorded play of that Experience.
+     * First-play status is derived from the FULL matching history, not just the
+     * collapsed result: a `play_number` window partitioned by (user, backend
+     * id) over every matching row runs alongside a recency window, so the
+     * selected (newest) footprint for a pair renders `first_play` only when it
+     * is genuinely that user's first-ever recorded play of the Experience, and
+     * ordinary `play` when older plays exist — even though those older rows are
+     * collapsed out of the output. One query, no N+1.
      *
-     * Ordering is deterministic, newest first. Timestamps are the durable
-     * `created_at` values, unmodified. No historical row is mutated, pruned, or
-     * backfilled, and no writer is altered.
+     * Distinct-pair selection happens in SQL BEFORE the five-row limit: the
+     * result is the five newest distinct footprints, never five raw rows deduped
+     * down to fewer afterwards.
      *
-     * Known activity-data limitations are intentionally not corrected here:
-     * managed doors record a play on a fresh session but not on resume; the
-     * WebDoor session endpoint can record repeated `webdoor_play` rows on
-     * player reload. Raw ordering is preserved.
+     * Ordering is deterministic, newest first (`created_at DESC, id DESC`).
+     * Timestamps are the durable `created_at` values, unmodified. No historical
+     * row is mutated, pruned, or backfilled, and no writer is altered.
      *
      * @param array<mixed> $experiences Authorized normalized Experiences,
      *     e.g. `GameCatalog::getEnabledGames($user, 'web')` (keyed or a list).
@@ -197,7 +210,11 @@ final class ExperienceActivity
                     ROW_NUMBER() OVER (
                         PARTITION BY al.user_id, al.object_name
                         ORDER BY al.created_at ASC, al.id ASC
-                    ) AS play_number
+                    ) AS play_number,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY al.user_id, al.object_name
+                        ORDER BY al.created_at DESC, al.id DESC
+                    ) AS recency_rank
                 FROM user_activity_log al
                 WHERE al.activity_type_id IN (?, ?)
                   AND al.user_id IS NOT NULL
@@ -214,6 +231,7 @@ final class ExperienceActivity
             JOIN users u
               ON u.id = ep.user_id
              AND u.is_system = FALSE
+            WHERE ep.recency_rank = 1
             ORDER BY ep.created_at DESC, ep.id DESC
             LIMIT {$limit}
         ");
