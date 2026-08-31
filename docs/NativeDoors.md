@@ -62,7 +62,7 @@ binkterm-php/
 │   │   └── mydoor/                         # Example custom door
 │   │       ├── nativedoor.json             # Door manifest (required)
 │   │       ├── mydoor.sh                   # Executable (or binary, .bat, etc.)
-│   │       └── icon.png                    # Optional icon (64×64 PNG)
+│   │       └── icon.png                    # Optional Experience icon (512×512, see Platform Notes)
 │   └── drops/                              # Generated at runtime — do not edit
 │       ├── NODE1/
 │       │   └── DOOR.SYS
@@ -180,7 +180,7 @@ The door will now appear in the `/games` game library.
 | `description` | string | No | Short description shown on the game card |
 | `genre` | array | No | Array of genre strings, e.g. `["RPG", "Strategy"]` |
 | `players` | string | No | Player count description. Defaults to `"Single-player"` |
-| `icon` | string\|null | No | Filename of an icon image (64×64 PNG) in the door directory |
+| `icon` | string\|null | No | Filename of the Experience icon in the door directory. See [Experience icon](#experience-icon) for the canonical asset spec. Served at `/door-assets/{id}/icon` |
 | `screenshot` | string\|null | No | Filename of a screenshot image in the door directory |
 
 ### `door` object
@@ -358,6 +358,54 @@ its `README.md`.
   (`command -v <bin>`, then the well-known absolute paths such as
   `/usr/games/<bin>` and `/usr/bin/<bin>`) because the multiplexing bridge's
   `PATH` does not always include `/usr/games`.
+
+## Experience icon
+
+A distinctive icon is a normal onboarding/polish step when adding an Experience
+to the Crossroads — plan for one the same way you plan a description. Without
+one the card and lobby fall back to the generic site mark, and every
+icon-less Experience looks identical.
+
+Where it renders (web only — the terminal Crossroads shows no icon):
+
+| Surface | Rendered box | Fit |
+|---------|--------------|-----|
+| `/games` and `/crossroads` cards, "Your Places" | 48 × 48 px | `object-fit: cover` |
+| `/experiences/{id}` lobby | 120 × 120 px | `object-fit: cover` |
+
+One source asset is reused at both sizes (there is no high-DPI variant), so it
+must read at 48 px and stay legible at 120 px, on both light and dark card
+surfaces.
+
+Canonical asset:
+
+- **1:1 square.** The boxes are square and use `object-fit: cover`; a
+  non-square image is centre-cropped.
+- **SVG** only for genuinely vector artwork (an emblem, a glyph). Give it a
+  square `viewBox`, no `<script>`, no `<foreignObject>`, no external
+  references.
+- **Painterly / raster artwork: an optimized 512 × 512 PNG**, RGB or RGBA,
+  8-bit, non-interlaced. 512 px covers the 120 px box at high pixel-ratios and
+  downscales cleanly to 48 px.
+- **No baked-in text** (it turns to mush at 48 px) and no dependency on
+  external fonts or resources.
+- **Transparent rounded corners** are fine and often desirable — the card
+  draws its own rounded plate. If the generated artwork has solid
+  (e.g. white) corner pixels outside a rounded frame, clear them to alpha;
+  don't crop real artwork to force it.
+- **Keep it small.** Optimize the PNG; **do not commit multi-megabyte source
+  images** as icons (a 512 px painterly PNG is ~0.3–0.6 MB — anything much
+  larger is unoptimized). Test how it looks on a light and a dark theme.
+- **Original / licence-safe provenance is required.** No third-party logos,
+  cover art, sprites, ANSI art, screenshots, or trademarked artwork — not even
+  "redrawn". Commissioned or generated original artwork made for this project
+  is fine.
+
+Wire it up by dropping the file in the door directory and setting
+`game.icon` in `nativedoor.json` (for example `"icon": "icon.png"`). The
+`/door-assets/{id}/icon` route serves it with the right MIME type; a WebDoor
+instead points `game.icon` at a file under its own `public_html/webdoors/{id}/`
+directory. Adding an icon where there was none needs no cache-version bump.
 
 ---
 

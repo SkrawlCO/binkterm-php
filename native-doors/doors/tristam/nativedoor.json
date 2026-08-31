@@ -10,7 +10,7 @@
     "description": "1901. Your seaplane goes down in the North Atlantic and you wash ashore on a small island that the maps say is uninhabited. Hungry and alone, you soon suspect the maps are wrong. A full-length, classic-style parser adventure by Hugo Labrande, released free and open source under CC0. Runs on the Frotz Z-machine interpreter.",
     "genre": ["Interactive Fiction", "Adventure"],
     "players": "Single-player",
-    "icon": null,
+    "icon": "icon.png",
     "screenshot": null
   },
   "door": {

@@ -1,0 +1,46 @@
+{
+  "type": "nativedoor",
+  "version": "1.0",
+  "game": {
+    "name": "Legend of the Red Dragon",
+    "short_name": "LORD",
+    "author": "Seth Able",
+    "version": "1.4.6",
+    "release_year": 2026,
+    "description": "Legend of the Red Dragon fantasy RPG BBS door.",
+    "genre": [
+      "RPG"
+    ],
+    "players": "Multiplayer",
+    "icon": "icon.png",
+    "screenshot": null
+  },
+  "door": {
+    "executable": "node",
+    "launch_command": "node lord-bridge.js",
+    "output_encoding": "utf8",
+    "terminal_mode": "raw",
+    "max_nodes": 10,
+    "ansi_required": true,
+    "time_per_day": 30
+  },
+  "requirements": {
+    "admin_only": false
+  },
+  "config": {
+    "enabled": false,
+    "credit_cost": 0,
+    "max_time_minutes": 30,
+    "max_sessions": 10
+  },
+  "experience": {
+    "category": "game",
+    "featured": true,
+    "multiplayer": true,
+    "participant_messaging": true,
+    "conversation": {
+      "type": "chat_room",
+      "room_name": "Legend of the Red Dragon"
+    }
+  }
+}
