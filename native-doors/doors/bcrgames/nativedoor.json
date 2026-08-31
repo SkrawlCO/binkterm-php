@@ -8,7 +8,7 @@
     "description": "Enter Shooter Jennings' Black Country Rock Games Server, home to From Here To Eternity, Freedom Train, 1NS0MN1A, and shared BCR community features.",
     "genre": ["BBS", "Games"],
     "players": "Multiplayer",
-    "icon": null,
+    "icon": "icon.png",
     "screenshot": null
   },
   "door": {

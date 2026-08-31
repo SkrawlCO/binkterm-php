@@ -18,11 +18,12 @@ modified.
 | From Here To Eternity, Freedom Train, 1NS0MN1A, Character Sheet, Trash Talking Wall, Leviathan, and the rest of the BCR service | **Shooter Jennings / Black Country Rock** |
 | BCR accounts, characters, authentication, content, artwork, and branding | **Black Country Rock** |
 | The `bcrgames.com:31337` endpoint | **Black Country Rock** |
-| This wrapper (`bcr.sh`), the manifest, and the descriptive copy | L33TEST |
+| This wrapper (`bcr.sh`), the manifest, the descriptive copy, and `icon.png` | L33TEST |
 
 L33TEST does not claim authorship of anything past the endpoint. No BCR artwork
-or branding is bundled — the Experience uses the standard Crossroads fallback
-icon until an original L33TEST icon is created separately.
+or branding is bundled. `icon.png` was generated specifically for this Crossroads
+integration and is owned by L33TEST — it is **not** copied from, extracted from,
+or derived from Shooter Jennings / Black Country Rock artwork or any BCR asset.
 
 ---
 
@@ -66,6 +67,13 @@ who launch this gateway get independent BCR sessions with independent BCR
 logins, and Crossroads cannot truthfully represent them as co‑players. Crossroads
 only reports local relay facts (a session is active, who is connected, the local
 relay‑session count, prior launches, session end).
+
+The flag stays `false`, but the presentation layer no longer reads a `false`
+multiplayer flag on a **gateway** Experience as "Single Player". Player-mode
+labels (`Multiplayer` / `Single Player`) apply only to `category: game`
+Experiences; a gateway shows just its category ("Gateway") with no player-mode
+suffix. This is a generic `ExperiencePresentation` rule
+(`capabilities.player_mode`), not BCR-specific.
 
 ---
 

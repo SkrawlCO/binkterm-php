@@ -454,6 +454,27 @@ final class AnonymousExperienceDiscoveryTest extends TestCase
         self::assertStringContainsString('ui.discovery.sign_in_to_play', $html);
     }
 
+    public function testPublicGatewayCardTaxonomyOmitsThePlayerModeSuffix(): void
+    {
+        // A game card reads "<category> · <player mode>". A gateway has no
+        // Crossroads-visible player mode, so the card shows just the category
+        // and never appends "Single Player".
+        $game = ExperiencePresentation::buildPublic(self::hostileExperience(), 'web', null);
+        $gameHtml = $this->renderPublicCard($game);
+        self::assertStringContainsString('ui.webdoors.category_game', $gameHtml);
+        self::assertStringContainsString('ui.webdoors.multiplayer', $gameHtml);
+
+        $exp = self::hostileExperience();
+        $exp['category'] = 'gateway';
+        $exp['capabilities']['multiplayer'] = false;
+        $gateway = ExperiencePresentation::buildPublic($exp, 'web', null);
+        $gatewayHtml = $this->renderPublicCard($gateway);
+
+        self::assertStringContainsString('ui.webdoors.category_gateway', $gatewayHtml);
+        self::assertStringNotContainsString('ui.webdoors.single_player', $gatewayHtml);
+        self::assertStringNotContainsString('ui.webdoors.multiplayer', $gatewayHtml);
+    }
+
     // ---------------------------------------------------------------- helpers
 
     private function between(string $source, string $start, string $end): string

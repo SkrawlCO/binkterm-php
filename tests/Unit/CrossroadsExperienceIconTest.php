@@ -135,6 +135,36 @@ final class CrossroadsExperienceIconTest extends TestCase
         self::assertSame('/door-assets/tristam/icon', $game['presentation']['icon_url']);
     }
 
+    // ---- BCR Games Server (gateway Experience) --------------------------
+
+    public function testBcrGamesIconAssetIsCanonical(): void
+    {
+        $this->assertCanonicalIcon(self::REPO_ROOT . '/native-doors/doors/bcrgames/icon.png');
+    }
+
+    public function testBcrGamesManifestDeclaresIcon(): void
+    {
+        $manifest = json_decode(
+            (string)file_get_contents(self::REPO_ROOT . '/native-doors/doors/bcrgames/nativedoor.json'),
+            true
+        );
+        self::assertSame('icon.png', $manifest['game']['icon'] ?? null);
+
+        $door = (new NativeDoorManager())->getDoor('bcrgames');
+        self::assertIsArray($door);
+        self::assertSame('icon.png', $door['icon'] ?? null);
+    }
+
+    public function testBcrGamesCatalogPresentationExposesIcon(): void
+    {
+        $games = (new GameCatalog())->getEnabledGames(null, 'web');
+        if (!isset($games['bcrgames'])) {
+            self::markTestSkipped('bcrgames is not enabled in this environment');
+        }
+        self::assertSame('icon.png', $games['bcrgames']['presentation']['icon']);
+        self::assertSame('/door-assets/bcrgames/icon', $games['bcrgames']['presentation']['icon_url']);
+    }
+
     // ---- Elsewhere: staged, NOT wired -----------------------------------
 
     public function testElsewhereIconIsStagedAsCanonicalArtwork(): void

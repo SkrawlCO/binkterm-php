@@ -31,7 +31,7 @@
                 <div class="min-w-0 flex-grow-1">
                     <h3 class="h5 mb-1">{% if public_mode %}{{ view.name }}{% else %}<a href="/experiences/{{ view.id }}" class="experience-title-link">{{ view.name }}</a>{% endif %}</h3>
                     <div class="experience-card-taxonomy small text-muted">
-                        {% if view.category == 'game' %}{{ t('ui.webdoors.category_game', {}, locale, ['common']) }}{% elseif view.category == 'gateway' %}{{ t('ui.webdoors.category_gateway', {}, locale, ['common']) }}{% else %}{{ view.category|capitalize }}{% endif %} · {% if view.capabilities.multiplayer %}{{ t('ui.webdoors.multiplayer', {}, locale, ['common']) }}{% else %}{{ t('ui.webdoors.single_player', {}, locale, ['common']) }}{% endif %}
+                        {% if view.category == 'game' %}{{ t('ui.webdoors.category_game', {}, locale, ['common']) }}{% elseif view.category == 'gateway' %}{{ t('ui.webdoors.category_gateway', {}, locale, ['common']) }}{% else %}{{ view.category|capitalize }}{% endif %}{% if view.capabilities.player_mode == 'multiplayer' %} · {{ t('ui.webdoors.multiplayer', {}, locale, ['common']) }}{% elseif view.capabilities.player_mode == 'single_player' %} · {{ t('ui.webdoors.single_player', {}, locale, ['common']) }}{% endif %}
                     </div>
                 </div>
             </div>

@@ -1584,6 +1584,39 @@ final class ExperienceLobbyTemplateTest extends TestCase
         self::assertDoesNotMatchRegularExpression('/\bNode\s+\d+\b/', $body);
     }
 
+    public function testGatewayLobbyIsNeitherSinglePlayerNorMultiplayer(): void
+    {
+        // A Gateway Experience (e.g. a remote games server reached over Telnet)
+        // has an opaque internal session model. The lobby must not call it
+        // "Single Player" merely because the Crossroads multiplayer flag is
+        // false, and it must not render the multiplayer roster section.
+        $html = $this->renderLobby(
+            0,
+            null,
+            true,
+            null,
+            'Remote Games Server',
+            false,
+            '/door-assets/remote/icon',
+            '/games/nativedoors/remote',
+            'native',
+            'remote',
+            experienceOverride: [
+                'category' => 'gateway',
+                'capabilities' => ['multiplayer' => false],
+            ]
+        );
+
+        $body = self::renderedBody($html);
+
+        self::assertStringNotContainsString('Single Player', $body);
+        self::assertStringNotContainsString('Multiplayer', $body);
+        self::assertStringNotContainsString('Live Players', $body);
+        // The player-mode badge falls back to the generic Gateway descriptor.
+        self::assertStringContainsString('ui.webdoors.category_gateway', $body);
+        self::assertStringContainsString('Remote Games Server', $body);
+    }
+
     public function testSinglePlayerLobbyStillRendersConfiguredConversation(): void
     {
         $html = $this->renderLobby(
@@ -1651,7 +1684,7 @@ final class ExperienceLobbyTemplateTest extends TestCase
                 'name' => 'Presented Name',
                 'description' => 'Presented description.',
                 'presentation' => ['icon_url' => '/presented/icon.png'],
-                'capabilities' => ['multiplayer' => true],
+                'capabilities' => ['multiplayer' => true, 'player_mode' => 'multiplayer'],
                 'cost' => ['credits' => 7, 'free' => false],
             ]
         );

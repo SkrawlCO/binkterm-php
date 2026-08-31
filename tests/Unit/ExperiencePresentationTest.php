@@ -111,6 +111,68 @@ final class ExperiencePresentationTest extends TestCase
         self::assertFalse($view['actions']['play']);
     }
 
+    public function testPlayerModeIsMultiplayerForAMultiplayerGame(): void
+    {
+        $view = ExperiencePresentation::build($this->experience(), 'web');
+
+        self::assertSame('game', $view['category']);
+        self::assertTrue($view['capabilities']['multiplayer']);
+        self::assertSame('multiplayer', $view['capabilities']['player_mode']);
+    }
+
+    public function testPlayerModeIsSinglePlayerForASoloGame(): void
+    {
+        $experience = $this->experience();
+        $experience['capabilities']['multiplayer'] = false;
+
+        $view = ExperiencePresentation::build($experience, 'web');
+
+        self::assertSame('game', $view['category']);
+        self::assertFalse($view['capabilities']['multiplayer']);
+        self::assertSame('single_player', $view['capabilities']['player_mode']);
+    }
+
+    public function testGatewayExperienceHasNoPlayerModeEvenWhenMultiplayerIsFalse(): void
+    {
+        // A Gateway is a destination whose internal session model is opaque to
+        // Crossroads. It must not be labelled "Single Player" just because the
+        // Crossroads-visible multiplayer flag is false.
+        $experience = $this->experience();
+        $experience['category'] = 'gateway';
+        $experience['capabilities']['multiplayer'] = false;
+
+        $view = ExperiencePresentation::build($experience, 'web');
+
+        self::assertSame('gateway', $view['category']);
+        self::assertFalse($view['capabilities']['multiplayer']);
+        self::assertNull($view['capabilities']['player_mode']);
+    }
+
+    public function testGatewayPlayerModeStaysNullEvenIfMultiplayerIsSomehowTrue(): void
+    {
+        $experience = $this->experience();
+        $experience['category'] = 'gateway';
+        $experience['capabilities']['multiplayer'] = true;
+
+        $view = ExperiencePresentation::build($experience, 'web');
+
+        self::assertNull($view['capabilities']['player_mode']);
+    }
+
+    public function testBuildPublicCarriesThePlayerModeDescriptor(): void
+    {
+        $experience = $this->experience();
+        $experience['category'] = 'gateway';
+
+        $public = ExperiencePresentation::buildPublic($experience, 'web');
+
+        self::assertArrayHasKey('player_mode', $public['capabilities']);
+        self::assertNull($public['capabilities']['player_mode']);
+
+        $game = ExperiencePresentation::buildPublic($this->experience(), 'web');
+        self::assertSame('multiplayer', $game['capabilities']['player_mode']);
+    }
+
     public function testCreditCostDistinguishesPaidFromFree(): void
     {
         $paid = $this->experience();

@@ -70,12 +70,22 @@ final class ExperiencePresentation
             $atCapacity
         );
 
+        $category = self::nonEmptyString($experience['category'] ?? null) ?? 'game';
+        $multiplayer = !empty($experience['capabilities']['multiplayer']);
+        // Player-mode descriptor. Only Game Experiences carry a single/multi
+        // player label; a Gateway Experience is a destination whose internal
+        // session model is opaque to Crossroads, so it is neither — consumers
+        // must not fall back to "Single Player" merely because multiplayer is
+        // false. Null means "no player-mode label applies".
+        $playerMode = $category === 'game'
+            ? ($multiplayer ? 'multiplayer' : 'single_player')
+            : null;
+
         return [
             'id' => $id,
             'name' => $name,
             'description' => trim((string)($experience['description'] ?? '')),
-            'category' => self::nonEmptyString($experience['category'] ?? null)
-                ?? 'game',
+            'category' => $category,
             'author' => self::nonEmptyString($experience['author'] ?? null),
             'version' => self::nonEmptyString($experience['version'] ?? null),
             'presentation' => [
@@ -89,7 +99,8 @@ final class ExperiencePresentation
                 'label' => self::backendLabel($backendType),
             ],
             'capabilities' => [
-                'multiplayer' => !empty($experience['capabilities']['multiplayer']),
+                'multiplayer' => $multiplayer,
+                'player_mode' => $playerMode,
             ],
             'capacity' => [
                 'max_sessions' => $maxSessions,
@@ -220,6 +231,7 @@ final class ExperiencePresentation
             ],
             'capabilities' => [
                 'multiplayer' => (bool)($view['capabilities']['multiplayer'] ?? false),
+                'player_mode' => $view['capabilities']['player_mode'] ?? null,
             ],
             'capacity' => [
                 'max_sessions' => $view['capacity']['max_sessions'],

@@ -49,15 +49,20 @@
                             </p>
 
                             <div class="d-flex flex-wrap gap-2">
-                                {% if view.capabilities.multiplayer %}
+                                {% if view.capabilities.player_mode == 'multiplayer' %}
                                     <span class="badge bg-secondary-subtle text-dark border">
                                         <i class="fas fa-users me-1" aria-hidden="true"></i>
                                         Multiplayer
                                     </span>
-                                {% else %}
+                                {% elseif view.capabilities.player_mode == 'single_player' %}
                                     <span class="badge bg-secondary-subtle text-dark border">
                                         <i class="fas fa-user me-1" aria-hidden="true"></i>
                                         Single Player
+                                    </span>
+                                {% else %}
+                                    <span class="badge bg-secondary-subtle text-dark border">
+                                        <i class="fas fa-door-open me-1" aria-hidden="true"></i>
+                                        {{ t('ui.webdoors.category_gateway', {}, locale, ['common']) }}
                                     </span>
                                 {% endif %}
 
