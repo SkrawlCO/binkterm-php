@@ -460,6 +460,18 @@ return [
     'ui.terminalserver.doors.end_confirm_title' => 'Mettre fin à la participation ?',
     'ui.terminalserver.doors.end_confirm_message' => 'Mettre fin à votre participation active à {name} ?',
     'ui.terminalserver.doors.end_failed' => 'Impossible de mettre fin à la participation : {error}',
+    'ui.terminalserver.doors.live_now_title' => 'En direct',
+    'ui.terminalserver.doors.live_now_summary' => '{players} utilisateurs dans {experiences} expériences',
+    'ui.terminalserver.doors.live_now_summary_1p' => '1 utilisateur dans {experiences} expériences',
+    'ui.terminalserver.doors.live_now_summary_1e' => '{players} utilisateurs dans 1 expérience',
+    'ui.terminalserver.doors.live_now_summary_1p_1e' => '1 utilisateur dans 1 expérience',
+    'ui.terminalserver.doors.live_now_quiet' => 'Crossroads est calme en ce moment.',
+    'ui.terminalserver.doors.live_now_player' => '1 utilisateur',
+    'ui.terminalserver.doors.live_now_players' => '{count} utilisateurs',
+    'ui.terminalserver.doors.live_now_sessions' => '{count}/{max} sessions',
+    'ui.terminalserver.doors.live_now_roster_more' => ' +{count} autres',
+    'ui.terminalserver.doors.live_now_prompt' => 'Sélectionnez une expérience ou Q pour revenir : ',
+    'ui.terminalserver.doors.live_now_empty' => 'Personne d\'autre n\'est actif dans une expérience en ce moment.',
 
     // --- Experience social layer (People / Conversation) ---
     'ui.terminalserver.doors.detail_action_people' => 'Personnes',

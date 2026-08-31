@@ -48,6 +48,35 @@ same read-model boundary available to web library and lobby consumers. Relay
 selection remains separate and continues to read the normalized
 `terminal.mode`; presentation data must never determine raw versus Doorway I/O.
 
+### Live Now arrival view (telnet Crossroads slice 4)
+
+`DoorHandler::show()` now uses one
+`ExperienceState::getExperienceStates($viewer, 'terminal')` collection read as
+the authorized source for both the terminal catalog and its Live Now arrival
+summary. The viewer context carries numeric `user_id` / `id` and `is_admin`.
+The returned snapshots already contain normalized distinct `player_count`,
+separate `session_count`, roster rows, and the authorized catalog entry, so the
+handler performs no per-Experience state queries.
+
+The first catalog item is **Live Now**. Its detail line reports the distinct
+callers present across included Experiences and the number of active
+Experiences, or a quiet-state message. Opening it runs `runLiveNowLoop()` using
+the existing shell `chooseFromList()` widget. Entries show only the Experience
+name, distinct caller count, session capacity where configured, and up to three
+roster names. Selecting an entry calls the existing `showExperienceDetail()`;
+Back returns to the Live Now loop, whose next iteration performs a fresh
+collection read. Returning to the catalog also refreshes its arrival snapshot.
+There is no polling or subscription.
+
+`composeLiveNow()` includes only snapshots whose normalized catalog entry has
+`actions.launch` and whose normalized `player_count` is positive. It
+deduplicates roster rows by numeric user id defensively. An Experience occupied
+only by the current viewer is excluded because that state belongs to future
+Continue Playing work, not social discovery. If any other distinct caller is
+present, the Experience remains in Live Now even when the viewer also
+participates. Authorization and terminal visibility remain owned by the
+collection-state catalog read.
+
 ### Experience detail screen (telnet Crossroads slice 1)
 
 Selecting an experience in the `DoorHandler` chooser now opens

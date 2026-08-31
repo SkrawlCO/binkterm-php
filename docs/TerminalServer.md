@@ -208,6 +208,15 @@ Stats are refreshed from the API after returning from netmail, echomail, or bull
   experiences configured for raw terminal handling preserve modern terminal
   input, ANSI output, and resize behavior; traditional doors continue to use
   Doorway-compatible handling.
+- The first catalog entry is **Live Now**, with a compact arrival summary of
+  how many distinct callers are gathering across active Experiences. Opening it
+  lists currently occupied terminal Experiences with caller count, session
+  capacity when configured, and a short roster preview. Selecting one opens its
+  existing Experience detail. Back returns to Live Now and refreshes the
+  current snapshot; returning to the catalog refreshes the arrival summary.
+  Experiences occupied only by the current caller are omitted so Live Now
+  describes social activity rather than acting as Continue Playing. A clear
+  quiet-state notice is shown when nobody else is active.
 - Selecting an experience from the menu opens an **experience detail screen**
   before anything launches. It shows the description, type, availability status,
   how many players are online (and the capacity limit when the experience has

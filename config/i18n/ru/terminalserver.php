@@ -581,6 +581,18 @@ return [
     'ui.terminalserver.doors.end_confirm_title' => 'Завершить участие?',
     'ui.terminalserver.doors.end_confirm_message' => 'Завершить активное участие в {name}?',
     'ui.terminalserver.doors.end_failed' => 'Не удалось завершить участие: {error}',
+    'ui.terminalserver.doors.live_now_title' => 'Сейчас активно',
+    'ui.terminalserver.doors.live_now_summary' => '{players} пользователей в {experiences} пространствах',
+    'ui.terminalserver.doors.live_now_summary_1p' => '1 пользователь в {experiences} пространствах',
+    'ui.terminalserver.doors.live_now_summary_1e' => '{players} пользователей в 1 пространстве',
+    'ui.terminalserver.doors.live_now_summary_1p_1e' => '1 пользователь в 1 пространстве',
+    'ui.terminalserver.doors.live_now_quiet' => 'На Crossroads сейчас тихо.',
+    'ui.terminalserver.doors.live_now_player' => '1 пользователь',
+    'ui.terminalserver.doors.live_now_players' => '{count} пользователей',
+    'ui.terminalserver.doors.live_now_sessions' => '{count}/{max} сессий',
+    'ui.terminalserver.doors.live_now_roster_more' => ' + ещё {count}',
+    'ui.terminalserver.doors.live_now_prompt' => 'Выберите пространство или Q для возврата: ',
+    'ui.terminalserver.doors.live_now_empty' => 'Сейчас больше никто не активен ни в одном пространстве.',
 
     // --- Experience social layer (People / Conversation) ---
     'ui.terminalserver.doors.detail_action_people' => 'Люди',

@@ -578,6 +578,18 @@ return [
     'ui.terminalserver.doors.end_confirm_title' => 'Teilnahme beenden?',
     'ui.terminalserver.doors.end_confirm_message' => 'Deine aktive Teilnahme an {name} beenden?',
     'ui.terminalserver.doors.end_failed' => 'Teilnahme konnte nicht beendet werden: {error}',
+    'ui.terminalserver.doors.live_now_title' => 'Jetzt aktiv',
+    'ui.terminalserver.doors.live_now_summary' => '{players} Anrufer in {experiences} Erlebnissen',
+    'ui.terminalserver.doors.live_now_summary_1p' => '1 Anrufer in {experiences} Erlebnissen',
+    'ui.terminalserver.doors.live_now_summary_1e' => '{players} Anrufer in 1 Erlebnis',
+    'ui.terminalserver.doors.live_now_summary_1p_1e' => '1 Anrufer in 1 Erlebnis',
+    'ui.terminalserver.doors.live_now_quiet' => 'An den Crossroads ist es gerade ruhig.',
+    'ui.terminalserver.doors.live_now_player' => '1 Anrufer',
+    'ui.terminalserver.doors.live_now_players' => '{count} Anrufer',
+    'ui.terminalserver.doors.live_now_sessions' => '{count}/{max} Sitzungen',
+    'ui.terminalserver.doors.live_now_roster_more' => ' +{count} weitere',
+    'ui.terminalserver.doors.live_now_prompt' => 'Erlebnis auswählen oder Q für zurück: ',
+    'ui.terminalserver.doors.live_now_empty' => 'Gerade ist niemand sonst in einem Erlebnis aktiv.',
 
     // --- Experience social layer (People / Conversation) ---
     'ui.terminalserver.doors.detail_action_people' => 'Leute',

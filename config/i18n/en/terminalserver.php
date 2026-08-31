@@ -580,6 +580,18 @@ return [
     'ui.terminalserver.doors.end_confirm_title' => 'End participation?',
     'ui.terminalserver.doors.end_confirm_message' => 'End your active participation in {name}?',
     'ui.terminalserver.doors.end_failed' => 'Unable to end participation: {error}',
+    'ui.terminalserver.doors.live_now_title' => 'Live Now',
+    'ui.terminalserver.doors.live_now_summary' => '{players} callers in {experiences} Experiences',
+    'ui.terminalserver.doors.live_now_summary_1p' => '1 caller in {experiences} Experiences',
+    'ui.terminalserver.doors.live_now_summary_1e' => '{players} callers in 1 Experience',
+    'ui.terminalserver.doors.live_now_summary_1p_1e' => '1 caller in 1 Experience',
+    'ui.terminalserver.doors.live_now_quiet' => 'The Crossroads are quiet right now.',
+    'ui.terminalserver.doors.live_now_player' => '1 caller',
+    'ui.terminalserver.doors.live_now_players' => '{count} callers',
+    'ui.terminalserver.doors.live_now_sessions' => '{count}/{max} sessions',
+    'ui.terminalserver.doors.live_now_roster_more' => ' +{count} more',
+    'ui.terminalserver.doors.live_now_prompt' => 'Select an Experience or Q to return: ',
+    'ui.terminalserver.doors.live_now_empty' => 'Nobody else is active in an Experience right now.',
 
     // --- Experience social layer (People / Conversation) ---
     'ui.terminalserver.doors.detail_action_people' => 'People',

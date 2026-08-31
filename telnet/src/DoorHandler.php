@@ -3,7 +3,6 @@
 namespace BinktermPHP\TelnetServer;
 
 use BinktermPHP\Config;
-use BinktermPHP\GameCatalog;
 use BinktermPHP\ExperienceActivity;
 use BinktermPHP\ExperienceParticipation;
 use BinktermPHP\ExperiencePresentation;
@@ -59,38 +58,51 @@ class DoorHandler
                 }
             }
         }
-        // Use the unified game catalog for terminal-visible experiences.
-        // Unlike the web surface, terminal includes doors marked hide_from_web.
-        $catalog = new GameCatalog();
-        $allDoors = $catalog->getEnabledGames(
-            ['is_admin' => !empty($state['is_admin'])],
-            'terminal'
-        );
-
-        if (empty($allDoors)) {
-            $shell->showText(
-                $conn,
-                $state,
-                $this->server->t('ui.terminalserver.doors.title', 'Games & Experiences', [], $state['locale']),
-                [$this->server->t('ui.terminalserver.doors.no_doors', 'No games or experiences are currently available.', [], $state['locale'])]
-            );
-            return;
-        }
-
-        // Convert associative catalog entries to the indexed list expected
-        // by the terminal chooser, preserving game IDs. Planned/unavailable
-        // entries remain discoverable through GameCatalog but are deferred
-        // from this launch-only chooser until the terminal detail slice.
-        $doorList = [];
-        foreach ($allDoors as $doorId => $game) {
-            if (empty($game['actions']['launch'])) {
-                continue;
-            }
-            $doorList[] = ['id' => $doorId, 'data' => $game];
-        }
+        $locale = $state['locale'] ?? 'en';
+        $t = function (string $key, array $params = [], string $fallback = '') use ($locale): string {
+            return $this->server->t($key, $fallback, $params, $locale);
+        };
+        $modelUser = [
+            'user_id' => (int)($state['user_id'] ?? 0),
+            'id' => (int)($state['user_id'] ?? 0),
+            'is_admin' => !empty($state['is_admin']),
+        ];
+        $experienceState = new ExperienceState();
 
         while (true) {
-            $items = [];
+            // One collection read owns both authorized terminal discovery and
+            // the Live Now arrival snapshot. Returning from either detail or
+            // Live Now reaches this boundary again and refreshes the snapshot.
+            $experienceStates = $experienceState->getExperienceStates(
+                $modelUser,
+                'terminal'
+            );
+
+            $doorList = [];
+            foreach ($experienceStates as $experienceId => $snapshot) {
+                $experience = $snapshot['experience'] ?? null;
+                if (!is_array($experience) || empty($experience['actions']['launch'])) {
+                    continue;
+                }
+                $doorList[] = ['id' => (string)$experienceId, 'data' => $experience];
+            }
+
+            if ($doorList === []) {
+                $shell->showText(
+                    $conn,
+                    $state,
+                    $t('ui.terminalserver.doors.title', [], 'Games & Experiences'),
+                    [$t('ui.terminalserver.doors.no_doors', [], 'No games or experiences are currently available.')]
+                );
+                return;
+            }
+
+            $liveNow = self::composeLiveNow(
+                $experienceStates,
+                (int)$modelUser['user_id'],
+                $t
+            );
+            $items = [self::buildLiveNowArrivalItem($liveNow, $t)];
             foreach ($doorList as $entry) {
                 $items[] = self::buildExperienceListItem(
                     $entry['id'],
@@ -112,7 +124,22 @@ class DoorHandler
                 return;
             }
 
-            $entry = $doorList[$selected];
+            if ($selected === 0) {
+                $reloadLiveNow = function () use ($experienceState, $modelUser, $t): array {
+                    return self::composeLiveNow(
+                        $experienceState->getExperienceStates($modelUser, 'terminal'),
+                        (int)$modelUser['user_id'],
+                        $t
+                    );
+                };
+                $openDetail = function (string $experienceId) use ($conn, &$state, $session, $shell): void {
+                    $this->showExperienceDetail($conn, $state, $session, $experienceId, $shell);
+                };
+                $this->runLiveNowLoop($conn, $state, $shell, $reloadLiveNow, $openDetail, $t);
+                continue;
+            }
+
+            $entry = $doorList[$selected - 1];
 
             // Selecting an experience now opens a terminal-native detail
             // screen instead of launching immediately. Play/Return happens
@@ -125,6 +152,233 @@ class DoorHandler
                 $shell
             );
             continue;
+        }
+    }
+
+    /**
+     * Compose the terminal Live Now arrival snapshot from one authorized
+     * collection-state read.
+     *
+     * Viewer-only occupancy is omitted because it communicates continuation,
+     * not social activity. An Experience remains live when any other distinct
+     * caller is present, including when the viewer is also participating.
+     *
+     * @param array<string,array<string,mixed>> $experienceStates
+     * @param callable(string,array<string,mixed>,string):string $t
+     * @return array{summary:string,entries:array<int,array<string,mixed>>,player_count:int,experience_count:int}
+     */
+    public static function composeLiveNow(
+        array $experienceStates,
+        int $viewerId,
+        callable $t
+    ): array {
+        $entries = [];
+        $activeUserIds = [];
+
+        foreach ($experienceStates as $experienceId => $snapshot) {
+            $experience = $snapshot['experience'] ?? null;
+            if (
+                !is_array($experience)
+                || empty($experience['actions']['launch'])
+                || (int)($snapshot['player_count'] ?? 0) <= 0
+            ) {
+                continue;
+            }
+
+            $distinctPlayers = [];
+            foreach ($snapshot['players'] ?? [] as $player) {
+                if (!is_array($player)) {
+                    continue;
+                }
+                $userId = (int)($player['user_id'] ?? 0);
+                if ($userId > 0 && !isset($distinctPlayers[$userId])) {
+                    $distinctPlayers[$userId] = $player;
+                }
+            }
+
+            if ($distinctPlayers === []) {
+                continue;
+            }
+
+            if (
+                count($distinctPlayers) === 1
+                && $viewerId > 0
+                && isset($distinctPlayers[$viewerId])
+            ) {
+                continue;
+            }
+
+            foreach (array_keys($distinctPlayers) as $userId) {
+                $activeUserIds[$userId] = true;
+            }
+
+            $entries[] = [
+                'id' => (string)$experienceId,
+                'experience' => $experience,
+                'player_count' => count($distinctPlayers),
+                'session_count' => (int)($snapshot['session_count'] ?? 0),
+                'players' => array_values($distinctPlayers),
+                'item' => self::buildLiveNowListItem(
+                    $experience,
+                    count($distinctPlayers),
+                    (int)($snapshot['session_count'] ?? 0),
+                    array_values($distinctPlayers),
+                    $t
+                ),
+            ];
+        }
+
+        usort(
+            $entries,
+            static fn(array $a, array $b): int => strcasecmp(
+                (string)($a['experience']['name'] ?? $a['id']),
+                (string)($b['experience']['name'] ?? $b['id'])
+            )
+        );
+
+        $playerCount = count($activeUserIds);
+        $experienceCount = count($entries);
+        if ($experienceCount === 0) {
+            $summary = $t(
+                'ui.terminalserver.doors.live_now_quiet',
+                [],
+                'The Crossroads are quiet right now.'
+            );
+        } elseif ($playerCount === 1 && $experienceCount === 1) {
+            $summary = $t(
+                'ui.terminalserver.doors.live_now_summary_1p_1e',
+                [],
+                '1 caller in 1 Experience'
+            );
+        } elseif ($playerCount === 1) {
+            $summary = $t(
+                'ui.terminalserver.doors.live_now_summary_1p',
+                ['experiences' => $experienceCount],
+                '1 caller in {experiences} Experiences'
+            );
+        } elseif ($experienceCount === 1) {
+            $summary = $t(
+                'ui.terminalserver.doors.live_now_summary_1e',
+                ['players' => $playerCount],
+                '{players} callers in 1 Experience'
+            );
+        } else {
+            $summary = $t(
+                'ui.terminalserver.doors.live_now_summary',
+                ['players' => $playerCount, 'experiences' => $experienceCount],
+                '{players} callers in {experiences} Experiences'
+            );
+        }
+
+        return [
+            'summary' => $summary,
+            'entries' => $entries,
+            'player_count' => $playerCount,
+            'experience_count' => $experienceCount,
+        ];
+    }
+
+    /** @return array{label:string,detail:string} */
+    public static function buildLiveNowArrivalItem(array $liveNow, callable $t): array
+    {
+        return [
+            'label' => $t('ui.terminalserver.doors.live_now_title', [], 'Live Now'),
+            'detail' => (string)($liveNow['summary'] ?? ''),
+        ];
+    }
+
+    /** @return array{label:string,detail:string} */
+    private static function buildLiveNowListItem(
+        array $experience,
+        int $playerCount,
+        int $sessionCount,
+        array $players,
+        callable $t
+    ): array {
+        $name = (string)($experience['name'] ?? $experience['id'] ?? '');
+        $maxSessions = (int)($experience['capacity']['max_sessions'] ?? 0);
+        $occupancy = $playerCount === 1
+            ? $t('ui.terminalserver.doors.live_now_player', [], '1 caller')
+            : $t(
+                'ui.terminalserver.doors.live_now_players',
+                ['count' => $playerCount],
+                '{count} callers'
+            );
+        if ($maxSessions > 0) {
+            $occupancy .= ' | ' . $t(
+                'ui.terminalserver.doors.live_now_sessions',
+                ['count' => $sessionCount, 'max' => $maxSessions],
+                '{count}/{max} sessions'
+            );
+        }
+
+        $names = [];
+        foreach ($players as $player) {
+            $username = trim((string)($player['username'] ?? ''));
+            if ($username !== '') {
+                $names[] = $username;
+            }
+            if (count($names) >= 3) {
+                break;
+            }
+        }
+        if ($names !== []) {
+            $occupancy .= ' | ' . implode(', ', $names);
+            if (count($players) > count($names)) {
+                $occupancy .= $t(
+                    'ui.terminalserver.doors.live_now_roster_more',
+                    ['count' => count($players) - count($names)],
+                    ' +{count} more'
+                );
+            }
+        }
+
+        return ['label' => $name, 'detail' => $occupancy];
+    }
+
+    /**
+     * Refresh and navigate the Live Now view. Detail Back returns here; the
+     * next loop iteration performs a fresh collection-state read.
+     *
+     * @param callable():array<string,mixed> $reload
+     * @param callable(string):void $openDetail
+     * @param callable(string,array<string,mixed>,string):string $t
+     */
+    private function runLiveNowLoop(
+        $conn,
+        array &$state,
+        TerminalShellInterface $shell,
+        callable $reload,
+        callable $openDetail,
+        callable $t
+    ): void {
+        while (true) {
+            $liveNow = $reload();
+            $entries = is_array($liveNow['entries'] ?? null) ? $liveNow['entries'] : [];
+            $items = array_values(array_map(
+                static fn(array $entry): array => $entry['item'],
+                $entries
+            ));
+
+            $selected = $shell->chooseFromList(
+                $conn,
+                $state,
+                $t('ui.terminalserver.doors.live_now_title', [], 'Live Now'),
+                $items,
+                [
+                    'prompt' => $t('ui.terminalserver.doors.live_now_prompt', [], 'Select an Experience or Q to return: '),
+                    'empty_message' => $t('ui.terminalserver.doors.live_now_empty', [], 'Nobody else is active in an Experience right now.'),
+                ]
+            );
+
+            if ($selected === null) {
+                return;
+            }
+
+            $experienceId = (string)($entries[$selected]['id'] ?? '');
+            if ($experienceId !== '') {
+                $openDetail($experienceId);
+            }
         }
     }
 
