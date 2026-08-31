@@ -227,6 +227,85 @@ final class ExperienceReturnContractTest extends TestCase
     }
 
 
+    public function testManagedDoorResumeRecordsADoorPlayFootprint(): void
+    {
+        // A resumed managed session is a genuine Experience re-entry and must
+        // record a door-play footprint, exactly like a fresh launch. The write
+        // must live inside the resume branch (after the resume log line, before
+        // the resume response is emitted).
+        $routes = file_get_contents(
+            dirname(__DIR__, 2) . '/routes/door-routes.php'
+        );
+
+        self::assertIsString($routes);
+
+        $resumeLog = strpos($routes, 'Resuming existing session:');
+        $resumeRecord = strpos(
+            $routes,
+            'DoorPlayActivity::record(',
+            $resumeLog === false ? 0 : $resumeLog
+        );
+        $resumeResponse = strpos($routes, "'ui.api.door.session_resumed'");
+
+        self::assertNotFalse($resumeLog);
+        self::assertNotFalse($resumeRecord);
+        self::assertNotFalse($resumeResponse);
+
+        self::assertLessThan(
+            $resumeResponse,
+            $resumeRecord,
+            'Resume branch must record the door-play footprint before returning the resumed session.'
+        );
+
+        self::assertStringContainsString(
+            'use BinktermPHP\Crossroads\DoorPlayActivity;',
+            $routes
+        );
+    }
+
+    public function testManagedDoorLaunchAndResumeUseTheDoorPlayContractNotRawTracking(): void
+    {
+        // Both managed door-play write sites go through the de-duplicating
+        // DoorPlayActivity contract; neither writes TYPE_DOSDOOR_PLAY directly
+        // via ActivityTracker::track() any more.
+        $routes = file_get_contents(
+            dirname(__DIR__, 2) . '/routes/door-routes.php'
+        );
+
+        self::assertIsString($routes);
+
+        self::assertSame(
+            2,
+            substr_count($routes, 'DoorPlayActivity::record('),
+            'Expected exactly the fresh-launch and resume door-play footprints.'
+        );
+
+        self::assertStringNotContainsString(
+            'ActivityTracker::track($doorContext->userId, ActivityTracker::TYPE_DOSDOOR_PLAY',
+            $routes
+        );
+    }
+
+    public function testWebDoorAndJsdosPlaySitesUseTheDoorPlayContract(): void
+    {
+        $routes = file_get_contents(
+            dirname(__DIR__, 2) . '/routes/webdoor-routes.php'
+        );
+
+        self::assertIsString($routes);
+
+        self::assertSame(
+            2,
+            substr_count($routes, 'DoorPlayActivity::record('),
+            'Expected the JS-DOS session and WebDoor session play footprints.'
+        );
+
+        self::assertStringNotContainsString(
+            'ActivityTracker::track($userId, ActivityTracker::TYPE_WEBDOOR_PLAY',
+            $routes
+        );
+    }
+
     public function testDoorPresenceOwnerFollowsAuthenticatedLaunchAndResume(): void
     {
         $routes = file_get_contents(

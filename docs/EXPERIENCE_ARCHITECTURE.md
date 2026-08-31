@@ -194,11 +194,12 @@ The sections render in this order, with distinct membership rules:
   when older plays exist even though they collapsed out.
   It is **historical evidence, not live presence** — "quiet now" does not mean
   the place is dead. It carries no "since your last visit" semantics, no session
-  duration, no leave/logout time, no launch-vs-return, and no surface label,
-  because the underlying activity data does not record those as lifecycle truth.
-  The known activity-data limitation that managed doors record a play on a fresh
-  session but not on resume is not corrected here. Hidden entirely when there is
-  nothing to show — it is not an empty-state card, and it is not a feed.
+  duration, no leave/logout time, and no surface label, because the underlying
+  activity data does not record those as lifecycle truth. A door-play footprint
+  means only that the user entered or returned to the Experience (see
+  **Door-play activity semantics** below); the section does not label a row as
+  launch versus return even though both are now recorded. Hidden entirely when
+  there is nothing to show — it is not an empty-state card, and it is not a feed.
   The authenticated **telnet** Crossroads arrival mirrors this section between
   Your Places and the Experiences catalog: the same `recentAcrossCatalog()`
   semantics and five-row cap, scoped to the viewer's authorized *telnet* catalog
@@ -216,6 +217,40 @@ The sections render in this order, with distinct membership rules:
   through historical activity when discovery policy hides it from that viewer.
   Filtering affects presentation and score submission authorization only;
   historical score records remain stored.
+
+### Door-play activity semantics
+
+Door-play activity records successful Experience entry/return and is historical
+event data, independent of presence and session continuity.
+
+A `user_activity_log` row of type `webdoor_play` / `dosdoor_play`
+(`ActivityTracker::TYPE_WEBDOOR_PLAY` / `TYPE_DOSDOOR_PLAY`) means exactly:
+
+> The user entered or returned to this Experience.
+
+It does **not** imply that a new runtime or session was created, that the user
+completed anything, or anything about duration, score, progress, current
+presence, or resumability. Every managed door-play write site records the
+footprint — the fresh managed launch **and** the resume branch in
+`routes/door-routes.php`, the JS-DOS session endpoint, and the WebDoor
+get-or-create session endpoint in `routes/webdoor-routes.php`.
+
+All of those routes are re-hit on a browser reload, bfcache restore, or double
+request, so a single genuine entry can arrive several times within seconds.
+`BinktermPHP\Crossroads\DoorPlayActivity::record()` is the one shared contract
+for these writes: a footprint for the same
+`(user_id, activity_type_id, object_name)` written within
+`DoorPlayActivity::DEDUP_WINDOW_SECONDS` (60 seconds) is not repeated. A
+deliberate later return, outside that window, records normally. The suppression
+is scoped to door-play only — it does not touch `ActivityTracker::track()` and no
+other activity type is affected; `webdoor_play` and `dosdoor_play` never suppress
+one another, and activity for a different Experience or a different user is never
+suppressed.
+
+This write-time storm guard is distinct from the purely structural
+distinct-`(user, Experience)`-pair collapsing that
+`ExperienceActivity::recentAcrossCatalog()` applies at read time for
+arrival-page composition — that read behavior is unchanged.
 
 ### Dashboard Crossroads pulse
 

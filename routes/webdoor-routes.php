@@ -9,6 +9,7 @@
 use BinktermPHP\ActivityTracker;
 use BinktermPHP\Auth;
 use BinktermPHP\BbsConfig;
+use BinktermPHP\Crossroads\DoorPlayActivity;
 use BinktermPHP\DoorManager;
 use BinktermPHP\GameConfig;
 use BinktermPHP\JsdosDoorConfig;
@@ -589,7 +590,7 @@ SimpleRouter::post('/api/jsdoor/session', function() {
         $userDataJson = json_encode(['mode' => $requestedMode]);
         $stmt->execute([$sessionId, $userId, $entry['id'], $expiresAt, $userDataJson]);
 
-        ActivityTracker::track($userId, ActivityTracker::TYPE_WEBDOOR_PLAY, null, $entry['id']);
+        DoorPlayActivity::record($userId, ActivityTracker::TYPE_WEBDOOR_PLAY, (string)$entry['id']);
 
         echo json_encode([
             'success'    => true,
@@ -1074,14 +1075,19 @@ SimpleRouter::get('/api/webdoor/session', function() {
     $controller = new WebDoorController();
     $result = $controller->getSession();
 
-    // Track webdoor play session (only when the session endpoint returns successfully)
+    // Record the Experience entry (create OR reuse). DoorPlayActivity collapses
+    // reload/double-request repeats within a short window.
     if (!empty($result['session_id'])) {
         $auth = new Auth();
         $user = $auth->getCurrentUser();
         if ($user) {
-            $userId = $user['user_id'] ?? $user['id'] ?? null;
+            $userId = (int)($user['user_id'] ?? $user['id'] ?? 0);
             $gameId = $result['game']['id'] ?? null;
-            ActivityTracker::track($userId, ActivityTracker::TYPE_WEBDOOR_PLAY, null, $gameId);
+            DoorPlayActivity::record(
+                $userId,
+                ActivityTracker::TYPE_WEBDOOR_PLAY,
+                $gameId === null ? null : (string)$gameId
+            );
         }
     }
 

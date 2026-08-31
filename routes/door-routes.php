@@ -12,6 +12,7 @@ use BinktermPHP\ExperienceLaunch;
 use BinktermPHP\GameCatalog;
 use BinktermPHP\DoorSessionManager;
 use BinktermPHP\DoorCapacityException;
+use BinktermPHP\Crossroads\DoorPlayActivity;
 use BinktermPHP\DoorManager;
 use BinktermPHP\NativeDoorManager;
 use BinktermPHP\RLoginDoorManager;
@@ -232,6 +233,15 @@ SimpleRouter::post('/api/door/launch', function() {
 
             publishDoorExperiencePresence($doorContext, $user);
 
+            // A resumed session is still an Experience entry — record it the same
+            // as a fresh launch. DoorPlayActivity collapses reload/double-request
+            // repeats within a short window.
+            DoorPlayActivity::record(
+                $doorContext->userId,
+                ActivityTracker::TYPE_DOSDOOR_PLAY,
+                (string)$doorName
+            );
+
             echo json_encode([
                 'success' => true,
                 'session' => [
@@ -410,7 +420,11 @@ SimpleRouter::post('/api/door/launch', function() {
         );
 
         publishDoorExperiencePresence($doorContext, $user);
-        ActivityTracker::track($doorContext->userId, ActivityTracker::TYPE_DOSDOOR_PLAY, null, $doorName);
+        DoorPlayActivity::record(
+            $doorContext->userId,
+            ActivityTracker::TYPE_DOSDOOR_PLAY,
+            (string)$doorName
+        );
 
         // Build WebSocket URL for browser
         $wsUrl = \BinktermPHP\Config::env('DOSDOOR_WS_URL');
