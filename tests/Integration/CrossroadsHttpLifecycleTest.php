@@ -246,16 +246,32 @@ final class CrossroadsHttpLifecycleTest extends TestCase
                 playtime_seconds INTEGER NOT NULL DEFAULT 0
             );
 
+            -- Full column set matching the real door_sessions schema (base
+            -- migration + later ALTERs). The app bootstrap runs
+            -- DoorSessionManager::cleanExpiredSessions() on ~5% of every request
+            -- (public_html/index.php), which UPDATEs exit_status here, so a
+            -- partial fixture makes unrelated requests randomly 500. Mirrors the
+            -- door_sessions fixture in DoorSessionRuntimeHandoffTest /
+            -- DoorSessionManagerAdmissionTest / CrossroadsManagedDoorConcurrencyTest.
             CREATE TABLE door_sessions (
-                session_id VARCHAR(128) PRIMARY KEY,
+                id BIGSERIAL PRIMARY KEY,
+                session_id VARCHAR(128) UNIQUE NOT NULL,
                 user_id BIGINT NOT NULL REFERENCES users(id),
                 door_id VARCHAR(100) NOT NULL,
+                node_number INTEGER NOT NULL,
+                tcp_port INTEGER,
+                ws_port INTEGER NOT NULL,
+                ws_token VARCHAR(128),
+                dosbox_pid INTEGER,
+                bridge_pid INTEGER,
+                session_path VARCHAR(255),
+                user_data JSONB,
                 door_type VARCHAR(20),
-                node_number INTEGER,
+                auth_session_id VARCHAR(128),
                 started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                expires_at TIMESTAMPTZ NOT NULL,
                 ended_at TIMESTAMPTZ,
-                auth_session_id VARCHAR(128)
+                expires_at TIMESTAMPTZ NOT NULL,
+                exit_status VARCHAR(50)
             );
 
             CREATE TABLE user_activity_log (
