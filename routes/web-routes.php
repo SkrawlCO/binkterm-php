@@ -452,14 +452,17 @@ SimpleRouter::get('/', function() {
     if (\BinktermPHP\Crossroads\DashboardPulse::shouldCompose($crossroadsAvailable, $dashboardLayout)) {
         try {
             $experienceStates = (new ExperienceState())->getExperienceStates($user, 'web');
-            $recentFootprints = (new \BinktermPHP\ExperienceActivity())->recentAcrossCatalog(
-                array_column($experienceStates, 'experience'),
-                1
-            );
+            $authorizedCatalog = array_column($experienceStates, 'experience');
+            $experienceActivity = new \BinktermPHP\ExperienceActivity();
+            $recentFootprints = $experienceActivity->recentAcrossCatalog($authorizedCatalog, 1);
+            // One extra viewer-scoped read: the viewer's own newest authorized
+            // play footprint, for the "You played …" personal-continuity state.
+            $viewerRecentFootprints = $experienceActivity->recentForUser($authorizedCatalog, $userId, 1);
             $crossroadsPulse = \BinktermPHP\Crossroads\DashboardPulse::compose(
                 $experienceStates,
                 $userId,
-                $recentFootprints
+                $recentFootprints,
+                $viewerRecentFootprints
             );
         } catch (\Throwable $e) {
             getServerLogger()->warning('Dashboard Crossroads pulse failed: ' . $e->getMessage());

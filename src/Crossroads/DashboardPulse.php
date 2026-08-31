@@ -19,8 +19,15 @@ use BinktermPHP\ExperienceParticipation;
  * Priority (first match wins):
  *   1. participating — the viewer has an active session somewhere
  *   2. others        — distinct other people are participating right now
- *   3. recent        — the newest authorized play footprint
- *   4. quiet         — nothing to show
+ *   3. recent_self   — the viewer's own newest authorized play footprint
+ *                      (historical personal relationship: "You played …")
+ *   4. recent        — the community's newest authorized play footprint
+ *   5. quiet         — nothing to show
+ *
+ * `recent_self` is historical relationship ONLY. It must never be presented as
+ * current participation, resumability / Return, saved progress, current
+ * presence, duration, or completion — the composed view model carries no such
+ * fields, and the partial renders a bare "You played {Experience} {when}".
  */
 final class DashboardPulse
 {
@@ -45,17 +52,22 @@ final class DashboardPulse
      * @param int $viewerId Numeric id of the authenticated viewer.
      * @param array<int,array<string,mixed>> $recentFootprints
      *     ExperienceActivity::recentAcrossCatalog() result, newest first.
+     * @param array<int,array<string,mixed>> $viewerRecentFootprints
+     *     ExperienceActivity::recentForUser() result for this viewer, newest
+     *     first. Already authorization-scoped to the viewer's web catalog.
      * @return array{
-     *     state: 'participating'|'others'|'recent'|'quiet',
+     *     state: 'participating'|'others'|'recent_self'|'recent'|'quiet',
      *     viewer?: array{experience_id:string,experience_name:string},
      *     others?: array<int,array{username:string,experience_id:string,experience_name:string}>,
+     *     recent_self?: array{experience_id:string,experience_name:string,occurred_at:string},
      *     recent?: array{username:string,experience_id:string,experience_name:string,first_play:bool}
      * }
      */
     public static function compose(
         array $experienceStates,
         int $viewerId,
-        array $recentFootprints
+        array $recentFootprints,
+        array $viewerRecentFootprints = []
     ): array {
         // 1. Is the viewer participating anywhere? Priority over everything.
         if ($viewerId > 0) {
@@ -132,7 +144,36 @@ final class DashboardPulse
             ];
         }
 
-        // 3. Newest authorized recent play footprint.
+        // 3. The viewer's own most-recent authorized play footprint — shown
+        //    when nobody more immediate is around. Historical relationship
+        //    only ("You played …"): no presence, Return, progress, or duration.
+        if ($viewerId > 0) {
+            foreach ($viewerRecentFootprints as $footprint) {
+                if (!is_array($footprint)) {
+                    continue;
+                }
+
+                $experienceId = trim((string)($footprint['experience_id'] ?? ''));
+                $occurredAt = trim((string)($footprint['occurred_at'] ?? ''));
+
+                if ($experienceId === '' || $occurredAt === '') {
+                    continue;
+                }
+
+                $experienceName = trim((string)($footprint['experience_name'] ?? ''));
+
+                return [
+                    'state' => 'recent_self',
+                    'recent_self' => [
+                        'experience_id' => $experienceId,
+                        'experience_name' => $experienceName !== '' ? $experienceName : $experienceId,
+                        'occurred_at' => $occurredAt,
+                    ],
+                ];
+            }
+        }
+
+        // 4. The community's newest authorized recent play footprint.
         foreach ($recentFootprints as $footprint) {
             if (!is_array($footprint)) {
                 continue;
@@ -158,7 +199,7 @@ final class DashboardPulse
             ];
         }
 
-        // 4. Nothing to show.
+        // 5. Nothing to show.
         return ['state' => 'quiet'];
     }
 

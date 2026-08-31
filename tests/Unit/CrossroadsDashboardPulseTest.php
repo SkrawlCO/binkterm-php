@@ -56,6 +56,18 @@ final class CrossroadsDashboardPulseTest extends TestCase
         ];
     }
 
+    /** @return array<string,mixed> */
+    private function selfFootprint(string $expId, string $expName, string $occurredAt = '2026-08-30 12:00:00+00'): array
+    {
+        return [
+            'id' => 5,
+            'user_id' => self::VIEWER,
+            'experience_id' => $expId,
+            'experience_name' => $expName,
+            'occurred_at' => $occurredAt,
+        ];
+    }
+
     public function testShouldComposeOnlyWhenAvailableAndNotHidden(): void
     {
         $notHidden = ['main' => ['crossroads'], 'sidebar' => [], 'hidden' => []];
@@ -194,6 +206,140 @@ final class CrossroadsDashboardPulseTest extends TestCase
             ['wordle' => $this->state('wordle', 'Wordle', [])],
             self::VIEWER,
             []
+        );
+
+        self::assertSame(['state' => 'quiet'], $pulse);
+    }
+
+    // ---- recent_self: viewer's own historical personal relationship ----
+
+    public function testViewerParticipatingStillWinsOverPersonalHistory(): void
+    {
+        $states = [
+            'greendragon' => $this->state('greendragon', 'Green Dragon', [[self::VIEWER, 'me']]),
+        ];
+
+        $pulse = DashboardPulse::compose(
+            $states,
+            self::VIEWER,
+            [$this->footprint('lord', 'Legend of the Red Dragon', 'bard')],
+            [$this->selfFootprint('wordle', 'Wordle')]
+        );
+
+        self::assertSame('participating', $pulse['state']);
+        self::assertArrayNotHasKey('recent_self', $pulse);
+    }
+
+    public function testOtherActivePeopleStillWinOverPersonalHistory(): void
+    {
+        $states = [
+            'lord' => $this->state('lord', 'Legend of the Red Dragon', [[7, 'kadmin']]),
+        ];
+
+        $pulse = DashboardPulse::compose(
+            $states,
+            self::VIEWER,
+            [],
+            [$this->selfFootprint('wordle', 'Wordle')]
+        );
+
+        self::assertSame('others', $pulse['state']);
+        self::assertArrayNotHasKey('recent_self', $pulse);
+    }
+
+    public function testViewerPersonalHistoryWinsOverCommunityRecent(): void
+    {
+        $states = ['wordle' => $this->state('wordle', 'Wordle', [])];
+
+        $pulse = DashboardPulse::compose(
+            $states,
+            self::VIEWER,
+            [$this->footprint('lord', 'Legend of the Red Dragon', 'bard')],
+            [$this->selfFootprint('usurper', 'Usurper Reborn', '2026-08-30 09:30:00+00')]
+        );
+
+        self::assertSame('recent_self', $pulse['state']);
+        self::assertSame('usurper', $pulse['recent_self']['experience_id']);
+        self::assertSame('Usurper Reborn', $pulse['recent_self']['experience_name']);
+        self::assertSame('2026-08-30 09:30:00+00', $pulse['recent_self']['occurred_at']);
+        // Historical relationship only — no presence/return/progress fields.
+        self::assertSame(
+            ['experience_id', 'experience_name', 'occurred_at'],
+            array_keys($pulse['recent_self'])
+        );
+        self::assertArrayNotHasKey('recent', $pulse);
+    }
+
+    public function testNewestViewerFootprintIsSelectedWhenSeveralAreProvided(): void
+    {
+        // recentForUser() returns newest first; compose() takes the first usable.
+        $pulse = DashboardPulse::compose(
+            ['wordle' => $this->state('wordle', 'Wordle', [])],
+            self::VIEWER,
+            [],
+            [
+                $this->selfFootprint('lord', 'Legend of the Red Dragon', '2026-08-30 18:00:00+00'),
+                $this->selfFootprint('usurper', 'Usurper Reborn', '2026-08-30 08:00:00+00'),
+            ]
+        );
+
+        self::assertSame('recent_self', $pulse['state']);
+        self::assertSame('lord', $pulse['recent_self']['experience_id']);
+    }
+
+    public function testNoViewerHistoryFallsThroughToCommunityRecent(): void
+    {
+        $pulse = DashboardPulse::compose(
+            ['wordle' => $this->state('wordle', 'Wordle', [])],
+            self::VIEWER,
+            [$this->footprint('lord', 'Legend of the Red Dragon', 'bard')],
+            []
+        );
+
+        self::assertSame('recent', $pulse['state']);
+        self::assertSame('bard', $pulse['recent']['username']);
+    }
+
+    public function testNoViewerAndNoCommunityHistoryFallsThroughToQuiet(): void
+    {
+        $pulse = DashboardPulse::compose(
+            ['wordle' => $this->state('wordle', 'Wordle', [])],
+            self::VIEWER,
+            [],
+            []
+        );
+
+        self::assertSame(['state' => 'quiet'], $pulse);
+    }
+
+    public function testMalformedViewerFootprintRowsAreSkipped(): void
+    {
+        $pulse = DashboardPulse::compose(
+            ['wordle' => $this->state('wordle', 'Wordle', [])],
+            self::VIEWER,
+            [],
+            [
+                'not-an-array',
+                ['experience_id' => '', 'occurred_at' => '2026-08-30 12:00:00+00'],
+                ['experience_id' => 'lord', 'occurred_at' => ''],
+                ['experience_id' => 'usurper', 'experience_name' => '', 'occurred_at' => '2026-08-30 12:00:00+00'],
+            ]
+        );
+
+        // First two rows are unusable; the third lacks a timestamp; the fourth
+        // is usable and its name falls back to the id.
+        self::assertSame('recent_self', $pulse['state']);
+        self::assertSame('usurper', $pulse['recent_self']['experience_id']);
+        self::assertSame('usurper', $pulse['recent_self']['experience_name']);
+    }
+
+    public function testViewerFootprintIgnoredForAnonymousViewer(): void
+    {
+        $pulse = DashboardPulse::compose(
+            ['wordle' => $this->state('wordle', 'Wordle', [])],
+            0,
+            [],
+            [$this->selfFootprint('wordle', 'Wordle')]
         );
 
         self::assertSame(['state' => 'quiet'], $pulse);

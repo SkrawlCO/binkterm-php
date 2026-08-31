@@ -19,6 +19,7 @@ final class CrossroadsDashboardWiringTest extends TestCase
         'ui.dashboard.card.crossroads',
         'ui.dashboard.crossroads.you_are_in',
         'ui.dashboard.crossroads.playing',
+        'ui.dashboard.crossroads.you_played',
         'ui.dashboard.crossroads.enter',
     ];
 
@@ -95,5 +96,44 @@ final class CrossroadsDashboardWiringTest extends TestCase
             '/\{%\s*if\s+crossroads_available[^%]*%\}\s*\{%\s*include\s+\'partials\/dashboard_crossroads_pulse\.twig\'\s*%\}/',
             $dashboard
         );
+    }
+
+    public function testDashboardRouteFeedsViewerScopedRecentIntoThePulse(): void
+    {
+        $route = file_get_contents(dirname(__DIR__, 2) . '/routes/web-routes.php');
+        self::assertIsString($route);
+
+        // The viewer's own most-recent authorized footprint is read and passed
+        // to compose() as the fourth argument for the "You played …" state.
+        self::assertStringContainsString(
+            '$experienceActivity->recentForUser($authorizedCatalog, $userId, 1)',
+            $route
+        );
+        self::assertStringContainsString('$viewerRecentFootprints', $route);
+        self::assertMatchesRegularExpression(
+            '/DashboardPulse::compose\(\s*\$experienceStates,\s*\$userId,\s*\$recentFootprints,\s*\$viewerRecentFootprints\s*\)/',
+            $route
+        );
+    }
+
+    public function testPersonalContinuityWordingCarriesNoReturnOrResumeSemantics(): void
+    {
+        $partial = file_get_contents(
+            dirname(__DIR__, 2) . '/templates/partials/dashboard_crossroads_pulse.twig'
+        );
+        self::assertIsString($partial);
+
+        // The recent_self branch links to the canonical Experience destination
+        // and shows relative time — but never a Return control or resume copy.
+        $selfBranch = substr(
+            $partial,
+            (int)strpos($partial, "pulse.state == 'recent_self'"),
+            (int)strpos($partial, "pulse.state == 'recent'") - (int)strpos($partial, "pulse.state == 'recent_self'")
+        );
+
+        self::assertStringContainsString('/experiences/{{ pulse.recent_self.experience_id|url_encode }}', $selfBranch);
+        self::assertStringContainsString("t('ui.dashboard.crossroads.you_played'", $selfBranch);
+        self::assertStringNotContainsString("ui.webdoors.return", $selfBranch);
+        self::assertStringNotContainsString('btn-primary', $selfBranch);
     }
 }

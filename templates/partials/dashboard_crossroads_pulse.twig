@@ -10,7 +10,12 @@
     Crossroads is available and the viewer has not hidden this card. When it is
     absent the card body simply shows the quiet line.
 
-    Priority: participating > others > recent > quiet.
+    Priority: participating > others > recent_self > recent > quiet.
+
+    `recent_self` is historical personal relationship only — "You played
+    {Experience} {when}", linking to the canonical Experience destination. It
+    does NOT mean current participation, Return/resume, saved progress, presence,
+    duration, or completion, so it carries no Return button and no live wording.
 #}
 {% set pulse = crossroads_pulse|default({'state': 'quiet'}) %}
 <div class="dash-card-wrapper" data-card-id="crossroads">
@@ -44,6 +49,25 @@
                 </li>
                 {% endfor %}
             </ul>
+        {% elseif pulse.state == 'recent_self' %}
+            {% set elapsed = ('now'|date('U')) - (pulse.recent_self.occurred_at|date('U')) %}
+            {%- if elapsed < 60 -%}
+                {% set relative_time = t('time.just_now', {}, locale, ['common']) %}
+            {%- elseif elapsed < 3600 -%}
+                {% set relative_time = t('time.minutes_ago', {'count': (elapsed // 60)}, locale, ['common']) %}
+            {%- elseif elapsed < 86400 -%}
+                {% set elapsed_hours = elapsed // 3600 %}
+                {% set relative_time = t('time.hours_ago', {'count': elapsed_hours, 'suffix': (elapsed_hours == 1 ? t('time.suffix_singular', {}, locale, ['common']) : t('time.suffix_plural', {}, locale, ['common']))}, locale, ['common']) %}
+            {%- elseif elapsed < 172800 -%}
+                {% set relative_time = t('time.yesterday', {}, locale, ['common']) %}
+            {%- else -%}
+                {% set relative_time = t('time.days_ago', {'count': (elapsed // 86400)}, locale, ['common']) %}
+            {%- endif -%}
+            <div class="small text-muted">
+                {{ t('ui.dashboard.crossroads.you_played', {}, locale, ['common']) }}
+                <a class="text-decoration-none" href="/experiences/{{ pulse.recent_self.experience_id|url_encode }}">{{ pulse.recent_self.experience_name }}</a>
+                · {{ relative_time }}
+            </div>
         {% elseif pulse.state == 'recent' %}
             <div class="small text-muted">
                 <span class="fw-semibold">{{ pulse.recent.username }}</span>

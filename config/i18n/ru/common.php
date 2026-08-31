@@ -4082,6 +4082,7 @@ return [
     'ui.dashboard.card.crossroads' => 'Crossroads',
     'ui.dashboard.crossroads.you_are_in' => 'Вы в',
     'ui.dashboard.crossroads.playing' => 'играет в',
+    'ui.dashboard.crossroads.you_played' => 'Вы играли в',
     'ui.dashboard.crossroads.enter' => 'Войти в Crossroads',
 
     // Настройки

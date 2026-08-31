@@ -3373,6 +3373,7 @@ Vous pouvez envoyer des rappels individuels en utilisant les boutons « Rappeler
     'ui.dashboard.card.crossroads' => 'Crossroads',
     'ui.dashboard.crossroads.you_are_in' => 'Vous êtes dans',
     'ui.dashboard.crossroads.playing' => 'joue à',
+    'ui.dashboard.crossroads.you_played' => 'Vous avez joué à',
     'ui.dashboard.crossroads.enter' => 'Entrer dans le Crossroads',
     'ui.dashboard.networks' => 'Réseaux',
     'ui.dashboard.registered_users' => 'Utilisateurs enregistrés',

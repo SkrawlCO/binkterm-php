@@ -170,28 +170,7 @@ final class ExperienceActivity
     {
         $limit = max(1, min($limit, 25));
 
-        // Allow-list keyed by backend id; remember the current catalog id (for
-        // linking) and current name (for presentation). First entry wins on the
-        // unlikely event of a backend-id collision across backend types.
-        $nameByBackendId = [];
-        $idByBackendId = [];
-
-        foreach ($experiences as $experience) {
-            if (!is_array($experience)) {
-                continue;
-            }
-
-            $backendId = trim((string)($experience['backend']['id'] ?? ''));
-            $catalogId = trim((string)($experience['id'] ?? ''));
-
-            if ($backendId === '' || $catalogId === '' || isset($nameByBackendId[$backendId])) {
-                continue;
-            }
-
-            $name = trim((string)($experience['name'] ?? ''));
-            $nameByBackendId[$backendId] = $name !== '' ? $name : $catalogId;
-            $idByBackendId[$backendId] = $catalogId;
-        }
+        [$nameByBackendId, $idByBackendId] = $this->buildCatalogAllowList($experiences);
 
         if ($nameByBackendId === []) {
             return [];
@@ -268,5 +247,144 @@ final class ExperienceActivity
         }
 
         return $activity;
+    }
+
+    /**
+     * The viewer's own single most-recent authorized Experience play footprint
+     * — the read behind the dashboard Crossroads pulse "You played …" personal
+     * continuity state.
+     *
+     * This is a **historical personal relationship** only. A returned row means
+     * the viewer entered or returned to that Experience at that time (see the
+     * door-play activity contract in `docs/EXPERIENCE_ARCHITECTURE.md`) and
+     * nothing more: not current participation, not resumability / Return, not
+     * saved progress or a persisted character, not current presence, not
+     * duration, not completion.
+     *
+     * Authorization is identical to {@see recentAcrossCatalog()}: the caller
+     * passes its own already-authorized catalog (e.g. the `experience` column of
+     * `ExperienceState::getExperienceStates($user, 'web')`). A footprint whose
+     * backend id is not in that catalog — disabled, hidden, admin-only, removed,
+     * renamed/orphaned, or never authorized for this viewer — simply never
+     * matches and cannot leak onto the dashboard. The presentation name is
+     * always the CURRENT catalog name, never the stale snapshot on the row. No
+     * historical row is mutated, pruned, or backfilled.
+     *
+     * Both existing play activity types are consulted
+     * ({@see ActivityTracker::TYPE_WEBDOOR_PLAY},
+     * {@see ActivityTracker::TYPE_DOSDOOR_PLAY}); no new event semantics. This
+     * adds no table, endpoint, cache, or realtime mechanism.
+     *
+     * Ordering is deterministic, newest first (`created_at DESC, id DESC`).
+     *
+     * @param array<mixed> $experiences Authorized normalized Experiences,
+     *     keyed or a list.
+     * @param int $userId Numeric id of the authenticated viewer; <= 0 yields [].
+     * @param int $limit Requested cap; bounded defensively to at most 5.
+     * @return array<int,array{
+     *     id:int,
+     *     user_id:int,
+     *     experience_id:string,
+     *     experience_name:string,
+     *     occurred_at:string
+     * }>
+     */
+    public function recentForUser(array $experiences, int $userId, int $limit = 1): array
+    {
+        if ($userId <= 0) {
+            return [];
+        }
+
+        $limit = max(1, min($limit, 5));
+
+        [$nameByBackendId, $idByBackendId] = $this->buildCatalogAllowList($experiences);
+
+        if ($nameByBackendId === []) {
+            return [];
+        }
+
+        $backendIds = array_keys($nameByBackendId);
+        $inPlaceholders = implode(',', array_fill(0, count($backendIds), '?'));
+
+        $stmt = $this->db->prepare("
+            SELECT
+                al.id,
+                al.user_id,
+                al.object_name,
+                al.created_at
+            FROM user_activity_log al
+            WHERE al.activity_type_id IN (?, ?)
+              AND al.user_id = ?
+              AND al.object_name IN ({$inPlaceholders})
+            ORDER BY al.created_at DESC, al.id DESC
+            LIMIT {$limit}
+        ");
+
+        $params = [
+            ActivityTracker::TYPE_WEBDOOR_PLAY,
+            ActivityTracker::TYPE_DOSDOOR_PLAY,
+            $userId,
+        ];
+        foreach ($backendIds as $backendId) {
+            $params[] = $backendId;
+        }
+        $stmt->execute($params);
+
+        $activity = [];
+
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $backendId = (string)$row['object_name'];
+
+            // Defensive: a row can only reach here if its object_name is in the
+            // authorized allow-list, but re-assert before presenting.
+            if (!isset($nameByBackendId[$backendId])) {
+                continue;
+            }
+
+            $activity[] = [
+                'id' => (int)$row['id'],
+                'user_id' => (int)$row['user_id'],
+                'experience_id' => $idByBackendId[$backendId],
+                'experience_name' => $nameByBackendId[$backendId],
+                'occurred_at' => (string)$row['created_at'],
+            ];
+        }
+
+        return $activity;
+    }
+
+    /**
+     * Build the authorized-catalog allow-list shared by the recent-activity
+     * reads: presentation name and current catalog id keyed by backend id.
+     * First entry wins on the unlikely event of a backend-id collision across
+     * backend types.
+     *
+     * @param array<mixed> $experiences
+     * @return array{0:array<string,string>,1:array<string,string>}
+     *     `[nameByBackendId, idByBackendId]`.
+     */
+    private function buildCatalogAllowList(array $experiences): array
+    {
+        $nameByBackendId = [];
+        $idByBackendId = [];
+
+        foreach ($experiences as $experience) {
+            if (!is_array($experience)) {
+                continue;
+            }
+
+            $backendId = trim((string)($experience['backend']['id'] ?? ''));
+            $catalogId = trim((string)($experience['id'] ?? ''));
+
+            if ($backendId === '' || $catalogId === '' || isset($nameByBackendId[$backendId])) {
+                continue;
+            }
+
+            $name = trim((string)($experience['name'] ?? ''));
+            $nameByBackendId[$backendId] = $name !== '' ? $name : $catalogId;
+            $idByBackendId[$backendId] = $catalogId;
+        }
+
+        return [$nameByBackendId, $idByBackendId];
     }
 }

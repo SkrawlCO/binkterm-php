@@ -566,4 +566,130 @@ final class ExperienceActivityTest extends TestCase
         self::assertSame(['lord', 'usurper'], array_column($rows, 'experience_id'));
     }
 
+    // ---- recentForUser(): dashboard "You played ..." personal continuity ----
+
+    public function testRecentForUserReturnsViewerNewestAuthorizedFootprint(): void
+    {
+        $db = $this->database();
+        $this->seedPlays($db);
+
+        $catalog = [
+            'lord'      => $this->experience('lord', 'Legend of the Red Dragon'),
+            'usurper'   => $this->experience('usurper', 'Usurper Reborn'),
+            'blackjack' => $this->experience('blackjack', 'Blackjack', 'web'),
+        ];
+
+        // Skrawl (id 3) played: usurper 10:00, blackjack 12:00, hidden-door
+        // 13:00. hidden-door is not in the catalog, so the newest *authorized*
+        // footprint is blackjack.
+        $rows = (new ExperienceActivity($db))->recentForUser($catalog, 3, 1);
+
+        self::assertCount(1, $rows);
+        self::assertSame('blackjack', $rows[0]['experience_id']);
+        self::assertSame('Blackjack', $rows[0]['experience_name']);
+        self::assertSame(3, $rows[0]['user_id']);
+        self::assertSame('2026-08-30 12:00:00+00', $rows[0]['occurred_at']);
+        // Never leaks the community/first-play shape.
+        self::assertArrayNotHasKey('username', $rows[0]);
+        self::assertArrayNotHasKey('type', $rows[0]);
+    }
+
+    public function testRecentForUserNeverReturnsAnotherUsersActivity(): void
+    {
+        $db = $this->database();
+        $this->seedPlays($db);
+
+        $catalog = ['lord' => $this->experience('lord', 'Legend of the Red Dragon')];
+
+        // Bard (id 7) has 'lord' plays; the viewer (id 3) has none in 'lord'.
+        $rows = (new ExperienceActivity($db))->recentForUser($catalog, 3, 1);
+
+        self::assertSame([], $rows);
+    }
+
+    public function testRecentForUserHidesUnauthorizedExperienceButKeepsOlderAuthorizedOne(): void
+    {
+        $db = $this->database();
+        $db->exec("
+            INSERT INTO users (id, username) VALUES (3, 'Skrawl');
+            INSERT INTO user_activity_log (user_id, activity_type_id, object_name, created_at) VALUES
+                (3, " . ActivityTracker::TYPE_DOSDOOR_PLAY . ", 'lord',        '2026-08-30 10:00:00+00'),
+                (3, " . ActivityTracker::TYPE_DOSDOOR_PLAY . ", 'hidden-door', '2026-08-30 13:00:00+00');
+        ");
+
+        // Catalog authorizes only 'lord'. The newer 'hidden-door' row is filtered
+        // out in SQL, so 'lord' surfaces instead of nothing.
+        $rows = (new ExperienceActivity($db))->recentForUser([
+            'lord' => $this->experience('lord', 'Legend of the Red Dragon'),
+        ], 3, 1);
+
+        self::assertCount(1, $rows);
+        self::assertSame('lord', $rows[0]['experience_id']);
+    }
+
+    public function testRecentForUserReturnsEmptyWhenOnlyUnauthorizedActivityExists(): void
+    {
+        $db = $this->database();
+        $db->exec("
+            INSERT INTO users (id, username) VALUES (3, 'Skrawl');
+            INSERT INTO user_activity_log (user_id, activity_type_id, object_name, created_at) VALUES
+                (3, " . ActivityTracker::TYPE_DOSDOOR_PLAY . ", 'hidden-door', '2026-08-30 13:00:00+00');
+        ");
+
+        $rows = (new ExperienceActivity($db))->recentForUser([
+            'lord' => $this->experience('lord', 'Legend of the Red Dragon'),
+        ], 3, 1);
+
+        self::assertSame([], $rows);
+    }
+
+    public function testRecentForUserDropsRenamedOrphanedBackendIds(): void
+    {
+        $db = $this->database();
+        $db->exec("
+            INSERT INTO users (id, username) VALUES (3, 'Skrawl');
+            INSERT INTO user_activity_log (user_id, activity_type_id, object_name, created_at) VALUES
+                (3, " . ActivityTracker::TYPE_DOSDOOR_PLAY . ", 'lord', '2026-08-30 10:00:00+00');
+        ");
+
+        // 'lord' was renamed; its backend id is now 'lotrd'. The historical row
+        // still says 'lord' and no longer matches.
+        $rows = (new ExperienceActivity($db))->recentForUser([
+            'lord' => $this->experience('lord', 'Legend of the Red Dragon', 'native', 'lotrd'),
+        ], 3, 1);
+
+        self::assertSame([], $rows);
+    }
+
+    public function testRecentForUserAcceptsBothWebAndDosPlayTypesAndPicksNewest(): void
+    {
+        $db = $this->database();
+        $db->exec("
+            INSERT INTO users (id, username) VALUES (3, 'Skrawl');
+            INSERT INTO user_activity_log (user_id, activity_type_id, object_name, created_at) VALUES
+                (3, " . ActivityTracker::TYPE_DOSDOOR_PLAY . ", 'lord',      '2026-08-30 10:00:00+00'),
+                (3, " . ActivityTracker::TYPE_WEBDOOR_PLAY . ", 'blackjack', '2026-08-30 11:00:00+00');
+        ");
+
+        $rows = (new ExperienceActivity($db))->recentForUser([
+            'lord'      => $this->experience('lord', 'Legend of the Red Dragon'),
+            'blackjack' => $this->experience('blackjack', 'Blackjack', 'web'),
+        ], 3, 1);
+
+        self::assertCount(1, $rows);
+        self::assertSame('blackjack', $rows[0]['experience_id']);
+    }
+
+    public function testRecentForUserReturnsEmptyForNonPositiveUserOrEmptyCatalog(): void
+    {
+        $db = $this->database();
+        $this->seedPlays($db);
+
+        $catalog = ['lord' => $this->experience('lord', 'Legend of the Red Dragon')];
+
+        self::assertSame([], (new ExperienceActivity($db))->recentForUser($catalog, 0, 1));
+        self::assertSame([], (new ExperienceActivity($db))->recentForUser($catalog, -5, 1));
+        self::assertSame([], (new ExperienceActivity($db))->recentForUser([], 3, 1));
+    }
+
 }

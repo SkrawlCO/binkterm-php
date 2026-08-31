@@ -4079,6 +4079,7 @@ return [
     'ui.dashboard.card.crossroads' => 'Crossroads',
     'ui.dashboard.crossroads.you_are_in' => 'You\'re in',
     'ui.dashboard.crossroads.playing' => 'is playing',
+    'ui.dashboard.crossroads.you_played' => 'You played',
     'ui.dashboard.crossroads.enter' => 'Enter the Crossroads',
 
     // Settings

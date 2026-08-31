@@ -4060,6 +4060,7 @@ return [
     'ui.dashboard.card.crossroads' => 'Crossroads',
     'ui.dashboard.crossroads.you_are_in' => 'Sei in',
     'ui.dashboard.crossroads.playing' => 'sta giocando a',
+    'ui.dashboard.crossroads.you_played' => 'Hai giocato a',
     'ui.dashboard.crossroads.enter' => 'Entra nel Crossroads',
 
     // Settings

@@ -264,17 +264,48 @@ It is a `DashboardCardRegistry` card (`id: crossroads`, main zone, optional,
 hideable/reorderable) gated on the same conditions as the authenticated
 Crossroads navigation link. The `/` route composes it — only when the card is
 available and the viewer has not hidden it — from **one**
-`ExperienceState::getExperienceStates($user, 'web')` read plus **one** bounded
-`ExperienceActivity::recentAcrossCatalog(…, 1)` read, reduced by the pure
+`ExperienceState::getExperienceStates($user, 'web')` read plus **two** bounded
+activity reads on that same authorized catalog:
+`ExperienceActivity::recentAcrossCatalog(…, 1)` (community) and
+`ExperienceActivity::recentForUser(…, $userId, 1)` (the viewer's own newest
+footprint). These are reduced by the pure
 `BinktermPHP\Crossroads\DashboardPulse::compose()` view model. It shows exactly
-one state, in priority order: the viewer's own active participation (Return);
-else distinct other people currently participating (at most three
-`{username} is playing {Experience}` rows, the viewer never counted as
-another); else the newest authorized recent footprint; else a quiet line. Every
-row links to the canonical `/experiences/{id}` lobby, and every state offers
-`Enter the Crossroads` → `/games`. Authorization and naming come entirely from
-the authorized `getExperienceStates()` snapshot and `recentAcrossCatalog()`
-result, so a hidden, admin-only, disabled, or renamed Experience never surfaces.
+one state, in priority order:
+
+1. the viewer's own active participation — rendered with a **Return** button;
+2. else distinct other people currently participating — at most three
+   `{username} is playing {Experience}` rows, the viewer never counted as
+   another;
+3. else **the viewer's own most-recent authorized play footprint** — rendered
+   `You played {Experience} {relative time}`, day-level relative wording from
+   the shared `time.*` ladder;
+4. else the community's newest authorized recent footprint;
+5. else a quiet line.
+
+Every row links to the canonical `/experiences/{id}` lobby, and every state
+offers `Enter the Crossroads` → `/games`. Authorization and naming come entirely
+from the authorized `getExperienceStates()` snapshot and the two activity reads
+(which filter `object_name` against that same catalog), so a hidden, admin-only,
+disabled, unauthorized, or renamed Experience never surfaces — neither in
+community activity nor in the viewer's personal footprint. No new table,
+endpoint, cache, or realtime mechanism; historical rows are untouched.
+
+State 3 is **historical personal relationship only**. It must never imply
+current participation, resumability / Return, saved progress or a persisted
+character, current presence, session duration, or completion — the composed
+view model carries none of those fields and the partial renders no Return
+control and no present-tense wording.
+
+#### Four distinct personal-continuity concepts
+
+The Crossroads surfaces keep these separate on purpose:
+
+| Concept | Question | Surface | Meaning |
+| --- | --- | --- | --- |
+| **Current participation / Your Places** | *Where am I active right now?* | lobby "Your Places", dashboard pulse state 1 | The viewer has a live session or viewer-occupancy in the Experience now. Return may be offered. |
+| **Session continuity / Return** | *Can I rejoin the runtime I left?* | `ExperiencePresentation` Return affordance | A managed runtime is still alive and reconnectable. Owned by presence + session lifetime, not by activity history. |
+| **Historical personal relationship** | *What did I last play?* | dashboard pulse state 3 (`You played …`) | The viewer entered or returned to the Experience at some past time. No live runtime, presence, or progress is implied. |
+| **Community recent activity** | *Has anyone been through lately?* | lobby "Recently in the Crossroads", dashboard pulse state 4 | Truthful historical evidence that the place is used, collapsed to distinct `(person, Experience)` pairs. Not live presence. |
 
 ## SysOp Configuration and Customization
 
