@@ -2,12 +2,12 @@
   "type": "nativedoor",
   "version": "1.0",
   "game": {
-    "name": "ascii-royale (M3 Proof)",
-    "short_name": "AR-M3",
+    "name": "ascii-royale",
+    "short_name": "AR",
     "author": "chad / L33TEST integration",
     "version": "0.1.0-ac7d9771",
     "release_year": 2026,
-    "description": "Administrator-only controlled web integration proof for the unmodified ascii-royale terminal client.",
+    "description": "A terminal battle royale — last one standing wins. Fight me next round.",
     "genre": ["Action", "Multiplayer"],
     "players": "Multiplayer",
     "icon": null,
@@ -30,7 +30,7 @@
     "time_per_day": 30
   },
   "requirements": {
-    "admin_only": true
+    "admin_only": false
   },
   "config": {
     "enabled": false,

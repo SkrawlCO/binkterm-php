@@ -1,22 +1,22 @@
-# ascii-royale production deployment (Crossroads Experience #2, M4 Slice 1)
+# ascii-royale production deployment (Crossroads Experience #2, M4)
 
 This document covers the durable production runtime for the ascii-royale
-Experience: the managed shared arena, its runtime artifacts, and how another
-SysOp reproduces the deployment. The committed M3 integration — the door
-manifest, the launcher and its unit tests under
-`native-doors/doors/ascii-royale-m3/` and `tests/Unit/AsciiRoyaleM3*` — is
-**unchanged by M4**; this slice only adds a durable way to run the arena the
-launcher already knows how to talk to.
+Experience: the managed shared arena, its runtime artifacts, how another
+SysOp reproduces the deployment, and how the Experience is opened to ordinary
+authenticated users on Web and Telnet.
 
 The upstream pin, the (absence of) source patches, the build recipe and the
 wrapper regression harness are in
 [`ascii-royale-backend/`](ascii-royale-backend/README.md).
 
-> **Scope of M4 Slice 1.** This slice makes the arena a durable,
-> supervisor-managed service and proves the committed launcher accepts its
-> record. It does **not** enable the Experience for ordinary users and does
-> **not** address Telnet — those are later M4 slices. `config/nativedoors.json`
-> keeps `ascii-royale-m3.enabled = false`.
+> **Slice 1** made the arena a durable, supervisor-managed service and proved
+> the committed launcher accepts its record. The launcher
+> (`native-doors/doors/ascii-royale-m3/launch-ascii-royale.sh`) and the
+> managed-arena runtime are **unchanged** by everything below.
+>
+> **Slice 2** opens the Experience to ordinary authenticated users on Web and
+> Telnet — a two-line tracked manifest policy change plus the site-local
+> enable switch. See [Ordinary-user + Telnet enablement](#ordinary-user--telnet-enablement-m4-slice-2).
 
 ---
 
@@ -252,6 +252,132 @@ Never restart the whole container or unrelated supervisor programs for this.
 8. `ascii-royale-backend/test/run-regression.sh` → all assertions pass
    (startup-timeout + crash + `TERM` cleanup incl. temp files).
 9. unrelated services (`multizorkd`, `dosdoor_bridge`, `caddy`, …) healthy.
+
+---
+
+## Ordinary-user + Telnet enablement (M4 Slice 2)
+
+Slice 2 opens ascii-royale as a real Crossroads Experience for **ordinary
+authenticated users** on **Web and Telnet**, backed by the same Slice 1
+managed arena. It changes no generic BinkTermPHP core, no launcher, no
+runtime, no bridge, no identity, and no endpoint channel.
+
+### What changes
+
+**Tracked** — `native-doors/doors/ascii-royale-m3/nativedoor.json`:
+
+| key | before | after | why |
+|---|---|---|---|
+| `requirements.admin_only` | `true` | **`false`** | `admin_only` is flattened from the manifest by `NativeDoorManifest` and read by every gate (`GameCatalog`, `webdoor-routes`, `door-routes`); it is the **only** manifest-authoritative lever and has no site-local override |
+| `game.name` | `ascii-royale (M3 Proof)` | **`ascii-royale`** | user-visible Experience title |
+| `game.short_name` | `AR-M3` | **`AR`** | compact label |
+| `game.description` | "Administrator-only … proof …" | **"A terminal battle royale — last one standing wins. Fight me next round."** | user-visible blurb / the Experience invitation |
+
+`config.enabled` in the manifest **stays `false`** — manifests are never the
+enable switch. `door.max_nodes` stays `4`. `terminal_mode` stays `raw`. The
+launch command and every runtime/security field are untouched. `AsciiRoyaleM3ManifestTest`
+is updated only where the old proof policy was asserted.
+
+**Site-local** — `config/nativedoors.json`, the `ascii-royale-m3` entry
+(git-ignored, admin-managed, authoritative deployment switch):
+
+```
+"enabled": true            ← the only change (false → true)
+"allow_anonymous": false   "guest_max_sessions": 0   ← no guest access
+"credit_cost": 0           ← free
+"max_concurrent_sessions": 4   "terminal_size": "80x24"   "max_time_minutes": 30
+"hide_from_web": false
+```
+
+### Effective policy after enablement
+
+| gate | value | source |
+|---|---|---|
+| discoverable / launchable by any authenticated non-admin | yes | `admin_only=false` (tracked) + `enabled=true` (site-local) |
+| anonymous / guest | blocked | `allow_anonymous=false` **and** `guest_max_sessions=0` (site-local); `/api/door/guest/launch` 403 then 503; Experience routes require login |
+| credit cost | free | `credit_cost=0` |
+| concurrent BinkTerm callers | 4 | `door.max_nodes` (tracked); a 5th caller gets a clean 503 |
+| terminal | 80×24 raw | `terminal_size` (site-local), `terminal_mode` (tracked) |
+| session lifetime | 30 min | `max_time_minutes` (site-local) |
+
+### Web + Telnet are coupled
+
+`GameCatalog::addManagedDoors` emits `surfaces = ['web' => 'full', 'telnet' =>
+'full']` for every managed door — `telnet` is hardcoded, with no per-surface
+toggle. Enabling for Web therefore enables Telnet/SSH at the same instant
+(the terminal Crossroads catalog is the same `getEnabledGames()` and the
+native-door telnet play path — bridge relay, `native` SS3 cursor-key
+normalization — is fully wired). This is intentional for this slice: Telnet
+acceptance is performed **before** the site-local switch is left on.
+
+### The technical id stays `ascii-royale-m3`
+
+The directory, manifest path, `ASCII_ROYALE_M3_*` bridge env, and the endpoint
+channel path all keep the `-m3` suffix — renaming them is pure churn with no
+user-facing benefit. Users never see the raw id in rendered copy
+(`ExperiencePresentation` strips it); it appears only in URLs
+(`/experiences/ascii-royale-m3`) and page JS/API paths, where `-m3` reads as a
+minor version tag, not milestone language. The public **name** is `ascii-royale`.
+
+### Enabling / disabling
+
+Enable (through **Admin → Native Doors**, or by editing the site-local file):
+set `ascii-royale-m3.enabled = true`. Disable: set it back to `false` — the
+Experience immediately disappears from both catalogs and every launch/route
+returns 404/403; the managed arena keeps running (harmless, idle).
+
+### Production-acceptance record — 2026-09-01
+
+`ascii-royale-m3.enabled` was set to `true` and controlled live acceptance was
+run with one ordinary authenticated **non-admin** account (`is_admin = false`,
+disposable, removed afterward — its door-session and activity rows removed with
+it; the pre-existing admin M3 history was retained). The managed Slice 1 arena
+(`[program:ascii-royale-arena]`, `serve`, uid 994) was **not restarted** at any
+point — same `host_generation` throughout, ~42 min continuous uptime.
+
+**Telnet** (`bbs.l33test.com:23`, real BBS path, UTF-8/ANSI terminal):
+discovered in *Games & Experiences → Crossroads* as **ascii-royale –
+Multiplayer** (public name and description, no proof/admin copy); detail screen
+"Status: Available", "Players online: 0 / 4"; `G Play` launched via the native
+door path; the arena lobby roster showed the deterministic callsign
+`@ arqa-i (you)` (`arqa` + user id 18 → `arqa-i`); joined the shared managed
+arena (9 bots, "the drop fills to 16"); the 80×24 raw TUI rendered coherently
+through the lobby → 20-second drop countdown → live match (island map, storm,
+status panel); **`w`/`a`/`s`/`d` and the right-arrow key moved the player
+marker**; `q` returned cleanly to Crossroads; re-entry produced a fresh session
+on the same arena; every session ended `exit_status = normal` with no orphan
+launcher / `ascii-royale join` / PTY descendants.
+
+**Web** (authenticated, non-admin): the Experience card and
+`/experiences/ascii-royale-m3` lobby rendered with the public name/description,
+Multiplayer, Free, capacity `/4`, and **no** "M3 Proof" / "administrator-only"
+copy; `POST /api/door/launch` (`surface=web`) returned a session with **no**
+`admin_only` / `launch_failed` 403; the web door session spawned
+`ascii-royale join <endpoint> --name arqa-i` against the production binary and
+endpoint; a second launch while active resumed the **same** session
+(`ui.api.door.session_resumed`); `POST /api/door/end` terminated it via the
+bridge control socket (`exit_status = normal`) and cleared Experience presence;
+0 open sessions and no client descendants afterward.
+
+**Anonymous / guest:** `GET /experiences/ascii-royale-m3` → 401;
+`GET /games/nativedoors/ascii-royale-m3` → 302 `/login`;
+`POST /api/door/launch` unauthenticated → 401;
+`POST /api/door/guest/launch` → 403 *"does not allow anonymous access"*;
+`allow_anonymous` stays `false`, `guest_max_sessions` stays `0`.
+
+**EndpointId secrecy:** the current endpoint value appeared in no BBS-visible
+output, no rendered web page or JS, no `/api/experiences|door` response, no
+`door_sessions` / activity row, and not in `docker logs binkterm-app`. The
+arena's own `/var/lib/ascii-royale/log/arena.out.log` (root:ascii-royale 0640,
+dir 0750) does contain it, as expected — upstream `serve` prints it.
+
+**Not demonstrated / not claimed:** weapon pickup or firing (not exercised);
+any WAN/NAT/relay traversal — the door's `ascii-royale join` process and the
+arena's `serve` both run inside `binkterm-app`, so the iroh connection was
+local to the container.
+
+**Outcome:** GO. `config/nativedoors.json` `ascii-royale-m3.enabled` left
+`true`.
 
 ---
 
