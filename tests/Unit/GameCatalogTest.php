@@ -112,7 +112,7 @@ final class GameCatalogTest extends TestCase
                 self::assertArrayHasKey('mode', $game['terminal']);
                 self::assertContains(
                     $game['terminal']['mode'],
-                    ['doorway', 'raw']
+                    ['doorway', 'raw', 'line']
                 );
             }
 

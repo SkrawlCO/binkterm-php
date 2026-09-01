@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace BinktermPHP\Crossroads;
 
 /**
- * L33TEST/Crossroads-owned MultiZork Slice 1 thin adapter.
+ * L33TEST/Crossroads-owned MultiZork thin adapter.
  *
  * This is the ONLY place in the codebase that knows MultiZork's own prompt
  * vocabulary (its "Hello sailor!" onboarding prompt and access-code
@@ -16,23 +16,28 @@ namespace BinktermPHP\Crossroads;
  * DoorHandler has no knowledge this class, or MultiZork, exists.
  *
  * Deliberately not a generic "door adapter framework": two static methods,
- * used because Slice 1 genuinely needs them (Correction 3 in
+ * used because Slice 1 genuinely needed them and Slice 3's productionization
+ * did not change that shape (Correction 3 in
  * docs/Crossroads/MultiZorkSlice1.md). Do not add speculative hooks for
  * hypothetical future backends here.
  *
- * Scope, deliberately narrow for Slice 1:
- *  - one fixed test expedition (FIXED_TEST_EXPEDITION_ID);
+ * Scope, deliberately kept narrow through Slice 3 (productionization):
+ *  - one fixed expedition (FIXED_EXPEDITION_ID) — proven with two
+ *    simultaneous callers in Slice 2, still the only expedition model;
  *  - no expedition naming/invitations/rosters;
  *  - no chat/transcript/game-over UX.
  */
 final class MultiZorkAdapter
 {
     /**
-     * Slice 1 uses exactly one fixed, non-production test expedition. This
-     * is an L33TEST-owned identifier, never MultiZork's own raw join/access
-     * code — see MultiZorkAccessMapping.
+     * Exactly one fixed expedition exists. This is an L33TEST-owned
+     * identifier, never MultiZork's own raw join/access code — see
+     * MultiZorkAccessMapping. (Renamed from the Slice 1/2 test-only value
+     * 'multizork-slice1-test' when productionized in Slice 3; test-era
+     * mappings under the old id are orphaned, not migrated, since they
+     * belonged only to disposable test accounts.)
      */
-    public const FIXED_TEST_EXPEDITION_ID = 'multizork-slice1-test';
+    public const FIXED_EXPEDITION_ID = 'multizork-prime';
 
     /** Bounded read window so a silent/misbehaving service cannot hang the daemon. */
     private const READ_TIMEOUT_SECONDS = 3.0;
@@ -42,7 +47,7 @@ final class MultiZorkAdapter
      * generic transparent line relay begins.
      *
      * If no BinkTerm identity is available, or no stored access code exists
-     * yet for this user's fixed test expedition, this does nothing but
+     * yet for this user's expedition, this does nothing but
      * relay MultiZork's own banner to the terminal — the human proceeds
      * through the ordinary, visible create/join/go flow observed in the
      * runtime proof. Only a RETURNING caller with a stored code is
@@ -65,7 +70,7 @@ final class MultiZorkAdapter
         }
 
         $mapping = new MultiZorkAccessMapping();
-        $code = $mapping->get($userId, self::FIXED_TEST_EXPEDITION_ID);
+        $code = $mapping->get($userId, self::FIXED_EXPEDITION_ID);
 
         if ($code === null) {
             // First run: no stored code. Let the human create/join by hand.
@@ -74,7 +79,7 @@ final class MultiZorkAdapter
         }
 
         $limiter = new MultiZorkAccessRateLimit();
-        if (!$limiter->check($userId, self::FIXED_TEST_EXPEDITION_ID)) {
+        if (!$limiter->check($userId, self::FIXED_EXPEDITION_ID)) {
             // Blocked: never attempt submission while blocked. Fall back to
             // the ordinary human-visible flow instead of failing silently.
             self::relay($conn, $banner);
@@ -89,12 +94,12 @@ final class MultiZorkAdapter
             // multizorkd's own rejection text (stale/invalid stored code).
             // Fall back to the human-visible flow from wherever multizorkd
             // itself leaves the session (it re-prompts at the same step).
-            $limiter->recordFailure($userId, self::FIXED_TEST_EXPEDITION_ID);
+            $limiter->recordFailure($userId, self::FIXED_EXPEDITION_ID);
             self::relay($conn, $response);
             return;
         }
 
-        $limiter->recordSuccess($userId, self::FIXED_TEST_EXPEDITION_ID);
+        $limiter->recordSuccess($userId, self::FIXED_EXPEDITION_ID);
         self::relay($conn, $response);
     }
 
@@ -114,7 +119,7 @@ final class MultiZorkAdapter
         }
 
         if (preg_match("/access code: '([A-Za-z0-9]{4,16})'/", $chunk, $m) === 1) {
-            (new MultiZorkAccessMapping())->save($userId, self::FIXED_TEST_EXPEDITION_ID, $m[1]);
+            (new MultiZorkAccessMapping())->save($userId, self::FIXED_EXPEDITION_ID, $m[1]);
         }
     }
 

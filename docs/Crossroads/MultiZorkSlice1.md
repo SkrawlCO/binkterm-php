@@ -125,6 +125,15 @@ does not reimplement any of it.
 
 ## Deploying/testing this Experience
 
+**Superseded by production (Slice 3):** the real, caller-facing MultiZork
+Experience now runs as described in
+[MultiZorkProduction.md](MultiZorkProduction.md) — a durable supervisord-
+managed backend and the `native-doors/doors/multizork/` manifest, open to
+ordinary authenticated callers. What follows here is the original Slice
+1/2 disposable test setup, kept for reference and still how the
+`multizork-slice1-test` entry (present but disabled) would be revived for
+throwaway testing.
+
 `config/nativedoors.json` is a site-local, gitignored config file (like
 `binkp.json`/`bbs.json`) — enabling a native door normally happens through
 **Admin → Native Doors**, not by hand-editing this file. The

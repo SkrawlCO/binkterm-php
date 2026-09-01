@@ -1,0 +1,37 @@
+{
+    "type": "nativedoor",
+    "version": "1.0",
+    "game": {
+        "name": "MultiZork",
+        "short_name": "MULTIZORK",
+        "author": "Ryan C. Gordon (icculus.org)",
+        "version": "0.0.9",
+        "release_year": 2026,
+        "description": "Zork — but you're not alone. Explore the Great Underground Empire with other callers: start an expedition or join one already underway, and pick up right where you left off next time you drop in.",
+        "genre": ["Interactive Fiction", "Multiplayer"],
+        "players": "Multiplayer",
+        "icon": null,
+        "screenshot": null
+    },
+    "experience": {
+        "category": "game",
+        "featured": true,
+        "multiplayer": true,
+        "participant_messaging": false
+    },
+    "door": {
+        "executable": "line-relay",
+        "dropfile_format": "DOOR.SYS",
+        "output_encoding": "utf8",
+        "terminal_mode": "line",
+        "relay_host": "::1",
+        "relay_port": 43023,
+        "relay_adapter_class": "BinktermPHP\\Crossroads\\MultiZorkAdapter",
+        "max_nodes": 4,
+        "ansi_required": false,
+        "time_per_day": 60
+    },
+    "requirements": {
+        "admin_only": false
+    }
+}

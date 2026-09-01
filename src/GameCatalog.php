@@ -170,10 +170,23 @@ class GameCatalog
                 ?? ($door['door']['terminal_mode'] ?? '')
             ));
 
+            // terminal_mode=line (DoorHandler's generic private-TCP line
+            // relay, added for network Experiences) has no web launch path
+            // today — only the telnet/SSH terminal stack drives it. Report
+            // that truthfully as 'unavailable' rather than 'full', instead
+            // of relying on the separate, operator-controlled
+            // hide_from_web flag (which removes the Experience from web
+            // discovery entirely, a stronger and distinct decision from
+            // "this backend can't be launched here yet").
+            $webSurfaceState = 'full';
+            if (!empty($door['config']['hide_from_web'])) {
+                $webSurfaceState = 'unavailable';
+            } elseif ($manifestTerminalMode === 'line') {
+                $webSurfaceState = 'unavailable';
+            }
+
             $surfaces = [
-                'web' => empty($door['config']['hide_from_web'])
-                    ? 'full'
-                    : 'unavailable',
+                'web' => $webSurfaceState,
                 'telnet' => 'full',
             ];
             $policy = [
