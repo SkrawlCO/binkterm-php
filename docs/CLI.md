@@ -1305,3 +1305,11 @@ Reads connection details from `config/rlogin_synchronet_service.json` (copy `con
 `rlogin_host`/`rlogin_port` are only used by the **Import from Synchronet** admin feature (see [RLoginDoors.md](RLoginDoors.md)), not by this script itself.
 
 On success it prints `{"remote_username":"..."}` to stdout and exits `0`. On failure it prints an error to stderr and exits `1`, which aborts the door launch.
+
+## Managed-door line relay runtime
+
+`scripts/line-relay-runtime.php` is an internal bridge helper for native
+Experiences whose manifest declares `terminal_mode: line`. The authenticated
+multiplexing bridge supplies its door, numeric user, and session identity; it
+is not an end-user launch command. The helper validates the native manifest,
+connects its private TCP endpoint, and invokes the optional PHP relay adapter.

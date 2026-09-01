@@ -21,6 +21,7 @@ const path = require('path');
 const { spawn } = require('child_process');
 const { Client } = require('pg');
 const { createEmulatorAdapter } = require('./emulator-adapters');
+const { waitForProcessExit } = require('./managed-runtime-lifecycle');
 require('dotenv').config({ path: __dirname + '/../../.env' });
 
 // Prepend ISO timestamp to every console.log / .error / .warn line
@@ -228,6 +229,7 @@ function reloadEnv() {
 const TCP_PORT_BASE = 5000;
 const TCP_PORT_MAX = 5100;
 const BASE_PATH = path.resolve(__dirname, '../..');
+const CONTROL_SOCKET_PATH = path.join(BASE_PATH, 'data', 'run', 'dosdoor-bridge-control.sock');
 
 // Database configuration
 const DB_CONFIG = {
@@ -321,6 +323,25 @@ class SessionManager {
         } catch (err) {
             console.error('[AUTH] Database error:', err.message);
             return null;
+        } finally {
+            await client.end();
+        }
+    }
+
+    async authorizeControlRequest(sessionId, token) {
+        const client = new Client(DB_CONFIG);
+        try {
+            await client.connect();
+            const result = await client.query(
+                `SELECT session_id
+                   FROM door_sessions
+                  WHERE session_id = $1
+                    AND ws_token = $2
+                    AND ended_at IS NULL
+                  LIMIT 1`,
+                [sessionId, token]
+            );
+            return result.rows.length === 1;
         } finally {
             await client.end();
         }
@@ -506,7 +527,7 @@ class SessionManager {
 
         // Create emulator adapter based on door_type
         const doorType = sessionData.door_type || 'dos';
-        session.emulator = createEmulatorAdapter(BASE_PATH, doorType);
+        session.emulator = createEmulatorAdapter(BASE_PATH, doorType, sessionData.door_id);
         session.emulator.slog = session.slog;   // propagate session logger into adapter
         const emulatorName = session.emulator.getName();
 
@@ -529,7 +550,7 @@ class SessionManager {
         session.sessionData.session_path = sessionPath;
 
         // Generate DOOR.SYS drop file (rlogin doors have no local process, so no drop file)
-        if (sessionData.user_data && emulatorName !== 'Rlogin') {
+        if (sessionData.user_data && emulatorName !== 'Rlogin' && emulatorName !== 'LineRelay') {
             let userData = sessionData.user_data;
             if (typeof userData === 'string') {
                 userData = JSON.parse(userData);
@@ -634,7 +655,7 @@ class SessionManager {
 
         session.slog.log(`[${emulatorName}] Launched PID ${result.pid}`);
 
-        if (emulatorName === 'Native' || emulatorName === 'Rlogin') {
+        if (emulatorName === 'Native' || emulatorName === 'Rlogin' || emulatorName === 'LineRelay') {
             // Native doors connect immediately via PTY, and rlogin doors connect
             // immediately via outbound TCP - set up handlers now in both cases
             this.setupEmulatorHandlers(session);
@@ -1091,6 +1112,12 @@ class SessionManager {
         // Mark that DOSBox has exited (so WebSocket handler knows to clean up immediately)
         session.dosboxExited = true;
 
+        // Explicit termination is awaiting this exact child exit. It owns the
+        // final cleanup and acknowledgement; do not enter ordinary WS cleanup.
+        if (session.isExplicitlyEnding) {
+            return;
+        }
+
         // Close WebSocket - this will trigger handleWebSocketDisconnect which does cleanup
         if (session.ws && session.ws.readyState === WebSocket.OPEN) {
             session.ws.close(1000, 'Door session ended');
@@ -1125,6 +1152,10 @@ class SessionManager {
     }
 
     handleWebSocketDisconnect(session) {
+        if (session.isExplicitlyEnding) {
+            session.slog.log(`[WS] Explicit end in progress - reconnect grace bypassed`);
+            return;
+        }
         // If DOSBox already exited, clean up immediately (no grace period)
         if (session.dosboxExited) {
             session.slog.log(`[WS] DOSBox exited, cleaning up`);
@@ -1151,7 +1182,45 @@ class SessionManager {
         }, RECONNECT_TIMEOUT * 1000);
     }
 
-    removeSession(session) {
+    async terminateExplicitSession(session) {
+        if (session.terminationPromise) {
+            return session.terminationPromise;
+        }
+
+        session.terminationPromise = (async () => {
+            session.isExplicitlyEnding = true;
+            if (session.disconnectTimer) {
+                clearTimeout(session.disconnectTimer);
+                session.disconnectTimer = null;
+            }
+
+            session.slog.log(`[SESSION] Explicit end requested - reconnect grace bypassed`);
+            if (session.emulator) {
+                session.emulator.close();
+            }
+
+            const exited = await this.waitForRuntimeExit(session);
+            if (!exited) {
+                session.slog.error(`[SESSION] Explicit end failed - runtime exit not confirmed`);
+                return false;
+            }
+
+            await this.removeSession(session, { closeEmulator: false, deleteRecord: false });
+            session.slog.log(`[SESSION] Explicit end confirmed`);
+            return true;
+        })();
+
+        return session.terminationPromise;
+    }
+
+    async waitForRuntimeExit(session) {
+        const pid = session.emulatorPid;
+        return waitForProcessExit(pid, CARRIER_LOSS_TIMEOUT, 1000, session.slog);
+    }
+
+    removeSession(session, options = {}) {
+        const closeEmulator = options.closeEmulator !== false;
+        const deleteRecord = options.deleteRecord !== false;
         // Prevent double cleanup
         if (session.isRemoving) {
             session.slog.log(`[SESSION] Already removing, skipping`);
@@ -1167,13 +1236,13 @@ class SessionManager {
         }
 
         // Close emulator TCP connection (simulates carrier loss)
-        if (session.emulator) {
+        if (closeEmulator && session.emulator) {
             session.emulator.close();
         }
 
         // Give emulator process time to detect carrier loss and exit gracefully
         // Then force kill if still running
-        if (session.emulatorProcess && session.emulatorPid) {
+        if (closeEmulator && session.emulatorProcess && session.emulatorPid) {
             const timeoutSec = (CARRIER_LOSS_TIMEOUT / 1000).toFixed(1);
             session.slog.log(`[SESSION] Waiting ${timeoutSec} seconds for emulator PID ${session.emulatorPid} to exit after carrier loss...`);
             setTimeout(() => {
@@ -1216,16 +1285,20 @@ class SessionManager {
         // Clear BinkTerm Experience presence before removing the
         // authoritative door-session record. Keep removeSession synchronous;
         // order the database cleanup through the Promise chain instead.
-        this.clearExperiencePresence(
+        const presenceCleanup = this.clearExperiencePresence(
             session.sessionData?.auth_session_id,
             session.slog
-        ).finally(() => {
-            this.deleteSession(session.sessionId, session.slog);
-        });
+        );
+        if (deleteRecord) {
+            presenceCleanup.finally(() => {
+                this.deleteSession(session.sessionId, session.slog);
+            });
+        }
 
         // Log statistics
         const uptime = Math.floor((Date.now() - session.startTime) / 1000);
         session.slog.log(`[SESSION] Stats - Uptime ${uptime}s, From Emulator: ${session.bytesFromEmulator}, To Emulator: ${session.bytesToEmulator}`);
+        return presenceCleanup;
     }
 
     cleanupSessionFiles(session) {
@@ -1309,6 +1382,86 @@ class SessionManager {
 // Create port pool and session manager
 const portPool = new PortPool(TCP_PORT_BASE, TCP_PORT_MAX);
 const sessionManager = new SessionManager(portPool);
+
+// Server-authoritative managed-session control. This Unix socket is reachable
+// only by local processes; every request must also present the exact
+// database-issued session token. Browser WebSocket messages cannot invoke it.
+fs.mkdirSync(path.dirname(CONTROL_SOCKET_PATH), { recursive: true });
+if (fs.existsSync(CONTROL_SOCKET_PATH)) {
+    fs.unlinkSync(CONTROL_SOCKET_PATH);
+}
+
+const controlServer = net.createServer((socket) => {
+    let requestBuffer = '';
+    let handled = false;
+
+    const respond = (payload) => {
+        if (!socket.destroyed) {
+            socket.end(JSON.stringify(payload) + '\n');
+        }
+    };
+
+    socket.setEncoding('utf8');
+    socket.setTimeout(Math.max(CARRIER_LOSS_TIMEOUT + 2000, 7000), () => {
+        respond({ success: false, error: 'Control request timed out' });
+    });
+    socket.on('data', async (chunk) => {
+        if (handled) return;
+        requestBuffer += chunk;
+        if (requestBuffer.length > 8192) {
+            handled = true;
+            respond({ success: false, error: 'Control request too large' });
+            return;
+        }
+        const newline = requestBuffer.indexOf('\n');
+        if (newline === -1) return;
+        handled = true;
+
+        try {
+            const request = JSON.parse(requestBuffer.slice(0, newline));
+            const sessionId = typeof request.session_id === 'string' ? request.session_id : '';
+            const token = typeof request.ws_token === 'string' ? request.ws_token : '';
+            if (request.action !== 'terminate_session' || !sessionId || !token) {
+                respond({ success: false, error: 'Invalid control request' });
+                return;
+            }
+
+            if (!await sessionManager.authorizeControlRequest(sessionId, token)) {
+                console.warn(`[CONTROL] Rejected unauthorized termination request for session ${sessionId}`);
+                respond({ success: false, error: 'Unauthorized session' });
+                return;
+            }
+
+            const session = sessionManager.sessionsByToken.get(token);
+            if (!session || session.sessionId !== sessionId) {
+                respond({ success: false, error: 'Managed runtime is unavailable' });
+                return;
+            }
+
+            const terminated = await sessionManager.terminateExplicitSession(session);
+            respond(terminated
+                ? { success: true }
+                : { success: false, error: 'Runtime termination was not confirmed' });
+        } catch (err) {
+            console.error('[CONTROL] Request failed:', err.message);
+            respond({ success: false, error: 'Control request failed' });
+        }
+    });
+    socket.on('error', (err) => {
+        console.error('[CONTROL] Socket error:', err.message);
+    });
+});
+
+controlServer.listen(CONTROL_SOCKET_PATH, () => {
+    // Authentication is still mandatory. World read/write permits the PHP-FPM
+    // account to connect when the bridge is supervised by a different user.
+    fs.chmodSync(CONTROL_SOCKET_PATH, 0o666);
+    console.log(`[CONTROL] Listening on Unix socket ${CONTROL_SOCKET_PATH}`);
+});
+
+controlServer.on('error', (err) => {
+    console.error('[CONTROL] Server error:', err.message);
+});
 
 // Create WebSocket server
 const wsServer = new WebSocket.Server({
@@ -1403,6 +1556,7 @@ process.on('SIGINT', () => {
 
     // Close WebSocket server
     wsServer.close(() => {
+        controlServer.close();
         console.log('[SHUTDOWN] Server closed');
         process.exit(0);
     });
@@ -1418,6 +1572,7 @@ process.on('SIGTERM', () => {
 
     // Close WebSocket server
     wsServer.close(() => {
+        controlServer.close();
         console.log('[SHUTDOWN] Server closed');
         process.exit(0);
     });

@@ -10,7 +10,7 @@
         "description": "Zork — but you're not alone. Explore the Great Underground Empire with other callers: start an expedition or join one already underway, and pick up right where you left off next time you drop in.",
         "genre": ["Interactive Fiction", "Multiplayer"],
         "players": "Multiplayer",
-        "icon": null,
+        "icon": "icon.png",
         "screenshot": null
     },
     "experience": {

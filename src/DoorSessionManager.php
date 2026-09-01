@@ -235,7 +235,7 @@ class DoorSessionManager
      * @param string $sessionId Session identifier
      * @return bool Success
      */
-    public function endSession(string $sessionId): bool
+    public function endSession(string $sessionId, bool $runtimeTerminationConfirmed = false): bool
     {
         $this->logger->info("[EndSession] BEGIN - Session: $sessionId");
 
@@ -250,7 +250,7 @@ class DoorSessionManager
         $bridgePid = $session['bridge_pid'] ?? null;
 
         // Kill DOSBox process using PID (taskkill works, proc_terminate doesn't)
-        if ($dosboxPid) {
+        if ($dosboxPid && !$runtimeTerminationConfirmed) {
             $this->logger->debug("[EndSession] Killing DOSBox PID: $dosboxPid");
             $killed = $this->killProcess($dosboxPid);
             if ($killed) {
@@ -301,6 +301,19 @@ class DoorSessionManager
 
         $this->logger->info("[EndSession] COMPLETE - Session: $sessionId");
         return true;
+    }
+
+    /**
+     * Return a session row regardless of active/ended state for authenticated
+     * ownership and idempotency checks. Tokens remain server-side only.
+     */
+    public function getSessionRecord(string $sessionId): ?array
+    {
+        $stmt = $this->db->prepare('SELECT * FROM door_sessions WHERE session_id = ?');
+        $stmt->execute([$sessionId]);
+        $session = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        return $session ?: null;
     }
 
     /**

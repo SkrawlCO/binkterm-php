@@ -129,17 +129,37 @@ a reasonable later hardening step, not required by this slice.
   disposable test path stays available without reconstruction, but it no
   longer appears in any catalog.
 
-### Why the web surface shows "unavailable", not hidden
+### Web and Telnet convergence (Slice 4)
 
-`terminal_mode: "line"` doors have no web launch path today (the generic
-line-relay only exists in the telnet/SSH terminal stack). `GameCatalog`
-now reports `surfaces.web = 'unavailable'` for any such door (a small,
-generic, reusable change — not MultiZork-specific), truthfully, rather
-than either claiming `full` (which would be false — there is nothing to
-launch) or hiding the Experience from web discovery entirely via
-`hide_from_web` (a distinct, stronger, operator-controlled decision this
-slice did not need). A caller browsing Crossroads on the web sees
-MultiZork listed with an honest "not available on this surface" state.
+Native `terminal_mode: "line"` Experiences now use the existing authenticated
+managed-door xterm/WebSocket/session path on the web. The bridge selects a
+generic line adapter, which starts `scripts/line-relay-runtime.php`; that PHP
+runtime connects the same private endpoint and invokes the same optional PHP
+adapter contract used by the terminal server. MultiZork therefore remains one
+native Experience backed by one `[::1]:43023` daemon and one persistent state
+database. No web-specific backend, credential mapping, or expedition exists.
+
+The approved icon is stored beside the production manifest as
+`native-doors/doors/multizork/icon.png` and is served through the existing
+manifest-declared managed-door asset route.
+
+Production acceptance proved a real web caller and Telnet caller concurrently
+sharing the same expedition and room, mutual action/chat visibility, and
+distinct persistent identities. Browser refresh reattached to the same managed
+runtime. Explicit **End Session** bypassed reconnect grace, waited for the
+bridge-owned runtime to exit and its backend socket to close, and permitted an
+immediate clean relaunch with the stored credential. The disposable Slice 1–4
+proof accounts, mappings, scratch files, and sensitive daemon log contents were
+removed after acceptance; production player state and legitimate session
+history were retained.
+
+> **HIGH-PRIORITY OPERATIONS FOLLOW-UP:** `/var/lib/multizork` currently lives
+> in the `binkterm-app` container writable layer. Recreating that container can
+> destroy the production player database and is unsafe until the directory is
+> moved to durable managed storage and backup/restore is verified. Also,
+> upstream `multizorkd` still logs raw client input; restricted log permissions
+> and post-proof cleanup are only an interim mitigation. Source-boundary input
+> suppression/redaction remains deferred hardening.
 
 ## Identity/expedition model (unchanged)
 

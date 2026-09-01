@@ -13,6 +13,23 @@ BinktermPHP supports three types of door games, each suited to different use cas
 
 C64 Doors, WebDoors, and JS-DOS Doors run entirely in the browser and require no additional server-side components. DOS Doors, Native Doors, and RLogin Doors all require the **multiplexing bridge** described below.
 
+### Managed session termination
+
+Refreshing or briefly disconnecting a managed browser door preserves the
+bridge-owned runtime for the configured reconnect window. The browser can then
+reattach to the same process and session.
+
+The player's explicit **End Session** action has different semantics. After
+the authenticated, CSRF-protected HTTP endpoint verifies session ownership, it
+requests termination through the bridge's local Unix control socket at
+`data/run/dosdoor-bridge-control.sock`. The bridge verifies the exact database
+session and token, bypasses reconnect grace, closes the adapter, and waits for
+the runtime to exit. It uses the configured carrier-loss timeout before a
+bounded forced-kill fallback. Only a confirmed exit is reported as success and
+only then is the database session marked ended, so a replacement launch cannot
+race a still-connected backend runtime. The control socket is local runtime
+infrastructure and must not be published by a reverse proxy.
+
 ## Table of Contents
 
 - [Choosing a Door Type: DOSBox-X vs JS-DOS](#choosing-a-door-type-dosbox-x-vs-js-dos)
@@ -98,6 +115,7 @@ DOS Doors and Native Doors share a single long-running Node.js bridge process (`
 - Authenticates sessions against the database
 - For **DOS Doors**: launches DOSBox and multiplexes TCP I/O
 - For **Native Doors**: spawns the door executable via `node-pty` and multiplexes PTY I/O
+- For native **line Experiences**: runs the generic PHP line runtime, which connects the manifest-declared private TCP service and multiplexes locally edited browser lines
 
 ```
 [Browser] ──→ wss://bbs.example.com:6001 ──→ [Multiplexing Bridge]

@@ -885,6 +885,161 @@ class NativeAdapter extends EmulatorAdapter {
 }
 
 /**
+ * Private TCP line Experience adapter.
+ *
+ * Browser keystrokes are edited and echoed locally here. Complete LF-ended
+ * lines are passed to the generic PHP runtime, which owns manifest validation,
+ * the backend TCP socket, and the optional PHP relay-adapter contract.
+ */
+class LineRelayAdapter extends EmulatorAdapter {
+    static MAX_LINE_BYTES = 1024;
+
+    constructor(basePath) {
+        super(basePath);
+        this.process = null;
+        this.outputEncoding = 'utf8';
+        this.dataCallback = null;
+        this.pendingData = [];
+        this.lineBuffer = '';
+        this.escapeState = 0;
+        this.suppressLf = false;
+    }
+
+    getName() {
+        return 'LineRelay';
+    }
+
+    async launch(session, sessionData) {
+        const slog = this.slog || console;
+        const runtime = path.join(this.basePath, 'scripts', 'line-relay-runtime.php');
+        if (!fs.existsSync(runtime)) {
+            throw new Error(`Line relay runtime not found: ${runtime}`);
+        }
+
+        const args = [
+            String(sessionData.door_id || ''),
+            String(sessionData.user_id || ''),
+            String(sessionData.session_id || '')
+        ];
+        slog.log(`[${this.getName()}] Starting generic runtime for door '${args[0]}'`);
+
+        this.process = spawn(runtime, args, {
+            cwd: this.basePath,
+            env: process.env,
+            stdio: ['pipe', 'pipe', 'pipe']
+        });
+
+        this.process.stdout.on('data', (data) => this._emit(data));
+        this.process.stderr.on('data', (data) => {
+            slog.error(`[${this.getName()}] ${data.toString('utf8').trimEnd()}`);
+        });
+        this.process.on('error', (err) => {
+            slog.error(`[${this.getName()}] Process error: ${err.message}`);
+        });
+        this.process.on('exit', (code, signal) => {
+            slog.log(`[${this.getName()}] Process exited: code=${code}, signal=${signal}`);
+            if (this.exitCallback) {
+                this.exitCallback(code, signal);
+            }
+        });
+
+        return { process: this.process, pid: this.process.pid };
+    }
+
+    onData(callback) {
+        this.dataCallback = callback;
+        if (this.pendingData.length > 0) {
+            const queued = this.pendingData;
+            this.pendingData = [];
+            queued.forEach(data => callback(data));
+        }
+    }
+
+    write(data) {
+        const input = data.toString('utf8');
+        for (const char of input) {
+            if (this.escapeState === 1) {
+                if (char === '[' || char === 'O') {
+                    this.escapeState = 2;
+                } else {
+                    this.escapeState = 0;
+                }
+                continue;
+            }
+            if (this.escapeState === 2) {
+                if (char >= '@' && char <= '~') {
+                    this.escapeState = 0;
+                }
+                continue;
+            }
+            if (char === '\x1b') {
+                this.escapeState = 1;
+                continue;
+            }
+            if (char === '\n' && this.suppressLf) {
+                this.suppressLf = false;
+                continue;
+            }
+            if (char === '\r' || char === '\n') {
+                this.suppressLf = char === '\r';
+                this._emit(Buffer.from('\r\n', 'utf8'));
+                if (this.process && this.process.stdin && !this.process.stdin.destroyed) {
+                    this.process.stdin.write(this.lineBuffer + '\n');
+                }
+                this.lineBuffer = '';
+                continue;
+            }
+            this.suppressLf = false;
+            if (char === '\x08' || char === '\x7f') {
+                const chars = Array.from(this.lineBuffer);
+                if (chars.length > 0) {
+                    chars.pop();
+                    this.lineBuffer = chars.join('');
+                    this._emit(Buffer.from('\x08 \x08', 'utf8'));
+                }
+                continue;
+            }
+            if (char < ' ' || char === '\x7f') {
+                continue;
+            }
+
+            const candidate = this.lineBuffer + char;
+            if (Buffer.byteLength(candidate, 'utf8') <= LineRelayAdapter.MAX_LINE_BYTES) {
+                this.lineBuffer = candidate;
+                this._emit(Buffer.from(char, 'utf8'));
+            }
+        }
+    }
+
+    resize() {
+        // Line-oriented scrolling services have no terminal geometry contract.
+    }
+
+    close() {
+        const slog = this.slog || console;
+        if (!this.process) {
+            return;
+        }
+        slog.log(`[${this.getName()}] Closing generic line runtime`);
+        if (this.process.stdin && !this.process.stdin.destroyed) {
+            this.process.stdin.end();
+        }
+        if (!this.process.killed) {
+            this.process.kill('SIGTERM');
+        }
+        this.process = null;
+    }
+
+    _emit(data) {
+        if (this.dataCallback) {
+            this.dataCallback(data);
+        } else {
+            this.pendingData.push(data);
+        }
+    }
+}
+
+/**
  * RLogin Adapter
  *
  * Connects out to a remote host over the rlogin protocol (RFC 1282) instead
@@ -1068,10 +1223,23 @@ class RloginAdapter extends EmulatorAdapter {
  *
  * @param {string} basePath - Base path for BinktermPHP
  * @param {string} [doorType='dos'] - Door type: 'dos', 'native', or 'rlogin'
+ * @param {string|null} [doorId=null] - Native door id used to resolve terminal_mode
  */
-function createEmulatorAdapter(basePath, doorType) {
+function createEmulatorAdapter(basePath, doorType, doorId = null) {
     // Native Linux doors use PTY directly - no emulator needed
     if (doorType === 'native') {
+        if (doorId) {
+            const manifestPath = path.join(basePath, 'native-doors', 'doors', doorId, 'nativedoor.json');
+            if (!fs.existsSync(manifestPath)) {
+                throw new Error(`Native door manifest not found: ${manifestPath}`);
+            }
+            const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+            const terminalMode = String(manifest.door?.terminal_mode || 'doorway').toLowerCase();
+            if (terminalMode === 'line') {
+                console.log('[EMULATOR] Native terminal mode: line, using LineRelayAdapter');
+                return new LineRelayAdapter(basePath);
+            }
+        }
         console.log('[EMULATOR] Door type: native, using NativeAdapter');
         return new NativeAdapter(basePath);
     }
@@ -1113,6 +1281,7 @@ module.exports = {
     DOSBoxAdapter,
     DOSEMUAdapter,
     NativeAdapter,
+    LineRelayAdapter,
     RloginAdapter,
     createEmulatorAdapter
 };

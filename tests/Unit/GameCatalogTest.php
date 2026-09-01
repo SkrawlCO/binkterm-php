@@ -500,6 +500,46 @@ final class GameCatalogTest extends TestCase
         self::assertSame(3, $exp['policy']['credit_cost']);
     }
 
+    public function testLineManagedDoorIsFullOnWebAndTelnet(): void
+    {
+        $door = [
+            'game' => ['name' => 'Private TCP Experience'],
+            'terminal_mode' => 'line',
+            'relay_host' => '::1',
+            'relay_port' => 43023,
+            'relay_adapter_class' => 'Example\\RelayAdapter',
+            'config' => ['enabled' => true],
+        ];
+
+        $web = $this->normalizeManagedDoor($door, 'native', 'web');
+        $telnet = $this->normalizeManagedDoor($door, 'native', 'telnet');
+
+        self::assertSame('line', $web['terminal']['mode']);
+        self::assertSame('full', $web['surfaces']['web']);
+        self::assertSame('full', $web['surfaces']['telnet']);
+        self::assertTrue($web['actions']['launch']);
+        self::assertSame('line', $telnet['terminal']['mode']);
+        self::assertTrue($telnet['actions']['launch']);
+    }
+
+    public function testProductionMultiZorkIsWebLaunchableThroughNativeBackend(): void
+    {
+        $games = $this->catalog->getEnabledGames(['is_admin' => false], 'web');
+
+        self::assertArrayHasKey('multizork', $games);
+        $multiZork = $games['multizork'];
+        self::assertSame('native', $multiZork['backend']['type']);
+        self::assertSame('line', $multiZork['terminal']['mode']);
+        self::assertSame('full', $multiZork['surfaces']['web']);
+        self::assertSame('full', $multiZork['surfaces']['telnet']);
+        self::assertTrue($multiZork['actions']['launch']);
+        self::assertSame(
+            '/games/nativedoors/multizork?experience=1',
+            \BinktermPHP\ExperienceLaunch::resolve($multiZork, 'web')['url'] ?? null
+        );
+        self::assertSame('/door-assets/multizork/icon', $multiZork['presentation']['icon_url']);
+    }
+
     public function testNestedTerminalModeShapeStillNormalizesToRaw(): void
     {
         // Backwards compatibility: a caller/fixture still passing the old

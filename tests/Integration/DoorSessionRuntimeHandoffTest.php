@@ -132,6 +132,81 @@ PHP
         );
     }
 
+    public function testBridgeReconnectReusesRuntimeBeforeAdapterSelection(): void
+    {
+        $source = (string)file_get_contents(
+            dirname(__DIR__, 2) . '/scripts/dosbox-bridge/multiplexing-server.js'
+        );
+
+        $reuse = strpos($source, 'this.sessionsByToken.get(sessionData.ws_token)');
+        $launch = strpos($source, 'await this.launchEmulator(session);');
+        self::assertNotFalse($reuse);
+        self::assertNotFalse($launch);
+        self::assertLessThan(
+            $launch,
+            $reuse,
+            'A reconnect must reuse the token runtime instead of creating another backend player.'
+        );
+    }
+
+    public function testBridgePassesAuthoritativeDoorIdentityToAdapterFactory(): void
+    {
+        $source = (string)file_get_contents(
+            dirname(__DIR__, 2) . '/scripts/dosbox-bridge/multiplexing-server.js'
+        );
+
+        self::assertStringContainsString(
+            'createEmulatorAdapter(BASE_PATH, doorType, sessionData.door_id)',
+            $source
+        );
+        self::assertStringNotContainsString("door_type = 'multizork'", $source);
+    }
+
+    public function testExplicitEndUsesAuthenticatedLocalControlAndBypassesReconnectGrace(): void
+    {
+        $bridge = (string)file_get_contents(
+            dirname(__DIR__, 2) . '/scripts/dosbox-bridge/multiplexing-server.js'
+        );
+        $lifecycle = (string)file_get_contents(
+            dirname(__DIR__, 2) . '/scripts/dosbox-bridge/managed-runtime-lifecycle.js'
+        );
+        $route = (string)file_get_contents(dirname(__DIR__, 2) . '/routes/door-routes.php');
+
+        self::assertStringContainsString("net.createServer((socket) =>", $bridge);
+        self::assertStringContainsString('authorizeControlRequest(sessionId, token)', $bridge);
+        self::assertStringContainsString('session.sessionId !== sessionId', $bridge);
+        self::assertStringContainsString('terminateExplicitSession(session)', $bridge);
+        self::assertStringContainsString('clearTimeout(session.disconnectTimer)', $bridge);
+        self::assertStringContainsString('Explicit end in progress - reconnect grace bypassed', $bridge);
+        self::assertStringContainsString('await this.waitForRuntimeExit(session)', $bridge);
+        self::assertStringContainsString("process.kill(pid, 'SIGKILL')", $lifecycle);
+        self::assertStringContainsString("new \\BinktermPHP\\DoorBridgeControlClient()", $route);
+        self::assertStringContainsString("(int)(\$session['dosbox_pid'] ?? 0) > 0", $route);
+        self::assertStringContainsString('$runtimeTerminationConfirmed', $route);
+    }
+
+    public function testOrdinaryDisconnectStillRetainsReconnectTimers(): void
+    {
+        $source = (string)file_get_contents(
+            dirname(__DIR__, 2) . '/scripts/dosbox-bridge/multiplexing-server.js'
+        );
+
+        self::assertStringContainsString('Reconnection to existing session', $source);
+        self::assertStringContainsString('Waiting ${RECONNECT_TIMEOUT}s for reconnect...', $source);
+        self::assertStringContainsString('grace period: ${DISCONNECT_TIMEOUT} minutes', $source);
+    }
+
+    public function testEndRouteRequiresOwnerBeforeBridgeTermination(): void
+    {
+        $source = (string)file_get_contents(dirname(__DIR__, 2) . '/routes/door-routes.php');
+        $ownership = strpos($source, "(int)\$session['user_id'] !== \$userId");
+        $control = strpos($source, 'DoorBridgeControlClient');
+
+        self::assertNotFalse($ownership);
+        self::assertNotFalse($control);
+        self::assertLessThan($control, $ownership);
+    }
+
     private function createIsolatedDatabase(): void
     {
         $config = Config::getDatabaseConfig();

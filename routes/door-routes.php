@@ -626,7 +626,7 @@ SimpleRouter::post('/api/door/end', function() {
 
     try {
         $sessionManager = new DoorSessionManager(null, true);
-        $session = $sessionManager->getSession($sessionId);
+        $session = $sessionManager->getSessionRecord($sessionId);
 
         // Verify session belongs to current user.
         // Normalize DB/user IDs to integers before strict comparison because
@@ -637,8 +637,42 @@ SimpleRouter::post('/api/door/end', function() {
             return;
         }
 
-        // End the session
-        $success = $sessionManager->endSession($sessionId);
+        // A completed duplicate request is an authenticated, harmless no-op.
+        if (!empty($session['ended_at'])) {
+            echo json_encode(['success' => true]);
+            return;
+        }
+
+        $runtimeTerminationConfirmed = false;
+        if ((int)($session['dosbox_pid'] ?? 0) > 0) {
+            $wsToken = (string)($session['ws_token'] ?? '');
+            $termination = (new \BinktermPHP\DoorBridgeControlClient())->terminate(
+                $sessionId,
+                $wsToken
+            );
+            if (!$termination['success']) {
+                getDoorLogger()->warning(
+                    '[EndSession] Bridge did not confirm runtime termination for session '
+                    . $sessionId . ': ' . ($termination['error'] ?? 'unknown failure')
+                );
+                doorApiError(
+                    'errors.door.session_end_failed',
+                    'Failed to end session',
+                    503
+                );
+                return;
+            }
+            $runtimeTerminationConfirmed = true;
+        }
+
+        // The bridge owns the child and has confirmed its exit. Only now may
+        // the authoritative database session be marked ended. A session with
+        // no recorded child is caller-owned (for example Telnet line relay)
+        // and retains the established direct-close lifecycle.
+        $success = $sessionManager->endSession(
+            $sessionId,
+            $runtimeTerminationConfirmed
+        );
 
         if ($success) {
             try {

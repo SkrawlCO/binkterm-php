@@ -25,6 +25,13 @@ Native doors are BBS door programs that run as native Linux binaries or Windows 
 
 Native doors use the same multiplexing bridge as DOS doors. Before native doors will work, the bridge must be installed and running.
 
+Native manifests may set `terminal_mode` to `line` for a private, line-oriented
+TCP Experience. These Experiences use `relay_host`, `relay_port`, and an
+optional `relay_adapter_class`; they are available through both terminal and
+web Crossroads without changing backend type. The browser path retains the
+authenticated managed-door WebSocket/session lifecycle and provides local
+echo, line editing, Backspace/Delete, and LF-ended submissions.
+
 **Quick start:**
 
 ```bash

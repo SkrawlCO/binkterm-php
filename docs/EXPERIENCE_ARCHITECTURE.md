@@ -67,6 +67,14 @@ manifest explicitly requests raw terminal handling; otherwise it is `doorway`.
 Presentation clients must consume this normalized field rather than reaching
 into backend manifest structure.
 
+Native Experiences may also declare `terminal.mode = line` with a private
+`relay_host`, `relay_port`, and optional PHP `relay_adapter_class`. Telnet/SSH
+connect directly through the terminal server's line relay. Web launches reuse
+the managed-door xterm/WebSocket/session bridge, whose generic line adapter
+runs `scripts/line-relay-runtime.php` to connect the same private service and
+invoke the same PHP adapter contract. Both surfaces retain the native backend
+identity and shared `door_sessions` lifecycle.
+
 Compatibility fields are also currently retained where existing BinkTerm code
 still expects the older game/door representation.
 
