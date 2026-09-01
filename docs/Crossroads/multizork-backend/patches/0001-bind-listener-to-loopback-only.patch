@@ -1,0 +1,32 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: L33TEST Crossroads <dullclarity@pm.me>
+Date: Sat, 15 Aug 2026 12:00:00 -0600
+Subject: [PATCH] multizorkd: bind listener to loopback (::1) only
+
+multizorkd has no CLI option for a bind address; prep_listen_socket() passes
+NULL to getaddrinfo(), binding every interface. This deployment reaches the
+daemon only through a co-located local relay, so bind ::1.
+
+Network-binding change only: no gameplay, protocol, or on-disk format change.
+This reconstructs the single local modification already present in the
+in-production multizorkd binary (SHA-256 6dcdde18...5536fc89).
+---
+ multizorkd.c | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/multizorkd.c b/multizorkd.c
+index df86a6d..c96a9f8 100644
+--- a/multizorkd.c
++++ b/multizorkd.c
+@@ -2454,7 +2454,10 @@ static int prep_listen_socket(const int port, const int backlog)
+     hints.ai_socktype = SOCK_STREAM;
+     hints.ai_flags = AI_V4MAPPED | AI_NUMERICSERV | AI_PASSIVE;    // AI_PASSIVE for the "any" address.
+     snprintf(service, sizeof (service), "%u", (uint) port);
+-    const int gairc = getaddrinfo(NULL, service, &hints, &ainfo);
++    // Deployment change: bind the listener to loopback only ("::1") instead of
++    //  every interface (NULL). multizorkd has no CLI flag to choose a bind
++    //  address and is only ever reached through a co-located local relay.
++    const int gairc = getaddrinfo("::1", service, &hints, &ainfo);
+     if (gairc != 0) {
+         loginfo("getaddrinfo() failed to find where we should bind! (%s)", gai_strerror(gairc));
+         return -1;

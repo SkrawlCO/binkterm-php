@@ -58,19 +58,38 @@ A dedicated, unprivileged service account (`multizork`, not `www-data`)
 owns all of it and runs the daemon — least-privilege, and distinct from
 the web server's own account.
 
-**Logging note:** multizorkd's own upstream logging (unmodified, not a
-BinkTermPHP concern) writes every raw line of client input to its log,
-including a player's access code when it is submitted — whether typed by
-a human or submitted invisibly by `MultiZorkAdapter`. Left on
-supervisord's default `stdout`/`stderr` targets, that would land in the
-same shared stream `docker logs binkterm-app` shows for every service.
-Slice 3 deliberately points `multizorkd`'s log destination at the
-dedicated `/var/lib/multizork/log/` files instead, keeping it out of that
-casually-browsed shared stream (still readable by whoever can already
-`docker exec`/read the container's filesystem — this narrows exposure, it
-does not eliminate the fact that multizorkd itself logs the value; see
-the Slice 3 report's security audit for the full account, including what
-was already written to the shared log stream before this fix).
+**Logging note:** upstream `multizorkd`'s `process_connection_command()`
+logs every raw line of client input before dispatch. Slice 3 kept that
+log out of the casually-browsed `docker logs binkterm-app` stream by
+pointing it at the dedicated `/var/lib/multizork/log/` files (mode `700`,
+still readable by anyone who can `docker exec`/read the container FS).
+
+Two local source patches now keep every credential out of that log:
+
+- **`0002`** redacts the credential-bearing *input* lines — a returning
+  player's **access code** (`inpfn_hello_sailor`, the credential
+  `MultiZorkAdapter` stores and invisibly re-submits) and a **join code**
+  (`inpfn_enter_instance_code_to_join`) — to `New input from socket N:
+  <redacted>`.
+- **`0003`** redacts the per-game **instance/join code** (`inst->hash`) in
+  the eight instance-lifecycle `loginfo` statements (`Created new
+  instance`, `Saving instance`, `Destroying instance`, `Rehydrated
+  archived instance`, the DB-consistency warning, the endgame line, the
+  not-a-player warning, and the Z-machine crash line) — each now logs the
+  instance as `'<redacted>'` while keeping the event and all non-secret
+  fields. On a crash the players in that instance still receive the full
+  text (with the hash) via the game broadcast; only the log copy is
+  redacted.
+
+All other logging is unchanged. See
+[`multizork-backend/`](multizork-backend/README.md) for the patches,
+build/provenance record and regression harness. These patches are **live in
+production as of 2026-09-01** (binary `multizorkd.p3`, `sha256
+4f1d780c…88a9ef92`) — verified with a live Crossroads smoke: a real caller
+launch, returning-access-code auto-submission, ordinary gameplay, and the
+restricted daemon log showing `<redacted>` for every credential-bearing
+input and instance-lifecycle line with no credential value present anywhere
+in it.
 
 ## Story artifact provenance (unchanged from Slice 1/Gate 1C)
 
@@ -95,22 +114,38 @@ git show 34cc828c4fa3b5e2581ea24c43bb8acb386d25d0:zork1.zip > zork1-r88.dat
 sha256sum zork1-r88.dat   # must equal the hash above
 ```
 
-The `multizorkd` binary itself is the pinned upstream
-`icculus/mojozork` commit `f94c3104aa18036d9ed5f0243814483f82e486cb`,
-built with `gcc -O2 -Wall -o multizorkd multizorkd.c -lsqlite3`, with
-**one disclosed, non-gameplay patch**: the daemon has no CLI flag to
-choose a bind address, so `prep_listen_socket()`'s `getaddrinfo(NULL, ...)`
-(which binds every interface) is changed to `getaddrinfo("::1", ...)`
-(loopback only). This is the same patch used throughout the disposable
-runtime proof and Slices 1–2; it is a deployment/network-binding change,
-not a change to Zork/MultiZork gameplay behavior, and it means multizorkd
-only ever accepts connections from `::1` inside the container — verified
-directly (Slice 3 report) to be unreachable via `127.0.0.1` or `0.0.0.0`.
-Rebuilding this binary from source was not required for Slice 3, since
-the already-verified binary from the disposable proof (identical
-`sha256`) was redeployed; building it inside the container's own
-toolchain (which would need `gcc`/`libsqlite3-dev` added to the image) is
-a reasonable later hardening step, not required by this slice.
+The `multizorkd` binary is the pinned upstream `icculus/mojozork` commit
+`f94c3104aa18036d9ed5f0243814483f82e486cb` (daemon version `0.0.9`),
+built with **`gcc -O2 -DNDEBUG -Wall -o multizorkd multizorkd.c -lsqlite3`**
+in a disposable Ubuntu 22.04 container (`gcc 11.4.0`, `libsqlite3-dev
+3.37.2`). (Earlier revisions of this document said `gcc -O2 -Wall`; the
+`-DNDEBUG` was omitted in error — the prior binary's `.rodata`/size and a
+byte-exact rebuild both confirm it was built with `-DNDEBUG`.)
+
+It carries three disclosed, non-gameplay patches, **all live in production
+as of 2026-09-01**:
+
+- **`0001`** — the daemon has no CLI flag to choose a bind address, so
+  `prep_listen_socket()`'s `getaddrinfo(NULL, ...)` (every interface)
+  becomes `getaddrinfo("::1", ...)` (loopback only), verified unreachable
+  via `127.0.0.1`/`0.0.0.0`. (This was the only patch in the pre-2026-09-01
+  binary `sha256 6dcdde18…5536fc89`.)
+- **`0002`** / **`0003`** — credential-log redaction (see the **Logging
+  note** above).
+
+Deployed binary: `sha256
+4f1d780cf0ea98061ceaebb5ae4321907edb4eede7f3d3cec84530ba88a9ef92`, GNU
+build-id `3ac91e0762cb37215e6dbc9292407192f5217d2b`. Instruction-for-
+instruction it equals the prior binary except the redacted `loginfo`
+statements (`build/verify-equivalence.sh`). The prior binary is retained
+in-container as `/var/lib/multizork/bin/multizorkd.6dcdde18.bak` for a
+binary-only rollback (temporary — remove once the new binary has soaked).
+
+The exact pinned source, the patch files, the containerised build recipe,
+a binary-equivalence check and a black-box regression harness are kept in
+[`multizork-backend/`](multizork-backend/README.md) — the local
+modifications were previously never retained as patch files, which this
+directory corrects. The upstream repository is deliberately not vendored.
 
 ## Experience manifest and configuration
 
@@ -153,13 +188,24 @@ proof accounts, mappings, scratch files, and sensitive daemon log contents were
 removed after acceptance; production player state and legitimate session
 history were retained.
 
-> **HIGH-PRIORITY OPERATIONS FOLLOW-UP:** `/var/lib/multizork` currently lives
-> in the `binkterm-app` container writable layer. Recreating that container can
-> destroy the production player database and is unsafe until the directory is
-> moved to durable managed storage and backup/restore is verified. Also,
-> upstream `multizorkd` still logs raw client input; restricted log permissions
-> and post-proof cleanup are only an interim mitigation. Source-boundary input
-> suppression/redaction remains deferred hardening.
+> **OPERATIONS FOLLOW-UP / DEFERRED ITEMS (as of 2026-09-01):**
+>
+> - `/var/lib/multizork` still lives on the `binkterm-app` container writable
+>   layer. **Recreating that container destroys the production player database
+>   and the deployed binary + `supervisord.conf` edit** — not safe until the
+>   directory is moved to durable managed storage with verified backup/restore.
+> - Credential-log redaction (`0002` + `0003`) is **deployed and verified** —
+>   no returning access code and no instance/join code reaches the daemon log.
+> - **Not remediated this session:** credential-shaped tokens in *historical*
+>   log lines written *before* the 2026-09-01 deploy — both in
+>   `/var/lib/multizork/log/multizorkd.out.log` and in the pre-Slice-3 shared
+>   `docker logs binkterm-app` JSON stream. Left as-is (not truncated).
+> - **By design, not a log:** on a Z-machine crash the instance hash still
+>   reaches the affected players' screens + their `transcripts` row, and the
+>   transcript web view is `…/game/<hash>`. These are hash-addressed
+>   gameplay-recap surfaces, out of scope for log redaction.
+> - The prior binary is kept as `multizorkd.6dcdde18.bak` for rollback —
+>   remove after the new binary has soaked.
 
 ## Identity/expedition model (unchanged)
 

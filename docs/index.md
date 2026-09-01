@@ -74,6 +74,7 @@ Complete reference for sysops and developers. New here? Start with [Getting Star
 - [DOSBox Headless Mode](DOSBox_Headless_Mode.md) — Running DOSBox without a display for DOS doors
 - [MultiZork Slice 1 (Crossroads)](Crossroads/MultiZorkSlice1.md) — the generic native-door line-relay capability (reusable), and its thin, L33TEST-owned MultiZork adapter
 - [MultiZork Production (Crossroads)](Crossroads/MultiZorkProduction.md) — durable backend service, artifact locations/provenance, and manifest for the live MultiZork Experience
+- [MultiZork backend build (Crossroads)](Crossroads/multizork-backend/README.md) — `multizorkd` upstream pin, the three local patches (loopback bind, credential-input redaction, instance/join-code log redaction), containerised build recipe and black-box regression harness
 
 ---
 

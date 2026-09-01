@@ -1,0 +1,106 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: L33TEST Crossroads <dullclarity@pm.me>
+Date: Tue, 1 Sep 2026 15:00:00 -0600
+Subject: [PATCH] multizorkd: never log verbatim instance (join) codes
+
+The per-game instance hash (inst->hash / conn->instance->hash) is the code a
+second player types at inpfn_enter_instance_code_to_join to join a running
+game -- i.e. it is a credential. Eight lifecycle log statements printed it
+verbatim:
+
+  - "Uhoh, instance '%s' has %d players ..."      (db consistency warning)
+  - "!! FATAL Z-MACHINE ERROR (instance='%s' ..."  (crash; also broadcast to players)
+  - "Player #%d on instance '%s' triggered ..."    (endgame)
+  - "Saving instance '%s'..."
+  - "Destroying instance '%s'"
+  - "... trying to talk to instance '%s' ..."      (not-a-player warning)
+  - "Created new instance '%s'"
+  - "Rehydrated archived instance '%s'"
+
+Each now logs the instance as '<redacted>' while keeping the lifecycle event
+and every other field. The crash path still shows the full text (with the
+hash) to the players in that instance via broadcast_to_instance(); only the
+log copy is redacted. No protocol, schema, gameplay, or hash
+generation/validation change.
+---
+ multizorkd.c | 18 ++++++++++--------
+ 1 file changed, 10 insertions(+), 8 deletions(-)
+
+diff --git a/multizorkd.c b/multizorkd.c
+index e050d83..1bcfe80 100644
+--- a/multizorkd.c
++++ b/multizorkd.c
+@@ -645,7 +645,7 @@ static int db_select_instance(Instance *inst, const sqlite3_int64 dbid)
+     sqlite3_reset(GStmtPlayersSelect);
+ 
+     if (num_players != inst->num_players) {
+-        loginfo("Uhoh, instance '%s' has %d players in the database, should be %d!", inst->hash, num_players, inst->num_players);
++        loginfo("Uhoh, instance '<redacted>' has %d players in the database, should be %d!", num_players, inst->num_players);
+         return 0;
+     }
+ 
+@@ -1254,7 +1254,9 @@ static void die_multizork(const char *fmt, ...)
+     }
+ 
+     snprintf(msg, sizeof (msg), "!! FATAL Z-MACHINE ERROR (instance='%s', err='%s', pc=%X, instructions_run=%u) !!", inst->hash, err, (uint) GState->logical_pc, (uint) GState->instructions_run);
+-    loginfo(msg);
++    // Log without the instance hash (it doubles as a join credential); players
++    //  in the instance still get the full message via broadcast_to_instance().
++    loginfo("!! FATAL Z-MACHINE ERROR (instance='<redacted>', err='%s', pc=%X, instructions_run=%u) !!", err, (uint) GState->logical_pc, (uint) GState->instructions_run);
+     broadcast_to_instance(inst, msg);
+     longjmp(inst->jmpbuf, 1);
+ }
+@@ -1470,7 +1472,7 @@ static int step_instance(Instance *inst, const int playernum, const char *input)
+         // endgame, so anyone that wanders back to that room will be told
+         // about the entrance to the stone barrow.
+         if ((starting_wonflag == 0) && (globals[140] != 0)) {
+-            loginfo("Player #%d on instance '%s' triggered the Zork 1 endgame!", playernum, inst->hash);
++            loginfo("Player #%d on instance '<redacted>' triggered the Zork 1 endgame!", playernum);
+             const uint8 flag = 1 << (179 % 8); // 179==West of House objid, minus 1.
+             for (int i = 0; i < inst->num_players; i++) {
+                 uint8 *bitptr = &inst->players[i].touchbits[179 / 8];  // 179==West of House objid, minus 1.
+@@ -1699,7 +1701,7 @@ static void save_instance(Instance *inst)
+ {
+     if (inst->started && inst->dbid) {  // if game started, save the state. If not, just drop the resources.
+         // not much we can do if this fails...
+-        loginfo("Saving instance '%s'...", inst->hash);
++        loginfo("Saving instance '<redacted>'...");
+         if (db_begin_transaction()) {
+             db_update_instance(inst);
+             for (int i = 0; i < inst->num_players; i++) {
+@@ -1717,7 +1719,7 @@ static void free_instance(Instance *inst)
+         return;
+     }
+ 
+-    loginfo("Destroying instance '%s'", inst->hash);
++    loginfo("Destroying instance '<redacted>'");
+ 
+     for (size_t i = 0; i < ARRAYSIZE(inst->players); i++) {
+         Player *player = &inst->players[i];
+@@ -1790,7 +1792,7 @@ static void inpfn_ingame(Connection *conn, const char *str)
+     char msg[256];
+ 
+     if (!player) {
+-        loginfo("Um, socket %d is trying to talk to instance '%s', which it is not a player on.", conn->sock, inst->hash);
++        loginfo("Um, socket %d is trying to talk to instance '<redacted>', which it is not a player on.", conn->sock);
+         write_to_connection(conn, "\n\n*** The server appears to be confused. This is a bug on our end. Sorry, dropping you now. ***\n\n\n");
+         drop_connection(conn);
+         return;
+@@ -2024,7 +2026,7 @@ static void inpfn_new_game_or_join(Connection *conn, const char *str)
+             return;
+         }
+ 
+-        loginfo("Created new instance '%s'", conn->instance->hash);
++        loginfo("Created new instance '<redacted>'");
+ 
+         conn->instance->players[0].connection = conn;
+         write_to_connection(conn, "Okay! Tell your friends to telnet here, too, and join game '");
+@@ -2156,7 +2158,7 @@ static Player *reconnect_player(Connection *conn, const char *access_code)
+     //  recap for this instance that are newer than the latest save time.
+     db_trim_recap(inst);
+ 
+-    loginfo("Rehydrated archived instance '%s'", inst->hash);
++    loginfo("Rehydrated archived instance '<redacted>'");
+ 
+     for (int i = 0; i < inst->num_players; i++) {
+         Player *player = &inst->players[i];
