@@ -18,7 +18,8 @@ use PHPUnit\Framework\TestCase;
  *
  * This slice ships icons for Legend of the Red Dragon and Tristam Island, and
  * stages an Elsewhere icon that is intentionally NOT yet wired into the paused
- * Elsewhere Experience.
+ * Elsewhere Experience. ascii-royale (M4 Slice 3) ships its own custom icon —
+ * an original terminal targeting-reticle mark — the same way.
  */
 final class CrossroadsExperienceIconTest extends TestCase
 {
@@ -133,6 +134,33 @@ final class CrossroadsExperienceIconTest extends TestCase
         $game = $this->enabledExperience('tristam');
         self::assertSame('icon.png', $game['presentation']['icon']);
         self::assertSame('/door-assets/tristam/icon', $game['presentation']['icon_url']);
+    }
+
+    // ---- ascii-royale (M4 Slice 3) --------------------------------------
+
+    public function testAsciiRoyaleIconAssetIsCanonical(): void
+    {
+        $this->assertCanonicalIcon(self::REPO_ROOT . '/native-doors/doors/ascii-royale-m3/icon.png');
+    }
+
+    public function testAsciiRoyaleManifestDeclaresIcon(): void
+    {
+        $manifest = json_decode(
+            (string)file_get_contents(self::REPO_ROOT . '/native-doors/doors/ascii-royale-m3/nativedoor.json'),
+            true
+        );
+        self::assertSame('icon.png', $manifest['game']['icon'] ?? null);
+
+        $door = (new NativeDoorManager())->getDoor('ascii-royale-m3');
+        self::assertIsArray($door);
+        self::assertSame('icon.png', $door['icon'] ?? null);
+    }
+
+    public function testAsciiRoyaleCatalogPresentationExposesIcon(): void
+    {
+        $game = $this->enabledExperience('ascii-royale-m3');
+        self::assertSame('icon.png', $game['presentation']['icon']);
+        self::assertSame('/door-assets/ascii-royale-m3/icon', $game['presentation']['icon_url']);
     }
 
     // ---- BCR Games Server (gateway Experience) --------------------------

@@ -10,7 +10,7 @@
     "description": "A terminal battle royale — last one standing wins. Fight me next round.",
     "genre": ["Action", "Multiplayer"],
     "players": "Multiplayer",
-    "icon": null,
+    "icon": "icon.png",
     "screenshot": null
   },
   "experience": {

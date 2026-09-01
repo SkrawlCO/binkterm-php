@@ -17,6 +17,10 @@ wrapper regression harness are in
 > **Slice 2** opens the Experience to ordinary authenticated users on Web and
 > Telnet — a two-line tracked manifest policy change plus the site-local
 > enable switch. See [Ordinary-user + Telnet enablement](#ordinary-user--telnet-enablement-m4-slice-2).
+>
+> **Slice 3** ships the custom Experience icon — presentation only, no
+> mechanism change. See [Experience icon](#experience-icon-m4-slice-3). This
+> closes M4.
 
 ---
 
@@ -378,6 +382,32 @@ local to the container.
 
 **Outcome:** GO. `config/nativedoors.json` `ascii-royale-m3.enabled` left
 `true`.
+
+---
+
+## Experience icon (M4 Slice 3)
+
+Presentation-only. Before this slice the Crossroads card and lobby fell back
+to the generic site mark (Kludge, orange). ascii-royale now ships a custom
+icon through the **existing** native-door icon contract
+(`docs/NativeDoors.md` → *Experience icon*) — no template, CSS, catalog, or
+route change:
+
+- **Asset:** `native-doors/doors/ascii-royale-m3/icon.png` — a 512×512, 8-bit,
+  non-interlaced RGBA PNG (~4 KB). Original artwork made for L33TEST /
+  Crossroads (generated with PHP GD; no third-party art, logos, sprites, or
+  ANSI). Motif: a terminal targeting reticle locked on a lone combatant
+  marker — green on a dark rounded panel, "last one standing".
+- **Wiring:** `game.icon: "icon.png"` in `nativedoor.json` (the only tracked
+  manifest change). `NativeDoorManifest` flattens it to `door['icon']`;
+  `GameCatalog` exposes `presentation.icon_url = /door-assets/ascii-royale-m3/icon`;
+  `routes/door-routes.php` serves the file as `image/png`.
+- Renders at 48×48 on `/games` and `/crossroads` cards and "Your Places", and
+  120×120 on the `/experiences/ascii-royale-m3` lobby (`object-fit: cover`).
+  The terminal Crossroads (Telnet/SSH) shows no icon and is unaffected.
+- Regression: `tests/Unit/CrossroadsExperienceIconTest.php` gains an
+  ascii-royale block (canonical-asset, manifest, catalog-presentation)
+  alongside the existing LORD / Tristam / BCR cases.
 
 ---
 
