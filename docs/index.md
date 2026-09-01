@@ -75,6 +75,8 @@ Complete reference for sysops and developers. New here? Start with [Getting Star
 - [MultiZork Slice 1 (Crossroads)](Crossroads/MultiZorkSlice1.md) — the generic native-door line-relay capability (reusable), and its thin, L33TEST-owned MultiZork adapter
 - [MultiZork Production (Crossroads)](Crossroads/MultiZorkProduction.md) — durable backend service, artifact locations/provenance, and manifest for the live MultiZork Experience
 - [MultiZork backend build (Crossroads)](Crossroads/multizork-backend/README.md) — `multizorkd` upstream pin, the three local patches (loopback bind, credential-input redaction, instance/join-code log redaction), containerised build recipe and black-box regression harness
+- [ascii-royale Production (Crossroads)](Crossroads/AsciiRoyaleProduction.md) — durable supervisor-managed arena, `/var/lib/ascii-royale/` artifact locations, the privileged lifecycle wrapper, and the deployment/upgrade procedure for the ascii-royale Experience
+- [ascii-royale backend (Crossroads)](Crossroads/ascii-royale-backend/README.md) — `ascii-royale` upstream pin (no local patches), reproducible build + binary verification, the `serve`/bot-count rationale, and the arena-wrapper black-box regression harness
 
 ---
 

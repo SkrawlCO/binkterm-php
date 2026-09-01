@@ -1,0 +1,5 @@
+# throwaway regression work dirs
+/tmp/
+arena-root.*/
+*.out
+*.err

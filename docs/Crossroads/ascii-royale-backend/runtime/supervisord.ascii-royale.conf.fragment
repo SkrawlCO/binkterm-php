@@ -1,0 +1,39 @@
+; ===========================================================================
+; ascii-royale managed arena — Crossroads Experience #2, M4 Slice 1
+;
+; Append this block verbatim to the LIVE container config
+;   /etc/supervisor/conf.d/supervisord.conf
+; then `supervisorctl reread && supervisorctl add ascii-royale-arena`.
+;
+; Like [program:multizorkd] and the dosdoor_bridge/Elsewhere env wiring, this
+; is a live edit to the running container's config — NOT baked into the Docker
+; image. It survives `docker restart binkterm-app`; it does NOT survive
+; `docker compose up --force-recreate` / an image rebuild without re-applying
+; this block and re-staging /var/lib/ascii-royale (see AsciiRoyaleProduction.md).
+;
+; The wrapper runs as root ONLY to publish/maintain the root:root endpoint
+; channel and to drop privileges for the arena; the actual `ascii-royale serve`
+; process runs as the unprivileged `ascii-royale` account. See
+; docs/Crossroads/ascii-royale-backend/runtime/ascii-royale-arena.sh.
+;
+; Logs go to /var/lib/ascii-royale/log/ (NOT /dev/stdout) because upstream
+; `serve` prints `[arena] ticket: <EndpointId>` to stdout — that line must not
+; enter the shared `docker logs binkterm-app` stream. Those files are private
+; (dir 0750 ascii-royale:ascii-royale) and DO contain the EndpointId.
+; ===========================================================================
+[program:ascii-royale-arena]
+command=/var/lib/ascii-royale/bin/ascii-royale-arena.sh
+directory=/var/lib/ascii-royale
+user=root
+autostart=true
+autorestart=true
+startsecs=15
+startretries=5
+stopsignal=TERM
+stopwaitsecs=20
+stdout_logfile=/var/lib/ascii-royale/log/arena.out.log
+stdout_logfile_maxbytes=10MB
+stdout_logfile_backups=3
+stderr_logfile=/var/lib/ascii-royale/log/arena.err.log
+stderr_logfile_maxbytes=10MB
+stderr_logfile_backups=3
