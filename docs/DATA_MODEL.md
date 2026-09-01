@@ -182,6 +182,7 @@ See [BinkStreamChannel.md](BinkStreamChannel.md) for the full architecture.
 | `tor_exit_nodes` | Cached Tor exit node IPs for the registration-screening Tor signal; refreshed every 6h by `binkp_scheduler.php` via `scripts/update_tor_exit_list.php` |
 | `disposable_email_domains` | Cached disposable/throwaway email provider domains for the registration-screening `disposable_email` signal; refreshed every 24h by `binkp_scheduler.php` via `scripts/update_disposable_email_list.php` |
 | `screening_list_refresh` | Last-run/status tracking for screening cache-list refresh jobs, so the scheduler can gate them to a fixed interval |
+| `multizork_expedition_credentials` / `multizork_access_attempts` | L33TEST/Crossroads-owned, MultiZork Experience Slice 1: opaque BinkTerm-user-to-MultiZork-access-code mapping, and its rate-limit attempt log. NOT a generic BinkTermPHP external-identity primitive — see [Crossroads/MultiZorkSlice1.md](Crossroads/MultiZorkSlice1.md) |
 
 ---
 

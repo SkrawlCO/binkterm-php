@@ -72,6 +72,7 @@ Complete reference for sysops and developers. New here? Start with [Getting Star
 - [JS-DOS Doors](JSDOSDoors.md) — Browser-side DOS game emulation via js-dos/DOSBox WASM
 - [C64 Doors](C64Doors.md) — Commodore 64 door games
 - [DOSBox Headless Mode](DOSBox_Headless_Mode.md) — Running DOSBox without a display for DOS doors
+- [MultiZork Slice 1 (Crossroads)](Crossroads/MultiZorkSlice1.md) — the generic native-door line-relay capability (reusable), and its thin, L33TEST-owned MultiZork adapter
 
 ---
 

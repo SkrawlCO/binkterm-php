@@ -245,13 +245,30 @@ class GameCatalog
                     // remote host (e.g. Synchronet) with no notion of Doorway
                     // protocol — cursor/extended keys must pass through raw or
                     // remote navigation breaks. DOS and native doors keep the
-                    // manifest-driven default (doorway unless terminal_mode=raw).
+                    // manifest-driven default (doorway unless terminal_mode is
+                    // raw or line). 'line' is a native-only mode: a private
+                    // TCP line-oriented service reached directly (no local
+                    // process, no dosbox-bridge) — see DoorHandler's
+                    // line-relay path. relay_host/relay_port/relay_adapter_class
+                    // are only meaningful, and only ever populated, when mode
+                    // is 'line'.
                     'mode' => (
                         $backendType === 'rlogin'
                         || $manifestTerminalMode === 'raw'
                     )
                         ? 'raw'
-                        : 'doorway',
+                        : ($manifestTerminalMode === 'line' && $backendType === 'native'
+                            ? 'line'
+                            : 'doorway'),
+                    'relay_host' => ($manifestTerminalMode === 'line' && $backendType === 'native')
+                        ? ($door['relay_host'] ?? null)
+                        : null,
+                    'relay_port' => ($manifestTerminalMode === 'line' && $backendType === 'native')
+                        ? ($door['relay_port'] ?? null)
+                        : null,
+                    'relay_adapter_class' => ($manifestTerminalMode === 'line' && $backendType === 'native')
+                        ? ($door['relay_adapter_class'] ?? null)
+                        : null,
                 ],
 
                 'surfaces' => $surfaces,

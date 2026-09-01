@@ -797,13 +797,25 @@ class DoorHandler
                 $state['username'] ?? 'unknown',
                 "Doors: launched \"{$view['name']}\""
             );
+            $terminalMode = self::resolveTerminalMode($experience);
+            if ($terminalMode === 'line') {
+                $this->launchLineRelayDoor(
+                    $conn,
+                    $state,
+                    $session,
+                    $experienceId,
+                    $view['name'],
+                    $experience
+                );
+                return;
+            }
             $this->launchDoor(
                 $conn,
                 $state,
                 $session,
                 $experienceId,
                 $view['name'],
-                self::resolveTerminalMode($experience),
+                $terminalMode,
                 (string)($experience['backend']['type'] ?? '')
             );
         };
@@ -1659,13 +1671,22 @@ class DoorHandler
     /**
      * Resolve the normalized terminal relay mode with a legacy-safe fallback.
      *
+     * 'line' selects the generic line-buffered private-TCP relay
+     * (launchLineRelayDoor()) instead of the dosbox-bridge WebSocket relay
+     * (launchDoor()). Any other/unrecognized value falls back to the
+     * existing 'raw'/'doorway' resolution unchanged.
+     *
      * @param array<string, mixed> $experience Normalized catalog entry
      */
     public static function resolveTerminalMode(array $experience): string
     {
-        return ($experience['terminal']['mode'] ?? null) === 'raw'
-            ? 'raw'
-            : 'doorway';
+        $mode = $experience['terminal']['mode'] ?? null;
+
+        if ($mode === 'line') {
+            return 'line';
+        }
+
+        return $mode === 'raw' ? 'raw' : 'doorway';
     }
 
     /**
@@ -1941,6 +1962,224 @@ class DoorHandler
             }
             if (is_resource($wsSock)) {
                 stream_set_blocking($wsSock, $wsWasBlocking);
+            }
+        }
+    }
+
+    /** Longest line the line-relay buffer will accumulate before forcing a submit. */
+    private const LINE_RELAY_MAX_LINE = 1024;
+
+    /**
+     * Launch a door whose manifest declares terminal_mode=line: a plain,
+     * line-oriented private TCP service reached directly, with no local
+     * process spawn and no dosbox-bridge WebSocket hop.
+     *
+     * Session bookkeeping (admission, node allocation, door_sessions row,
+     * ExperiencePresence, activity) is unchanged and reused via the same
+     * /api/door/launch and /api/door/end calls every other door type uses —
+     * this method differs from launchDoor() only in how the runtime data
+     * connection is made and relayed.
+     *
+     * If the normalized Experience names a relay_adapter_class with a
+     * callable static handshake() method, it runs once, directly against
+     * the raw socket, before the generic transparent line relay begins.
+     * DoorHandler has no knowledge of what that class does — see
+     * lineRelayLoop() for the generic part, and the resolved class for the
+     * backend-specific part.
+     *
+     * @param resource $conn
+     * @param array $state
+     * @param array<string, mixed> $experience Normalized catalog entry (for
+     *                                          terminal.relay_host/relay_port/
+     *                                          relay_adapter_class)
+     */
+    private function launchLineRelayDoor(
+        $conn,
+        array &$state,
+        string $session,
+        string $doorId,
+        string $doorName,
+        array $experience
+    ): void
+    {
+        TelnetUtils::safeWrite($conn, "\033[2J\033[H");
+        TelnetUtils::writeLine($conn, TelnetUtils::colorize($this->server->t('ui.terminalserver.doors.launching', 'Launching {name}...', ['name' => $doorName], $state['locale']), TelnetUtils::ANSI_CYAN));
+        TelnetUtils::writeLine($conn, '');
+
+        $apiResult = $this->callDoorLaunchApi($session, $doorId, $state['csrf_token'] ?? null);
+
+        if (empty($apiResult['success'])) {
+            $msg = $apiResult['message'] ?? $apiResult['error'] ?? 'Failed to start door session';
+            TelnetUtils::writeLine($conn, TelnetUtils::colorize($this->server->t('ui.terminalserver.doors.launch_error', 'Error: {error}', ['error' => $msg], $state['locale']), TelnetUtils::ANSI_RED));
+            TelnetUtils::writeLine($conn, '');
+            TelnetUtils::writeLine($conn, TelnetUtils::colorize($this->server->t('ui.terminalserver.server.press_any_key', 'Press any key to return...', [], $state['locale']), TelnetUtils::ANSI_YELLOW));
+            $this->server->readKeyWithIdleCheck($conn, $state);
+            return;
+        }
+
+        $doorSession = $apiResult['session'];
+        $sessionId = $doorSession['session_id'];
+
+        $host = (string)($experience['terminal']['relay_host'] ?? '');
+        $port = (int)($experience['terminal']['relay_port'] ?? 0);
+
+        if ($host === '' || $port <= 0) {
+            TelnetUtils::writeLine($conn, TelnetUtils::colorize($this->server->t('ui.terminalserver.doors.connect_failed', 'Could not connect to game bridge. Is the DOS door bridge running?', [], $state['locale']), TelnetUtils::ANSI_RED));
+            TelnetUtils::writeLine($conn, '');
+            TelnetUtils::writeLine($conn, TelnetUtils::colorize($this->server->t('ui.terminalserver.server.press_any_key', 'Press any key to return...', [], $state['locale']), TelnetUtils::ANSI_YELLOW));
+            $this->server->readKeyWithIdleCheck($conn, $state);
+            $this->callDoorEndApi($session, $sessionId, $state['csrf_token'] ?? null);
+            return;
+        }
+
+        TelnetUtils::writeLine($conn, TelnetUtils::colorize($this->server->t('ui.terminalserver.doors.connecting', 'Connecting to game server...', [], $state['locale']), TelnetUtils::ANSI_DIM));
+
+        // Bracket a literal IPv6 relay_host (e.g. "::1") for the tcp:// URL form.
+        $relayTarget = (strpos($host, ':') !== false && $host[0] !== '[') ? "[{$host}]" : $host;
+
+        $errno = 0;
+        $errstr = '';
+        $sock = @stream_socket_client("tcp://{$relayTarget}:{$port}", $errno, $errstr, 5);
+
+        if ($sock === false) {
+            TelnetUtils::writeLine($conn, TelnetUtils::colorize($this->server->t('ui.terminalserver.doors.connect_failed', 'Could not connect to game bridge. Is the DOS door bridge running?', [], $state['locale']), TelnetUtils::ANSI_RED));
+            TelnetUtils::writeLine($conn, '');
+            TelnetUtils::writeLine($conn, TelnetUtils::colorize($this->server->t('ui.terminalserver.server.press_any_key', 'Press any key to return...', [], $state['locale']), TelnetUtils::ANSI_YELLOW));
+            $this->server->readKeyWithIdleCheck($conn, $state);
+            $this->callDoorEndApi($session, $sessionId, $state['csrf_token'] ?? null);
+            return;
+        }
+
+        TelnetUtils::writeLine($conn, TelnetUtils::colorize($this->server->t('ui.terminalserver.doors.connected', 'Connected! Starting game...', [], $state['locale']), TelnetUtils::ANSI_GREEN));
+
+        // Suppress daemon-layer echo — this relay drives its own local echo
+        // (see lineRelayLoop()), exactly as launchDoor() does for its modes.
+        $this->server->safeWrite($conn, chr(255) . chr(251) . chr(1)); // IAC WILL ECHO
+        $this->server->safeWrite($conn, chr(255) . chr(254) . chr(1)); // IAC DONT ECHO
+
+        $adapterClass = $experience['terminal']['relay_adapter_class'] ?? null;
+        $adapterUsable = is_string($adapterClass) && $adapterClass !== '' && class_exists($adapterClass);
+        $adapterContext = ['session_id' => $sessionId, 'door_id' => $doorId];
+
+        if ($adapterUsable && is_callable([$adapterClass, 'handshake'])) {
+            $adapterClass::handshake($conn, $sock, $state, $adapterContext);
+        }
+
+        $onOutput = ($adapterUsable && is_callable([$adapterClass, 'onOutput']))
+            ? static function (string $chunk) use ($adapterClass, &$state, $adapterContext): void {
+                $adapterClass::onOutput($chunk, $state, $adapterContext);
+            }
+            : null;
+
+        $this->lineRelayLoop($conn, $state, $sock, $onOutput);
+
+        // Notify the API before closing the data socket, mirroring launchDoor().
+        $this->callDoorEndApi($session, $sessionId, $state['csrf_token'] ?? null);
+        @fclose($sock);
+
+        // Restore echo state
+        $this->server->safeWrite($conn, chr(255) . chr(251) . chr(1)); // IAC WILL ECHO
+        $this->server->safeWrite($conn, chr(255) . chr(254) . chr(1)); // IAC DONT ECHO
+
+        $this->resetTerminalAfterDoor($conn);
+        $this->drainPendingInput($conn, $state, 250000, 1500000);
+
+        TelnetUtils::safeWrite($conn, "\033[2J\033[H");
+        TelnetUtils::writeLine($conn, '');
+        TelnetUtils::writeLine($conn, TelnetUtils::colorize($this->server->t('ui.terminalserver.doors.returned', 'Returned from {name}.', ['name' => $doorName], $state['locale']), TelnetUtils::ANSI_CYAN));
+        TelnetUtils::writeLine($conn, TelnetUtils::colorize($this->server->t('ui.terminalserver.server.press_continue', 'Press any key to continue...', [], $state['locale']), TelnetUtils::ANSI_YELLOW));
+        $this->server->readKeyWithIdleCheck($conn, $state);
+        $this->drainPendingInput($conn, $state);
+    }
+
+    /**
+     * Generic, backend-agnostic line-buffered relay: local echo, Backspace/
+     * Delete erase, Enter submits a complete line LF-terminated to the
+     * private TCP service; output from that service is written back to the
+     * terminal largely unchanged (no Doorway/ANSI-to-scancode translation —
+     * this mode is for plain scrolling-text services, not screen-oriented
+     * ones).
+     *
+     * CRLF/bare-CR/CR-NUL/Telnet IAC negotiation are handled by the existing,
+     * shared BbsSession::readKeyWithTimeout()/readRawChar() normalization
+     * layer this reuses — nothing here re-parses raw bytes.
+     *
+     * An optional $onOutput(string $chunk): void observer receives every raw
+     * chunk of service output exactly as written to the terminal, purely for
+     * side-effect pattern-watching (e.g. capturing a returned credential) —
+     * it cannot alter the stream and has no input-side visibility.
+     *
+     * @param resource $conn
+     * @param array $state
+     * @param resource $sock Connected private TCP socket
+     * @param ?callable $onOutput
+     */
+    private function lineRelayLoop($conn, array &$state, $sock, ?callable $onOutput = null): void
+    {
+        stream_set_blocking($sock, false);
+        $buffer = '';
+
+        try {
+            while (true) {
+                if (!is_resource($conn) || feof($conn)) {
+                    return;
+                }
+                if (!is_resource($sock) || feof($sock)) {
+                    return;
+                }
+
+                // Drain any pending service output before waiting on the next
+                // keystroke, so another player's chat/broadcast text appears
+                // promptly rather than only after this caller types something.
+                $chunk = @fread($sock, 4096);
+                if ($chunk === false) {
+                    return;
+                }
+                if ($chunk !== '') {
+                    $this->server->safeWrite($conn, $chunk);
+                    if ($onOutput !== null) {
+                        $onOutput($chunk);
+                    }
+                    continue; // check for more pending output before blocking on input
+                }
+
+                [$key, $timedOut, $shouldDisconnect] = $this->server->readKeyWithTimeout($conn, $state, 100);
+                if ($shouldDisconnect) {
+                    return;
+                }
+                if ($timedOut || $key === null || $key === '') {
+                    continue;
+                }
+
+                if ($key === 'BACKSPACE' || $key === 'DELETE' || $key === 'CHAR:\x7f') {
+                    if ($buffer !== '') {
+                        $buffer = substr($buffer, 0, -1);
+                        $this->server->safeWrite($conn, "\x08 \x08");
+                    }
+                    continue;
+                }
+
+                if ($key === 'ENTER') {
+                    $this->server->safeWrite($conn, "\r\n");
+                    @fwrite($sock, $buffer . "\n");
+                    $buffer = '';
+                    continue;
+                }
+
+                if (preg_match('/^CHAR:(.)$/s', $key, $m)) {
+                    if (strlen($buffer) < self::LINE_RELAY_MAX_LINE) {
+                        $buffer .= $m[1];
+                        $this->server->safeWrite($conn, $m[1]);
+                    }
+                    continue;
+                }
+
+                // Any other logical key (arrows, PGUP, etc.) has no meaning
+                // for a plain scrolling-text line service — ignore it.
+            }
+        } finally {
+            if (is_resource($sock)) {
+                stream_set_blocking($sock, true);
             }
         }
     }

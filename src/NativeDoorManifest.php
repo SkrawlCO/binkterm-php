@@ -169,6 +169,15 @@ class NativeDoorManifest
             'dropfile_format' => $data['door']['dropfile_format'] ?? 'DOOR.SYS',
             'output_encoding' => $data['door']['output_encoding'] ?? 'utf8',
             'terminal_mode' => $data['door']['terminal_mode'] ?? 'doorway',
+            // Only meaningful when terminal_mode is 'line': a private TCP
+            // endpoint the terminal layer connects to directly (no local
+            // process spawn, no dosbox-bridge). relay_adapter_class, if
+            // given, names a class the line-relay calls a static
+            // handshake() method on before entering transparent passthrough
+            // — see DoorHandler::launchLineRelayDoor().
+            'relay_host' => $data['door']['relay_host'] ?? null,
+            'relay_port' => isset($data['door']['relay_port']) ? (int)$data['door']['relay_port'] : null,
+            'relay_adapter_class' => $data['door']['relay_adapter_class'] ?? null,
             'node_support' => true,
             'max_nodes' => $data['door']['max_nodes'] ?? 10,
             'ansi_required' => $data['door']['ansi_required'] ?? true,
