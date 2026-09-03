@@ -21,6 +21,52 @@
     text-transform: uppercase;
 }
 
+/* ---- Crossroads masthead (Slice 3: L33TEST identity) ------------------- *
+ * [ L33TEST mark ]  CROSSROADS
+ * The mark is the identity anchor, so the header's left accent bar is
+ * dropped here; one strong primary use, no wallpaper. Cyan is reused from
+ * --experience-accent (the site accent), never a second hue. */
+.crossroads-masthead {
+    border-left: 0;
+    padding-left: 0;
+}
+
+.crossroads-eyebrow {
+    color: color-mix(in srgb, var(--experience-accent) 78%, var(--text-color-muted, #6c757d));
+}
+
+.crossroads-eyebrow span {
+    color: var(--text-color-muted, #6c757d);
+    margin: 0 0.15em;
+}
+
+.crossroads-lockup {
+    align-items: center;
+    display: flex;
+    gap: 0.85rem;
+    margin: 0.35rem 0 0.4rem;
+}
+
+.crossroads-mark {
+    flex-shrink: 0;
+    height: 2.75rem;
+    width: auto;
+}
+
+.crossroads-wordmark {
+    color: var(--text-color, #1a1a1a);
+    font-size: clamp(1.9rem, 1.3rem + 2.4vw, 2.6rem);
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    line-height: 1;
+    text-transform: uppercase;
+}
+
+.crossroads-tagline {
+    font-size: 0.95rem;
+    max-width: 52ch;
+}
+
 /* Around the Crossroads — one quiet community-presence line under the header. */
 .experiences-around {
     color: var(--text-color-muted, #6c757d);
@@ -307,12 +353,22 @@
     }
 }
 
-/* ---- Curated Catalog shelves (Slice 2: composition, not final polish) ---- */
+/* ---- Curated Catalog shelves (Slice 3: identity + rhythm) ------------- */
+
+.experience-catalog {
+    /* The shelves are the library; trim the section's tail so a collapsed
+       Gateways strip does not float in 3rem of void before the scoreboard. */
+    margin-bottom: 1.75rem !important;
+}
+
+.experience-filter-toolbar {
+    margin-top: 0;
+}
 
 .experience-shelves {
     display: flex;
     flex-direction: column;
-    gap: 1.75rem;
+    gap: 1.4rem;
 }
 
 .experience-shelf {
@@ -323,41 +379,52 @@
     display: none;
 }
 
-/* Curated sits first and breathes a little more; the emphasis is placement
-   and spacing, not decoration. */
+/* Curated: strengthen the SURROUNDING composition, not the cards. A quiet
+   inset panel + a single cyan top rule sets it apart; no glow, no bigger
+   cards, no "premium" language. */
 .experience-shelf--curated {
-    padding-top: 0.25rem;
-    border-top: 2px solid color-mix(in srgb, var(--experience-accent) 45%, transparent);
+    background: color-mix(in srgb, var(--experience-accent) 5%, transparent);
+    border-top: 2px solid var(--experience-accent);
+    border-radius: 0 0 6px 6px;
+    margin-bottom: 0.35rem;
+    padding: 0.85rem 0.9rem 1rem;
+}
+
+.experience-shelf--curated .experience-shelf-title {
+    color: color-mix(in srgb, var(--experience-accent) 30%, var(--text-color, #1a1a1a));
 }
 
 .experience-shelf-heading {
     align-items: baseline;
-    column-gap: 0.6rem;
+    column-gap: 0.55rem;
     display: flex;
     flex-wrap: wrap;
-    margin-bottom: 0.6rem;
-    row-gap: 0.1rem;
+    margin-bottom: 0.55rem;
+    row-gap: 0.15rem;
 }
 
 .experience-shelf-title {
-    font-size: 1.15rem;
+    font-size: 1.1rem;
     font-weight: 600;
+    letter-spacing: 0.01em;
 }
 
 .experience-shelf-caption {
     color: var(--text-color-muted, #6c757d);
     flex-basis: 100%;
-    font-size: 0.82rem;
+    font-size: 0.8rem;
+    margin: 0;
 }
 
 .experience-shelf-count {
+    align-self: center;
     border: 1px solid var(--experience-border);
     border-radius: 999px;
     color: var(--text-color-muted, #6c757d);
     font-family: "Courier New", monospace;
-    font-size: 0.7rem;
+    font-size: 0.68rem;
     line-height: 1.2;
-    padding: 0.1rem 0.45rem;
+    padding: 0.08rem 0.45rem;
 }
 
 /* A <details>/<summary> disclosure: native keyboard + ARIA, works with no JS. */
@@ -371,7 +438,13 @@
     display: none;
 }
 
+.experience-shelf-disclosure > summary:focus-visible {
+    border-radius: 3px;
+    outline: 2px solid var(--experience-accent);
+}
+
 .experience-shelf-disclosure > summary .experience-shelf-title::before {
+    color: var(--experience-accent);
     content: "\25B8"; /* ▸ */
     display: inline-block;
     font-size: 0.8em;
@@ -383,7 +456,17 @@
     transform: rotate(90deg);
 }
 
-.experience-shelf-disclosure > .experience-library-grid {
+/* Collapsed: heading + compact caption + modest spacing, then the next
+   section. No reserved-but-invisible card space. */
+.experience-shelf-disclosure:not([open]) > summary {
+    margin-bottom: 0;
+}
+
+.experience-shelf-disclosure:not([open]) > summary .experience-shelf-heading {
+    margin-bottom: 0;
+}
+
+.experience-shelf-disclosure[open] > .experience-library-grid {
     margin-top: 0.6rem;
 }
 
@@ -391,6 +474,21 @@
     .experience-shelf-disclosure > summary .experience-shelf-title::before {
         transition: none;
     }
+}
+
+/* ---- Community Scoreboard: supporting information, not the climax ----- */
+.experience-scoreboard {
+    --bs-card-border-color: var(--experience-border);
+}
+
+.experience-scoreboard-section {
+    border-top: 1px solid var(--experience-border);
+    margin-top: 1.75rem;
+    padding-top: 1.5rem;
+}
+
+.experience-scoreboard .card-header h2 {
+    font-size: 1rem;
 }
 
 @media (min-width: 768px) {
@@ -426,6 +524,23 @@
 @media (max-width: 575.98px) {
     .experiences-library-header {
         padding-left: 0.75rem;
+    }
+
+    .crossroads-masthead {
+        padding-left: 0;
+    }
+
+    .crossroads-lockup {
+        gap: 0.6rem;
+    }
+
+    .crossroads-mark {
+        height: 2.1rem;
+    }
+
+    .experience-shelf--curated {
+        padding-left: 0.65rem;
+        padding-right: 0.65rem;
     }
 
     .experience-filter-search {

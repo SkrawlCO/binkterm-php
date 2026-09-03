@@ -8,10 +8,13 @@
 
 {% block content %}
 <div class="container experiences-library py-3 py-md-4">
-    <header class="experiences-library-header mb-4">
-        <div class="experiences-eyebrow">{{ system_name }} // {{ t('ui.webdoors.heading', {}, locale, ['common']) }}</div>
-        <h1 class="h2 mb-1"><i class="fas fa-compass me-2" aria-hidden="true"></i>{{ t('ui.webdoors.heading', {}, locale, ['common']) }}</h1>
-        <p class="text-muted mb-0">{{ t('ui.webdoors.description', {'system_name': system_name}, locale, ['common']) }}</p>
+    <header class="experiences-library-header crossroads-masthead mb-4">
+        <p class="experiences-eyebrow crossroads-eyebrow mb-0">{{ system_name }} <span aria-hidden="true">//</span> {{ t('ui.webdoors.heading', {}, locale, ['common']) }}</p>
+        <div class="crossroads-lockup">
+            <img class="crossroads-mark" src="/img/l33test-mark.png" width="512" height="512" alt="" aria-hidden="true">
+            <h1 class="crossroads-wordmark h2 mb-0">{{ t('ui.webdoors.heading', {}, locale, ['common']) }}</h1>
+        </div>
+        <p class="crossroads-tagline text-muted mb-0">{{ t('ui.webdoors.description', {'system_name': system_name}, locale, ['common']) }}</p>
     </header>
 
     {# "Around the Crossroads" — one quiet line answering "is anyone around?"
@@ -167,17 +170,15 @@
     </section>
     {% endif %}
 
-    <section class="experience-section mb-5" aria-labelledby="experiences-title">
-        <div class="experience-section-heading">
-            <div>
-                <h2 id="experiences-title" class="h4 mb-1">{{ t('ui.webdoors.experiences', {}, locale, ['common']) }}</h2>
-                <p class="text-muted small mb-0">{{ t('ui.webdoors.all_experiences_description', {}, locale, ['common']) }}</p>
-            </div>
-            <span class="experience-count" aria-live="polite" aria-atomic="true">{{ games|length }}</span>
-        </div>
+    {# The three shelves below ARE the Experience library now, so the old
+       "Experiences / complete library" intro is gone. The heading stays as a
+       visually-hidden landmark label and the live match count moves into the
+       filter toolbar. #}
+    <section class="experience-section experience-catalog mb-5" aria-labelledby="experiences-title">
+        <h2 id="experiences-title" class="visually-hidden">{{ t('ui.webdoors.experiences', {}, locale, ['common']) }}</h2>
 
         {% if games|length > 0 %}
-        <div class="experience-filter-toolbar mt-3" data-experience-filter-controls role="group" aria-label="{{ t('ui.webdoors.filter_controls', {}, locale, ['common']) }}">
+        <div class="experience-filter-toolbar" data-experience-filter-controls role="group" aria-label="{{ t('ui.webdoors.filter_controls', {}, locale, ['common']) }}">
             <div class="experience-filter-search">
                 <label for="experience-filter-search" class="visually-hidden">{{ t('ui.webdoors.filter_search_label', {}, locale, ['common']) }}</label>
                 <input type="search" class="form-control form-control-sm" id="experience-filter-search" placeholder="{{ t('ui.webdoors.filter_search_placeholder', {}, locale, ['common']) }}" autocomplete="off">
@@ -201,6 +202,7 @@
                 </div>
             </div>
             <button type="button" class="btn btn-outline-secondary btn-sm experience-filter-reset" data-experience-filter-reset>{{ t('ui.webdoors.clear_filters', {}, locale, ['common']) }}</button>
+            <span class="experience-count" aria-live="polite" aria-atomic="true" title="{{ t('ui.webdoors.shelf_count_label', {'count': games|length}, locale, ['common']) }}">{{ games|length }}</span>
         </div>
 
         <div class="experience-shelves mt-3" data-experience-filter-root>
@@ -219,7 +221,7 @@
         {% endif %}
     </section>
 
-    <section class="experience-section" aria-labelledby="community-scoreboard-title">
+    <section class="experience-section experience-scoreboard-section" aria-labelledby="community-scoreboard-title">
         <div class="card experience-scoreboard mb-0">
             <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
                 <div>
@@ -278,9 +280,7 @@
     const filterInputs = Array.from(document.querySelectorAll('[data-experience-filter]'));
     const filterResetButtons = Array.from(document.querySelectorAll('[data-experience-filter-reset]'));
     const filterEmpty = document.querySelector('[data-experience-filter-empty]');
-    const filterCount = document.querySelector('#experiences-title')
-        ?.closest('.experience-section-heading')
-        ?.querySelector('.experience-count');
+    const filterCount = document.querySelector('.experience-filter-toolbar .experience-count');
     const presenceElements = document.querySelectorAll('.experience-presence');
     const playersOnlineFallback = '{{ t('ui.webdoors.players_online', {'count': '{count}'}, locale, ['common']) | escape('js') }}';
     const fullCapacityFallback = '{{ t('ui.webdoors.full_capacity', {}, locale, ['common']) | escape('js') }}';

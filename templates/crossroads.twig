@@ -21,10 +21,13 @@
 
 {% block content %}
 <div class="container experiences-library py-3 py-md-4">
-    <header class="experiences-library-header mb-4">
-        <div class="experiences-eyebrow">{{ system_name }} // {{ t('ui.discovery.heading', {}, locale, ['common']) }}</div>
-        <h1 class="h2 mb-1"><i class="fas fa-compass me-2" aria-hidden="true"></i>{{ t('ui.discovery.heading', {}, locale, ['common']) }}</h1>
-        <p class="text-muted mb-0">{{ t('ui.discovery.intro', {'system_name': system_name}, locale, ['common']) }}</p>
+    <header class="experiences-library-header crossroads-masthead mb-4">
+        <p class="experiences-eyebrow crossroads-eyebrow mb-0">{{ system_name }} <span aria-hidden="true">//</span> {{ t('ui.discovery.heading', {}, locale, ['common']) }}</p>
+        <div class="crossroads-lockup">
+            <img class="crossroads-mark" src="/img/l33test-mark.png" width="512" height="512" alt="" aria-hidden="true">
+            <h1 class="crossroads-wordmark h2 mb-0">{{ t('ui.discovery.heading', {}, locale, ['common']) }}</h1>
+        </div>
+        <p class="crossroads-tagline text-muted mb-0">{{ t('ui.discovery.intro', {'system_name': system_name}, locale, ['common']) }}</p>
     </header>
 
     {# "Around" line: aggregate counts only, and only when someone is actually
@@ -46,10 +49,10 @@
     </p>
     {% endif %}
 
-    <section class="experience-section mb-4" aria-labelledby="crossroads-all-title">
-        <div class="experience-section-heading">
-            <h2 id="crossroads-all-title" class="h4 mb-1">{{ t('ui.webdoors.all_experiences', {}, locale, ['common']) }}</h2>
-        </div>
+    {# The shelves are the library; no generic "All Experiences" wrapper. The
+       heading stays as a visually-hidden landmark label. #}
+    <section class="experience-section experience-catalog mb-4" aria-labelledby="crossroads-all-title">
+        <h2 id="crossroads-all-title" class="visually-hidden">{{ t('ui.webdoors.all_experiences', {}, locale, ['common']) }}</h2>
 
         {% if cards|default([])|length > 0 %}
         <div class="experience-shelves">
