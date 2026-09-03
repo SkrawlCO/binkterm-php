@@ -1,8 +1,10 @@
 # OpenGlad WebDoor — Crossroads Experience #3 (A-leg)
 
-**Status: admin-only.** Durable infrastructure (M4 Slice 1F). Ordinary-user
-rollout + custom icon are Slice 1G — not yet enabled
-(`webdoor.json` `admin_only: true`, `config/webdoors.json` `openglad.enabled: false`).
+**Status: LIVE for ordinary authenticated users** (M4 Slice 1G).
+`webdoor.json` `admin_only: false`; `config/webdoors.json` `openglad.enabled: true`
+(site-local admin switch). Anonymous callers are still blocked (WebDoor routes
+require login). Telnet/SSH remain **deferred** — the catalog shows Web
+*available*, Telnet *planned*.
 
 This WebDoor runs the pinned OpenGlad Web/WASM client — **with one tracked
 downstream carry patch** (`docs/Crossroads/openglad-backend/patches/0001-web-persist-namespace.patch`, pending
@@ -85,18 +87,43 @@ no auth system of its own. Limits, lifecycle, and deployment:
 `docs/Crossroads/OpenGladProduction.md`; regression:
 `docs/Crossroads/openglad-backend/test/run-regression.sh`.
 
-## Admin-only
+## Access model (M4 Slice 1G — ordinary users)
 
-`webdoor.json` sets `requirements.admin_only: true` (the WebDoor capability from
-commit `899caa1e`). Withheld from non-admin discovery; `/games/openglad` 403s
-non-admins; catalog-driven APIs fail closed. `index.php` re-checks (defence in
-depth + covers a direct `/webdoors/openglad/index.php` hit). Raw static assets
-(`play.wasm`, …) remain directly fetchable — a WebDoor-inherent property; a
-direct `play.html`/`play.js` load gets no namespace injected → upstream default
-`/persist`, no BinkTerm identity, no working multiplayer.
+`webdoor.json` `requirements.admin_only: false` — **any authenticated L33TEST
+user** discovers and launches OpenGlad. Still fail-closed:
+
+- WebDoor routes require login → **anonymous is blocked** (`/games/openglad`
+  → `/login`; `GameCatalog::isWebDoorDiscoverable` needs a user; the relay's
+  `/api/webdoor/session` auth check needs a session).
+- `index.php` still requires a resolvable immutable `users.id` (HTTP 403 with no
+  game otherwise) and derives the per-user persistence namespace — **never** the
+  shared `/persist` on the L33TEST path.
+- The relay still delegates authorization to
+  `GET /api/webdoor/session?game_id=openglad` — no OpenGlad-specific auth. When
+  `admin_only` was `true` this same call blocked non-admins; with it `false` it
+  admits any authenticated user and still rejects anon / stale sessions.
+- Raw static assets (`play.wasm`, …) stay directly fetchable (WebDoor-inherent);
+  a direct `play.html`/`play.js` load gets no namespace injected and no working
+  multiplayer.
 
 Enable/disable via **Admin → WebDoors** or `config/webdoors.json`
-(`"openglad": {"enabled": true|false}`).
+(`"openglad": {"enabled": true|false}`). Setting `enabled: false` removes it from
+every catalog and every route/relay path 404/403s — the fast kill switch.
+
+## Experience presentation
+
+- `game.icon: "icon.png"` — a 512×512 RGBA PNG, **original L33TEST artwork**
+  (hand-authored vector in `icon.svg`, rasterised via headless Chromium; no
+  third-party or upstream OpenGlad assets). Motif: a gladius crossed with a
+  trident over an arena oval, on the flat dark-rounded-panel used by the
+  MultiZork / ascii-royale cards; OpenGlad's own parchment/gold/green palette.
+  `GameCatalog::addWebDoors` serves it at `/webdoors/openglad/icon.png`.
+- `game.name` / `game.description` — truthful product copy: a real-time action
+  RPG, build a Company, host or join a browser match. **No** overclaim of a
+  persistent shared world, a permanent communal arena, or mid-match joining.
+- Surfaces — `GameCatalog` sets every WebDoor to `web: full`, `telnet: planned`.
+  For OpenGlad that is correct: **Web available, Telnet deferred** (the curses
+  client needs key press/release semantics mainstream SyncTERM lacked in M2).
 
 ## Deployment
 

@@ -1,17 +1,21 @@
 <?php
 
 /*
- * OpenGlad WebDoor entry point (L33TEST Crossroads integration, M4 Slice 1E).
+ * OpenGlad WebDoor entry point (L33TEST Crossroads integration; M4 Slice 1E
+ * fail-closed identity + namespace; M4 Slice 1G ordinary-user access).
  *
  * This is the ONLY server-side glue for the OpenGlad WebDoor. It is a thin
  * wrapper around the UNMODIFIED-except-for-the-tracked-carried-patch OpenGlad
  * Web build (docs/Crossroads/openglad-backend/patches/0001-web-persist-namespace.patch,
  * pending openglad/openglad#281). It:
  *
- *   1. FAILS CLOSED. The authenticated multi-user OpenGlad path requires a
- *      resolvable, immutable BinkTerm user id and admin authorization. If either
- *      is missing this returns 403 and serves no game -- it must never fall back
- *      to OpenGlad's shared "/persist" store for this deployment.
+ *   1. FAILS CLOSED on identity. Requires an authenticated caller with a
+ *      resolvable, immutable BinkTerm user id and the game enabled; otherwise
+ *      HTTP 403 and no game -- it must never fall back to OpenGlad's shared
+ *      "/persist" store for this deployment. Access level (all authenticated
+ *      users vs admin-only) follows webdoor.json `requirements.admin_only`, the
+ *      same manifest-authoritative gate GameCatalog and routes/webdoor-routes.php
+ *      use -- so flipping that flag opens/closes this entry point too.
  *   2. Derives an opaque, deterministic per-user PERSISTENCE PARTITION token
  *      from the immutable users.id only (NOT from APP_SECRET -- a partition id
  *      must survive a secret rotation), and injects it as
@@ -47,10 +51,9 @@ function openglad_forbidden(string $why): void
 $auth = new Auth();
 $user = $auth->getCurrentUser();
 
-// (1) Fail closed. The /games/openglad route already redirects anonymous users
-// and 403s non-admins (the requirements.admin_only capability), but this entry
-// point is defence in depth and also covers a direct /webdoors/openglad/index.php
-// hit.
+// (1) Fail closed on identity. Defence in depth over the /games/openglad route
+// (which already redirects anonymous users and applies the same manifest gate);
+// also covers a direct /webdoors/openglad/index.php hit.
 if (!is_array($user)) {
     openglad_forbidden('no authenticated user');
 }
@@ -58,11 +61,17 @@ $userId = (int)($user['user_id'] ?? $user['id'] ?? 0);
 if ($userId <= 0) {
     openglad_forbidden('unresolvable user id');
 }
-if (empty($user['is_admin'])) {
-    openglad_forbidden('user ' . $userId . ' is not an administrator');
-}
 if (!GameConfig::isGameSystemEnabled() || !GameConfig::isEnabled(OPENGLAD_GAME_ID)) {
     openglad_forbidden('openglad WebDoor is not enabled');
+}
+
+// Access level follows webdoor.json `requirements.admin_only` -- the same
+// manifest-authoritative flag GameCatalog::isWebDoorDiscoverable() and
+// routes/webdoor-routes.php enforce. admin_only:true -> admins only;
+// admin_only:false (M4 Slice 1G) -> any authenticated user.
+$manifest = json_decode((string)@file_get_contents(__DIR__ . '/webdoor.json'), true);
+if (!empty($manifest['requirements']['admin_only']) && empty($user['is_admin'])) {
+    openglad_forbidden('user ' . $userId . ' is not an administrator (webdoor.json admin_only)');
 }
 
 // (2) Opaque per-user persistence-partition token (see OpengladPersistNamespace:

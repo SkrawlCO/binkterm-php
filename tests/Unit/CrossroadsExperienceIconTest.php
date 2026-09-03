@@ -193,6 +193,46 @@ final class CrossroadsExperienceIconTest extends TestCase
         self::assertSame('/door-assets/bcrgames/icon', $games['bcrgames']['presentation']['icon_url']);
     }
 
+    // ---- OpenGlad (M4 Slice 1G) — a WebDoor, not a native door ---------
+
+    public function testOpengladIconAssetIsCanonical(): void
+    {
+        $this->assertCanonicalIcon(
+            self::REPO_ROOT . '/public_html/webdoors/openglad/icon.png'
+        );
+    }
+
+    public function testOpengladIconSourceSvgIsTrackedAndValid(): void
+    {
+        $svg = self::REPO_ROOT . '/public_html/webdoors/openglad/icon.svg';
+        self::assertFileExists($svg, 'the icon.png vector source must be tracked');
+        $xml = @simplexml_load_file($svg);
+        self::assertNotFalse($xml, 'icon.svg is not well-formed XML');
+        self::assertSame('svg', $xml->getName());
+    }
+
+    public function testOpengladManifestDeclaresIcon(): void
+    {
+        $manifest = json_decode(
+            (string)file_get_contents(
+                self::REPO_ROOT . '/public_html/webdoors/openglad/webdoor.json'
+            ),
+            true
+        );
+        self::assertSame('icon.png', $manifest['game']['icon'] ?? null);
+        // Slice 1G also flipped this open to ordinary authenticated users.
+        self::assertFalse((bool)($manifest['requirements']['admin_only'] ?? true));
+    }
+
+    public function testOpengladCatalogPresentationExposesIcon(): void
+    {
+        // WebDoor icons are served straight from the door directory, unlike the
+        // native-door /door-assets/{id}/icon route.
+        $game = $this->enabledExperience('openglad');
+        self::assertSame('icon.png', $game['presentation']['icon']);
+        self::assertSame('/webdoors/openglad/icon.png', $game['presentation']['icon_url']);
+    }
+
     // ---- Elsewhere: staged, NOT wired -----------------------------------
 
     public function testElsewhereIconIsStagedAsCanonicalArtwork(): void

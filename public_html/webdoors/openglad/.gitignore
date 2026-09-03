@@ -3,9 +3,10 @@
 # from pinned OpenGlad 4565499825c2 + the tracked carry patch(es), emsdk 6.0.3.
 # Not source -- rebuild, do not commit. Verified against
 #   docs/Crossroads/openglad-backend/build/EXPECTED.sha256
-# by verify-webdoor.sh, and layered into the L33TEST image at build time
-# (see docs/Crossroads/OpenGladProduction.md). The tracked entry point is
-# index.php; play.html is the pinned OpenGlad shell used verbatim.
+# by verify-webdoor.sh, and deployed via the ./app bind mount (NOT image-layered
+# -- see docs/Crossroads/OpenGladProduction.md). The tracked entry point is
+# index.php; play.html is the pinned OpenGlad shell used verbatim. icon.svg /
+# icon.png are tracked (the custom Experience icon).
 index.html
 play.html
 play.js

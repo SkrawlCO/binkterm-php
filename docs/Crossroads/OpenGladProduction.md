@@ -15,10 +15,15 @@ build scripts and the relay regression harness are in
 > acceptance-time `supervisorctl add` + hand-edited proxy config that was
 > reverted at teardown.
 >
-> **Slice 1G** (not this slice) opens the Experience to ordinary authenticated
-> users and ships a custom icon. Until then OpenGlad is **admin-only**
-> (`webdoor.json` `requirements.admin_only: true`) and the site switch
-> (`config/webdoors.json` `openglad.enabled`) is `false`.
+> **Slice 1G** (2026-09-03) opened the Experience to **ordinary authenticated
+> users**: `webdoor.json` `requirements.admin_only: false`, `config/webdoors.json`
+> `openglad.enabled: true`, a custom Experience icon
+> (`public_html/webdoors/openglad/icon.png`), and truthful product copy.
+> Anonymous is still blocked; Telnet stays **deferred** (catalog: Web
+> *available*, Telnet *planned*). Proven live with two ordinary non-admin
+> accounts (discovery → launch → HOST/JOIN/GO → per-user save isolation) and
+> across a genuine container recreate. **OpenGlad M4-A is LIVE — Crossroads
+> Curated Experience #3.**
 
 ---
 
@@ -303,9 +308,10 @@ Never restart the whole container or unrelated supervisor programs for this.
 | Prefer to wait for upstream #281? | **No.** `multizork` shipped production carrying three tracked patches under the same discipline. #281 silence is not a safety signal. If it lands a different shape, the carry patch + a pin bump absorb it with no BinkTerm core change. |
 | Honest scope of the A-leg | "host a private match / join a friend's match" with per-user persistence — **not** "drop into a live arena". The always-populated experience is the deferred B-leg. Rollout copy should say so. |
 
-Ordinary-user enablement + the custom icon are **Slice 1G**, not this slice.
-Until then: `webdoor.json` `admin_only: true`, `config/webdoors.json`
-`openglad.enabled: false`.
+Ordinary-user enablement + the custom icon shipped in **Slice 1G** (2026-09-03):
+`webdoor.json` `admin_only: false`, `config/webdoors.json` `openglad.enabled: true`,
+`game.icon: icon.png`. The `enabled` toggle remains the fast kill switch; the
+`admin_only` line remains a one-line revert to admin-only.
 
 ---
 

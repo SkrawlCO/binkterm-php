@@ -5,13 +5,13 @@
     "name": "OpenGlad",
     "version": "0.0.0-4565499",
     "author": "OpenGlad project (GPL-2.0); L33TEST Crossroads integration",
-    "description": "Gladiator arena RPG, browser/WASM build, self-hosted relay multiplayer, per-user browser persistence. Admin-only integration proof (M4 Slice 1A/1E) - not an ordinary-user Experience.",
+    "description": "A real-time action RPG in the gladiator-arena tradition. Recruit and grow a Company of fighters across classes, through campaigns of combat and progression. Play solo, or host a match and have another player join to fight alongside or against you, right in your browser. Your Company saves to your own L33TEST account.",
     "entry_point": "index.php",
-    "icon": "icon.svg"
+    "icon": "icon.png"
   },
   "requirements": {
     "min_host_version": "1.0",
-    "admin_only": true
+    "admin_only": false
   },
   "multiplayer": {
     "enabled": true
