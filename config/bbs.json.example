@@ -15,6 +15,9 @@
         "pgp_public_keyserver": true,
         "pgp_managed_keys": false
     },
+    "crossroads": {
+        "curated_experiences": []
+    },
     "default_echo_interface": "echolist",
     "bulletin_display_mode": "once",
     "dashboard_ad_rotate_interval_seconds": 20,

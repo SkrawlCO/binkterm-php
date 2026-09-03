@@ -30,7 +30,7 @@ class BbsConfig
      *
      * @var string[]
      */
-    private const REPLACE_WHOLESALE_KEYS = ['registration_screening'];
+    private const REPLACE_WHOLESALE_KEYS = ['registration_screening', 'crossroads'];
 
     private static function getConfigPath(): string
     {
@@ -373,6 +373,46 @@ class BbsConfig
     public static function isAnonymousExperienceDiscoveryEnabled(): bool
     {
         return self::isFeatureEnabled('anonymous_experience_discovery');
+    }
+
+    /**
+     * Ordered list of catalog IDs the operator has curated as defining
+     * Crossroads Experiences (`crossroads.curated_experiences` in
+     * config/bbs.json).
+     *
+     * Curation is an editorial/operator decision, not an intrinsic property of
+     * the game and not the same as the legacy manifest `experience.featured`
+     * flag. The list is Crossroads-specific, ordered, and backend-independent;
+     * changing it never requires editing a native/DOS/WebDoor manifest.
+     *
+     * Default (key absent, non-array, or empty): no entries are curated. This
+     * preserves historical behaviour for installs that never opt in.
+     *
+     * Values are trimmed, blank entries dropped, and duplicates removed while
+     * preserving first-seen order. Stale IDs (curated here but not currently
+     * discoverable) are returned as-is; consumers intersect against the live
+     * catalog so a stale ID simply classifies nothing.
+     *
+     * @return list<string>
+     */
+    public static function getCuratedExperienceIds(): array
+    {
+        self::load();
+
+        $configured = self::$config['crossroads']['curated_experiences'] ?? null;
+        if (!is_array($configured)) {
+            return [];
+        }
+
+        $ids = [];
+        foreach ($configured as $value) {
+            $id = trim((string)$value);
+            if ($id !== '' && !in_array($id, $ids, true)) {
+                $ids[] = $id;
+            }
+        }
+
+        return $ids;
     }
 
     /**

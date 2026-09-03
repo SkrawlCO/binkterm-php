@@ -132,6 +132,48 @@ final class ExperiencePresentationTest extends TestCase
         self::assertSame('single_player', $view['capabilities']['player_mode']);
     }
 
+    public function testCurationDefaultsToNotCuratedWhenAbsent(): void
+    {
+        $view = ExperiencePresentation::build($this->experience(), 'web');
+
+        self::assertSame(['curated' => false, 'order' => null], $view['curation']);
+    }
+
+    public function testCurationBlockPassesThroughFromTheCatalogEntry(): void
+    {
+        $experience = $this->experience();
+        $experience['curation'] = ['curated' => true, 'order' => 2];
+
+        $view = ExperiencePresentation::build($experience, 'web');
+
+        self::assertTrue($view['curation']['curated']);
+        self::assertSame(2, $view['curation']['order']);
+    }
+
+    public function testCurationIsNormalizedForMalformedInput(): void
+    {
+        $experience = $this->experience();
+        $experience['curation'] = ['curated' => true]; // order missing
+
+        $view = ExperiencePresentation::build($experience, 'web');
+
+        self::assertTrue($view['curation']['curated']);
+        self::assertNull($view['curation']['order']);
+    }
+
+    public function testPublicProjectionCarriesTheCurationBlock(): void
+    {
+        $experience = $this->experience();
+        $experience['curation'] = ['curated' => true, 'order' => 0];
+
+        $view = ExperiencePresentation::buildPublic($experience, 'web');
+
+        self::assertSame(['curated' => true, 'order' => 0], $view['curation']);
+        // Still no identity-bearing keys.
+        self::assertArrayNotHasKey('viewer', $view);
+        self::assertArrayNotHasKey('launch', $view);
+    }
+
     public function testGatewayExperienceHasNoPlayerModeEvenWhenMultiplayerIsFalse(): void
     {
         // A Gateway is a destination whose internal session model is opaque to

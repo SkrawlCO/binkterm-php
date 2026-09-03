@@ -71,6 +71,7 @@ final class ExperiencePresentation
         );
 
         $category = self::nonEmptyString($experience['category'] ?? null) ?? 'game';
+        $curation = self::curation($experience['curation'] ?? null);
         $multiplayer = !empty($experience['capabilities']['multiplayer']);
         // Player-mode descriptor. Only Game Experiences carry a single/multi
         // player label; a Gateway Experience is a destination whose internal
@@ -86,6 +87,10 @@ final class ExperiencePresentation
             'name' => $name,
             'description' => trim((string)($experience['description'] ?? '')),
             'category' => $category,
+            // Crossroads curation state (backend-independent). Non-identity
+            // bearing: safe on anonymous surfaces. Shelf placement is derived
+            // from this plus `category` by CrossroadsShelves.
+            'curation' => $curation,
             'author' => self::nonEmptyString($experience['author'] ?? null),
             'version' => self::nonEmptyString($experience['version'] ?? null),
             'presentation' => [
@@ -216,6 +221,7 @@ final class ExperiencePresentation
             'name' => $view['name'],
             'description' => $view['description'],
             'category' => $view['category'],
+            'curation' => $view['curation'],
             'author' => $view['author'],
             'version' => $view['version'],
             'presentation' => [
@@ -366,5 +372,25 @@ final class ExperiencePresentation
         $value = trim((string)$value);
 
         return $value !== '' ? $value : null;
+    }
+
+    /**
+     * Normalize the curation block GameCatalog attaches to each entry.
+     *
+     * Tolerates a missing/malformed value (an entry composed outside the
+     * catalog, or a fixture) by defaulting to "not curated".
+     *
+     * @param mixed $curation
+     * @return array{curated:bool,order:int|null}
+     */
+    private static function curation(mixed $curation): array
+    {
+        $curated = is_array($curation) && !empty($curation['curated']);
+        $order = null;
+        if ($curated && isset($curation['order']) && is_numeric($curation['order'])) {
+            $order = (int)$curation['order'];
+        }
+
+        return ['curated' => $curated, 'order' => $order];
     }
 }

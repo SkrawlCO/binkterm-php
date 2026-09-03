@@ -223,6 +223,7 @@ final class GameCatalogTest extends TestCase
                 'name',
                 'description',
                 'category',
+                'curation',
                 'backend',
                 'author',
                 'version',
@@ -255,6 +256,84 @@ final class GameCatalogTest extends TestCase
                     "Legacy field '{$legacyField}' must not exist for {$game['id']}"
                 );
             }
+        }
+    }
+
+    public function testEveryEntryCarriesACurationBlock(): void
+    {
+        $games = $this->catalog->getEnabledGames(null, 'web');
+
+        foreach ($games as $game) {
+            self::assertArrayHasKey('curation', $game);
+            self::assertArrayHasKey('curated', $game['curation']);
+            self::assertArrayHasKey('order', $game['curation']);
+            self::assertIsBool($game['curation']['curated']);
+            if ($game['curation']['curated']) {
+                self::assertIsInt($game['curation']['order']);
+            } else {
+                self::assertNull($game['curation']['order']);
+            }
+        }
+    }
+
+    public function testCurationListTagsMatchingEntriesInOperatorOrder(): void
+    {
+        $catalog = new GameCatalog(null, ['openglad', 'multizork']);
+        $games = $catalog->getEnabledGames(null, 'web');
+
+        self::assertTrue($games['openglad']['curation']['curated']);
+        self::assertSame(0, $games['openglad']['curation']['order']);
+        self::assertTrue($games['multizork']['curation']['curated']);
+        self::assertSame(1, $games['multizork']['curation']['order']);
+
+        // Everything not in the list is explicitly not curated.
+        self::assertFalse($games['lord']['curation']['curated']);
+        self::assertNull($games['lord']['curation']['order']);
+        self::assertFalse($games['bcrgames']['curation']['curated']);
+    }
+
+    public function testEmptyCurationListLeavesNothingCurated(): void
+    {
+        $games = (new GameCatalog(null, []))->getEnabledGames(null, 'web');
+
+        foreach ($games as $game) {
+            self::assertFalse($game['curation']['curated'], $game['id']);
+            self::assertNull($game['curation']['order'], $game['id']);
+        }
+    }
+
+    public function testStaleCurationIdDoesNotCreateOrReclassifyEntries(): void
+    {
+        $baseline = (new GameCatalog(null, []))->getEnabledGames(null, 'web');
+        $withStale = (new GameCatalog(null, ['no-such-experience', 'openglad']))
+            ->getEnabledGames(null, 'web');
+
+        // No phantom card for the missing id.
+        self::assertArrayNotHasKey('no-such-experience', $withStale);
+        // Same entry set, same order.
+        self::assertSame(array_keys($baseline), array_keys($withStale));
+        // Only the real curated id is tagged; its order is its list position.
+        self::assertTrue($withStale['openglad']['curation']['curated']);
+        self::assertSame(1, $withStale['openglad']['curation']['order']);
+        // Unrelated entries are untouched.
+        self::assertFalse($withStale['lord']['curation']['curated']);
+    }
+
+    public function testCurationDoesNotAlterLaunchOrSurfaceContract(): void
+    {
+        $plain = (new GameCatalog(null, []))->getEnabledGames(null, 'web');
+        $curated = (new GameCatalog(null, ['openglad']))->getEnabledGames(null, 'web');
+
+        foreach ($plain as $id => $game) {
+            $other = $curated[$id];
+            self::assertSame($game['surfaces'], $other['surfaces'], $id);
+            self::assertSame($game['actions'], $other['actions'], $id);
+            self::assertSame($game['policy'], $other['policy'], $id);
+            self::assertEquals(
+                array_diff_key($game, ['curation' => true]),
+                array_diff_key($other, ['curation' => true]),
+                "only the curation block may differ for {$id}"
+            );
         }
     }
 

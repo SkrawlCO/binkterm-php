@@ -53,6 +53,7 @@ The normalized Experience representation includes common information such as:
 
 - identity and display metadata
 - category
+- curation (Crossroads shelf placement — see below)
 - backend information
 - capabilities
 - presentation surfaces
@@ -74,6 +75,23 @@ the managed-door xterm/WebSocket/session bridge, whose generic line adapter
 runs `scripts/line-relay-runtime.php` to connect the same private service and
 invoke the same PHP adapter contract. Both surfaces retain the native backend
 identity and shared `door_sessions` lifecycle.
+
+### Curation
+
+Every normalized entry carries a `curation` block: `{ curated: bool, order:
+int|null }`. `curated` is true when the entry's catalog ID appears in the
+operator's ordered `crossroads.curated_experiences` list in `config/bbs.json`
+(read via `BbsConfig::getCuratedExperienceIds()`); `order` is then its 0-based
+position in that list. The default — key absent or empty — is that nothing is
+curated, preserving historical behaviour for installs that do not opt in.
+
+Curation is an editorial/operator decision, independent of backend type and of
+the game's own manifest (it is not the legacy manifest `experience.featured`
+flag). `ExperiencePresentation::build()` and `buildPublic()` pass the block
+through unchanged; it carries no viewer identity and is safe on anonymous
+surfaces. `CrossroadsShelves` derives the three Curated Catalog shelves from it
+plus `category`: an entry is `curated` if `curation.curated`, else `gateway` if
+`category === 'gateway'`, else `game_hall` (curation wins over category).
 
 Compatibility fields are also currently retained where existing BinkTerm code
 still expects the older game/door representation.

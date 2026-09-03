@@ -19,9 +19,26 @@ class GameCatalog
 {
     private ChatRoomService $chatRooms;
 
-    public function __construct(?ChatRoomService $chatRooms = null)
-    {
+    /**
+     * Ordered catalog IDs the operator has curated as defining Crossroads
+     * Experiences. Injected for testability; defaults to the
+     * config/bbs.json-owned list. Empty means "nothing is curated".
+     *
+     * @var list<string>
+     */
+    private array $curatedExperienceIds;
+
+    /**
+     * @param list<string>|null $curatedExperienceIds Ordered curated catalog
+     *     IDs; null resolves to {@see BbsConfig::getCuratedExperienceIds()}.
+     */
+    public function __construct(
+        ?ChatRoomService $chatRooms = null,
+        ?array $curatedExperienceIds = null
+    ) {
         $this->chatRooms = $chatRooms ?? new ChatRoomService();
+        $this->curatedExperienceIds = $curatedExperienceIds
+            ?? BbsConfig::getCuratedExperienceIds();
     }
 
     /**
@@ -68,7 +85,36 @@ class GameCatalog
         $this->addWebDoors($experiences, $user, $surface);
         $this->addJsdosDoors($experiences, $user, $surface);
 
+        $this->applyCuration($experiences);
+
         return $experiences;
+    }
+
+    /**
+     * Tag every normalized entry with its Crossroads curation state.
+     *
+     * `curation.curated` is true when the entry's ID appears in the operator's
+     * ordered curation list; `curation.order` is then its 0-based position in
+     * that list, else null. This is a generic, backend-independent signal —
+     * shelf composition (curated / game_hall / gateway) is derived from it plus
+     * the existing `category` by {@see CrossroadsShelves}. A curated ID that is
+     * not currently discoverable classifies nothing (only real entries are
+     * tagged here).
+     *
+     * @param array<string, array<string, mixed>> $experiences
+     */
+    private function applyCuration(array &$experiences): void
+    {
+        $order = array_flip($this->curatedExperienceIds);
+
+        foreach ($experiences as $id => &$experience) {
+            $curated = isset($order[$id]);
+            $experience['curation'] = [
+                'curated' => $curated,
+                'order' => $curated ? (int)$order[$id] : null,
+            ];
+        }
+        unset($experience);
     }
 
     /**
