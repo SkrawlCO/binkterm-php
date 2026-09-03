@@ -3925,6 +3925,8 @@ Dies ist eine **eigene Splash-Nachricht**.',
     'ui.webdoor_play.back_to_crossroads' => 'Zurück zu Crossroads',
     'ui.webdoor_play.admin_config' => 'Admin-Konfiguration',
     'ui.webdoor_play.fullscreen' => 'Vollbild',
+    'ui.webdoor_play.exit_fullscreen' => 'Vollbild verlassen',
+    'ui.webdoor_play.fs_controls_label' => 'Crossroads-Steuerung',
     'ui.webdoor_play.play_mode' => 'Spielmodus',
 
     // Experience lobby (Crossroads inner surface)

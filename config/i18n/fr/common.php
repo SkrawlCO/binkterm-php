@@ -3270,6 +3270,8 @@ Vous pouvez envoyer des rappels individuels en utilisant les boutons « Rappeler
     'ui.webdoor_play.back_to_crossroads' => 'Retour à Crossroads',
     'ui.webdoor_play.admin_config' => 'Configuration admin',
     'ui.webdoor_play.fullscreen' => 'Plein écran',
+    'ui.webdoor_play.exit_fullscreen' => 'Quitter le plein écran',
+    'ui.webdoor_play.fs_controls_label' => 'Commandes Crossroads',
     'ui.webdoor_play.play_mode' => 'Mode jeu',
 
     // Experience lobby (Crossroads inner surface)

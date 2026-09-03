@@ -3927,6 +3927,8 @@ return [
     'ui.webdoor_play.back_to_crossroads' => 'Torna a Crossroads',
     'ui.webdoor_play.admin_config' => 'Configurazione admin',
     'ui.webdoor_play.fullscreen' => 'Schermo intero',
+    'ui.webdoor_play.exit_fullscreen' => 'Esci da schermo intero',
+    'ui.webdoor_play.fs_controls_label' => 'Controlli Crossroads',
     'ui.webdoor_play.play_mode' => 'Modalità gioco',
 
     // Experience lobby (Crossroads inner surface)

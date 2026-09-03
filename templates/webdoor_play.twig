@@ -19,6 +19,22 @@
     </div>
 
     <div class="game-container">
+        {# Crossroads-owned escape affordance. Only rendered while the
+           .game-container element itself is fullscreen (the case the wrapper's
+           own fullscreen button creates for every WebDoor, including Chessmata
+           and OpenGlad) -- the normal top bar is a sibling and the browser does
+           not paint it during fullscreen. Idle it is nearly transparent and
+           only its two hitboxes are clickable, so it does not obscure or
+           intercept gameplay. It is not in the tab order or layout when hidden. #}
+        <div class="webdoor-fs-escape" id="webdoor-fs-escape" role="group"
+             aria-label="{{ t('ui.webdoor_play.fs_controls_label', {}, locale, ['common']) }}" aria-hidden="true">
+            <a href="{{ return_url|default('/games') }}" class="webdoor-fs-btn" id="webdoor-fs-leave" tabindex="-1">
+                <i class="fas fa-arrow-left"></i> {{ t('ui.webdoor_play.back_to_crossroads', {}, locale, ['common']) }}
+            </a>
+            <button type="button" class="webdoor-fs-btn" id="webdoor-fs-exit" tabindex="-1">
+                <i class="fas fa-compress"></i> {{ t('ui.webdoor_play.exit_fullscreen', {}, locale, ['common']) }}
+            </button>
+        </div>
         <iframe id="game-frame"
                 src="{{ game_url }}"
                 class="game-frame"
@@ -53,6 +69,50 @@
 .game-container:fullscreen .game-frame {
     height: 100vh;
 }
+
+/* Crossroads-owned fullscreen escape affordance (hidden unless the
+   .game-container element is the fullscreen element). */
+.webdoor-fs-escape {
+    display: none;
+}
+.game-container:fullscreen .webdoor-fs-escape,
+.game-container:-webkit-full-screen .webdoor-fs-escape {
+    display: flex;
+    gap: .4rem;
+    position: absolute;
+    top: .5rem;
+    right: .5rem;
+    z-index: 20;
+    pointer-events: none;      /* only the buttons catch clicks */
+    opacity: .22;
+    transition: opacity .15s ease;
+}
+.game-container:fullscreen .webdoor-fs-escape:hover,
+.game-container:fullscreen .webdoor-fs-escape:focus-within {
+    opacity: 1;
+}
+.webdoor-fs-btn {
+    pointer-events: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    padding: .3rem .6rem;
+    font-size: .8rem;
+    line-height: 1;
+    color: #fff;
+    background: rgba(15, 17, 21, .82);
+    border: 1px solid rgba(255, 255, 255, .35);
+    border-radius: 999px;
+    text-decoration: none;
+    cursor: pointer;
+}
+.webdoor-fs-btn:hover,
+.webdoor-fs-btn:focus-visible {
+    background: rgba(15, 17, 21, .95);
+    color: #fff;
+    outline: 2px solid rgba(255, 255, 255, .6);
+    outline-offset: 1px;
+}
 </style>
 
 <script>
@@ -73,6 +133,44 @@ document.addEventListener('keydown', function(e) {
         document.exitFullscreen();
     }
 });
+
+// Crossroads-owned fullscreen escape affordance. The "Back to Crossroads" link
+// navigates (which auto-exits fullscreen and fires the End Session beacon
+// below); the "Exit Fullscreen" button just drops out of fullscreen so the
+// normal wrapper controls return. The affordance is only reachable/keyboard-
+// focusable while the .game-container element is the fullscreen element.
+(function () {
+    var container = document.querySelector('.game-container');
+    var escape = document.getElementById('webdoor-fs-escape');
+    var exitBtn = document.getElementById('webdoor-fs-exit');
+    if (!container || !escape || !exitBtn) {
+        return;
+    }
+
+    function fsElement() {
+        return document.fullscreenElement || document.webkitFullscreenElement || null;
+    }
+
+    exitBtn.addEventListener('click', function () {
+        if (document.exitFullscreen) {
+            document.exitFullscreen();
+        } else if (document.webkitExitFullscreen) {
+            document.webkitExitFullscreen();
+        }
+    });
+
+    function syncEscape() {
+        var active = fsElement() === container;
+        escape.setAttribute('aria-hidden', active ? 'false' : 'true');
+        escape.querySelectorAll('.webdoor-fs-btn').forEach(function (el) {
+            el.setAttribute('tabindex', active ? '0' : '-1');
+        });
+    }
+
+    document.addEventListener('fullscreenchange', syncEscape);
+    document.addEventListener('webkitfullscreenchange', syncEscape);
+    syncEscape();
+})();
 
 // Leaving the WebDoor page ends this game's active participation, so Crossroads
 // presence (Live Now, rosters, "Your Places") reflects that the player has left
