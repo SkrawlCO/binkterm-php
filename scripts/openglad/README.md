@@ -1,43 +1,54 @@
-# OpenGlad self-hosted relay (M4 Slice 1A assay)
+# OpenGlad self-hosted relay
 
-`openglad-relay-runtime.cjs` runs the OpenGlad multiplayer **relay** (rendezvous)
-as a supervised, loopback-only companion process for the admin-only OpenGlad
-WebDoor (`public_html/webdoors/openglad/`).
+`openglad-relay-runtime.cjs` is the durable, **multi-room** rendezvous/relay for
+the OpenGlad Web/WASM WebDoor's networked multiplayer (Crossroads Experience #3,
+A-leg). It forwards **opaque binary game frames** between browser peers. It holds
+no game state, no persistence, no database, and writes no secrets to its log.
 
-- `relay_stub.js` — **git-ignored**, staged byte-identical from the pinned
-  OpenGlad revision `4565499825c25b0943ab0f6e1e5403af752e63ed`
-  (`tests/e2e/relay_stub.js`, GPL-2.0, sha256 `51127d6d…5e290d`). M3 runtime-proved
-  this exact wire contract against the real WASM client.
-- `openglad-relay-runtime.cjs` — **tracked**, ~50 lines, a long-lived wrapper:
-  fixed loopback port, fresh per-process owner token, clean SIGTERM shutdown,
-  a 60 s liveness heartbeat. No game state, no secrets in logs.
+- **Self-contained, dependency-free** Node (built-ins only). The RFC 6455 frame
+  codec is ported from the pinned OpenGlad `tests/e2e/relay_stub.js` and the wire
+  contract is implemented to `relay/README.md` + the two C++ transports
+  (`src/platform/{emscripten,sdl}/net_transport_relay_ws.cpp`) of pinned OpenGlad
+  `4565499825c25b0943ab0f6e1e5403af752e63ed` (GPL-2.0).
+- **Loopback only** — the runtime refuses a non-loopback `OPENGLAD_RELAY_HOST`.
+- **Authorization** defers entirely to BinkTerm: every `/api/*` call replays the
+  caller's `Cookie` against `GET /api/webdoor/session?game_id=openglad` (the
+  existing authenticated, admin-aware WebDoor session authority). 200 + a
+  `session_id` + `game.id == "openglad"` == authorized; anything else is refused
+  and **no room/peer state is created**. There is no second auth system and no
+  bypass — the check runs in the relay, so hitting `127.0.0.1:<port>` directly is
+  gated identically.
+- **Limits** (from `relay/src/shared.ts`): 16 peers/room, 128 KiB frame,
+  4 KiB TEXT, 2000 msg/s or 8 MiB/s per connection, 10 room-creates/IP/min,
+  120 s empty-room TTL, 5 min owner-connect grace, 12 h room age, 256-room ceiling.
 
-## Run (inside the `binkterm-app` container)
+## Run
 
 ```
-OPENGLAD_RELAY_PORT=6035 node /var/www/html/scripts/openglad/openglad-relay-runtime.cjs
+node scripts/openglad/openglad-relay-runtime.cjs      # 127.0.0.1:6035
 ```
 
-Supervised as `[program:openglad-relay]` — a live edit to the container's
-`/etc/supervisor/conf.d/supervisord.conf` (the `[program:multizorkd]` /
-`[program:ascii-royale-arena]` precedent). **TEMPORARY / ASSAY** — lives on the
-container writable layer, lost on `docker compose up --force-recreate`.
+Env (all optional; defaults are production values): `OPENGLAD_RELAY_HOST`,
+`OPENGLAD_RELAY_PORT`, `OPENGLAD_RELAY_AUTH_URL`, `OPENGLAD_RELAY_AUTH_TIMEOUT_MS`,
+`OPENGLAD_RELAY_AUTH_CACHE_MS`, `OPENGLAD_RELAY_EMPTY_ROOM_TTL_MS`,
+`OPENGLAD_RELAY_MAX_ROOMS`, `OPENGLAD_RELAY_TRUST_XREALIP`. A few
+`*_RATE_*` / `*_SWEEP_*` overrides exist only so the regression harness can drive
+the limit/alarm paths quickly (the upstream relay overrides `EMPTY_ROOM_TTL_MS`
+the same way); production leaves them at the defaults. See the file header.
 
-## Reverse proxy
+## Deployment
+
+Durable, supervised, baked into the L33TEST image — **not** a live
+`supervisorctl` edit. See:
+
+- `docs/Crossroads/OpenGladProduction.md` — the production deployment doc
+- `docs/Crossroads/openglad-backend/runtime/` — the tracked reference fragments
+  (`supervisord.openglad-relay.conf.fragment`, `caddy.openglad-relay.snippet`,
+  `apache.openglad-relay.snippet`)
+- `docs/Crossroads/openglad-backend/test/` — the black-box regression harness
+
+## Regression
 
 ```
-browser  wss://binkterm.l33test.com/openglad-relay
-  -> host Apache  ProxyPass /openglad-relay ws://127.0.0.1:8090/openglad-relay   (live public vhost edit)
-  -> container Caddy  reverse_proxy /openglad-relay 127.0.0.1:6035               (Caddyfile edit, baked image)
-  -> this process (127.0.0.1:6035, loopback only)
+docs/Crossroads/openglad-backend/test/run-regression.sh
 ```
-
-The relay is a single shared room (`GLAD-XR1A`): the first browser to HOST owns
-it, others JOIN. Restart the program to reset the room.
-
-## Not for production as-is
-
-Durable production needs the relay built into the image with a supervised block,
-the Caddyfile + proxy routes as managed config, and a decision on running the
-upstream relay Worker (`workerd`) vs this contract implementation. See
-`/root/openglad-assay/OPENGLAD_M4_SLICE1A_REPORT.md`.

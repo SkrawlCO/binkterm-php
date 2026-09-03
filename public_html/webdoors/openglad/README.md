@@ -1,13 +1,16 @@
-# OpenGlad WebDoor — M4 Slice 1A/1E (admin-only integration proof)
+# OpenGlad WebDoor — Crossroads Experience #3 (A-leg)
 
-**Status: admin-only assay. NOT an ordinary-user Experience. NOT production-complete.**
+**Status: admin-only.** Durable infrastructure (M4 Slice 1F). Ordinary-user
+rollout + custom icon are Slice 1G — not yet enabled
+(`webdoor.json` `admin_only: true`, `config/webdoors.json` `openglad.enabled: false`).
 
 This WebDoor runs the pinned OpenGlad Web/WASM client — **with one tracked
 downstream carry patch** (`docs/Crossroads/openglad-backend/patches/0001-web-persist-namespace.patch`, pending
 openglad/openglad#281) — as a BinkTermPHP WebDoor, with multiplayer routed
-through a **self-hosted, loopback** OpenGlad relay at the same-origin path
-`/openglad-relay`, and **per-user browser persistence isolation**. It is the
-A-leg of the approved Architecture C (Hybrid). See:
+through a **self-hosted, loopback, multi-room** OpenGlad relay at the same-origin
+path `/openglad-relay`, and **per-user browser persistence isolation**. It is the
+A-leg of the approved Architecture C (Hybrid). Production deployment:
+**`docs/Crossroads/OpenGladProduction.md`**. See also:
 
 - `/root/openglad-assay/OPENGLAD_M4_SLICE0_ARCHITECTURE.md` — architecture
 - `/root/openglad-assay/OPENGLAD_M4_SLICE1A_REPORT.md` — mechanism proof (identity gate FAILED as predicted)
@@ -22,20 +25,24 @@ A-leg of the approved Architecture C (Hybrid). See:
 | OpenGlad revision | `4565499825c25b0943ab0f6e1e5403af752e63ed` (GPL-2.0) — **pin not advanced** |
 | Toolchain | Emscripten SDK `6.0.3` |
 | Carried patches | `docs/Crossroads/openglad-backend/patches/0001-web-persist-namespace.patch` (`window.__opengladPersistNamespace`; see `docs/Crossroads/openglad-backend/README.md` for the removal / convergence condition) |
-| Build | `build-webdoor.sh <openglad-src>` — applies `docs/Crossroads/openglad-backend/patches/*.patch` to the checkout, `cmake --preset web-emscripten --target play`, stages here |
+| Build | `docs/Crossroads/openglad-backend/build/build-webdoor.sh` — clones the pin, `git apply`s the carry patch(es), `cmake --preset web-emscripten --target play`, stages here, writes `build.env` |
+| Verify | `docs/Crossroads/openglad-backend/build/verify-webdoor.sh` — staged tree vs `EXPECTED.sha256` (the pre-deploy gate) |
 | Canonical OpenGlad tree | **never patched** — the carry is applied to a fresh throwaway clone |
 
 ## What is tracked vs staged
 
 **Tracked (git):** `webdoor.json`, `index.php`, `crossroads-glue.js`,
-`build-webdoor.sh`, `icon.svg`, `README.md`, `.gitignore`. The carried OpenGlad
-patch + its README live under `docs/Crossroads/openglad-backend/` (the
-`multizork-backend` precedent — **not** under `public_html`).
+`icon.svg`, `README.md`, `.gitignore`. The carried OpenGlad patch, the
+build/verify scripts, the relay runtime + its regression harness, and the
+runtime reference config all live under `docs/Crossroads/openglad-backend/` and
+`scripts/openglad/` (the `multizork-backend` / `ascii-royale-backend` precedent
+— **not** under `public_html`).
 
 **Staged, git-ignored** (regenerate with `build-webdoor.sh`):
 `play.html`, `play.js`, `play.wasm` (~8 MB), `play.data` (~3 MB),
-`manifest.webmanifest`. `play.html` is the pinned OpenGlad shell **verbatim** —
-no glue is baked into it.
+`manifest.webmanifest`, `build.env`. `play.html` is the pinned OpenGlad shell
+**verbatim** — no glue is baked into it. Deployed builds are layered into the
+L33TEST image after `verify-webdoor.sh` passes.
 
 ## The integration code
 
@@ -58,14 +65,25 @@ no glue is baked into it.
 ### `crossroads-glue.js` — client-side
 
 1. sets `window.__opengladRelayBaseUrlForTests = location.origin + '/openglad-relay'`
-   (OpenGlad's own shipped relay override — multiplayer uses the L33TEST relay,
-   never `openglad.pages.dev`);
+   (OpenGlad's own shipped relay override — multiplayer uses the L33TEST
+   self-hosted relay, never `openglad.pages.dev`);
 2. calls `GET /api/webdoor/session?game_id=openglad` for the normal WebDoor
    session lifecycle (presence + `webdoor_play` footprint; end beacon fired by
    `templates/webdoor_play.twig`).
 
 No IndexedDB manipulation, no save export/import, no direct-connect transport.
 Per-user isolation is the carried patch's job, not this file's.
+
+### The relay
+
+`scripts/openglad/openglad-relay-runtime.cjs` — a self-contained, dependency-free
+**multi-room** rendezvous, loopback-only, forwarding opaque binary frames. Every
+`/api/*` call is authorized by replaying the caller's cookie against
+`GET /api/webdoor/session?game_id=openglad` (the same authority that gates this
+WebDoor), so the relay follows this manifest's `admin_only` automatically and has
+no auth system of its own. Limits, lifecycle, and deployment:
+`docs/Crossroads/OpenGladProduction.md`; regression:
+`docs/Crossroads/openglad-backend/test/run-regression.sh`.
 
 ## Admin-only
 
@@ -80,22 +98,22 @@ direct `play.html`/`play.js` load gets no namespace injected → upstream defaul
 Enable/disable via **Admin → WebDoors** or `config/webdoors.json`
 (`"openglad": {"enabled": true|false}`).
 
-## Deployment (assay — TEMPORARY, container-writable-layer)
+## Deployment
 
-The relay + same-origin `wss://` path are not in this directory:
+Durable — see **`docs/Crossroads/OpenGladProduction.md`**. In summary:
 
-1. `scripts/openglad/openglad-relay-runtime.cjs` (tracked) as
-   `[program:openglad-relay]` on `127.0.0.1:6035` **inside `binkterm-app`** — a
-   live `supervisord.conf` edit (`[program:multizorkd]` precedent). Lost on
-   container recreate.
-2. Container `/etc/caddy/Caddyfile`: `handle_path /openglad-relay/* {
-   reverse_proxy 127.0.0.1:6035 }` — an in-container edit to an image-baked file,
-   lost on recreate.
-3. Host Apache vhost: `ProxyPass /openglad-relay ws://127.0.0.1:8090/openglad-relay`
-   — a **live public production reverse-proxy edit** (host filesystem; keep a
-   timestamped backup).
+1. `[program:openglad-relay]` (`scripts/openglad/openglad-relay-runtime.cjs`,
+   `127.0.0.1:6035`) — **baked into the L33TEST image `supervisord.conf`**
+   (the `multizorkd` / `ascii-royale-arena` precedent). Survives
+   `--force-recreate`.
+2. Container `/etc/caddy/Caddyfile`: the `handle_path /openglad-relay/*` block
+   (`docs/Crossroads/openglad-backend/runtime/caddy.openglad-relay.snippet`) —
+   **baked into the image Caddyfile**.
+3. Host Apache vhost: `ProxyPass /openglad-relay …`
+   (`docs/Crossroads/openglad-backend/runtime/apache.openglad-relay.snippet`) —
+   **committed to the host's config management**, beside `/ws` and `/dosdoor`.
 
-Applied only for supervised acceptance windows, then reverted (Slice 1A/1E
-teardown). **Durable production would require:** a pinned-artifact pipeline for
-the built client + patch, the relay built into the image, and the proxy routing
-as managed config.
+The built `play.*` are produced by
+`docs/Crossroads/openglad-backend/build/build-webdoor.sh` from the pin + the
+carry patch, checked by `verify-webdoor.sh` against `EXPECTED.sha256`, and
+layered into the image.

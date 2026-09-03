@@ -1,0 +1,20 @@
+# ===========================================================================
+# OpenGlad relay — same-origin route for the host Apache TLS vhost
+# (Crossroads Experience #3, M4 Slice 1F)
+#
+# DURABLE placement: add these two lines to
+#   /etc/apache2/sites-enabled/binkterm.l33test.com-le-ssl.conf
+# next to the existing `ProxyPass /ws` / `ProxyPass /dosdoor` lines, and commit
+# that file to the host's config management. That is the difference from the
+# Slice 1A/1E acceptance-time edit that was reverted at teardown.
+#
+# Needs mod_proxy + mod_proxy_http + mod_proxy_wstunnel (already loaded — /ws
+# and /dosdoor use them). ws:// upgrades to wss:// automatically over the TLS
+# vhost. The CSP already permits it: connect-src 'self' wss://binkterm.l33test.com
+# covers wss://binkterm.l33test.com/openglad-relay — NO CSP change.
+#
+# Order: these must appear BEFORE the catch-all `ProxyPass / http://127.0.0.1:8090/`.
+# ===========================================================================
+
+ProxyPass        /openglad-relay ws://127.0.0.1:8090/openglad-relay
+ProxyPassReverse /openglad-relay ws://127.0.0.1:8090/openglad-relay

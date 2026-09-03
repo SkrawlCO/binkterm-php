@@ -1,0 +1,30 @@
+# ===========================================================================
+# OpenGlad relay — same-origin route for the container Caddy
+# (Crossroads Experience #3, M4 Slice 1F)
+#
+# DURABLE placement: add to the L33TEST image's baked /etc/caddy/Caddyfile,
+# INSIDE the existing `route { ... }` block, next to the `/ws` and `/dosdoor`
+# reverse_proxy lines.
+#
+# `handle_path` strips the /openglad-relay prefix, so the relay sees /api/...
+# at its root (the runtime serves /api/create, /api/rooms, /api/room/<CODE>,
+# /healthz at the root). WebSocket upgrades pass through unbuffered.
+#
+# Also add /openglad-relay to the existing @compressible `not path` list so the
+# `encode` directive never buffers the relay's frames:
+#
+#   @compressible {
+#       not path /api/stream /dosdoor /ws /openglad-relay
+#   }
+# ===========================================================================
+
+handle_path /openglad-relay/* {
+    reverse_proxy 127.0.0.1:6035 {
+        header_up Host {host}
+        # {client_ip} is resolved by the Caddyfile global `servers` block
+        # (trusted_proxies + client_ip_headers X-Real-IP) from the value host
+        # Apache sets from CF-Connecting-IP — so the relay's per-IP create-rate
+        # cap keys on the real visitor address.
+        header_up X-Real-IP {client_ip}
+    }
+}

@@ -1,0 +1,36 @@
+# Recreate/restart-survival proof for the durable OpenGlad relay.
+#
+# This overlay simulates what the L33TEST image build does: it bakes the
+# [program:openglad-relay] supervisord block and the /openglad-relay Caddy
+# route into the image, so `docker rm -f` + recreate brings the relay back
+# with NO hand steps -- the property Slice 1F delivers over the Slice 1A/1E
+# acceptance-time `supervisorctl add` + hand-edited proxy config.
+#
+# Build/run is driven by ./recreate-survival.sh (context = repo root).
+#
+# The survival check asserts the SERVICE and the ROUTE return after recreate:
+#   - `supervisorctl status openglad-relay` -> RUNNING
+#   - GET /openglad-relay/healthz (ungated) -> 200 ok  through the baked Caddy route
+# The authorization behaviour and gameplay are proven separately by
+# relay-contract.mjs (hermetic) and the live acceptance.
+
+ARG BASE=binktermphp-binkterm-app:latest
+FROM ${BASE}
+
+# 1. the relay source (bind-mounted in the live deployment; the L33TEST image
+#    build would already carry it under /var/www/html).
+COPY scripts/openglad/openglad-relay-runtime.cjs /var/www/html/scripts/openglad/openglad-relay-runtime.cjs
+
+# 2. bake [program:openglad-relay] into the image's baseline supervisord.conf.
+#    (the data/logs dir is a volume mount in the live container; create it here
+#    so this standalone throwaway can start supervisord.)
+COPY docs/Crossroads/openglad-backend/runtime/supervisord.openglad-relay.conf.fragment /tmp/og-relay.conf
+RUN cat /tmp/og-relay.conf >> /etc/supervisor/conf.d/supervisord.conf && rm /tmp/og-relay.conf \
+ && mkdir -p /var/www/html/data/logs && chown -R www-data:www-data /var/www/html/data
+
+# 3. bake the same-origin route into the Caddyfile: add /openglad-relay to the
+#    @compressible exclusion, and insert the handle_path block just before the
+#    existing `reverse_proxy /ws` line inside route { }.
+RUN sed -i 's#not path /api/stream /dosdoor /ws#not path /api/stream /dosdoor /ws /openglad-relay#' /etc/caddy/Caddyfile \
+ && sed -i 's#^\(\s*\)reverse_proxy /ws 127.0.0.1:6010 {#\1handle_path /openglad-relay/* {\n\1    reverse_proxy 127.0.0.1:6035\n\1}\n\1reverse_proxy /ws 127.0.0.1:6010 {#' /etc/caddy/Caddyfile \
+ && caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile

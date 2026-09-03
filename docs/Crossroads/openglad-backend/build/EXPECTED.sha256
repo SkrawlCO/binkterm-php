@@ -1,0 +1,21 @@
+# Accepted OpenGlad WebDoor artifact hashes.
+#
+# Tuple: pin 4565499825c25b0943ab0f6e1e5403af752e63ed
+#      + patches/0001-web-persist-namespace.patch
+#      + emsdk 6.0.3
+#
+# verify-webdoor.sh checks the staged public_html/webdoors/openglad/ tree
+# against this list. Emscripten output is NOT guaranteed bit-reproducible
+# across toolchain/host differences: if a rebuild's hashes differ, pin the
+# toolchain that produced THIS set (see the accepted build's build.env) and
+# escalate BEFORE deploying any artifact whose hash is not listed here.
+#
+# Provenance: built in the Slice 1C/1E assay (scratch-1e/), isolation-proven
+# 25/25 (m4s1e_persist) and upstream-web-e2e-proven 31/31 (m4s1e_webtests).
+# Updated together with any pin bump or patch-set change.
+
+a3414084810bf761976190e26cb3a0bf483e973064320d7c7974846094dbb088  play.html
+76798905f07b5e7463d4dd7ce1d8493ffa6ff9196b699d53597c9b4f9d7b7ecf  play.js
+0a171d0e85a8d9742a716c8e1156d7b7846e4597f95170de43856756d158d655  play.wasm
+b704357b65755b5fe9968691124e9969222ffdf4d86799b4869fe519b5f67879  play.data
+e1ea689d0cf7fc936cbd62bd0bf8903705dac585eaf53450b0e927f4bf84a12d  manifest.webmanifest

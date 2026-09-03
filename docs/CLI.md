@@ -1313,3 +1313,14 @@ Experiences whose manifest declares `terminal_mode: line`. The authenticated
 multiplexing bridge supplies its door, numeric user, and session identity; it
 is not an end-user launch command. The helper validates the native manifest,
 connects its private TCP endpoint, and invokes the optional PHP relay adapter.
+
+## OpenGlad relay runtime
+
+`scripts/openglad/openglad-relay-runtime.cjs` is the self-hosted, loopback-only,
+multi-room rendezvous for the OpenGlad WebDoor's browser multiplayer (Crossroads
+Experience #3). It is a supervised companion daemon (`[program:openglad-relay]`
+on `127.0.0.1:6035`), **not** an end-user command. It forwards opaque binary game
+frames, holds no game state, and authorizes every request against the existing
+`GET /api/webdoor/session?game_id=openglad` authority. Deployment, limits and
+rollback: [`Crossroads/OpenGladProduction.md`](Crossroads/OpenGladProduction.md).
+Regression: `docs/Crossroads/openglad-backend/test/run-regression.sh`.

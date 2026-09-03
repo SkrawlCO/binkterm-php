@@ -1,0 +1,43 @@
+; ===========================================================================
+; OpenGlad relay — Crossroads Experience #3, M4 Slice 1F (durable A-leg)
+;
+; DURABLE placement: add this block to the L33TEST image's baked
+;   /etc/supervisor/conf.d/supervisord.conf
+; (the same file that already carries [program:multizorkd] and
+; [program:ascii-royale-arena]). Once baked, the relay returns on
+; `docker compose up --force-recreate` / an image rebuild with NO hand steps —
+; that is the difference from the Slice 1A/1E acceptance-time `supervisorctl
+; add`.
+;
+; The relay:
+;   - binds 127.0.0.1:6035 ONLY (the runtime refuses a non-loopback host);
+;   - forwards opaque binary game frames between browser peers; holds no game
+;     state, no persistence, no database, no secrets in its log;
+;   - authorizes every /api/* call by replaying the caller's Cookie against the
+;     EXISTING WebDoor session authority
+;       GET http://127.0.0.1/api/webdoor/session?game_id=openglad
+;     (200 + session_id + game.id=="openglad" == authorized; else refused).
+;
+; Runs as the unprivileged `www-data` account (the L33TEST image's app-tree
+; owner; the relay needs no privilege). A dedicated service account could be
+; added later, the `multizorkd` / `user=multizork` way. Logs go to the normal
+; data/logs stream — no EndpointId-style secret to hide, unlike multizorkd /
+; ascii-royale.
+; ===========================================================================
+[program:openglad-relay]
+command=/usr/bin/node /var/www/html/scripts/openglad/openglad-relay-runtime.cjs
+directory=/var/www/html
+user=www-data
+autostart=true
+autorestart=true
+startsecs=5
+startretries=5
+stopsignal=TERM
+stopwaitsecs=10
+environment=OPENGLAD_RELAY_HOST="127.0.0.1",OPENGLAD_RELAY_PORT="6035"
+stdout_logfile=/var/www/html/data/logs/openglad_relay.log
+stdout_logfile_maxbytes=10485760
+stdout_logfile_backups=3
+stderr_logfile=/var/www/html/data/logs/openglad_relay_error.log
+stderr_logfile_maxbytes=10485760
+stderr_logfile_backups=3
