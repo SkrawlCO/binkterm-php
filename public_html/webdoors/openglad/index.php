@@ -5,8 +5,8 @@
  *
  * This is the ONLY server-side glue for the OpenGlad WebDoor. It is a thin
  * wrapper around the UNMODIFIED-except-for-the-tracked-carried-patch OpenGlad
- * Web build (patches/0001-web-persist-namespace.patch, pending
- * openglad/openglad#281). It:
+ * Web build (docs/Crossroads/openglad-backend/patches/0001-web-persist-namespace.patch,
+ * pending openglad/openglad#281). It:
  *
  *   1. FAILS CLOSED. The authenticated multi-user OpenGlad path requires a
  *      resolvable, immutable BinkTerm user id and admin authorization. If either

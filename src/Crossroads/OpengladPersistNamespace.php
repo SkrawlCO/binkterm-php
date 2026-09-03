@@ -11,7 +11,7 @@ namespace BinktermPHP\Crossroads;
  * partition token for the OpenGlad WebDoor. The token is passed to the pinned
  * OpenGlad Web build as window.__opengladPersistNamespace (the seam proposed
  * upstream in openglad/openglad#281 and carried as
- * public_html/webdoors/openglad/patches/0001-web-persist-namespace.patch),
+ * docs/Crossroads/openglad-backend/patches/0001-web-persist-namespace.patch),
  * which mounts IDBFS at /persist_<token> so each user gets an isolated store.
  *
  * IMPORTANT — this is a PERSISTENCE PARTITION IDENTIFIER, not a credential:

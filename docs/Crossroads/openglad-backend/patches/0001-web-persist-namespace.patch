@@ -5,8 +5,8 @@ Subject: [PATCH] Web: opt-in window.__opengladPersistNamespace for isolated
  browser persistence
 
 Downstream carry pending openglad/openglad#281 -- see
-public_html/webdoors/openglad/patches/README.md for the removal / convergence
-condition. Not an upstream commit; carried against pinned revision
+docs/Crossroads/openglad-backend/README.md for the removal /
+convergence condition. Not an upstream commit; carried against pinned revision
 4565499825c25b0943ab0f6e1e5403af752e63ed.
 
 The Emscripten build persists to IDBFS at /persist, scoped to the page origin,
