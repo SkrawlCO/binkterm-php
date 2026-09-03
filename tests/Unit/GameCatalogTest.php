@@ -449,6 +449,72 @@ final class GameCatalogTest extends TestCase
         ));
     }
 
+    public function testAdminOnlyWebDoorIsWithheldFromNonAdminDiscovery(): void
+    {
+        // Uses 'blackjack' only because it is an enabled WebDoor id in this
+        // environment (mirrors testRequirementsFailingWebDoorIsNotDiscoverable);
+        // the manifest passed in is synthetic.
+        $method = new ReflectionMethod(GameCatalog::class, 'isWebDoorDiscoverable');
+        $adminOnly = ['requirements' => ['admin_only' => true]];
+
+        // Hidden from an ordinary authenticated viewer and from anonymous.
+        self::assertFalse(
+            $method->invoke($this->catalog, 'blackjack', $adminOnly, ['is_admin' => false])
+        );
+        self::assertFalse(
+            $method->invoke($this->catalog, 'blackjack', $adminOnly, null)
+        );
+
+        // Visible to an admin.
+        self::assertTrue(
+            $method->invoke($this->catalog, 'blackjack', $adminOnly, ['is_admin' => true])
+        );
+    }
+
+    public function testNonAdminOnlyWebDoorDiscoveryIsUnchanged(): void
+    {
+        $method = new ReflectionMethod(GameCatalog::class, 'isWebDoorDiscoverable');
+
+        // No admin_only key: discoverable for every viewer, exactly as before.
+        self::assertTrue(
+            $method->invoke($this->catalog, 'blackjack', ['requirements' => []], ['is_admin' => false])
+        );
+        self::assertTrue(
+            $method->invoke($this->catalog, 'blackjack', [], null)
+        );
+        // Backward-compatible two-argument call still resolves.
+        self::assertTrue(
+            $method->invoke($this->catalog, 'blackjack', [])
+        );
+    }
+
+    public function testOrdinaryWebDoorsStayVisibleToNonAdminsAndReportAdminOnlyFalse(): void
+    {
+        // Regression: adding the admin_only gate must not hide ordinary
+        // WebDoors from non-admins. The shipped fixtures declare no admin_only.
+        $games = $this->catalog->getEnabledGames(
+            ['user_id' => 7, 'is_admin' => false],
+            'web'
+        );
+
+        $webIds = array_keys(array_filter(
+            $games,
+            static fn(array $g): bool => $g['backend']['type'] === 'web'
+        ));
+
+        self::assertNotEmpty(
+            $webIds,
+            'Expected at least one ordinary WebDoor visible to a non-admin'
+        );
+
+        foreach ($webIds as $id) {
+            self::assertFalse(
+                $games[$id]['policy']['admin_only'],
+                "Ordinary WebDoor {$id} must report policy.admin_only = false"
+            );
+        }
+    }
+
     /**
      * Normalize one managed-door array through GameCatalog::addManagedDoors and
      * return its catalogued experience.

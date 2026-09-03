@@ -126,6 +126,21 @@ final class WebDoorSessionAuthorizationTest extends TestCase
         self::assertSame(0, $this->sessionCount());
     }
 
+    public function testAdminOnlyWebDoorFailsClosedForNonAdminSession(): void
+    {
+        // GameCatalog::addWebDoors withholds a manifest admin_only WebDoor from
+        // a non-admin's discovery catalog. The session route authorizes purely
+        // through that catalog, so a non-admin cannot mint or reuse a session
+        // for it even by naming the id directly.
+        $_GET['game_id'] = 'staff-only-game';
+        $this->expectSingleCatalogLookup($this->authorizedCatalog());
+
+        $result = $this->controller()->getSession();
+
+        $this->assertUnavailable($result);
+        self::assertSame(0, $this->sessionCount());
+    }
+
     public function testNonWebDoorCatalogIdentityFailsClosed(): void
     {
         $_GET['game_id'] = 'native-door';

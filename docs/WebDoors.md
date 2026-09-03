@@ -68,7 +68,8 @@ Each WebDoor must include a `webdoor.json` manifest file in its root directory. 
   "requirements": {
     "min_host_version": "1.0",
     "features": ["storage", "leaderboard", "credits"],
-    "permissions": ["user_display_name"]
+    "permissions": ["user_display_name"],
+    "admin_only": false
   },
   "storage": {
     "max_size_kb": 256,
@@ -111,6 +112,17 @@ Declares features and permissions the WebDoor needs.
   - `"credits"`: BBS credits system integration
 - `permissions` (array): User data the game needs access to:
   - `"user_display_name"`: Access to user's display name
+- `admin_only` (boolean, optional): When `true`, the WebDoor is withheld from
+  non-admin discovery and its `/games/{id}` launch route returns 403 for
+  non-admins — the same manifest-authoritative gate DOS and native doors use
+  (`requirements.admin_only`). Catalog-driven APIs (`/api/webdoor/session`,
+  leaderboards, score submission) also fail closed for non-admins because they
+  authorize purely through the filtered discovery catalog. There is no
+  `config/webdoors.json` override — the manifest is authoritative, matching the
+  managed-door contract. Note that static asset files under
+  `public_html/webdoors/{id}/` remain directly fetchable by URL regardless;
+  `admin_only` gates discovery, launch, and platform APIs, not raw file serving.
+  Default: `false`.
 
 #### `storage` (object, optional)
 Storage requirements for games that save user data.

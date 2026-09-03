@@ -327,7 +327,7 @@ class GameCatalog
 
             $id = (string)($entry['id'] ?? $game['id'] ?? $entry['path']);
 
-            if (!$this->isWebDoorDiscoverable($id, $manifest)) {
+            if (!$this->isWebDoorDiscoverable($id, $manifest, $user)) {
                 continue;
             }
 
@@ -356,7 +356,7 @@ class GameCatalog
             ];
             $policy = [
                 'enabled' => true,
-                'admin_only' => false,
+                'admin_only' => !empty($manifest['requirements']['admin_only']),
                 'credit_cost' => (int)($config['credit_cost'] ?? 0),
             ];
             $launchIdentity = [
@@ -429,13 +429,39 @@ class GameCatalog
     }
 
     /**
-     * Keep WebDoor enablement and platform requirements as discovery gates on
-     * every presentation surface.
+     * Keep WebDoor enablement, platform requirements, and the manifest
+     * admin_only boundary as discovery gates on every presentation surface.
+     *
+     * An admin_only WebDoor (manifest `requirements.admin_only: true`) is an
+     * explicit operator visibility control, withheld from non-admin discovery
+     * entirely rather than surfaced as a non-runnable state — the same
+     * manifest-authoritative gate managed doors use in {@see addManagedDoors()}.
+     * There is no site-config override.
+     *
+     * @param array<string,mixed>|null $user Authenticated viewer, or null when
+     *     there is no viewer. Only `is_admin` is consulted.
      */
-    private function isWebDoorDiscoverable(string $id, array $manifest): bool
-    {
-        return GameConfig::isEnabled($id)
-            && WebDoorSupport::requirementsSatisfied($manifest);
+    private function isWebDoorDiscoverable(
+        string $id,
+        array $manifest,
+        ?array $user = null
+    ): bool {
+        if (!GameConfig::isEnabled($id)) {
+            return false;
+        }
+
+        if (!WebDoorSupport::requirementsSatisfied($manifest)) {
+            return false;
+        }
+
+        if (
+            !empty($manifest['requirements']['admin_only'])
+            && empty($user['is_admin'])
+        ) {
+            return false;
+        }
+
+        return true;
     }
 
     /**

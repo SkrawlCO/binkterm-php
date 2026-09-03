@@ -1032,6 +1032,19 @@ SimpleRouter::get('/games/{game}', function($game) {
         return;
     }
 
+    // Block admin-only WebDoors for non-admins. Mirrors the DOS/native/rlogin
+    // branches above and the GameCatalog::addWebDoors discovery filter, so a
+    // direct /games/{id} URL cannot bypass the manifest requirements.admin_only.
+    if (!empty($manifest['requirements']['admin_only']) && empty($user['is_admin'])) {
+        http_response_code(403);
+        $template = new Template();
+        $template->renderResponse('error.twig', [
+            'error_title_code' => 'ui.error.access_error',
+            'error_code' => 'ui.webdoors.errors.admin_only'
+        ]);
+        return;
+    }
+
     $entryPoint = $manifest['game']['entry_point'] ?? 'index.html';
     $gameUrl = "/webdoors/{$game}/{$entryPoint}";
 
