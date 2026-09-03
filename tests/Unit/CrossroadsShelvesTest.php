@@ -157,4 +157,116 @@ final class CrossroadsShelvesTest extends TestCase
         self::assertSame(['multizork'], array_column($shelves[CrossroadsShelves::CURATED], 'id'));
         self::assertSame(['lord'], array_column($shelves[CrossroadsShelves::GAME_HALL], 'id'));
     }
+
+    // ---- route wrappers: { experience_presentation: view, ... } ----
+
+    /** @param array{curated?:bool,order?:int|null} $curation */
+    private function wrapped(string $id, string $category = 'game', array $curation = []): array
+    {
+        return [
+            'id' => $id,
+            'experience_presentation' => [
+                'id' => $id,
+                'category' => $category,
+                'curation' => [
+                    'curated' => $curation['curated'] ?? false,
+                    'order' => $curation['order'] ?? null,
+                ],
+            ],
+        ];
+    }
+
+    public function testClassifyReadsTheNestedPresentationView(): void
+    {
+        self::assertSame(
+            CrossroadsShelves::GATEWAY,
+            CrossroadsShelves::classify($this->wrapped('doorparty', 'gateway'))
+        );
+        self::assertSame(
+            CrossroadsShelves::CURATED,
+            CrossroadsShelves::classify(
+                $this->wrapped('openglad', 'game', ['curated' => true, 'order' => 0])
+            )
+        );
+    }
+
+    public function testGroupOrdersCuratedWrappersByOperatorOrder(): void
+    {
+        $entries = [
+            $this->wrapped('openglad', 'game', ['curated' => true, 'order' => 2]),
+            $this->wrapped('multizork', 'game', ['curated' => true, 'order' => 0]),
+            $this->wrapped('ascii-royale-m3', 'game', ['curated' => true, 'order' => 1]),
+            $this->wrapped('lord'),
+        ];
+
+        $grouped = CrossroadsShelves::group($entries);
+
+        self::assertSame(
+            ['multizork', 'ascii-royale-m3', 'openglad'],
+            array_column($grouped[CrossroadsShelves::CURATED], 'id')
+        );
+        self::assertSame(['lord'], array_column($grouped[CrossroadsShelves::GAME_HALL], 'id'));
+    }
+
+    // ---- compose(): render-ready shelf list ----
+
+    public function testComposeReturnsThreeShelvesInDisplayOrderWithPolicy(): void
+    {
+        $shelves = CrossroadsShelves::compose([]);
+
+        self::assertCount(3, $shelves);
+        self::assertSame(
+            [CrossroadsShelves::CURATED, CrossroadsShelves::GAME_HALL, CrossroadsShelves::GATEWAY],
+            array_column($shelves, 'key')
+        );
+
+        [$curated, $hall, $gateway] = $shelves;
+
+        self::assertFalse($curated['collapsible']);
+        self::assertTrue($curated['default_expanded']);
+
+        self::assertTrue($hall['collapsible']);
+        self::assertTrue($hall['default_expanded']);
+
+        self::assertTrue($gateway['collapsible']);
+        self::assertFalse($gateway['default_expanded']);
+
+        foreach ($shelves as $shelf) {
+            self::assertSame(0, $shelf['count']);
+            self::assertSame([], $shelf['entries']);
+        }
+    }
+
+    public function testComposePartitionsCountsAndOrdersALiveShapedCatalog(): void
+    {
+        $entries = [
+            $this->entry('blackjack'),
+            $this->entry('bcrgames', 'gateway'),
+            $this->entry('openglad', 'game', ['curated' => true, 'order' => 2]),
+            $this->entry('lord'),
+            $this->entry('doorparty', 'gateway'),
+            $this->entry('multizork', 'game', ['curated' => true, 'order' => 0]),
+            $this->entry('ascii-royale-m3', 'game', ['curated' => true, 'order' => 1]),
+        ];
+
+        $shelves = CrossroadsShelves::compose($entries);
+        $byKey = [];
+        foreach ($shelves as $s) {
+            $byKey[$s['key']] = $s;
+        }
+
+        self::assertSame(3, $byKey['curated']['count']);
+        self::assertSame(
+            ['multizork', 'ascii-royale-m3', 'openglad'],
+            array_column($byKey['curated']['entries'], 'id')
+        );
+        self::assertSame(2, $byKey['game_hall']['count']);
+        self::assertSame(['blackjack', 'lord'], array_column($byKey['game_hall']['entries'], 'id'));
+        self::assertSame(2, $byKey['gateway']['count']);
+        self::assertSame(['bcrgames', 'doorparty'], array_column($byKey['gateway']['entries'], 'id'));
+
+        // Every entry lands on exactly one shelf.
+        $total = array_sum(array_column($shelves, 'count'));
+        self::assertSame(count($entries), $total);
+    }
 }

@@ -1,0 +1,60 @@
+{#
+    Curated Catalog shelf (Slice 2).
+
+    Renders one of the three composition shelves produced by
+    CrossroadsShelves::compose() — Curated Experiences / Game Hall / Gateways —
+    using the shared experience_library_card partial. Classification, ordering
+    and default open/closed state are decided server-side; this template only
+    lays them out and picks the copy off `shelf.key`.
+
+    Params:
+      shelf        { key, entries, count, collapsible, default_expanded }
+      public_mode  (default false) — passed straight through to the card partial
+
+    A shelf with no entries renders nothing (an operator who curates nothing
+    must not see an empty "Curated Experiences" header).
+#}
+{% set public_mode = public_mode|default(false) %}
+{% if shelf.count > 0 %}
+{% set shelf_titles = {
+    'curated': 'ui.webdoors.shelf_curated_title',
+    'game_hall': 'ui.webdoors.shelf_game_hall_title',
+    'gateway': 'ui.webdoors.shelf_gateway_title'
+} %}
+{% set shelf_captions = {
+    'curated': 'ui.webdoors.shelf_curated_caption',
+    'game_hall': 'ui.webdoors.shelf_game_hall_caption',
+    'gateway': 'ui.webdoors.shelf_gateway_caption'
+} %}
+{% set shelf_title = t(shelf_titles[shelf.key]|default('ui.webdoors.experiences'), {}, locale, ['common']) %}
+{% set shelf_caption = shelf_captions[shelf.key] is defined ? t(shelf_captions[shelf.key], {}, locale, ['common']) : '' %}
+<section class="experience-shelf experience-shelf--{{ shelf.key }}"
+         data-experience-shelf="{{ shelf.key }}"
+         data-shelf-default-expanded="{{ shelf.default_expanded ? '1' : '0' }}">
+    {% if shelf.collapsible %}
+    <details class="experience-shelf-disclosure"{% if shelf.default_expanded %} open{% endif %} data-experience-shelf-disclosure>
+        <summary class="experience-shelf-heading">
+            <span class="experience-shelf-title">{{ shelf_title }}</span>
+            <span class="experience-shelf-count" data-experience-shelf-count>{{ shelf.count }}</span>
+            <span class="visually-hidden">{{ t('ui.webdoors.shelf_count_label', {'count': shelf.count}, locale, ['common']) }}</span>
+            {% if shelf_caption %}<span class="experience-shelf-caption">{{ shelf_caption }}</span>{% endif %}
+        </summary>
+        <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-2 mt-0 experience-library-grid">
+            {% for game in shelf.entries %}
+                {% include 'partials/experience_library_card.twig' with {game: game, public_mode: public_mode} %}
+            {% endfor %}
+        </div>
+    </details>
+    {% else %}
+    <div class="experience-shelf-heading experience-shelf-heading--static">
+        <span class="experience-shelf-title">{{ shelf_title }}</span>
+        {% if shelf_caption %}<span class="experience-shelf-caption">{{ shelf_caption }}</span>{% endif %}
+    </div>
+    <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-2 mt-0 experience-library-grid">
+        {% for game in shelf.entries %}
+            {% include 'partials/experience_library_card.twig' with {game: game, public_mode: public_mode} %}
+        {% endfor %}
+    </div>
+    {% endif %}
+</section>
+{% endif %}

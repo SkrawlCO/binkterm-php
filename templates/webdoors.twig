@@ -203,9 +203,9 @@
             <button type="button" class="btn btn-outline-secondary btn-sm experience-filter-reset" data-experience-filter-reset>{{ t('ui.webdoors.clear_filters', {}, locale, ['common']) }}</button>
         </div>
 
-        <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-2 mt-0 experience-library-grid" data-experience-filter-root>
-            {% for game in games %}
-                {% include 'partials/experience_library_card.twig' with {game: game} %}
+        <div class="experience-shelves mt-3" data-experience-filter-root>
+            {% for shelf in catalog_shelves %}
+                {% include 'partials/experience_shelf.twig' with {shelf: shelf, public_mode: false} %}
             {% endfor %}
         </div>
         <div class="alert alert-info mt-3 mb-0 d-none experience-filter-empty" data-experience-filter-empty aria-live="polite">
@@ -271,6 +271,9 @@
     const filterItems = filterRoot
         ? Array.from(filterRoot.querySelectorAll('[data-experience-filter-item]'))
         : [];
+    const shelfSections = filterRoot
+        ? Array.from(filterRoot.querySelectorAll('[data-experience-shelf]'))
+        : [];
     const filterSearch = document.getElementById('experience-filter-search');
     const filterInputs = Array.from(document.querySelectorAll('[data-experience-filter]'));
     const filterResetButtons = Array.from(document.querySelectorAll('[data-experience-filter-reset]'));
@@ -293,6 +296,54 @@
         return Boolean(document.querySelector(
             '[data-experience-filter="' + name + '"]:checked'
         ));
+    }
+
+    function anyFilterActive() {
+        return normalizeSearch(filterSearch?.value) !== ''
+            || filterIsActive('live')
+            || filterIsActive('multiplayer')
+            || filterIsActive('web')
+            || filterIsActive('telnet');
+    }
+
+    // Keep shelves truthful while filtering: a collapsed shelf that contains a
+    // match opens so its results are visible, a shelf with no matches collapses
+    // out of the way, and per-shelf counts track visible cards. Clearing the
+    // filter restores each shelf's default open/closed state. Classification is
+    // never done here — only rendered card visibility is read.
+    function syncShelves() {
+        const filtering = anyFilterActive();
+
+        shelfSections.forEach(function (section) {
+            const items = section.querySelectorAll('[data-experience-filter-item]');
+            let shelfVisible = 0;
+            items.forEach(function (item) {
+                if (!item.hidden) {
+                    shelfVisible += 1;
+                }
+            });
+
+            const countEl = section.querySelector('[data-experience-shelf-count]');
+            const disclosure = section.querySelector('[data-experience-shelf-disclosure]');
+
+            if (filtering) {
+                if (countEl) {
+                    countEl.textContent = String(shelfVisible);
+                }
+                section.hidden = shelfVisible === 0;
+                if (disclosure && shelfVisible > 0) {
+                    disclosure.open = true;
+                }
+            } else {
+                if (countEl) {
+                    countEl.textContent = String(items.length);
+                }
+                section.hidden = false;
+                if (disclosure) {
+                    disclosure.open = section.dataset.shelfDefaultExpanded === '1';
+                }
+            }
+        });
     }
 
     function applyExperienceFilters() {
@@ -336,6 +387,8 @@
         if (filterEmpty) {
             filterEmpty.classList.toggle('d-none', visibleCount !== 0);
         }
+
+        syncShelves();
     }
 
     function resetExperienceFilters() {

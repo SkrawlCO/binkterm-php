@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace BinktermPHP\Tests\Unit;
 
+use BinktermPHP\CrossroadsShelves;
 use PHPUnit\Framework\TestCase;
 use Twig\Environment;
 use Twig\Loader\FilesystemLoader;
@@ -146,6 +147,7 @@ final class GamesHubTemplateTest extends TestCase
         return $twig->render('webdoors.twig', [
             'system_name' => 'L33Test Gaming',
             'games' => $games,
+            'catalog_shelves' => CrossroadsShelves::compose($games),
             'your_places' => $yourPlaces,
             'live_experiences' => $liveExperiences,
             'recent_activity' => $recentActivity,
@@ -1235,7 +1237,7 @@ final class GamesHubTemplateTest extends TestCase
                 'version' => '1.0',
                 'presentation' => ['icon_url' => '/icon/' . $id],
                 'backend' => ['type' => 'native', 'label' => 'Native'],
-                'capabilities' => ['multiplayer' => true],
+                'capabilities' => ['multiplayer' => true, 'player_mode' => 'multiplayer'],
                 'capacity' => ['max_sessions' => 8, 'limited' => true, 'at_capacity' => $atCapacity],
                 'cost' => ['credits' => 0, 'free' => true],
                 'surfaces' => ['requested' => 'web', 'current' => 'full', 'web' => 'full', 'telnet' => 'full', 'static_launchable' => $launchable],

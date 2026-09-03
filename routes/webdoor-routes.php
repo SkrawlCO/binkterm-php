@@ -284,9 +284,15 @@ SimpleRouter::get('/games', function() {
     $recentActivity = (new \BinktermPHP\ExperienceActivity())
         ->recentAcrossCatalog($games, 5);
 
+    // Curated Catalog: partition the (already name-sorted) catalog into the
+    // Curated Experiences / Game Hall / Gateways shelves. Cards still carry
+    // their own presentation + launch data; this only groups and orders them.
+    $catalogShelves = \BinktermPHP\CrossroadsShelves::compose($games);
+
     $template = new Template();
     $template->renderResponse('webdoors.twig', [
         'games' => $games,
+        'catalog_shelves' => $catalogShelves,
         'your_places' => $yourPlaces,
         'live_experiences' => $liveExperiences,
         'recent_activity' => $recentActivity,

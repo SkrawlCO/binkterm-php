@@ -307,6 +307,92 @@
     }
 }
 
+/* ---- Curated Catalog shelves (Slice 2: composition, not final polish) ---- */
+
+.experience-shelves {
+    display: flex;
+    flex-direction: column;
+    gap: 1.75rem;
+}
+
+.experience-shelf {
+    margin: 0;
+}
+
+.experience-shelf[hidden] {
+    display: none;
+}
+
+/* Curated sits first and breathes a little more; the emphasis is placement
+   and spacing, not decoration. */
+.experience-shelf--curated {
+    padding-top: 0.25rem;
+    border-top: 2px solid color-mix(in srgb, var(--experience-accent) 45%, transparent);
+}
+
+.experience-shelf-heading {
+    align-items: baseline;
+    column-gap: 0.6rem;
+    display: flex;
+    flex-wrap: wrap;
+    margin-bottom: 0.6rem;
+    row-gap: 0.1rem;
+}
+
+.experience-shelf-title {
+    font-size: 1.15rem;
+    font-weight: 600;
+}
+
+.experience-shelf-caption {
+    color: var(--text-color-muted, #6c757d);
+    flex-basis: 100%;
+    font-size: 0.82rem;
+}
+
+.experience-shelf-count {
+    border: 1px solid var(--experience-border);
+    border-radius: 999px;
+    color: var(--text-color-muted, #6c757d);
+    font-family: "Courier New", monospace;
+    font-size: 0.7rem;
+    line-height: 1.2;
+    padding: 0.1rem 0.45rem;
+}
+
+/* A <details>/<summary> disclosure: native keyboard + ARIA, works with no JS. */
+.experience-shelf-disclosure > summary {
+    cursor: pointer;
+    list-style: none;
+    outline-offset: 3px;
+}
+
+.experience-shelf-disclosure > summary::-webkit-details-marker {
+    display: none;
+}
+
+.experience-shelf-disclosure > summary .experience-shelf-title::before {
+    content: "\25B8"; /* ▸ */
+    display: inline-block;
+    font-size: 0.8em;
+    margin-right: 0.4rem;
+    transition: transform 0.12s ease;
+}
+
+.experience-shelf-disclosure[open] > summary .experience-shelf-title::before {
+    transform: rotate(90deg);
+}
+
+.experience-shelf-disclosure > .experience-library-grid {
+    margin-top: 0.6rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .experience-shelf-disclosure > summary .experience-shelf-title::before {
+        transition: none;
+    }
+}
+
 @media (min-width: 768px) {
     .experience-card-identity {
         min-height: 4.3rem;

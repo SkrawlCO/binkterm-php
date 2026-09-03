@@ -52,9 +52,9 @@
         </div>
 
         {% if cards|default([])|length > 0 %}
-        <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-2 mt-0 experience-library-grid">
-            {% for card in cards %}
-                {% include 'partials/experience_library_card.twig' with {game: card, public_mode: true} %}
+        <div class="experience-shelves">
+            {% for shelf in catalog_shelves %}
+                {% include 'partials/experience_shelf.twig' with {shelf: shelf, public_mode: true} %}
             {% endfor %}
         </div>
         {% else %}

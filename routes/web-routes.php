@@ -239,8 +239,13 @@ SimpleRouter::get('/crossroads', function() {
 
     $activePeople = $state->getPublicActivePeopleCount('web');
 
+    // Same shelf composition as the authenticated /games surface, over the
+    // anonymous-safe presentation projection.
+    $catalogShelves = \BinktermPHP\CrossroadsShelves::compose($cards);
+
     $template->renderResponse('crossroads.twig', [
         'cards' => $cards,
+        'catalog_shelves' => $catalogShelves,
         'around_active_people' => $activePeople,
         'around_active_experiences' => $activeExperiences,
     ]);

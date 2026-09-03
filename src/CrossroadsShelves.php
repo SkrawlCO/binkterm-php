@@ -3,13 +3,14 @@
 namespace BinktermPHP;
 
 /**
- * Pure classification of normalized Experience entries into the three
- * Crossroads Curated Catalog shelves.
+ * Pure classification and composition of normalized Experience entries into the
+ * three Crossroads Curated Catalog shelves.
  *
- * Input entries may be raw {@see GameCatalog} rows or {@see ExperiencePresentation}
- * view models — both expose `category` and the `curation` block. This helper
- * performs no I/O and renders nothing; shelf composition in Twig (Slice 2)
- * consumes its output.
+ * Input entries may be raw {@see GameCatalog} rows, {@see ExperiencePresentation}
+ * view models, or route wrappers of the form `['experience_presentation' => $view,
+ * ...]` — classification reads `category` and the `curation` block from the
+ * nested view when present, else from the entry itself. This helper performs no
+ * I/O and renders nothing; the Twig templates consume {@see compose()}.
  *
  * Rules, in order:
  *   1. entry is curated (`curation.curated`)      -> CURATED
@@ -31,6 +32,33 @@ final class CrossroadsShelves
     public const GAME_HALL = 'game_hall';
     public const GATEWAY = 'gateway';
 
+    /** Shelf order + default open/closed policy for Curated Catalog v1.0. */
+    private const SHELF_ORDER = [self::CURATED, self::GAME_HALL, self::GATEWAY];
+    private const COLLAPSIBLE = [
+        self::CURATED => false,
+        self::GAME_HALL => true,
+        self::GATEWAY => true,
+    ];
+    private const DEFAULT_EXPANDED = [
+        self::CURATED => true,
+        self::GAME_HALL => true,
+        self::GATEWAY => false,
+    ];
+
+    /**
+     * The classification facet of an entry: the nested presentation view when
+     * the entry is a route wrapper, else the entry itself.
+     *
+     * @param array<string,mixed> $entry
+     * @return array<string,mixed>
+     */
+    private static function facet(array $entry): array
+    {
+        return isset($entry['experience_presentation']) && is_array($entry['experience_presentation'])
+            ? $entry['experience_presentation']
+            : $entry;
+    }
+
     /**
      * The shelf a single entry belongs on.
      *
@@ -39,11 +67,13 @@ final class CrossroadsShelves
      */
     public static function classify(array $entry): string
     {
-        if (!empty($entry['curation']['curated'])) {
+        $facet = self::facet($entry);
+
+        if (!empty($facet['curation']['curated'])) {
             return self::CURATED;
         }
 
-        if (($entry['category'] ?? null) === 'gateway') {
+        if (($facet['category'] ?? null) === 'gateway') {
             return self::GATEWAY;
         }
 
@@ -74,6 +104,32 @@ final class CrossroadsShelves
     }
 
     /**
+     * Render-ready shelf list, in display order, each carrying its key, ordered
+     * entries, count, and default disclosure state. Copy (titles/captions) is
+     * the template's concern, keyed off `key`.
+     *
+     * @param iterable<array<string,mixed>> $entries
+     * @return list<array{key:string,entries:list<array<string,mixed>>,count:int,collapsible:bool,default_expanded:bool}>
+     */
+    public static function compose(iterable $entries): array
+    {
+        $grouped = self::group($entries);
+
+        $shelves = [];
+        foreach (self::SHELF_ORDER as $key) {
+            $shelves[] = [
+                'key' => $key,
+                'entries' => $grouped[$key],
+                'count' => count($grouped[$key]),
+                'collapsible' => self::COLLAPSIBLE[$key],
+                'default_expanded' => self::DEFAULT_EXPANDED[$key],
+            ];
+        }
+
+        return $shelves;
+    }
+
+    /**
      * Stable sort by `curation.order` ascending. A missing/non-numeric order
      * sorts after every explicitly ordered entry, preserving input order among
      * equals.
@@ -85,7 +141,7 @@ final class CrossroadsShelves
     {
         $indexed = [];
         foreach ($entries as $i => $entry) {
-            $order = $entry['curation']['order'] ?? null;
+            $order = self::facet($entry)['curation']['order'] ?? null;
             $indexed[] = [
                 'sort' => is_numeric($order) ? (int)$order : PHP_INT_MAX,
                 'seq' => $i,
