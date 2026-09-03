@@ -79,6 +79,7 @@ Complete reference for sysops and developers. New here? Start with [Getting Star
 - [ascii-royale backend (Crossroads)](Crossroads/ascii-royale-backend/README.md) — `ascii-royale` upstream pin (no local patches), reproducible build + binary verification, the `serve`/bot-count rationale, and the arena-wrapper black-box regression harness
 - [OpenGlad Production (Crossroads)](Crossroads/OpenGladProduction.md) — durable A-leg infrastructure for the OpenGlad Experience: the self-hosted multi-room relay as an image-baked supervised companion, same-origin `/openglad-relay` routing, relay authorization through the existing WebDoor session authority, the pinned Web-artifact build/verify pipeline, rollout boundary and rollback
 - [OpenGlad backend (Crossroads)](Crossroads/openglad-backend/README.md) — `openglad` Web/WASM upstream pin and the one downstream carry patch (`window.__opengladPersistNamespace` for per-user browser persistence, pending openglad/openglad#281), its removal/convergence condition, the build/verify scripts, the relay runtime + regression harness, and the BinkTerm-side per-user token derivation
+- [Chessmata identity broker (Crossroads)](Crossroads/ChessmataIdentity.md) — Experience #4, Slice 2: one authenticated BinkTerm user → one self-hosted Chessmata account over ordinary HTTP (no Mongo coupling), for both the graphical Web client and the terminal CLI; the `src/Crossroads/Chessmata*` classes, the encrypted `chessmata_identities` mapping, provisioning/re-resolution, and the `auth.autoVerifyEmail` self-host dependency
 
 ---
 
