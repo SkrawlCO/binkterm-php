@@ -1,0 +1,156 @@
+From b66c4f6d79ef3f1fda819e86c43def17fe224db6 Mon Sep 17 00:00:00 2001
+From: SkrawlCO <skrawl@l33test.com>
+Date: Thu, 3 Sep 2026 00:05:21 -0600
+Subject: [PATCH] Web: opt-in window.__opengladPersistNamespace for isolated
+ browser persistence
+
+Downstream carry pending openglad/openglad#281 -- see
+public_html/webdoors/openglad/patches/README.md for the removal / convergence
+condition. Not an upstream commit; carried against pinned revision
+4565499825c25b0943ab0f6e1e5403af752e63ed.
+
+The Emscripten build persists to IDBFS at /persist, scoped to the page origin,
+so multiple users on one origin share one set of companies. When
+window.__opengladPersistNamespace is set to a valid opaque token
+([A-Za-z0-9_-], 1..64 chars) before boot, IDBFS mounts at /persist_<token> and
+get_user_path() roots there -- the native filesystem layout is unchanged, just
+re-parented, and each token is a distinct IndexedDB-backed store. Unset / empty
+/ invalid keeps the current /persist behaviour (a present-but-invalid token
+also logs one console warning).
+
+Change is confined to src/resources/platform_io.cpp under #ifdef __EMSCRIPTEN__;
+native builds are unaffected (one-blank-line textual delta, -fsyntax-only clean).
+---
+ src/resources/platform_io.cpp | 102 ++++++++++++++++++++++++++--------
+ 1 file changed, 78 insertions(+), 24 deletions(-)
+
+diff --git a/src/resources/platform_io.cpp b/src/resources/platform_io.cpp
+index 102eb97b..fdb8e659 100644
+--- a/src/resources/platform_io.cpp
++++ b/src/resources/platform_io.cpp
+@@ -98,6 +98,77 @@ int rwops_write_handler(void *data, unsigned char *buffer, size_t size)
+     return 1;
+ }
+ 
++#ifdef __EMSCRIPTEN__
++// stringToNewUTF8 is a JS library symbol; declare the dependency explicitly
++// (same as the picker relay test hook).
++EM_JS_DEPS(openglad_persist_namespace_deps, "$stringToNewUTF8");
++
++// Web embedding hook: a host that serves the OpenGlad Web build to more than
++// one person from a single origin sets window.__opengladPersistNamespace to an
++// opaque, host-chosen token before the module boots. Unset / empty / invalid
++// keeps the single shared "/persist" behaviour unchanged.
++EM_JS(char*, openglad_persist_namespace_js, (), {
++    const value = (typeof window !== 'undefined' &&
++                   typeof window.__opengladPersistNamespace === 'string')
++        ? window.__opengladPersistNamespace
++        : "";
++    return stringToNewUTF8(value);
++});
++
++// The IDBFS persistence root for the Web build:
++//   "/persist"                 (default; also any invalid namespace)
++//   "/persist_<namespace>"     when a valid opaque token is supplied
++// A valid token is 1..64 chars of [A-Za-z0-9_-]. Anything else -- empty,
++// over-length, or containing '/', '\\', '.', whitespace or other punctuation --
++// is rejected and falls back to "/persist" (the host selects a token, never a
++// path); a present-but-invalid token also logs one console warning. Resolved
++// once per run.
++static const std::string& web_persist_root()
++{
++    static constexpr char kAllowedNamespaceChars[] =
++        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-";
++
++    static const std::string root = []() -> std::string {
++        const std::string fallback = "/persist";
++        std::unique_ptr<char, decltype(&std::free)> raw(
++            openglad_persist_namespace_js(), &std::free);
++        const std::string token = raw ? std::string(raw.get()) : std::string();
++        if (token.empty()) {
++            return fallback;  // unset / empty: normal, no warning
++        }
++        if (token.size() > 64 ||
++            token.find_first_not_of(kAllowedNamespaceChars) != std::string::npos) {
++            EM_ASM({ console.warn(
++                'openglad: __opengladPersistNamespace ignored (need 1-64 chars ' +
++                'of [A-Za-z0-9_-]); using default persistence.'); });
++            return fallback;
++        }
++        return fallback + "_" + token;
++    }();
++    return root;
++}
++
++// Mount IDBFS at `mount_point`, create the directory if needed, and kick off
++// the populate sync; calls Module._on_idbfs_sync_done() when the sync finishes.
++EM_JS(void, openglad_mount_persist_idbfs, (const char* mount_point), {
++    const mp = UTF8ToString(mount_point);
++    try {
++        FS.mkdir(mp);
++    } catch (e) {
++        // Directory may already exist
++    }
++    FS.mount(IDBFS, {}, mp);
++    FS.syncfs(true, function(err) {
++        if (err) {
++            console.error('IDBFS load error:', err);
++        } else {
++            console.log('IDBFS loaded from IndexedDB');
++        }
++        Module._on_idbfs_sync_done();
++    });
++});
++#endif // __EMSCRIPTEN__
++
+ std::string get_user_path()
+ {
+     auto normalize_dir = [](std::string path) {
+@@ -120,8 +191,10 @@ std::string get_user_path()
+     }
+ 
+ #ifdef __EMSCRIPTEN__
+-    // Use IDBFS mount point for persistent storage in browser
+-    return "/persist/";
++    // Use the IDBFS mount point for persistent storage in browser. This is
++    // "/persist/" unless the embedding host selected an opaque namespace via
++    // window.__opengladPersistNamespace (see web_persist_root()).
++    return web_persist_root() + "/";
+ #elif defined(ANDROID)
+     std::string path = SDL_GetAndroidInternalStoragePath();
+     return path + "/";
+@@ -287,28 +360,9 @@ void io_init(int argc, char* argv[])
+     Log("Setting up IDBFS for persistent storage...\n");
+     idbfs_sync_done.store(false, std::memory_order_release);
+ 
+-    EM_ASM({
+-        // Create mount point
+-        try {
+-            FS.mkdir('/persist');
+-        } catch(e) {
+-            // Directory may already exist
+-        }
+-
+-        // Mount IDBFS
+-        FS.mount(IDBFS, {}, '/persist');
+-
+-        // Sync FROM IndexedDB to populate the virtual filesystem
+-        FS.syncfs(true, function(err) {
+-            if (err) {
+-                console.error('IDBFS load error:', err);
+-            } else {
+-                console.log('IDBFS loaded from IndexedDB');
+-            }
+-            // Signal that sync is done
+-            Module._on_idbfs_sync_done();
+-        });
+-    });
++    // web_persist_root() is "/persist" unless the embedding host selected an
++    // opaque namespace via window.__opengladPersistNamespace.
++    openglad_mount_persist_idbfs(web_persist_root().c_str());
+ 
+     // Wait for sync to complete (ASYNCIFY allows this)
+     Log("Waiting for IDBFS sync...\n");
+-- 
+2.34.1
+

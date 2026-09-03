@@ -1,0 +1,16 @@
+# Build artifacts staged by build-webdoor.sh from pinned OpenGlad + patches/
+# (OpenGlad @ 4565499825c2, emsdk 6.0.3). Compiled output, not source. A durable
+# production deployment needs a pinned-artifact pipeline (see README.md); for the
+# M4 Slice 1A/1E admin-only proof they are staged, not committed.
+# The entry point is the tracked index.php; play.html is the raw pinned shell.
+index.html
+play.html
+play.js
+play.wasm
+play.data
+manifest.webmanifest
+_worker.js
+help.html
+apple-touch-icon.png
+icon-192.png
+icon-512.png

@@ -1,0 +1,19 @@
+{
+  "webdoor_version": "1.0",
+  "game": {
+    "id": "openglad",
+    "name": "OpenGlad",
+    "version": "0.0.0-4565499",
+    "author": "OpenGlad project (GPL-2.0); L33TEST Crossroads integration",
+    "description": "Gladiator arena RPG, browser/WASM build, self-hosted relay multiplayer, per-user browser persistence. Admin-only integration proof (M4 Slice 1A/1E) - not an ordinary-user Experience.",
+    "entry_point": "index.php",
+    "icon": "icon.svg"
+  },
+  "requirements": {
+    "min_host_version": "1.0",
+    "admin_only": true
+  },
+  "multiplayer": {
+    "enabled": true
+  }
+}

@@ -1,0 +1,5 @@
+# Staged UNMODIFIED from the pinned OpenGlad revision 4565499825c2
+# (tests/e2e/relay_stub.js, GPL-2.0). A runtime dependency of the M4 Slice 1A
+# assay relay, not BinkTermPHP source — kept out of the tree the same way the
+# OpenGlad WASM build artifacts are. sha256 51127d6d..5e290d.
+relay_stub.js

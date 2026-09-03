@@ -77,6 +77,7 @@ Complete reference for sysops and developers. New here? Start with [Getting Star
 - [MultiZork backend build (Crossroads)](Crossroads/multizork-backend/README.md) — `multizorkd` upstream pin, the three local patches (loopback bind, credential-input redaction, instance/join-code log redaction), containerised build recipe and black-box regression harness
 - [ascii-royale Production (Crossroads)](Crossroads/AsciiRoyaleProduction.md) — durable supervisor-managed arena, `/var/lib/ascii-royale/` artifact locations, the privileged lifecycle wrapper, and the deployment/upgrade procedure for the ascii-royale Experience
 - [ascii-royale backend (Crossroads)](Crossroads/ascii-royale-backend/README.md) — `ascii-royale` upstream pin (no local patches), reproducible build + binary verification, the `serve`/bot-count rationale, and the arena-wrapper black-box regression harness
+- [OpenGlad backend (Crossroads)](Crossroads/openglad-backend/README.md) — `openglad` Web/WASM upstream pin and the one downstream carry patch (`window.__opengladPersistNamespace` for per-user browser persistence, pending openglad/openglad#281), its removal/convergence condition, and the BinkTerm-side per-user token derivation
 
 ---
 
