@@ -76,6 +76,67 @@ runs `scripts/line-relay-runtime.php` to connect the same private service and
 invoke the same PHP adapter contract. Both surfaces retain the native backend
 identity and shared `door_sessions` lifecycle.
 
+### Multi-backend Experiences (`experience.group`)
+
+The default model is *one Experience = one catalog id = one backend*, and that
+backend declares which surfaces it serves as transports of a single runtime
+(the `terminal.mode = line` case above; a plain NativeDoor serving both Telnet
+and a managed browser terminal; a WebDoor serving Web only).
+
+Some product Experiences instead have **two distinct implementations, one per
+surface** — for example a graphical browser client (a WebDoor) and a terminal
+client (a NativeDoor) that share the same upstream service, world, and account.
+These are not aliases (they launch different programs); they are two
+surface-implementations of one Experience, and should present as one card.
+
+A backend opts in through its manifest's existing `experience` block:
+
+| key | type | meaning |
+|---|---|---|
+| `experience.group` | string | shared product-Experience key. Every discovered entry with the same value is one Experience; the normalized entry is keyed by this value — its **canonical id**, used for `/experiences/{id}`, curation, and shelves. |
+| `experience.primary` | bool (optional) | exactly one member of a group must be `true`. The primary supplies the card's identity/presentation (name, description, icon, category, author, version) deterministically regardless of discovery order, and is the default backend for surface-less launch resolution. |
+| `experience.surface` | `"web"` \| `"telnet"` | the launch surface this backend contributes to the group. The member must itself be `full` on that surface. |
+
+`ExperienceComposition::compose()` (a pure helper, called by
+`GameCatalog::getEnabledGames()` after discovery and before curation) collapses
+the members into one normalized entry:
+
+- keyed by the canonical `experience.group` id;
+- presentation from the `primary` member;
+- `surfaces.web` / `surfaces.telnet` (the existing scalar status fields) are
+  `full` only for a surface an explicit member contributes;
+- a new `surface_backends` block (`{ web: {type,id}, telnet: {type,id} }`) records
+  the contributing backend per surface — `ExperienceLaunch::resolve($exp, $surface)`
+  resolves **that** backend, so Web launches the Web member and Telnet launches
+  the terminal member;
+- a `members` list (`[{type,id}, …]`) records every contributing backend id.
+
+Compatibility: when no discovered entry carries `experience.group`, composition
+is a no-op — the catalog array is returned unchanged and no existing manifest
+needs any new field. Ungrouped entries are never rewritten.
+
+Fail closed: a group is dropped whole (and a warning logged) when it is
+ambiguous — zero or more than one `primary` member, two members claiming the
+same `surface`, or a member whose declared `surface` is invalid or not `full` in
+that member's own surfaces map. Nothing is chosen by discovery order.
+
+Operator guidance: make the **always-discoverable** surface the `primary` (in
+practice the Web member), so the card still appears for viewers who cannot see
+the other member (e.g. an `admin_only` / `hide_from_web` terminal member).
+
+Presence and activity: `ExperienceState` and `ExperienceActivity` resolve every
+member backend id (via `ExperienceComposition::backendMembers()`) to the
+canonical Experience at the read-side. A grouped Experience's live presence
+(`door_sessions` + `webdoor_sessions`) and recent activity (`user_activity_log`)
+are queried across all its members and attributed to the one card; a person
+active on both surfaces counts as one player (as a person on two door nodes
+already does), and "Recently in the Crossroads" collapses that person's plays of
+either member to one canonical footprint. Session and activity rows keep their
+real backend ids on disk — this is read-side only, no schema change, no writer
+change, no data migration. Single-backend Experiences are unaffected: for them
+`backendMembers()` yields the single `backend`, so every lookup is identical to
+before.
+
 ### Curation
 
 Every normalized entry carries a `curation` block: `{ curated: bool, order:

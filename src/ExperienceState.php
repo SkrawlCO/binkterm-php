@@ -65,17 +65,25 @@ class ExperienceState
 
         $doorExperienceIds = [];
         $webExperienceIds = [];
+        // Session rows key on the real backend id. A grouped Experience
+        // (ExperienceComposition) has more than one member backend; map every
+        // member id back to its canonical Experience so presence from any member
+        // is attributed to the one card. For an ungrouped entry backendMembers()
+        // yields a single pair whose id equals the catalog id, so these maps are
+        // identity and behaviour is unchanged.
+        $doorCanonicalByBackendId = [];
+        $webCanonicalByBackendId = [];
 
         foreach ($experiences as $experienceId => $experience) {
-            $backendType = (string)($experience['backend']['type'] ?? '');
-
-            if ($backendType === 'web') {
-                $webExperienceIds[] = (string)$experienceId;
-            } else {
-                // Native, DOS, and JS-DOS all use door_sessions today.
-                // Compatibility fixtures without backend metadata also
-                // retain the historical door_sessions behavior.
-                $doorExperienceIds[] = (string)$experienceId;
+            foreach (ExperienceComposition::backendMembers($experience) as $member) {
+                if ($member['type'] === 'web') {
+                    $webExperienceIds[] = $member['id'];
+                    $webCanonicalByBackendId[$member['id']] = (string)$experienceId;
+                } else {
+                    // Native, DOS, and JS-DOS all use door_sessions today.
+                    $doorExperienceIds[] = $member['id'];
+                    $doorCanonicalByBackendId[$member['id']] = (string)$experienceId;
+                }
             }
         }
 
@@ -105,7 +113,12 @@ class ExperienceState
             ");
 
             $stmt->execute([...$doorExperienceIds, $now]);
-            $sessions = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+                $row['experience_id'] =
+                    $doorCanonicalByBackendId[(string)$row['experience_id']]
+                    ?? (string)$row['experience_id'];
+                $sessions[] = $row;
+            }
         }
 
         if (!empty($webExperienceIds)) {
@@ -133,10 +146,12 @@ class ExperienceState
 
             $stmt->execute([...$webExperienceIds, $now]);
 
-            $sessions = array_merge(
-                $sessions,
-                $stmt->fetchAll(PDO::FETCH_ASSOC)
-            );
+            foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+                $row['experience_id'] =
+                    $webCanonicalByBackendId[(string)$row['experience_id']]
+                    ?? (string)$row['experience_id'];
+                $sessions[] = $row;
+            }
         }
 
         usort(
@@ -278,26 +293,24 @@ class ExperienceState
         $now = gmdate('Y-m-d H:i:s');
         $presenceSince = gmdate('Y-m-d H:i:s', time() - (15 * 60));
 
-        $backendType = (string)($experience['backend']['type'] ?? '');
+        // A grouped Experience (ExperienceComposition) has more than one member
+        // backend, possibly across both session tables. Query each member and
+        // attribute every row to this one requested Experience. For an ungrouped
+        // entry this is a single query keyed by the catalog id -- unchanged.
+        $doorMemberIds = [];
+        $webMemberIds = [];
+        foreach (ExperienceComposition::backendMembers($experience) as $member) {
+            if ($member['type'] === 'web') {
+                $webMemberIds[] = $member['id'];
+            } else {
+                $doorMemberIds[] = $member['id'];
+            }
+        }
 
-        if ($backendType === 'web') {
-            $stmt = $this->db->prepare("
-                SELECT
-                    ws.session_id,
-                    ws.user_id,
-                    ws.game_id AS experience_id,
-                    NULL AS node_number,
-                    ws.created_at AS started_at,
-                    u.username
-                FROM webdoor_sessions ws
-                JOIN users u
-                    ON u.id = ws.user_id
-                WHERE ws.game_id = ?
-                  AND ws.ended_at IS NULL
-                  AND ws.expires_at > ?
-                ORDER BY ws.created_at ASC
-            ");
-        } else {
+        $sessions = [];
+
+        if ($doorMemberIds !== []) {
+            $placeholders = implode(',', array_fill(0, count($doorMemberIds), '?'));
             $stmt = $this->db->prepare("
                 SELECT
                     ds.session_id,
@@ -309,15 +322,47 @@ class ExperienceState
                 FROM door_sessions ds
                 JOIN users u
                     ON u.id = ds.user_id
-                WHERE ds.door_id = ?
+                WHERE ds.door_id IN ($placeholders)
                   AND ds.ended_at IS NULL
                   AND ds.expires_at > ?
                 ORDER BY ds.started_at ASC
             ");
+            $stmt->execute([...$doorMemberIds, $now]);
+            $sessions = array_merge($sessions, $stmt->fetchAll(PDO::FETCH_ASSOC));
         }
 
-        $stmt->execute([$experienceId, $now]);
-        $sessions = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        if ($webMemberIds !== []) {
+            $placeholders = implode(',', array_fill(0, count($webMemberIds), '?'));
+            $stmt = $this->db->prepare("
+                SELECT
+                    ws.session_id,
+                    ws.user_id,
+                    ws.game_id AS experience_id,
+                    NULL AS node_number,
+                    ws.created_at AS started_at,
+                    u.username
+                FROM webdoor_sessions ws
+                JOIN users u
+                    ON u.id = ws.user_id
+                WHERE ws.game_id IN ($placeholders)
+                  AND ws.ended_at IS NULL
+                  AND ws.expires_at > ?
+                ORDER BY ws.created_at ASC
+            ");
+            $stmt->execute([...$webMemberIds, $now]);
+            $sessions = array_merge($sessions, $stmt->fetchAll(PDO::FETCH_ASSOC));
+        }
+
+        // Keep the single-Experience "oldest session first" order when a grouped
+        // Experience merged rows from both session tables. A single-table result
+        // is already ordered, so this is a no-op for ungrouped entries.
+        usort(
+            $sessions,
+            static fn(array $a, array $b): int => strcmp(
+                (string)$a['started_at'],
+                (string)$b['started_at']
+            )
+        );
 
         $players = [];
         $seenUsers = [];
@@ -395,6 +440,10 @@ class ExperienceState
 
         $doorIds = [];
         $webIds = [];
+        // Grouped Experiences: map each member backend id to its canonical id so
+        // aggregate occupancy is counted once per card. Identity for ungrouped.
+        $doorCanonicalByBackendId = [];
+        $webCanonicalByBackendId = [];
 
         foreach ($experiences as $experienceId => $experience) {
             $experienceId = (string)$experienceId;
@@ -403,10 +452,14 @@ class ExperienceState
                 continue;
             }
 
-            if ((string)($experience['backend']['type'] ?? '') === 'web') {
-                $webIds[] = $experienceId;
-            } else {
-                $doorIds[] = $experienceId;
+            foreach (ExperienceComposition::backendMembers($experience) as $member) {
+                if ($member['type'] === 'web') {
+                    $webIds[] = $member['id'];
+                    $webCanonicalByBackendId[$member['id']] = $experienceId;
+                } else {
+                    $doorIds[] = $member['id'];
+                    $doorCanonicalByBackendId[$member['id']] = $experienceId;
+                }
             }
         }
 
@@ -428,7 +481,8 @@ class ExperienceState
             $stmt->execute([...$doorIds, $now]);
 
             foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
-                $experienceId = (string)$row['experience_id'];
+                $experienceId = $doorCanonicalByBackendId[(string)$row['experience_id']]
+                    ?? (string)$row['experience_id'];
                 $sessionRowCounts[$experienceId] =
                     ($sessionRowCounts[$experienceId] ?? 0) + 1;
                 $distinctUsers[$experienceId][(int)$row['user_id']] = true;
@@ -448,7 +502,8 @@ class ExperienceState
             $stmt->execute([...$webIds, $now]);
 
             foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
-                $experienceId = (string)$row['experience_id'];
+                $experienceId = $webCanonicalByBackendId[(string)$row['experience_id']]
+                    ?? (string)$row['experience_id'];
                 $sessionRowCounts[$experienceId] =
                     ($sessionRowCounts[$experienceId] ?? 0) + 1;
                 $distinctUsers[$experienceId][(int)$row['user_id']] = true;
@@ -490,17 +545,20 @@ class ExperienceState
         $doorIds = [];
         $webIds = [];
 
+        // Site-wide distinct people: query every member backend of every
+        // Experience. No per-Experience attribution is needed (the result is one
+        // global distinct-user set), so no canonical map. Identity for ungrouped.
         foreach ($experiences as $experienceId => $experience) {
-            $experienceId = (string)$experienceId;
-
-            if (trim($experienceId) === '') {
+            if (trim((string)$experienceId) === '') {
                 continue;
             }
 
-            if ((string)($experience['backend']['type'] ?? '') === 'web') {
-                $webIds[] = $experienceId;
-            } else {
-                $doorIds[] = $experienceId;
+            foreach (ExperienceComposition::backendMembers($experience) as $member) {
+                if ($member['type'] === 'web') {
+                    $webIds[] = $member['id'];
+                } else {
+                    $doorIds[] = $member['id'];
+                }
             }
         }
 

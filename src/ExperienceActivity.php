@@ -27,19 +27,22 @@ final class ExperienceActivity
      */
     public function recent(array $experience, int $limit = 10): array
     {
-        $backend = $experience['backend'] ?? null;
+        // A grouped Experience (ExperienceComposition) has more than one member
+        // backend id; a raw play row under any of them is this Experience's
+        // activity. play_number is partitioned by user only, so it is still the
+        // person's Nth play of the Experience across every surface. An ungrouped
+        // entry yields one member id equal to today's backend.id -- unchanged.
+        $backendIds = array_values(array_unique(array_map(
+            static fn(array $m): string => $m['id'],
+            ExperienceComposition::backendMembers($experience)
+        )));
 
-        if (!is_array($backend)) {
-            return [];
-        }
-
-        $backendId = trim((string)($backend['id'] ?? ''));
-
-        if ($backendId === '') {
+        if ($backendIds === []) {
             return [];
         }
 
         $limit = max(1, min($limit, 50));
+        $inPlaceholders = implode(',', array_fill(0, count($backendIds), '?'));
 
         $stmt = $this->db->prepare("
             WITH experience_plays AS (
@@ -55,7 +58,7 @@ final class ExperienceActivity
                     ) AS play_number
                 FROM user_activity_log al
                 WHERE al.activity_type_id IN (?, ?)
-                  AND al.object_name = ?
+                  AND al.object_name IN ({$inPlaceholders})
             )
             SELECT
                 ep.id,
@@ -75,7 +78,7 @@ final class ExperienceActivity
         $stmt->execute([
             ActivityTracker::TYPE_WEBDOOR_PLAY,
             ActivityTracker::TYPE_DOSDOOR_PLAY,
-            $backendId,
+            ...$backendIds,
         ]);
 
         $activity = [];
@@ -179,6 +182,16 @@ final class ExperienceActivity
         $backendIds = array_keys($nameByBackendId);
         $inPlaceholders = implode(',', array_fill(0, count($backendIds), '?'));
 
+        // SQL still de-dupes per (user, object_name). When the catalog contains a
+        // grouped Experience, two member backend ids can each yield one row for
+        // the same person that then attribute to the one canonical Experience, so
+        // over-fetch (a group has at most one member per surface -> at most 2x)
+        // and collapse + slice in PHP. Ungrouped catalogs over-fetch nothing and
+        // the SQL LIMIT is unchanged.
+        $canonicalIds = array_values($idByBackendId);
+        $hasGrouped = count($backendIds) > count(array_unique($canonicalIds));
+        $fetchLimit = $hasGrouped ? $limit * 2 : $limit;
+
         $stmt = $this->db->prepare("
             WITH experience_plays AS (
                 SELECT
@@ -212,7 +225,7 @@ final class ExperienceActivity
              AND u.is_system = FALSE
             WHERE ep.recency_rank = 1
             ORDER BY ep.created_at DESC, ep.id DESC
-            LIMIT {$limit}
+            LIMIT {$fetchLimit}
         ");
 
         $params = [
@@ -246,7 +259,11 @@ final class ExperienceActivity
             ];
         }
 
-        return $activity;
+        return array_slice(
+            $this->collapseByUserAndExperience($activity),
+            0,
+            $limit
+        );
     }
 
     /**
@@ -306,6 +323,13 @@ final class ExperienceActivity
         $backendIds = array_keys($nameByBackendId);
         $inPlaceholders = implode(',', array_fill(0, count($backendIds), '?'));
 
+        // Over-fetch + collapse when a grouped Experience is in the catalog so
+        // two member ids' rows for this viewer resolve to one canonical footprint
+        // without shortening the result. Unchanged for ungrouped catalogs.
+        $canonicalIds = array_values($idByBackendId);
+        $hasGrouped = count($backendIds) > count(array_unique($canonicalIds));
+        $fetchLimit = $hasGrouped ? $limit * 2 : $limit;
+
         $stmt = $this->db->prepare("
             SELECT
                 al.id,
@@ -317,7 +341,7 @@ final class ExperienceActivity
               AND al.user_id = ?
               AND al.object_name IN ({$inPlaceholders})
             ORDER BY al.created_at DESC, al.id DESC
-            LIMIT {$limit}
+            LIMIT {$fetchLimit}
         ");
 
         $params = [
@@ -350,14 +374,23 @@ final class ExperienceActivity
             ];
         }
 
-        return $activity;
+        return array_slice(
+            $this->collapseByUserAndExperience($activity),
+            0,
+            $limit
+        );
     }
 
     /**
      * Build the authorized-catalog allow-list shared by the recent-activity
-     * reads: presentation name and current catalog id keyed by backend id.
-     * First entry wins on the unlikely event of a backend-id collision across
-     * backend types.
+     * reads: presentation name and current canonical catalog id keyed by every
+     * backend id that belongs to the Experience. A grouped Experience
+     * (ExperienceComposition) contributes one entry per member backend id, all
+     * pointing at the one canonical id and name, so historical activity stored
+     * under any member id resolves to the single card. An ungrouped Experience
+     * contributes one entry equal to today's `backend.id`, so its behaviour is
+     * unchanged. First entry wins on the unlikely event of a backend-id
+     * collision across backend types.
      *
      * @param array<mixed> $experiences
      * @return array{0:array<string,string>,1:array<string,string>}
@@ -373,18 +406,54 @@ final class ExperienceActivity
                 continue;
             }
 
-            $backendId = trim((string)($experience['backend']['id'] ?? ''));
             $catalogId = trim((string)($experience['id'] ?? ''));
-
-            if ($backendId === '' || $catalogId === '' || isset($nameByBackendId[$backendId])) {
+            if ($catalogId === '') {
                 continue;
             }
 
             $name = trim((string)($experience['name'] ?? ''));
-            $nameByBackendId[$backendId] = $name !== '' ? $name : $catalogId;
-            $idByBackendId[$backendId] = $catalogId;
+            $name = $name !== '' ? $name : $catalogId;
+
+            foreach (ExperienceComposition::backendMembers($experience) as $member) {
+                $backendId = $member['id'];
+                if ($backendId === '' || isset($nameByBackendId[$backendId])) {
+                    continue;
+                }
+                $nameByBackendId[$backendId] = $name;
+                $idByBackendId[$backendId] = $catalogId;
+            }
         }
 
         return [$nameByBackendId, $idByBackendId];
+    }
+
+    /**
+     * Collapse a newest-first activity list to one row per
+     * (user_id, canonical experience_id) pair, keeping the first (newest) seen.
+     *
+     * A grouped Experience can legitimately return one raw row per member
+     * backend id for the same person; after those rows are attributed to the one
+     * canonical Experience this removes the resulting duplicate footprint while
+     * preserving order. An ungrouped Experience has one row per pair already, so
+     * this is a no-op for it.
+     *
+     * @param array<int,array<string,mixed>> $activity newest-first
+     * @return array<int,array<string,mixed>>
+     */
+    private function collapseByUserAndExperience(array $activity): array
+    {
+        $seen = [];
+        $out = [];
+
+        foreach ($activity as $row) {
+            $key = (string)($row['user_id'] ?? '') . "\0" . (string)($row['experience_id'] ?? '');
+            if (isset($seen[$key])) {
+                continue;
+            }
+            $seen[$key] = true;
+            $out[] = $row;
+        }
+
+        return $out;
     }
 }

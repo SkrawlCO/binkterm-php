@@ -85,6 +85,10 @@ class GameCatalog
         $this->addWebDoors($experiences, $user, $surface);
         $this->addJsdosDoors($experiences, $user, $surface);
 
+        // Collapse any backend entries that a manifest has grouped into one
+        // product Experience (experience.group). No-op when nothing is grouped.
+        $experiences = ExperienceComposition::compose($experiences);
+
         $this->applyCuration($experiences);
 
         return $experiences;
@@ -115,6 +119,33 @@ class GameCatalog
             ];
         }
         unset($experience);
+    }
+
+    /**
+     * Optional multi-backend grouping metadata, read from a manifest's
+     * `experience` block. Returns null (the common case) when the entry
+     * declares no `experience.group`, so ungrouped normalized entries are never
+     * given a new key. See {@see ExperienceComposition}.
+     *
+     * @param mixed $experienceBlock
+     * @return array{group:string,primary:bool,surface:string}|null
+     */
+    private function grouping(mixed $experienceBlock): ?array
+    {
+        if (!is_array($experienceBlock)) {
+            return null;
+        }
+
+        $group = trim((string)($experienceBlock['group'] ?? ''));
+        if ($group === '') {
+            return null;
+        }
+
+        return [
+            'group' => $group,
+            'primary' => !empty($experienceBlock['primary']),
+            'surface' => strtolower(trim((string)($experienceBlock['surface'] ?? ''))),
+        ];
     }
 
     /**
@@ -345,6 +376,11 @@ class GameCatalog
                     'manifest' => $door,
                 ],
             ];
+
+            $grouping = $this->grouping($experience);
+            if ($grouping !== null) {
+                $experiences[$id]['grouping'] = $grouping;
+            }
         }
     }
 
@@ -471,6 +507,11 @@ class GameCatalog
                     'manifest' => $manifest,
                 ],
             ];
+
+            $grouping = $this->grouping($manifest['experience'] ?? null);
+            if ($grouping !== null) {
+                $experiences[$id]['grouping'] = $grouping;
+            }
         }
     }
 
@@ -620,6 +661,11 @@ class GameCatalog
                     'manifest' => $manifest,
                 ],
             ];
+
+            $grouping = $this->grouping($manifest['experience'] ?? null);
+            if ($grouping !== null) {
+                $experiences[$id]['grouping'] = $grouping;
+            }
         }
     }
 }

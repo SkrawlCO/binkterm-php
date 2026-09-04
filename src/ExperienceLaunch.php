@@ -57,6 +57,16 @@ final class ExperienceLaunch
 
         $backend = $experience['backend'] ?? null;
 
+        // A grouped multi-backend Experience (see ExperienceComposition) resolves
+        // each surface to its own contributing backend. Absent -> the single
+        // canonical backend, unchanged.
+        if (
+            $surface !== null
+            && is_array($experience['surface_backends'][self::normalizeSurface($surface)] ?? null)
+        ) {
+            $backend = $experience['surface_backends'][self::normalizeSurface($surface)];
+        }
+
         if (!is_array($backend)) {
             return null;
         }
