@@ -233,6 +233,41 @@ final class ExperienceComposition
         return $pairs;
     }
 
+    /**
+     * The canonical Experience id a backend/catalog id belongs to, within an
+     * already-composed catalog: the id of the entry that lists it among its
+     * backend members (see {@see self::backendMembers()}), or the given id
+     * itself when nothing claims it.
+     *
+     * For an ungrouped Experience the backend id already IS the Experience id,
+     * so this returns it unchanged; the same for an unknown id. For a grouped
+     * Experience a member backend id -- e.g. a `chessmata-web` WebDoor launched
+     * as `/games/chessmata-web` -- resolves to the canonical group id
+     * `chessmata`, which is the only public `/experiences/{id}` URL. Callers
+     * that turn a launched backend id back into a Crossroads return/lobby URL
+     * must go through this so the return target is never a backend-only id.
+     *
+     * Pure; no I/O.
+     *
+     * @param array<string,array<string,mixed>> $experiences a composed catalog
+     *     (the output of {@see self::compose()} / GameCatalog::getEnabledGames())
+     */
+    public static function canonicalId(array $experiences, string $backendId): string
+    {
+        foreach ($experiences as $experienceId => $experience) {
+            if (!is_array($experience)) {
+                continue;
+            }
+            foreach (self::backendMembers($experience) as $member) {
+                if ($member['id'] === $backendId) {
+                    return (string)$experienceId;
+                }
+            }
+        }
+
+        return $backendId;
+    }
+
     private static function drop(string $group, string $reason): null
     {
         if (function_exists('getServerLogger')) {

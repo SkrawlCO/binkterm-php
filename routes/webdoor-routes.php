@@ -1070,12 +1070,22 @@ SimpleRouter::get('/games/{game}', function($game) {
         }
     }
 
+    // "Back to Crossroads" returns to the CANONICAL Experience, not to this
+    // backend id. For an ordinary WebDoor they are the same. For a grouped
+    // multi-backend Experience the Web member is launched by its backend id
+    // (e.g. /games/chessmata-web) but belongs to a different canonical
+    // Experience id (chessmata) -- the only valid /experiences/{id} URL.
+    $returnExperienceId = \BinktermPHP\ExperienceComposition::canonicalId(
+        (new \BinktermPHP\GameCatalog())->getEnabledGames($user, 'web'),
+        (string)$game
+    );
+
     $template = new Template();
     $template->renderResponse('webdoor_play.twig', [
         'game' => $gameData,
         'game_url' => $gameUrl,
         'game_id' => $game,
-        'return_url' => '/experiences/' . rawurlencode((string)$game)
+        'return_url' => '/experiences/' . rawurlencode($returnExperienceId)
     ]);
 });
 

@@ -177,8 +177,18 @@ final class ExperienceReturnContractTest extends TestCase
         self::assertIsString($routes);
         self::assertIsString($template);
 
+        // Regression (human acceptance): the WebDoor play route must resolve the
+        // launched backend id to its CANONICAL Experience id before building the
+        // Crossroads return. A grouped Experience's Web member is launched as
+        // /games/{backendId} but its "Back to Crossroads" must target the
+        // group's /experiences/{canonicalId}, not /experiences/{backendId}
+        // (which 404s -- the backend id is not a public Experience URL).
         self::assertStringContainsString(
-            "'return_url' => '/experiences/' . rawurlencode((string)\$game)",
+            '\BinktermPHP\ExperienceComposition::canonicalId(',
+            $routes
+        );
+        self::assertStringContainsString(
+            "'return_url' => '/experiences/' . rawurlencode(\$returnExperienceId)",
             $routes
         );
 

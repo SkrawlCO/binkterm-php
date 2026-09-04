@@ -231,4 +231,43 @@ final class ExperienceCompositionTest extends TestCase
 
         self::assertArrayNotHasKey('shared-game', ExperienceComposition::compose($input));
     }
+
+    // ---- G. canonicalId(): launched backend id -> Crossroads return ----
+
+    public function testCanonicalIdMapsAGroupedMemberBackendToTheCanonicalExperience(): void
+    {
+        // The human-acceptance shape: a grouped Experience whose Web member is
+        // launched as /games/{backendId} must return to /experiences/{group},
+        // never /experiences/{backendId} (which is not a public Experience URL).
+        $catalog = ExperienceComposition::compose($this->sharedGameInput());
+
+        self::assertSame(
+            'shared-game',
+            ExperienceComposition::canonicalId($catalog, 'sg-web'),
+            'Web member backend id resolves to the canonical Experience'
+        );
+        self::assertSame(
+            'shared-game',
+            ExperienceComposition::canonicalId($catalog, 'sg-term'),
+            'terminal member backend id resolves to the same canonical Experience'
+        );
+    }
+
+    public function testCanonicalIdLeavesOrdinarySingleBackendIdsUnchanged(): void
+    {
+        $catalog = ExperienceComposition::compose([
+            'openglad' => $this->row('openglad', 'web', ['web' => 'full', 'telnet' => 'planned']),
+            'sg-term' => $this->row('sg-term', 'native', ['web' => 'full', 'telnet' => 'full'],
+                ['group' => 'shared-game', 'primary' => false, 'surface' => 'telnet']),
+            'sg-web' => $this->row('sg-web', 'web', ['web' => 'full', 'telnet' => 'planned'],
+                ['group' => 'shared-game', 'primary' => true, 'surface' => 'web']),
+        ]);
+
+        // ordinary WebDoor: backend id already IS the Experience id -> unchanged.
+        self::assertSame('openglad', ExperienceComposition::canonicalId($catalog, 'openglad'));
+        // unknown id: returned as-is, no lookup match, no exception.
+        self::assertSame('no-such-door', ExperienceComposition::canonicalId($catalog, 'no-such-door'));
+        // the grouped member still resolves to its canonical Experience id.
+        self::assertSame('shared-game', ExperienceComposition::canonicalId($catalog, 'sg-web'));
+    }
 }
