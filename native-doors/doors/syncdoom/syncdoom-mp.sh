@@ -6,17 +6,18 @@
 # NativeDoor bridge and the SyncDOOM engine. It offers:
 #
 #   [S] the existing, already-accepted single-player launch, unchanged;
-#   [C] Create a 2-player co-op match: spawn a detached dedicated server,
-#       confirm its lobby registry entry, then hand this caller (as the
-#       netgame controller) into SyncDOOM's own native waiting room.
-#   [J] Join a game: list other callers' currently-joinable co-op lobbies
-#       (read directly from the shared registry directory -- no database,
-#       no separate service) and, on selection, hand this caller into the
+#   [C] Create a game: pick mode (Co-op/Deathmatch/Altdeath), player count
+#       (2-4) and skill, spawn a detached dedicated server, confirm its
+#       lobby registry entry, then hand this caller (as the netgame
+#       controller) into SyncDOOM's own native waiting room.
+#   [J] Join a game: list other callers' currently-joinable lobbies (read
+#       directly from the shared registry directory -- no database, no
+#       separate service) and, on selection, hand this caller into the
 #       chosen match as a client.
 #
-# Deathmatch selection, altdeath, 3-4 players, skill choice and map/warp are
-# NOT implemented here -- see docs/proposals or the design recon that
-# preceded this slice. This is plumbing, not the finished lobby.
+# Map/warp selection is deliberately not exposed -- see create_game() for why.
+# This is plumbing appropriate to a BBS door, not a full Synchronet-style
+# lobby (no persistent rooms, no muster/waiting-room chat, no WAD picker).
 #
 # The final operation on every path is a shell `exec` into the real syncdoom
 # binary: no relay layer remains, the caller's PTY stays direct, and sixel
@@ -50,17 +51,20 @@ REGISTRY_WAIT_INTERVAL='0.1'
 # without cleaning up.
 LOBBY_STALE_SECS=15
 
-# Join is restricted to lobbies matching exactly what this wrapper's own
-# Create path produces today -- a 2-player co-op match. This is a Join-side
-# display/eligibility filter only: it does not touch, delete, or modify any
-# registry file that falls outside it.
-JOIN_MAXPLAYERS=2
-JOIN_MODE='coop'
+# Join's eligibility range/set -- kept in sync with what Create actually
+# offers below. SyncDOOM's own MAXPLAYERS is 4 (doomdef.h); Create never
+# offers fewer than 2 (a 1-player "match" is just single-player). This is a
+# Join-side display/eligibility filter only: it never touches, deletes, or
+# modifies a registry file that falls outside it.
+JOIN_MIN_PLAYERS=2
+JOIN_MAX_PLAYERS=4
+JOIN_MODES='coop deathmatch altdeath'
 
 # Enumerated-lobby state, populated by enumerate_joinable_games() and read by
 # join_game(). Declared up front so `set -u` never sees them unset.
 declare -a join_files=()
 declare -a join_hosts=()
+declare -a join_modes=()
 declare -a join_players=()
 declare -a join_maxplayers=()
 
@@ -101,12 +105,37 @@ kill_if_our_dedicated_server() {
     fi
 }
 
+# Human-facing label for a registry `mode` value. Falls back to the raw
+# value verbatim for anything unrecognized (defensive only -- Join's own
+# filter already excludes any mode outside JOIN_MODES before this is used).
+mode_label() {
+    case "$1" in
+        coop) printf 'Co-op' ;;
+        deathmatch) printf 'Deathmatch' ;;
+        altdeath) printf 'Altdeath' ;;
+        *) printf '%s' "$1" ;;
+    esac
+}
+
+# Human-facing label for a Doom skill number (1-5) -- the standard, widely
+# documented vanilla Doom difficulty names. Unknown input falls back to the
+# same default (3) the engine itself defaults to.
+skill_label() {
+    case "$1" in
+        1) printf "I'm Too Young To Die" ;;
+        2) printf 'Hey, Not Too Rough' ;;
+        4) printf 'Ultra-Violence' ;;
+        5) printf 'Nightmare!' ;;
+        *) printf 'Hurt Me Plenty' ;;
+    esac
+}
+
 show_menu() {
     printf '\r\n'
     printf '  SYNCDOOM\r\n'
     printf '\r\n'
     printf '  [S] Single Player\r\n'
-    printf '  [C] Create 2-Player Co-op\r\n'
+    printf '  [C] Create Game\r\n'
     printf '  [J] Join Game\r\n'
     printf '  [Q] Return\r\n'
     printf '\r\n'
@@ -160,9 +189,18 @@ parse_registry_file() {
     return 0
 }
 
-# Validate registry file $1 as a currently-joinable lobby for this slice. On
-# success sets rv_host/rv_players/rv_maxplayers/rv_port from a FRESH read of
-# $1 and returns 0; on any failure returns 1 and rv_* must not be used. Used
+# True (0) if $1 is one of Join's currently-accepted registry mode strings.
+mode_supported() {
+    local m
+    for m in $JOIN_MODES; do
+        [ "$1" = "$m" ] && return 0
+    done
+    return 1
+}
+
+# Validate registry file $1 as a currently-joinable lobby. On success sets
+# rv_host/rv_mode/rv_players/rv_maxplayers/rv_port from a FRESH read of $1
+# and returns 0; on any failure returns 1 and rv_* must not be used. Used
 # both to build the Join list and, unchanged, to re-check the caller's exact
 # selection immediately before exec (the TOCTOU guard) -- the same rules
 # apply both times because it is the same function.
@@ -183,7 +221,7 @@ validate_joinable() {
 
     case "$players" in '' | *[!0-9]*) return 1 ;; esac
     case "$maxplayers" in '' | *[!0-9]*) return 1 ;; esac
-    [ "$maxplayers" -eq "$JOIN_MAXPLAYERS" ] || return 1
+    [ "$maxplayers" -ge "$JOIN_MIN_PLAYERS" ] && [ "$maxplayers" -le "$JOIN_MAX_PLAYERS" ] || return 1
     [ "$players" -lt "$maxplayers" ] || return 1
 
     case "$port" in '' | *[!0-9]*) return 1 ;; esac
@@ -193,27 +231,29 @@ validate_joinable() {
     # what any registry file's addr field claims.
     [ "$addr" = "127.0.0.1" ] || return 1
 
-    [ "$mode" = "$JOIN_MODE" ] || return 1
+    mode_supported "$mode" || return 1
 
     case "$heartbeat" in '' | *[!0-9]*) return 1 ;; esac
     now=$(date +%s)
     [ $((now - heartbeat)) -le "$LOBBY_STALE_SECS" ] || return 1
 
     rv_host="${reg[host]:-Someone}"
+    rv_mode="$mode"
     rv_players="$players"
     rv_maxplayers="$maxplayers"
     rv_port="$port"
     return 0
 }
 
-# Populate join_files/join_hosts/join_players/join_maxplayers from every
-# currently-valid lobby entry under GAMES_DIR. Display fields are sanitized
-# here; join_files entries are real, already-glob-produced paths under the
-# known games directory only -- nothing caller- or registry-supplied can
-# redirect this to another file.
+# Populate join_files/join_hosts/join_modes/join_players/join_maxplayers from
+# every currently-valid lobby entry under GAMES_DIR. Display fields are
+# sanitized here; join_files entries are real, already-glob-produced paths
+# under the known games directory only -- nothing caller- or
+# registry-supplied can redirect this to another file.
 enumerate_joinable_games() {
     join_files=()
     join_hosts=()
+    join_modes=()
     join_players=()
     join_maxplayers=()
 
@@ -223,6 +263,7 @@ enumerate_joinable_games() {
         if validate_joinable "$f"; then
             join_files+=("$f")
             join_hosts+=("$(sanitize_display "$rv_host")")
+            join_modes+=("$rv_mode")
             join_players+=("$rv_players")
             join_maxplayers+=("$rv_maxplayers")
         fi
@@ -239,10 +280,77 @@ launch_single_player() {
         -sixel 1
 }
 
-launch_create_coop() {
+# Prompt for mode/players/skill, confirm, then spawn the server and exec
+# this caller into it as the netgame controller. Each prompt is a single
+# keystroke (`read -n 1`, EOF-safe: a stale/empty read just falls through to
+# that prompt's default), so a caller who disconnects mid-flow lands on
+# sane defaults rather than an error -- nothing is spawned until the final
+# [Y/N] confirmation is answered Y.
+create_game() {
     require_var DOOR_DROPFILE 'your session drop file'
     require_var DOOR_HOME 'your player data directory'
     require_var DOOR_USER_NAME 'your caller name'
+
+    local c create_mode create_players create_skill
+
+    printf '\r\n  Game mode:\r\n'
+    printf '  [1] Co-op\r\n'
+    printf '  [2] Deathmatch\r\n'
+    printf '  [3] Altdeath\r\n'
+    printf '\r\n  Choice (default 1): '
+    c=''
+    IFS= read -r -s -n 1 c || true
+    printf '\r\n'
+    case "$c" in
+        2) create_mode='deathmatch' ;;
+        3) create_mode='altdeath' ;;
+        *) create_mode='coop' ;;
+    esac
+
+    printf '\r\n  Number of players:\r\n'
+    printf '  [2] 2 players\r\n'
+    printf '  [3] 3 players\r\n'
+    printf '  [4] 4 players\r\n'
+    printf '\r\n  Choice (default 2): '
+    c=''
+    IFS= read -r -s -n 1 c || true
+    printf '\r\n'
+    case "$c" in
+        3) create_players=3 ;;
+        4) create_players=4 ;;
+        *) create_players=2 ;;
+    esac
+
+    printf '\r\n  Skill level:\r\n'
+    printf "  [1] I'm Too Young To Die\r\n"
+    printf '  [2] Hey, Not Too Rough\r\n'
+    printf '  [3] Hurt Me Plenty\r\n'
+    printf '  [4] Ultra-Violence\r\n'
+    printf '  [5] Nightmare!\r\n'
+    printf '\r\n  Choice (default 3): '
+    c=''
+    IFS= read -r -s -n 1 c || true
+    printf '\r\n'
+    case "$c" in
+        1 | 2 | 4 | 5) create_skill="$c" ;;
+        *) create_skill=3 ;;
+    esac
+
+    printf '\r\n  Create SyncDOOM Game\r\n\r\n'
+    printf '  Mode: %s\r\n' "$(mode_label "$create_mode")"
+    printf '  Players: %s\r\n' "$create_players"
+    printf '  Skill: %s\r\n' "$(skill_label "$create_skill")"
+    printf '\r\n  Start game? [Y/N]: '
+    c=''
+    IFS= read -r -s -n 1 c || true
+    printf '\r\n'
+    case "$c" in
+        [Yy]) : ;;
+        *)
+            printf '\r\n  Cancelled.\r\n'
+            return 0
+            ;;
+    esac
 
     mkdir -p "$GAMES_DIR"
 
@@ -254,18 +362,18 @@ launch_create_coop() {
     # entry lands one directory up, glued onto the directory's own name.
     set +e
     spawn_out=$("$SYNCDOOM_BIN" -spawnserver \
-        -maxplayers 2 \
+        -maxplayers "$create_players" \
         -gamesdir "$GAMES_DIR/" \
         -host "$host_id" \
         -wadset freedoom2 \
-        -gamemode coop \
+        -gamemode "$create_mode" \
         -bindaddr 127.0.0.1 \
         -advertise 127.0.0.1 2>&1)
     spawn_status=$?
     set -e
 
     if [ "$spawn_status" -ne 0 ]; then
-        fail "Could not start a co-op server right now. Please try again shortly."
+        fail "Could not start the server right now. Please try again shortly."
         exit 1
     fi
 
@@ -274,13 +382,13 @@ launch_create_coop() {
     spawn_port=$(printf '%s\n' "$spawn_out" | awk '{print $2}')
 
     case "$spawn_pid" in
-        ''|*[!0-9]*) fail "Could not start a co-op server right now. Please try again shortly."; exit 1 ;;
+        '' | *[!0-9]*) fail "Could not start the server right now. Please try again shortly."; exit 1 ;;
     esac
     case "$spawn_port" in
-        ''|*[!0-9]*) fail "Could not start a co-op server right now. Please try again shortly."; exit 1 ;;
+        '' | *[!0-9]*) fail "Could not start the server right now. Please try again shortly."; exit 1 ;;
     esac
     if [ "$spawn_port" -lt 1 ] || [ "$spawn_port" -gt 65535 ]; then
-        fail "Could not start a co-op server right now. Please try again shortly."
+        fail "Could not start the server right now. Please try again shortly."
         exit 1
     fi
 
@@ -302,16 +410,25 @@ launch_create_coop() {
 
     if [ -z "$registry_file" ]; then
         kill_if_our_dedicated_server "$spawn_pid"
-        fail "The co-op server did not come up in time. Please try again."
+        fail "The server did not come up in time. Please try again."
         exit 1
     fi
 
-    # Hand off: this caller becomes the netgame controller. Co-op only in
-    # this slice -- no -deathmatch/-altdeath flag is ever passed here.
+    # Hand off: this caller becomes the netgame controller, so its own
+    # -deathmatch/-altdeath/-skill choice is what the whole match negotiates
+    # to (proven: d_net.c / net_structrw.c). -gamemode on the server above is
+    # registry/display metadata only -- this flag is what actually matters.
+    local -a mode_args=()
+    case "$create_mode" in
+        deathmatch) mode_args=(-deathmatch) ;;
+        altdeath) mode_args=(-altdeath) ;;
+    esac
+
     exec "$SYNCDOOM_BIN" "$DOOR_DROPFILE" \
         -connect "127.0.0.1:$spawn_port" \
-        -players 2 \
-        -skill 3 \
+        -players "$create_players" \
+        -skill "$create_skill" \
+        "${mode_args[@]}" \
         -home "$DOOR_HOME" \
         -iwad "$IWAD" \
         -name "$DOOR_USER_NAME" \
@@ -336,8 +453,9 @@ join_game() {
     printf '\r\n  SYNCDOOM -- JOIN GAME\r\n\r\n'
     local i=1 idx
     for idx in "${!join_files[@]}"; do
-        printf '  %d. %s -- Co-op -- %s/%s players\r\n' \
-            "$i" "${join_hosts[$idx]}" "${join_players[$idx]}" "${join_maxplayers[$idx]}"
+        printf '  %d. %s -- %s -- %s/%s players\r\n' \
+            "$i" "${join_hosts[$idx]}" "$(mode_label "${join_modes[$idx]}")" \
+            "${join_players[$idx]}" "${join_maxplayers[$idx]}"
         i=$((i + 1))
     done
     printf '\r\n  Selection (or Q to return): '
@@ -399,7 +517,7 @@ while true; do
     printf '\r\n'
     case "$choice" in
         [Ss]) launch_single_player ;;
-        [Cc]) launch_create_coop ;;
+        [Cc]) create_game ;;
         [Jj]) join_game ;;
         [Qq]) exit 0 ;;
         *) : ;; # unrecognized key -- redraw the menu

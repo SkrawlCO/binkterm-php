@@ -5,43 +5,44 @@ declare(strict_types=1);
 use PHPUnit\Framework\TestCase;
 
 /**
- * Slice 1: the SyncDOOM multiplayer native-door wrapper (syncdoom-mp.sh).
- *
- * The wrapper is the SyncDOOM-owned integration layer between the generic
- * NativeDoor bridge and the engine. This slice covers only:
+ * The SyncDOOM multiplayer native-door wrapper (syncdoom-mp.sh):
  *
  *   [S] the existing, already-accepted single-player launch (unchanged);
- *   [C] Create a 2-player co-op match: spawn a detached dedicated server,
- *       confirm its registry entry, then exec the caller into the client
- *       as the netgame controller.
+ *   [C] Create a game: pick mode (Co-op/Deathmatch/Altdeath), player count
+ *       (2-4) and skill (1-5), confirm, then spawn a detached dedicated
+ *       server, confirm its registry entry, and exec the caller into the
+ *       client as the netgame controller;
+ *   [J] Join a game: enumerate other callers' currently-joinable lobbies
+ *       directly from data/run/syncdoom/games/*.ini (no database, no other
+ *       service) and, on a validated selection, exec into that match as a
+ *       client.
  *
  * These tests drive the real script against a FAKE `syncdoom` placed at the
  * exact path the wrapper resolves ($(dirname "$0")/syncdoom) -- no real
- * engine, no real network. They assert:
+ * engine, no real network -- and hand-written registry files for Join. They
+ * assert:
  *
- *   * Create invokes -spawnserver with the exact proven flag set;
+ *   * Create invokes -spawnserver with the exact proven flag set, and its
+ *     registry metadata (-gamemode, -maxplayers) matches the caller's
+ *     selection;
  *   * the wrapper safely parses the "<pid> <port>" spawn output;
- *   * the final client exec carries the real dropfile, -connect to the
- *     spawned port, -players 2, -skill 3, -home, -iwad, -name as one argv
- *     entry, and -sixel 1 -- and never -deathmatch/-altdeath;
+ *   * the controller exec carries the real dropfile, -connect to the
+ *     spawned port, the selected -players/-skill, -home, -iwad, -name as
+ *     one argv entry, -sixel 1, and -deathmatch/-altdeath exactly when that
+ *     mode was chosen (never for Co-op);
  *   * a caller name containing shell metacharacters can never execute;
- *   * a failed spawn never execs a client;
+ *   * a failed spawn never execs a client; cancelling at the [Y/N] prompt
+ *     spawns nothing;
  *   * Quit spawns nothing;
- *   * Single Player reproduces today's exact accepted launch semantics.
- *
- * Slice 2 adds [J] Join: enumerate other callers' currently-joinable co-op
- * lobbies directly from data/run/syncdoom/games/*.ini (no database, no other
- * service) and, on a validated selection, exec into that match as a client.
- * These tests drive the real script against hand-written registry files --
- * no real engine, no real network -- and assert:
- *
- *   * an empty/no-lobby games dir shows a message and execs nothing;
- *   * a valid co-op lobby is listed and produces the exact expected join
- *     argv (never -deathmatch/-altdeath/-skill/-warp);
+ *   * Single Player reproduces today's exact accepted launch semantics;
+ *   * Join lists Co-op/Deathmatch/Altdeath lobbies with 2-4 players and
+ *     produces the exact expected join argv (never -deathmatch/-altdeath/
+ *     -skill/-warp -- those are negotiated from the controller);
  *   * multiple lobbies list deterministically and numeric selection maps to
  *     the correct entry;
- *   * a full, in-progress, stale, malformed-port, non-loopback, or
- *     unsupported-mode entry is hidden without being touched or deleted;
+ *   * a full, in-progress, stale, malformed-port, non-loopback,
+ *     unsupported-mode, or out-of-range-player-count entry is hidden
+ *     without being touched or deleted;
  *   * a malformed registry file is ignored without crashing the wrapper;
  *   * a hostile host field (shell metacharacters, an ANSI escape sequence)
  *     is displayed only as inert sanitized text, never executed or emitted
@@ -126,11 +127,21 @@ SH
     }
 
     /**
+     * Default Create input: [C] then a single keystroke per prompt (mode,
+     * players, skill, confirm). '9' never matches any prompt's own choices,
+     * so it always falls through to that prompt's default -- Co-op, 2
+     * players, skill 3 (Hurt Me Plenty) -- then 'Y' confirms. This reproduces
+     * exactly the fixed co-op/2/3 shape the wrapper always used before
+     * mode/player-count/skill selection existed.
+     */
+    private const DEFAULT_CREATE_INPUT = 'C999Y';
+
+    /**
      * @param array<string,string|false> $env value false removes the variable
-     * @param string $input bytes to feed the wrapper's stdin (menu keypress)
+     * @param string $input bytes to feed the wrapper's stdin (menu keypresses)
      * @return array{code:int,stdout:string,stderr:string}
      */
-    private function runWrapper(array $env = [], string $input = 'C'): array
+    private function runWrapper(array $env = [], string $input = self::DEFAULT_CREATE_INPUT): array
     {
         $base = [
             'PATH' => getenv('PATH') ?: '/usr/bin:/bin',
@@ -293,6 +304,71 @@ SH
 
         self::assertNotContains('-deathmatch', $argv);
         self::assertNotContains('-altdeath', $argv);
+    }
+
+    // ---- Create: mode / player count / skill selection ------------------
+
+    public function testCreateDeathmatchPassesDeathmatchToControllerAndRegistry(): void
+    {
+        // [C] mode=2 (Deathmatch), players=default, skill=default, confirm Y.
+        $r = $this->runWrapper([], 'C299Y');
+        self::assertSame(0, $r['code'], $r['stdout'] . $r['stderr']);
+
+        $spawnArgv = $this->readArgvFile('spawn.argv');
+        self::assertSame('deathmatch', $spawnArgv[array_search('-gamemode', $spawnArgv, true) + 1]);
+
+        $execArgv = $this->readArgvFile('exec.argv');
+        self::assertContains('-deathmatch', $execArgv);
+        self::assertNotContains('-altdeath', $execArgv);
+        self::assertStringContainsString('Deathmatch', $r['stdout']);
+    }
+
+    public function testCreateAltdeathPassesAltdeathToControllerAndRegistry(): void
+    {
+        // [C] mode=3 (Altdeath), players=default, skill=default, confirm Y.
+        $r = $this->runWrapper([], 'C399Y');
+        self::assertSame(0, $r['code'], $r['stdout'] . $r['stderr']);
+
+        $spawnArgv = $this->readArgvFile('spawn.argv');
+        self::assertSame('altdeath', $spawnArgv[array_search('-gamemode', $spawnArgv, true) + 1]);
+
+        $execArgv = $this->readArgvFile('exec.argv');
+        self::assertContains('-altdeath', $execArgv);
+        self::assertNotContains('-deathmatch', $execArgv);
+    }
+
+    public function testCreatePlayerCountAppliesToServerAndController(): void
+    {
+        // [C] mode=default, players=4, skill=default, confirm Y.
+        $r = $this->runWrapper([], 'C949Y');
+        self::assertSame(0, $r['code'], $r['stdout'] . $r['stderr']);
+
+        $spawnArgv = $this->readArgvFile('spawn.argv');
+        self::assertSame('4', $spawnArgv[array_search('-maxplayers', $spawnArgv, true) + 1]);
+
+        $execArgv = $this->readArgvFile('exec.argv');
+        self::assertSame('4', $execArgv[array_search('-players', $execArgv, true) + 1]);
+        self::assertStringContainsString('Players: 4', $r['stdout']);
+    }
+
+    public function testCreateSkillSelectionAppliesToController(): void
+    {
+        // [C] mode=default, players=default, skill=5 (Nightmare!), confirm Y.
+        $r = $this->runWrapper([], 'C995Y');
+        self::assertSame(0, $r['code'], $r['stdout'] . $r['stderr']);
+
+        $execArgv = $this->readArgvFile('exec.argv');
+        self::assertSame('5', $execArgv[array_search('-skill', $execArgv, true) + 1]);
+        self::assertStringContainsString('Nightmare!', $r['stdout']);
+    }
+
+    public function testCreateCancelledAtConfirmationSpawnsNothing(): void
+    {
+        $r = $this->runWrapper([], 'C999N');
+        self::assertSame(0, $r['code'], $r['stdout'] . $r['stderr']);
+
+        self::assertFileDoesNotExist($this->scratch . '/spawn.argv');
+        self::assertFileDoesNotExist($this->scratch . '/exec.argv');
     }
 
     // ---- argv safety against a hostile caller name ----------------------
@@ -479,7 +555,7 @@ SH
         self::assertSame('127.0.0.1:' . $expectedPort, $connect);
     }
 
-    public function testJoinHidesFullInProgressStaleMalformedNonLoopbackAndUnsupportedModeLobbies(): void
+    public function testJoinHidesFullInProgressStaleMalformedNonLoopbackOutOfRangeAndUnsupportedModeLobbies(): void
     {
         $now = time();
         $this->writeRegistry('FULL', $this->defaultLobbyFields(['host' => 'FullHost', 'port' => '20510', 'players' => '2', 'maxplayers' => '2']));
@@ -487,17 +563,60 @@ SH
         $this->writeRegistry('STALE', $this->defaultLobbyFields(['host' => 'StaleHost', 'port' => '20512', 'heartbeat' => (string)($now - 100)]));
         $this->writeRegistry('BADPORT', $this->defaultLobbyFields(['host' => 'BadPortHost', 'port' => 'not-a-port']));
         $this->writeRegistry('LAN', $this->defaultLobbyFields(['host' => 'LanHost', 'port' => '20513', 'addr' => '10.0.0.5']));
-        $this->writeRegistry('DM', $this->defaultLobbyFields(['host' => 'DmHost', 'port' => '20514', 'mode' => 'deathmatch']));
+        // "duel" is not one of coop/deathmatch/altdeath -- a genuinely
+        // unsupported mode, unlike deathmatch/altdeath which Create now ships.
+        $this->writeRegistry('UNSUPPORTED', $this->defaultLobbyFields(['host' => 'DuelHost', 'port' => '20514', 'mode' => 'duel']));
+        $this->writeRegistry('TOOFEW', $this->defaultLobbyFields(['host' => 'TooFewHost', 'port' => '20516', 'players' => '0', 'maxplayers' => '1']));
+        $this->writeRegistry('TOOMANY', $this->defaultLobbyFields(['host' => 'TooManyHost', 'port' => '20517', 'players' => '0', 'maxplayers' => '5']));
         $this->writeRegistry('GOOD', $this->defaultLobbyFields(['host' => 'OnlyGoodHost', 'port' => '20515']));
 
         $r = $this->runWrapper([], 'J');
 
-        foreach (['FullHost', 'PlayingHost', 'StaleHost', 'BadPortHost', 'LanHost', 'DmHost'] as $hidden) {
+        foreach (['FullHost', 'PlayingHost', 'StaleHost', 'BadPortHost', 'LanHost', 'DuelHost', 'TooFewHost', 'TooManyHost'] as $hidden) {
             self::assertStringNotContainsString($hidden, $r['stdout'], "$hidden must be hidden from Join");
         }
         self::assertStringContainsString('OnlyGoodHost', $r['stdout']);
         // Exactly one numbered entry.
         self::assertSame(1, preg_match_all('/^\s*\d+\.\s/m', $r['stdout']));
+    }
+
+    public function testJoinDisplaysDeathmatchAltdeathAndVariedPlayerCounts(): void
+    {
+        $this->writeRegistry('COOP4', $this->defaultLobbyFields([
+            'host' => 'Skrawl', 'port' => '20570', 'mode' => 'coop', 'players' => '1', 'maxplayers' => '4',
+        ]));
+        $this->writeRegistry('DM3', $this->defaultLobbyFields([
+            'host' => 'BraidedDuck', 'port' => '20571', 'mode' => 'deathmatch', 'players' => '2', 'maxplayers' => '3',
+        ]));
+        $this->writeRegistry('ALTD2', $this->defaultLobbyFields([
+            'host' => 'AltHost', 'port' => '20572', 'mode' => 'altdeath', 'players' => '1', 'maxplayers' => '2',
+        ]));
+
+        $r = $this->runWrapper([], 'J');
+
+        self::assertMatchesRegularExpression('/Skrawl\s+--\s+Co-op\s+--\s+1\/4 players/', $r['stdout']);
+        self::assertMatchesRegularExpression('/BraidedDuck\s+--\s+Deathmatch\s+--\s+2\/3 players/', $r['stdout']);
+        self::assertMatchesRegularExpression('/AltHost\s+--\s+Altdeath\s+--\s+1\/2 players/', $r['stdout']);
+    }
+
+    public function testJoinAcceptsAndConnectsToADeathmatchThreePlayerLobby(): void
+    {
+        $this->writeRegistry('DM3-20573', $this->defaultLobbyFields([
+            'host' => 'BraidedDuck', 'port' => '20573', 'mode' => 'deathmatch', 'players' => '1', 'maxplayers' => '3',
+        ]));
+
+        $r = $this->runWrapper([], "J1\n");
+        self::assertSame(0, $r['code'], $r['stdout'] . $r['stderr']);
+
+        $argv = $this->readArgvFile('exec.argv');
+        self::assertSame('127.0.0.1:20573', $argv[array_search('-connect', $argv, true) + 1]);
+        self::assertSame('3', $argv[array_search('-players', $argv, true) + 1]);
+        // The joiner still never reconstructs controller gameplay flags,
+        // even for a deathmatch lobby -- the controller already negotiates it.
+        self::assertNotContains('-deathmatch', $argv);
+        self::assertNotContains('-altdeath', $argv);
+        self::assertNotContains('-skill', $argv);
+        self::assertNotContains('-warp', $argv);
     }
 
     public function testJoinIgnoresMalformedRegistryFileWithoutCrashing(): void
