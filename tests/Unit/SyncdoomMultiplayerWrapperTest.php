@@ -28,6 +28,29 @@ use PHPUnit\Framework\TestCase;
  *   * a failed spawn never execs a client;
  *   * Quit spawns nothing;
  *   * Single Player reproduces today's exact accepted launch semantics.
+ *
+ * Slice 2 adds [J] Join: enumerate other callers' currently-joinable co-op
+ * lobbies directly from data/run/syncdoom/games/*.ini (no database, no other
+ * service) and, on a validated selection, exec into that match as a client.
+ * These tests drive the real script against hand-written registry files --
+ * no real engine, no real network -- and assert:
+ *
+ *   * an empty/no-lobby games dir shows a message and execs nothing;
+ *   * a valid co-op lobby is listed and produces the exact expected join
+ *     argv (never -deathmatch/-altdeath/-skill/-warp);
+ *   * multiple lobbies list deterministically and numeric selection maps to
+ *     the correct entry;
+ *   * a full, in-progress, stale, malformed-port, non-loopback, or
+ *     unsupported-mode entry is hidden without being touched or deleted;
+ *   * a malformed registry file is ignored without crashing the wrapper;
+ *   * a hostile host field (shell metacharacters, an ANSI escape sequence)
+ *     is displayed only as inert sanitized text, never executed or emitted
+ *     as a raw terminal control sequence;
+ *   * a registry line that looks like a command substitution is treated as
+ *     pure data and never executed;
+ *   * a lobby that disappears between listing and selection (TOCTOU) is
+ *     refused, not joined with stale cached values;
+ *   * Q from the Join list launches nothing.
  */
 final class SyncdoomMultiplayerWrapperTest extends TestCase
 {
@@ -149,6 +172,45 @@ SH
         $code = proc_close($proc);
 
         return ['code' => $code, 'stdout' => $stdout, 'stderr' => $stderr];
+    }
+
+    /**
+     * Write a registry .ini exactly the way mp_write_registry() (mp_server.c)
+     * does -- "key = value" lines -- under the same games dir the wrapper
+     * resolves. Returns the file path.
+     *
+     * @param array<string,string> $fields
+     */
+    private function writeRegistry(string $name, array $fields): string
+    {
+        if (!is_dir($this->gamesDir)) {
+            mkdir($this->gamesDir, 0700, true);
+        }
+        $lines = [];
+        foreach ($fields as $k => $v) {
+            $lines[] = "$k = $v";
+        }
+        $path = $this->gamesDir . '/' . $name . '.ini';
+        file_put_contents($path, implode("\n", $lines) . "\n");
+        return $path;
+    }
+
+    /** @param array<string,string> $overrides @return array<string,string> */
+    private function defaultLobbyFields(array $overrides = []): array
+    {
+        return array_merge([
+            'host' => 'GoodHost',
+            'wadset' => 'freedoom2',
+            'mode' => 'coop',
+            'addr' => '127.0.0.1',
+            'port' => '20500',
+            'hostid' => 'HOSTX',
+            'players' => '1',
+            'maxplayers' => '2',
+            'status' => 'lobby',
+            'pid' => '99999',
+            'heartbeat' => (string)time(),
+        ], $overrides);
     }
 
     /** @return list<string> */
@@ -349,6 +411,189 @@ SH
         self::assertSame(0, $r['code'], $r['stdout'] . $r['stderr']);
         self::assertFileDoesNotExist($this->scratch . '/spawn.argv');
         self::assertFileDoesNotExist($this->scratch . '/exec.argv');
+    }
+
+    // ---- Join: discovery, selection, hand-off ---------------------------
+
+    public function testJoinWithNoLobbiesShowsMessageAndExecsNothing(): void
+    {
+        $r = $this->runWrapper([], 'J');
+
+        self::assertSame(0, $r['code'], $r['stdout'] . $r['stderr']);
+        self::assertStringContainsStringIgnoringCase('no games are waiting', $r['stdout']);
+        self::assertFileDoesNotExist($this->scratch . '/exec.argv');
+        self::assertFileDoesNotExist($this->scratch . '/spawn.argv');
+    }
+
+    public function testJoinListsAndJoinsSingleValidLobbyWithExactArgvAndNoControllerFlags(): void
+    {
+        $this->writeRegistry('HOSTX-20500', $this->defaultLobbyFields());
+
+        $r = $this->runWrapper([], "J1\n");
+        self::assertSame(0, $r['code'], $r['stdout'] . $r['stderr']);
+        self::assertStringContainsString('GoodHost', $r['stdout']);
+        self::assertStringContainsString('1/2', $r['stdout']);
+
+        $argv = $this->readArgvFile('exec.argv');
+        self::assertSame($this->scratch . '/drops/DOOR32.SYS', $argv[0]);
+        self::assertContains('-connect', $argv);
+        self::assertSame('127.0.0.1:20500', $argv[array_search('-connect', $argv, true) + 1]);
+        self::assertContains('-players', $argv);
+        self::assertSame('2', $argv[array_search('-players', $argv, true) + 1]);
+        self::assertContains('-home', $argv);
+        self::assertSame($this->scratch . '/home', $argv[array_search('-home', $argv, true) + 1]);
+        self::assertContains('-iwad', $argv);
+        self::assertSame('freedoom2.wad', $argv[array_search('-iwad', $argv, true) + 1]);
+        self::assertContains('-name', $argv);
+        self::assertSame('Tester One', $argv[array_search('-name', $argv, true) + 1]);
+        self::assertSame(1, count(array_keys($argv, '-name', true)));
+        self::assertContains('-sixel', $argv);
+        self::assertSame('1', $argv[array_search('-sixel', $argv, true) + 1]);
+
+        // The joiner never reconstructs controller gameplay flags -- those
+        // are negotiated from the controller over the network.
+        self::assertNotContains('-deathmatch', $argv);
+        self::assertNotContains('-altdeath', $argv);
+        self::assertNotContains('-skill', $argv);
+        self::assertNotContains('-warp', $argv);
+    }
+
+    public function testJoinListsMultipleLobbiesDeterministicallyAndSelectionMapsCorrectly(): void
+    {
+        $this->writeRegistry('AAA-20501', $this->defaultLobbyFields(['host' => 'FirstHost', 'port' => '20501']));
+        $this->writeRegistry('BBB-20502', $this->defaultLobbyFields(['host' => 'SecondHost', 'port' => '20502']));
+
+        // Selecting "2" must join whichever entry is listed second, not
+        // whichever file happens to sort first on disk.
+        $r = $this->runWrapper([], 'J');
+        self::assertMatchesRegularExpression('/1\.\s+\S+.*\r?\n.*2\.\s+\S+/s', $r['stdout']);
+
+        preg_match('/1\.\s+(\S+)/', $r['stdout'], $m1);
+        preg_match('/2\.\s+(\S+)/', $r['stdout'], $m2);
+        $secondListedHost = $m2[1];
+
+        $r2 = $this->runWrapper([], "J2\n");
+        $argv = $this->readArgvFile('exec.argv');
+        $connect = $argv[array_search('-connect', $argv, true) + 1];
+        $expectedPort = $secondListedHost === 'FirstHost' ? '20501' : '20502';
+        self::assertSame('127.0.0.1:' . $expectedPort, $connect);
+    }
+
+    public function testJoinHidesFullInProgressStaleMalformedNonLoopbackAndUnsupportedModeLobbies(): void
+    {
+        $now = time();
+        $this->writeRegistry('FULL', $this->defaultLobbyFields(['host' => 'FullHost', 'port' => '20510', 'players' => '2', 'maxplayers' => '2']));
+        $this->writeRegistry('PLAYING', $this->defaultLobbyFields(['host' => 'PlayingHost', 'port' => '20511', 'status' => 'playing']));
+        $this->writeRegistry('STALE', $this->defaultLobbyFields(['host' => 'StaleHost', 'port' => '20512', 'heartbeat' => (string)($now - 100)]));
+        $this->writeRegistry('BADPORT', $this->defaultLobbyFields(['host' => 'BadPortHost', 'port' => 'not-a-port']));
+        $this->writeRegistry('LAN', $this->defaultLobbyFields(['host' => 'LanHost', 'port' => '20513', 'addr' => '10.0.0.5']));
+        $this->writeRegistry('DM', $this->defaultLobbyFields(['host' => 'DmHost', 'port' => '20514', 'mode' => 'deathmatch']));
+        $this->writeRegistry('GOOD', $this->defaultLobbyFields(['host' => 'OnlyGoodHost', 'port' => '20515']));
+
+        $r = $this->runWrapper([], 'J');
+
+        foreach (['FullHost', 'PlayingHost', 'StaleHost', 'BadPortHost', 'LanHost', 'DmHost'] as $hidden) {
+            self::assertStringNotContainsString($hidden, $r['stdout'], "$hidden must be hidden from Join");
+        }
+        self::assertStringContainsString('OnlyGoodHost', $r['stdout']);
+        // Exactly one numbered entry.
+        self::assertSame(1, preg_match_all('/^\s*\d+\.\s/m', $r['stdout']));
+    }
+
+    public function testJoinIgnoresMalformedRegistryFileWithoutCrashing(): void
+    {
+        if (!is_dir($this->gamesDir)) {
+            mkdir($this->gamesDir, 0700, true);
+        }
+        // No '=' anywhere, binary-ish content, no recognizable fields at all.
+        file_put_contents($this->gamesDir . '/GARBAGE.ini', "\x00\x01\xffnot an ini file at all\nrandom text\n");
+        $this->writeRegistry('GOOD', $this->defaultLobbyFields(['host' => 'SurvivorHost', 'port' => '20520']));
+
+        $r = $this->runWrapper([], 'J');
+
+        self::assertSame(0, $r['code'], $r['stdout'] . $r['stderr']);
+        self::assertStringContainsString('SurvivorHost', $r['stdout']);
+        self::assertSame(1, preg_match_all('/^\s*\d+\.\s/m', $r['stdout']));
+    }
+
+    public function testJoinSanitizesHostileHostDisplayValueAndNeverEmitsRawEscapeOrExecutesIt(): void
+    {
+        $canary = $this->scratch . '/JOIN_HOST_PWNED';
+        $hostileHost = "Evil\x1b[31m; touch {$canary}; \$(id)";
+        $this->writeRegistry('HOSTILE', $this->defaultLobbyFields(['host' => $hostileHost, 'port' => '20530']));
+
+        $r = $this->runWrapper([], 'J');
+
+        self::assertFileDoesNotExist($canary, 'a hostile host field must never execute');
+        // The raw ESC byte must never reach the terminal stream.
+        self::assertStringNotContainsString("\x1b", $r['stdout'], 'a raw ANSI escape byte leaked into Join display output');
+    }
+
+    public function testJoinRegistryLineLookingLikeCommandSubstitutionIsInertData(): void
+    {
+        $canary = $this->scratch . '/JOIN_SUBSHELL_PWNED';
+        $path = $this->writeRegistry('SUBSHELL', $this->defaultLobbyFields(['port' => '20540']));
+        file_put_contents($path, "evil=\$(touch {$canary})\n", FILE_APPEND);
+
+        $r = $this->runWrapper([], "J1\n");
+
+        self::assertFileDoesNotExist($canary, 'a registry line resembling a command substitution must never execute');
+        // The lobby itself is still otherwise valid and joinable -- the
+        // unrecognized "evil" key is simply ignored, not fatal.
+        self::assertFileExists($this->scratch . '/exec.argv');
+    }
+
+    public function testToctouRefusesJoinWhenLobbyDisappearsBeforeSelection(): void
+    {
+        $ini = $this->writeRegistry('TOCTOU', $this->defaultLobbyFields(['port' => '20550']));
+
+        $env = [
+            'PATH' => getenv('PATH') ?: '/usr/bin:/bin',
+            'DOOR_DROPFILE' => $this->scratch . '/drops/DOOR32.SYS',
+            'DOOR_HOME' => $this->scratch . '/home',
+            'DOOR_USER_NAME' => 'Tester One',
+        ];
+        $descriptors = [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']];
+        $proc = proc_open(['/bin/bash', $this->wrapper], $descriptors, $pipes, $this->doorDir, $env);
+        self::assertIsResource($proc);
+
+        fwrite($pipes[0], 'J');
+        usleep(300000);
+        // The lobby vanishes between the list being shown and the caller's
+        // selection reaching the wrapper -- the real-world race this guards.
+        unlink($ini);
+        usleep(200000);
+        fwrite($pipes[0], "1\n");
+        fclose($pipes[0]);
+
+        $stdout = '';
+        $deadline = microtime(true) + 15.0;
+        do {
+            $stdout .= (string)stream_get_contents($pipes[1]);
+            $st = proc_get_status($proc);
+            if (!$st['running']) {
+                break;
+            }
+            usleep(15000);
+        } while (microtime(true) < $deadline);
+        $stdout .= (string)stream_get_contents($pipes[1]);
+        fclose($pipes[1]);
+        fclose($pipes[2]);
+        proc_close($proc);
+
+        self::assertStringContainsStringIgnoringCase('no longer available', $stdout);
+        self::assertFileDoesNotExist($this->scratch . '/exec.argv');
+    }
+
+    public function testQuitFromJoinLaunchesNothing(): void
+    {
+        $this->writeRegistry('GOOD', $this->defaultLobbyFields(['port' => '20560']));
+
+        $r = $this->runWrapper([], "JQ\n");
+
+        self::assertSame(0, $r['code'], $r['stdout'] . $r['stderr']);
+        self::assertFileDoesNotExist($this->scratch . '/exec.argv');
+        self::assertFileDoesNotExist($this->scratch . '/spawn.argv');
     }
 
     // ---- Single Player: must reproduce today's exact accepted launch ---
