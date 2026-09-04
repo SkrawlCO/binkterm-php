@@ -233,6 +233,65 @@ final class CrossroadsExperienceIconTest extends TestCase
         self::assertSame('/webdoors/openglad/icon.png', $game['presentation']['icon_url']);
     }
 
+    // ---- Chessmata (Crossroads #4) — a grouped Experience; icon on the
+    //      primary (Web) member, no duplicate on the terminal member --------
+
+    public function testChessmataIconAssetIsCanonical(): void
+    {
+        $this->assertCanonicalIcon(
+            self::REPO_ROOT . '/public_html/webdoors/chessmata-web/icon.png'
+        );
+    }
+
+    public function testChessmataIconSourceSvgIsTrackedAndValid(): void
+    {
+        $svg = self::REPO_ROOT . '/public_html/webdoors/chessmata-web/icon.svg';
+        self::assertFileExists($svg, 'the icon.png vector source must be tracked');
+        $xml = @simplexml_load_file($svg);
+        self::assertNotFalse($xml, 'icon.svg is not well-formed XML');
+        self::assertSame('svg', $xml->getName());
+    }
+
+    public function testChessmataPrimaryMemberManifestDeclaresIcon(): void
+    {
+        $manifest = json_decode(
+            (string)file_get_contents(
+                self::REPO_ROOT . '/public_html/webdoors/chessmata-web/webdoor.json'
+            ),
+            true
+        );
+        self::assertSame('icon.png', $manifest['game']['icon'] ?? null);
+    }
+
+    public function testChessmataTerminalMemberCarriesNoDuplicateIconAsset(): void
+    {
+        // The grouped card's icon comes from the primary (Web) member only. The
+        // terminal member must not duplicate the asset or declare its own.
+        $manifest = json_decode(
+            (string)file_get_contents(
+                self::REPO_ROOT . '/native-doors/doors/chessmata/nativedoor.json'
+            ),
+            true
+        );
+        self::assertNull($manifest['game']['icon'] ?? null);
+        self::assertFileDoesNotExist(
+            self::REPO_ROOT . '/native-doors/doors/chessmata/icon.png'
+        );
+    }
+
+    public function testChessmataCanonicalCardResolvesTheCustomIconFromThePrimaryMember(): void
+    {
+        // The normalized (grouped) Experience is keyed by the canonical id
+        // "chessmata"; its presentation is the primary member's, so the card
+        // icon is the chessmata-web WebDoor asset served from that directory.
+        $game = $this->enabledExperience('chessmata');
+        self::assertSame('icon.png', $game['presentation']['icon']);
+        self::assertSame(
+            '/webdoors/chessmata-web/icon.png',
+            $game['presentation']['icon_url']
+        );
+    }
+
     // ---- Elsewhere: staged, NOT wired -----------------------------------
 
     public function testElsewhereIconIsStagedAsCanonicalArtwork(): void

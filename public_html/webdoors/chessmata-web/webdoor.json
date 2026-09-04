@@ -7,7 +7,7 @@
     "author": "Metavert LLC (MIT); L33TEST Crossroads integration",
     "description": "Multiplayer chess across Web and terminal, with human and Maia2 opponents on one shared L33TEST board.",
     "entry_point": "index.php",
-    "icon": null
+    "icon": "icon.png"
   },
   "requirements": {
     "min_host_version": "1.0",
