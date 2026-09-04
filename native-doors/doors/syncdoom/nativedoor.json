@@ -1,0 +1,38 @@
+{
+  "type": "nativedoor",
+  "version": "1.0",
+  "game": {
+    "name": "SyncDOOM",
+    "short_name": "SYNCDOOM",
+    "author": "Synchronet project; engine after Chocolate Doom / id Software",
+    "version": "git-74898075",
+    "release_year": 2026,
+    "description": "DOOM played over your terminal session — the classic id Software shooter rendered as live graphics in your BBS terminal, no download or native client.",
+    "genre": [
+      "Action",
+      "Shooter"
+    ],
+    "players": "Single-player"
+  },
+  "door": {
+    "executable": "syncdoom",
+    "launch_command": "syncdoom {dropfile} -home {homedir} -iwad freedoom2.wad -sixel 1",
+    "dropfile_format": "DOOR32.SYS",
+    "output_encoding": "cp437",
+    "terminal_mode": "raw",
+    "max_nodes": 4,
+    "ansi_required": true,
+    "time_per_day": 60
+  },
+  "requirements": {
+    "admin_only": true
+  },
+  "config": {
+    "enabled": false,
+    "credit_cost": 0,
+    "max_time_minutes": 60,
+    "max_sessions": 4,
+    "allow_anonymous": false,
+    "guest_max_sessions": 0
+  }
+}
