@@ -16,7 +16,7 @@
   },
   "door": {
     "executable": "syncdoom",
-    "launch_command": "syncdoom {dropfile} -home {homedir} -iwad freedoom2.wad -sixel 1",
+    "launch_command": "/bin/bash syncdoom-mp.sh",
     "dropfile_format": "DOOR32.SYS",
     "output_encoding": "cp437",
     "terminal_mode": "raw",
