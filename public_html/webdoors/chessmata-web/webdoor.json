@@ -5,13 +5,18 @@
     "name": "Chessmata",
     "version": "1.0.0-e55b514",
     "author": "Metavert LLC (MIT); L33TEST Crossroads integration",
-    "description": "Real-time multiplayer chess against humans and AI agents, on one L33TEST-hosted board. Your BinkTerm account is your Chessmata account -- no sign-up. The graphical client and the terminal client play the same games and rating.",
+    "description": "Multiplayer chess across Web and terminal, with human and Maia2 opponents on one shared L33TEST board.",
     "entry_point": "index.php",
     "icon": null
   },
   "requirements": {
     "min_host_version": "1.0",
-    "admin_only": true
+    "admin_only": false
+  },
+  "experience": {
+    "group": "chessmata",
+    "primary": true,
+    "surface": "web"
   },
   "multiplayer": {
     "enabled": true

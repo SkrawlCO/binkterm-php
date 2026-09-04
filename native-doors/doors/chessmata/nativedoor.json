@@ -7,7 +7,7 @@
     "author": "Metavert LLC (MIT) / L33TEST Crossroads integration",
     "version": "1.0.0-e55b514",
     "release_year": 2026,
-    "description": "Real-time multiplayer chess against humans and AI agents, on one L33TEST-hosted board. Your BinkTerm account is your Chessmata account -- no sign-up. Play the same games and rating whether you drop in from a terminal or the graphical client.",
+    "description": "Multiplayer chess across Web and terminal, with human and Maia2 opponents on one shared L33TEST board.",
     "genre": ["Strategy", "Board Game", "Multiplayer"],
     "players": "Multiplayer",
     "icon": null,
@@ -17,7 +17,10 @@
     "category": "game",
     "featured": false,
     "multiplayer": true,
-    "participant_messaging": false
+    "participant_messaging": false,
+    "group": "chessmata",
+    "primary": false,
+    "surface": "telnet"
   },
   "door": {
     "executable": "launch-chessmata.sh",
@@ -30,7 +33,7 @@
     "time_per_day": 120
   },
   "requirements": {
-    "admin_only": true
+    "admin_only": false
   },
   "config": {
     "enabled": false,

@@ -194,21 +194,128 @@ final class GameCatalogTest extends TestCase
         }
     }
 
+    /**
+     * A grouped multi-backend Experience, as emitted by
+     * {@see \BinktermPHP\ExperienceComposition::compose()}: two or more backend
+     * entries composed under one canonical (group) id, each contributing one
+     * surface. Detected by the composition output contract -- an entry carrying
+     * both `members` and `surface_backends` -- never by a product-specific id.
+     *
+     * @param array<string,mixed> $game
+     */
+    private static function isGroupedExperience(array $game): bool
+    {
+        return isset($game['members'], $game['surface_backends'])
+            && is_array($game['members'])
+            && is_array($game['surface_backends']);
+    }
+
+    /**
+     * The grouped-Experience surface contract, replacing the old
+     * "backend.type implies surface reach" assumption:
+     *
+     *  - a surface is `full` exactly when a member contributes it;
+     *  - a `full` surface has a `surface_backends` entry that is one of
+     *    `members`, and `ExperienceLaunch::resolve()` resolves that surface to
+     *    that same backend;
+     *  - a surface no member contributes is not `full`, has no
+     *    `surface_backends` entry, and resolves nothing.
+     *
+     * @param array<string,mixed> $game
+     */
+    private static function assertGroupedSurfaceContract(array $game): void
+    {
+        $id = $game['id'];
+
+        foreach (['web', 'telnet'] as $surface) {
+            if (($game['surfaces'][$surface] ?? null) === 'full') {
+                self::assertArrayHasKey(
+                    $surface,
+                    $game['surface_backends'],
+                    "grouped {$id}: surfaces.{$surface}=full requires surface_backends.{$surface}"
+                );
+
+                $target = $game['surface_backends'][$surface];
+                self::assertContains(
+                    $target,
+                    $game['members'],
+                    "grouped {$id}: surface_backends.{$surface} must be one of members"
+                );
+
+                $resolved = ExperienceLaunch::resolve($game, $surface);
+                self::assertNotNull(
+                    $resolved,
+                    "grouped {$id}: full surface {$surface} must resolve a launch target"
+                );
+                self::assertSame(
+                    [$target['type'], $target['id']],
+                    [$resolved['type'], $resolved['id']],
+                    "grouped {$id}: {$surface} must launch its own contributing backend"
+                );
+            } else {
+                self::assertArrayNotHasKey(
+                    $surface,
+                    $game['surface_backends'],
+                    "grouped {$id}: a non-full surface {$surface} must not claim a backend"
+                );
+                self::assertNull(
+                    ExperienceLaunch::resolve($game, $surface),
+                    "grouped {$id}: a non-full surface {$surface} must not resolve a launch target"
+                );
+            }
+        }
+    }
+
     public function testNormalizedBackendIdentityIsCanonical(): void
     {
         $games = $this->catalog->getEnabledGames(null, 'web');
 
         foreach ($games as $game) {
-            self::assertSame(
-                $game['backend']['id'],
-                $game['id'],
-                "Backend identity mismatch for {$game['id']}"
-            );
-
+            // Backend and source types always agree, grouped or not.
             self::assertSame(
                 $game['backend']['type'],
                 $game['source']['type'],
                 "Backend/source type mismatch for {$game['id']}"
+            );
+
+            if (self::isGroupedExperience($game)) {
+                // A grouped Experience is keyed by its canonical group id, and
+                // `backend` is the PRIMARY member (the default target for
+                // surface-less launch), so backend.id deliberately differs from
+                // the entry id. The canonical contract is instead:
+                self::assertArrayHasKey('grouping', $game);
+                self::assertSame(
+                    $game['grouping']['group'],
+                    $game['id'],
+                    "grouped {$game['id']}: entry id must be the canonical group id"
+                );
+                // `backend` is the primary member's backend: the one that
+                // contributes the primary member's declared surface.
+                self::assertSame(
+                    $game['surface_backends'][$game['grouping']['surface']] ?? null,
+                    $game['backend'],
+                    "grouped {$game['id']}: backend must be the primary member's backend"
+                );
+                self::assertContains(
+                    $game['backend'],
+                    $game['members'],
+                    "grouped {$game['id']}: backend must be one of members"
+                );
+                foreach ($game['surface_backends'] as $surface => $target) {
+                    self::assertContains(
+                        $target,
+                        $game['members'],
+                        "grouped {$game['id']}: surface_backends.{$surface} must be one of members"
+                    );
+                }
+                continue;
+            }
+
+            // Ungrouped single-backend Experience: backend.id IS the entry id.
+            self::assertSame(
+                $game['backend']['id'],
+                $game['id'],
+                "Backend identity mismatch for {$game['id']}"
             );
         }
     }
@@ -396,6 +503,16 @@ final class GameCatalogTest extends TestCase
             $runnable = $game['surfaces']['telnet'] === 'full';
             self::assertSame($runnable, $game['actions']['launch']);
 
+            if (self::isGroupedExperience($game)) {
+                // Telnet reach is whatever the composed members contribute, not
+                // what the primary backend type would imply.
+                self::assertGroupedSurfaceContract($game);
+                if ($game['surfaces']['telnet'] === 'full') {
+                    $runnableManaged[] = $game['id'];
+                }
+                continue;
+            }
+
             if (in_array($game['backend']['type'], ['dos', 'native'], true)) {
                 $runnableManaged[] = $game['id'];
                 self::assertSame('full', $game['surfaces']['telnet']);
@@ -422,6 +539,22 @@ final class GameCatalogTest extends TestCase
         $webOnlyTypes = [];
 
         foreach ($web as $id => $experience) {
+            if (self::isGroupedExperience($experience)) {
+                // A grouped Experience whose primary backend is a WebDoor is not
+                // "web-only": it composes a terminal member too. It appears on
+                // both surface catalogs with an identical surface map, and each
+                // surface resolves to its own contributing backend.
+                self::assertArrayHasKey($id, $telnet);
+                self::assertSame(
+                    $experience['surfaces'],
+                    $telnet[$id]['surfaces'],
+                    "grouped {$id}: surface map is identical across surface catalogs"
+                );
+                self::assertGroupedSurfaceContract($experience);
+                self::assertGroupedSurfaceContract($telnet[$id]);
+                continue;
+            }
+
             if (!in_array($experience['backend']['type'], ['web', 'jsdos'], true)) {
                 continue;
             }
@@ -790,6 +923,13 @@ final class GameCatalogTest extends TestCase
         $games = $this->catalog->getEnabledGames(null, 'web');
 
         foreach ($games as $game) {
+            if (self::isGroupedExperience($game)) {
+                // Telnet reach comes from the composed members, not from the
+                // primary backend type.
+                self::assertGroupedSurfaceContract($game);
+                continue;
+            }
+
             if (!in_array($game['backend']['type'], ['web', 'jsdos'], true)) {
                 continue;
             }
