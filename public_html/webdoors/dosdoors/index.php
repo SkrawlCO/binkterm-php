@@ -203,6 +203,7 @@ if (empty($doorId)) {
     <div id="terminal-container"></div>
 
     <script src="/webdoors/terminal/assets/xterm.js"></script>
+    <script src="/webdoors/terminal/assets/xterm-addon-image.js"></script>
     <script>
         let term = null;
         const TERM_COLS = 80;
@@ -317,6 +318,17 @@ if (empty($doorId)) {
             term.open(container);
             term.resize(TERM_COLS, TERM_ROWS);
             scheduleFixedTerminalSize();
+
+            // Sixel/iTerm inline-image rendering (SyncDOOM's graphical mode and
+            // any other door that emits DCS sixel). xterm.js core has no
+            // built-in image support; this is the official companion addon
+            // (same loadAddon() pattern as xterm-addon-fit), decoding to an
+            // overlaid <canvas> without touching the door's own byte stream.
+            if (typeof ImageAddon !== 'undefined') {
+                term.loadAddon(new ImageAddon.ImageAddon());
+            } else {
+                console.warn('[INIT] xterm-addon-image not loaded; sixel/image output will not render');
+            }
 
             // Handle terminal input
             term.onData((data) => {

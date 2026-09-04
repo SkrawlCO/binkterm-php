@@ -1,10 +1,10 @@
 # Sixel Support
 
-BinktermPHP renders DEC Sixel graphics embedded in messages and uploaded as files.
+BinktermPHP renders DEC Sixel graphics embedded in messages, uploaded as files, and streamed live by a NativeDoor game running in a web terminal session.
 
 ## Overview
 
-Sixel is a bitmap graphics format developed by Digital Equipment Corporation (DEC) for VT240/VT340 terminals. It encodes raster images as streams of six-pixel-tall columns using printable ASCII characters, and is still widely supported by modern terminals (xterm, iTerm2, mlterm, etc.). BinktermPHP decodes and renders sixel data entirely in the browser using an HTML5 `<canvas>` element.
+Sixel is a bitmap graphics format developed by Digital Equipment Corporation (DEC) for VT240/VT340 terminals. It encodes raster images as streams of six-pixel-tall columns using printable ASCII characters, and is still widely supported by modern terminals (xterm, iTerm2, mlterm, SyncTerm, etc.). Static content (messages, file previews) is decoded and rendered entirely in the browser using BinktermPHP's own HTML5 `<canvas>` decoder; a live NativeDoor terminal session instead renders sixel through xterm.js's own image addon (see below) — the two are separate renderers for two different contexts.
 
 ## Where Sixel Renders
 
@@ -17,6 +17,10 @@ The `renderSixelChunks()` function handles mixed content — a message may conta
 ### In File Areas
 
 Files with `.six` or `.sixel` extensions are automatically previewed as sixel images in the file browser. The preview renders the file content to a canvas element in the file detail panel.
+
+### In a Live Web NativeDoor Session
+
+A NativeDoor game played from the web (`/games/nativedoors/{id}`, the DOS Door Player at `public_html/webdoors/dosdoors/index.php`) runs in a live xterm.js terminal fed byte-for-byte from the door's PTY over WebSocket. xterm.js core has no sixel/image support of its own — DCS sixel sequences arriving in a live stream would otherwise be silently discarded by its parser (text and ordinary ANSI/CP437 output are unaffected either way, since those don't depend on this addon). The player loads the official `@xterm/addon-image` companion (`public_html/webdoors/terminal/assets/xterm-addon-image.js`, vendored the same way as `xterm-addon-fit.js`) via the normal `term.loadAddon(...)` API, which decodes DCS sixel (and iTerm inline-image) sequences to an overlaid `<canvas>` as they stream in. This is what makes SyncDOOM's forced `-sixel 1` graphical output visible when played from the web, matching what a real sixel-capable terminal (e.g. SyncTerm over Telnet) already showed. It is a generic capability — any NativeDoor emitting sixel over the web terminal benefits, not just SyncDOOM.
 
 ## Supported Features
 
