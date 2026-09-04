@@ -193,6 +193,40 @@ final class CrossroadsExperienceIconTest extends TestCase
         self::assertSame('/door-assets/bcrgames/icon', $games['bcrgames']['presentation']['icon_url']);
     }
 
+    // ---- Tournament Trivia (Crossroads Experience #5) ------------------
+
+    public function testTournamentTriviaIconAssetIsCanonical(): void
+    {
+        $this->assertCanonicalIcon(
+            self::REPO_ROOT . '/native-doors/doors/tournament-trivia/icon.png'
+        );
+    }
+
+    public function testTournamentTriviaManifestDeclaresIcon(): void
+    {
+        $manifest = json_decode(
+            (string)file_get_contents(
+                self::REPO_ROOT . '/native-doors/doors/tournament-trivia/nativedoor.json'
+            ),
+            true
+        );
+        self::assertSame('icon.png', $manifest['game']['icon'] ?? null);
+
+        $door = (new NativeDoorManager())->getDoor('tournament-trivia');
+        self::assertIsArray($door);
+        self::assertSame('icon.png', $door['icon'] ?? null);
+    }
+
+    public function testTournamentTriviaCatalogPresentationExposesIcon(): void
+    {
+        $game = $this->enabledExperience('tournament-trivia');
+        self::assertSame('icon.png', $game['presentation']['icon']);
+        self::assertSame(
+            '/door-assets/tournament-trivia/icon',
+            $game['presentation']['icon_url']
+        );
+    }
+
     // ---- OpenGlad (M4 Slice 1G) — a WebDoor, not a native door ---------
 
     public function testOpengladIconAssetIsCanonical(): void

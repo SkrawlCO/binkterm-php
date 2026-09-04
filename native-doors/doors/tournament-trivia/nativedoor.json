@@ -7,10 +7,10 @@
     "author": "Evan Elias (GPLv3) / L33TEST Crossroads integration",
     "version": "1.0-b195ff2",
     "release_year": 2003,
-    "description": "Real-time multiplayer trivia. Everyone races to answer the same question first; scores build up through the month. Doubles as a cross-node chat room.",
+    "description": "A live trivia room shared with the other callers online: the same question drops for everyone, first to answer takes the points, and the room chats between rounds. Scores build through the month, and L33TEST loads its own question sets for trivia nights.",
     "genre": ["Trivia", "Party", "Multiplayer"],
     "players": "Multiplayer",
-    "icon": null,
+    "icon": "icon.png",
     "screenshot": null
   },
   "experience": {
