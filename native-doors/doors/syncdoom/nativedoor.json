@@ -7,12 +7,13 @@
     "author": "Synchronet project; engine after Chocolate Doom / id Software",
     "version": "git-74898075",
     "release_year": 2026,
-    "description": "DOOM played over your terminal session — the classic id Software shooter rendered as live graphics in your BBS terminal, no download or native client.",
+    "description": "Doom-style action rendered in real sixel graphics over your terminal. Play solo, or create and join Co-op, Deathmatch, and Altdeath matches for up to four players — a sixel-capable terminal (SyncTerm recommended) is needed for graphical play.",
     "genre": [
       "Action",
       "Shooter"
     ],
-    "players": "Single-player"
+    "players": "1-4 Players",
+    "icon": "icon.png"
   },
   "door": {
     "executable": "syncdoom",
@@ -25,10 +26,14 @@
     "time_per_day": 60
   },
   "requirements": {
-    "admin_only": true
+    "admin_only": false
+  },
+  "experience": {
+    "category": "game",
+    "multiplayer": true
   },
   "config": {
-    "enabled": false,
+    "enabled": true,
     "credit_cost": 0,
     "max_time_minutes": 60,
     "max_sessions": 4,
