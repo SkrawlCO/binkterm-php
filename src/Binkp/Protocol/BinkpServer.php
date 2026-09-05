@@ -286,7 +286,11 @@ class BinkpServer
             $stream = $this->socketToStream($socket);
             $frame = BinkpFrame::createCommand(BinkpFrame::M_BSY, $message);
             $frame->writeToSocket($stream);
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
+            // Socket operations here (clearSocketTimeouts(), socket_export_stream())
+            // can throw \Error/\TypeError on PHP 8 (e.g. an already-closed
+            // socket) — not just \Exception — so this must catch the full
+            // \Throwable surface to avoid escaping into acceptConnection().
             $this->log("Failed to send busy message: " . $e->getMessage(), 'ERROR');
         } finally {
             if (is_resource($stream)) {

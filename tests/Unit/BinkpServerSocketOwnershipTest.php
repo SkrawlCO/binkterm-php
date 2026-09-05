@@ -117,6 +117,36 @@ final class BinkpServerSocketOwnershipTest extends TestCase
         socket_close($peerEnd);
     }
 
+    /**
+     * PHP 8's socket_export_stream() throws \Error (a \Throwable, not an
+     * \Exception) when given an already-closed Socket — e.g.
+     * "Argument #1 ($socket) has already been closed". sendBusy() must
+     * contain that the same way it contains an \Exception: log it and report
+     * that ownership was never transferred, not let it escape uncaught.
+     */
+    public function testSendBusyContainsNonExceptionThrowableFromSocketExportStream(): void
+    {
+        // A Socket resource that is valid PHP-side but already closed, so
+        // socket_export_stream() throws \Error rather than returning false —
+        // no network involved.
+        $socket = socket_create(AF_UNIX, SOCK_STREAM, 0);
+        socket_close($socket);
+
+        $server = new BinkpServer(new class {
+            public function getBinkpTimeout()
+            {
+                return 5;
+            }
+        }, self::noopLogger());
+
+        $method = new ReflectionMethod(BinkpServer::class, 'sendBusy');
+        $method->setAccessible(true);
+
+        $result = $method->invoke($server, $socket, 'Maximum connections reached');
+
+        self::assertFalse($result, 'sendBusy() should report ownership was never transferred when export throws');
+    }
+
     // ---- 3. Raw-socket fallback still closes when no session is constructed
 
     public function testHandleConnectionSyncClosesRawSocketWhenSessionIsNeverConstructed(): void
