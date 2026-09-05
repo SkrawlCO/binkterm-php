@@ -1,0 +1,66 @@
+# Example compose fragment for the production Galactic Bloodshed service.
+# Not wired into the live stack yet -- staged for review. Intended to join
+# the SAME compose project/network as binkterm-app.
+#
+# Two services, matching the parent slice report's "least privilege" design:
+#   galactic-bloodshed             the always-on GB server (game state)
+#   galactic-bloodshed-provisioner makeuniv/enrol/racegen + the narrow
+#                                   gb_provisiond.py daemon binkterm-app's
+#                                   NativeDoor launcher talks to over a Unix
+#                                   socket -- NOT Docker socket access,
+#                                   NOT shell exec, NOT a public network
+#                                   endpoint. See ../README.md and the
+#                                   parent slice report "Provisioning-service
+#                                   architecture" for the full design and why
+#                                   the rejected alternative (giving
+#                                   binkterm-app the Docker socket) is unsafe.
+#
+# Host paths follow the existing, already-live L33TEST convention (see
+# /root/binktermphp/state/multizork, /root/binktermphp/secrets/chessmata_broker_key
+# on the host) rather than opaque Docker-managed volumes -- a deliberate
+# choice so backups, the sysop, and disaster recovery all work with an
+# ordinary directory instead of `docker volume` indirection.
+
+services:
+  galactic-bloodshed:
+    image: l33test/galactic-bloodshed-server:latest
+    container_name: galactic-bloodshed
+    restart: unless-stopped
+    # No `ports:` -- internal-only. Reachable from binkterm-app as
+    # "galactic-bloodshed:2010" over the compose network; never bound to a
+    # host interface.
+    volumes:
+      - /root/binktermphp/state/galactic-bloodshed:/var/lib/galactic-bloodshed
+    healthcheck:
+      test: ["CMD", "bash", "-c", "echo > /dev/tcp/127.0.0.1/2010"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    stop_grace_period: 15s
+
+  galactic-bloodshed-provisioner:
+    image: l33test/galactic-bloodshed-admin:latest
+    container_name: galactic-bloodshed-provisioner
+    restart: unless-stopped
+    # SAME host-backed data directory as the server above -- this is the
+    # whole point: both processes touch the one real gb.db, never a copy.
+    volumes:
+      - /root/binktermphp/state/galactic-bloodshed:/var/lib/galactic-bloodshed
+      - /root/binktermphp/state/gb-provisiond-run:/run/gb-provisiond
+      - /root/binktermphp/secrets/galactic_bloodshed_provisiond_token:/run/secrets/galactic_bloodshed_provisiond_token:ro
+    # No `ports:`, no published socket -- reachable only by whatever else
+    # mounts /run/gb-provisiond (binkterm-app, below).
+    stop_grace_period: 10s
+
+  # binkterm-app itself (excerpt -- add these two lines to its existing
+  # service definition, do not duplicate the whole service here):
+  #   volumes:
+  #     - /root/binktermphp/state/gb-provisiond-run:/run/gb-provisiond:ro
+  #     - /root/binktermphp/secrets/galactic_bloodshed_provisiond_token:/run/secrets/galactic_bloodshed_provisiond_token:ro
+  # binkterm-app connects to /run/gb-provisiond/gb-provisiond.sock as a
+  # plain Unix-socket CLIENT -- it never listens, never execs anything in
+  # the provisioner container, and has no Docker socket access at all.
+
+# No top-level `volumes:` section -- these are host bind mounts, not
+# Docker-managed volumes (see ../README.md "Persistent data path").

@@ -13,27 +13,27 @@ already has a GB race, provisions one through the real `enrol` binary if not,
 then auto-logs the caller into the real upstream Python/curses client and
 hands over interactive control.
 
-Two distinct mechanisms are used, chosen for what each subprocess actually
-needs -- NOT a single one-size-fits-all pty scraper:
+Two distinct mechanisms are used, chosen for what each remote endpoint
+actually needs -- NOT a single one-size-fits-all pty scraper:
 
-  1. `enrol` automation (plain pipes, no pty): enrol is a completely ordinary
-     buffered stdin/stdout program (std::getline(std::cin, ...)) -- it never
-     puts the terminal in raw mode and never needs one. We relay it through
-     plain subprocess pipes. Three of its prompts are intercepted by EXACT
-     string match against the literal prompts in gb/server/enrol.cc (not
-     fuzzy/visual scraping -- these strings are the actual source, pinned to
-     the GB revision this was built against): the deity/guest/normal prompt
-     (always answered "n" -- a regular BinkTerm user is never silently made
-     a GB deity or guest) and the two password prompts (answered with the
-     opaque generated credential, never shown to the caller). Every OTHER
-     prompt -- racial type, home planet, accept-generated-stats, home sector
-     preference, sector compatibilities -- is a genuine race-design choice
-     (see the parent slice report, section B) and is relayed live to/from the
-     real caller: we print enrol's exact prompt text and read one real line
-     of input from the caller, unmodified. Prompt boundaries for this
-     passthrough case are detected by a short idle gap after unterminated
-     output (enrol has no structured "ready for input" signal to key off of
-     instead) -- a documented timing heuristic, not text-content guessing.
+  1. Enrollment: NOT run locally. This process has no Docker socket access,
+     no `enrol` binary, and no direct access to the GB data directory --
+     see gb_provisiond.py (the narrow provisioning daemon) and the parent
+     slice report "Narrow provisioning service" for why. Instead this
+     connects to that daemon over a Unix socket and becomes a byte relay
+     between it and the real caller's terminal: whatever the daemon sends is
+     printed for the caller (that's enrol's own prompt text for the
+     genuine race-design choices -- racial type, home planet,
+     accept-generated-stats, home sector, compatibilities, see the parent
+     slice report section B), and whatever the caller types is sent back.
+     The daemon -- not this process -- is what auto-answers the
+     deity/guest/normal prompt and the two password prompts, invisibly; this
+     process never even sees those prompts or the credential go over its own
+     terminal-facing side.
+
+  1b. `run_enrol_via_provisioner()`'s `answer_source` parameter exists purely
+     for tests that want to script the passthrough answers instead of
+     reading a real terminal.
 
   2. Auto-login (a real pty): the upstream client is curses-based and
      requires one. A single, protocol-state-gated injection is used instead
@@ -60,6 +60,7 @@ import os
 import pty
 import select
 import signal
+import socket
 import struct
 import subprocess
 import sys
@@ -71,13 +72,12 @@ APP_ROOT = os.environ.get("GB_APP_ROOT", "/root/binktermphp/app")
 PHP_BIN = os.environ.get("GB_PHP_BIN", "php")
 IDENTITY_CLI = os.path.join(APP_ROOT, "scripts/galactic_bloodshed/gb_identity_cli.php")
 
-ENROL_BIN = os.environ["GB_ENROL_BIN"]
-GB_DB_PATH = os.environ["GB_DB_PATH"]
+PROVISIOND_SOCKET = os.environ.get("GB_PROVISIOND_SOCKET", "/run/gb-provisiond/gb-provisiond.sock")
+PROVISIOND_TOKEN_FILE = os.environ.get("GB_PROVISIOND_TOKEN_FILE", "/run/secrets/galactic_bloodshed_provisiond_token")
 CLIENT_PY = os.environ["GB_CLIENT_PY"]
 GB_HOST = os.environ.get("GALACTICBLOODSHED_HOST", "127.0.0.1")
 GB_PORT = os.environ.get("GALACTICBLOODSHED_PORT", "2010")
 
-IDLE_PROMPT_GAP_SEC = 0.2  # passthrough-prompt boundary heuristic; see module docstring
 POST_LOGIN_MARKER = b"APs:"  # only ever appears once genuinely in-game (client.py scope-prompt parse)
 LOGIN_PASSWORD_PROMPT = b"Please enter your password:"
 
@@ -135,106 +135,80 @@ class EnrolResult:
     transcript_tail: str  # for diagnostics on failure; never contains a password
 
 
-def run_enrol(race_password: str, governor_password: str, answer_source=None) -> EnrolResult:
-    """Run `enrol`, auto-answering the 3 identity-relevant prompts and
-    relaying every other prompt live to/from the real caller terminal (or, in
-    tests, to/from `answer_source` -- a callable(prompt_text: str) -> str).
+def run_enrol_via_provisioner(race_password: str, governor_password: str, answer_source=None) -> EnrolResult:
+    """Connect to gb_provisiond.py over its Unix socket and relay the
+    enrollment conversation to/from the real caller terminal (or, in tests,
+    to/from `answer_source` -- a callable(prompt_text: str) -> str). See the
+    module docstring and the parent slice report "Narrow provisioning
+    service" for the protocol and why this process never runs `enrol`
+    itself.
     """
-    proc = subprocess.Popen(
-        [ENROL_BIN, "--db", GB_DB_PATH],
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        bufsize=0,
-    )
-    fd = proc.stdout.fileno()
-    os.set_blocking(fd, False)
+    with open(PROVISIOND_TOKEN_FILE, "r") as f:
+        token = f.read().strip()
 
-    buf = b""
+    sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    sock.connect(PROVISIOND_SOCKET)
+    sockfile = sock.makefile("rwb", buffering=0)
+
+    header = json.dumps({
+        "token": token,
+        "race_password": race_password,
+        "governor_password": governor_password,
+    })
+    sockfile.write((header + "\n").encode())
+
     tail = ""
 
-    def safe_wait(timeout: float) -> None:
-        """Never let a hung/misbehaving enrol leak a process: on timeout,
-        kill it and reap unconditionally rather than propagating."""
-        try:
-            proc.wait(timeout=timeout)
-        except subprocess.TimeoutExpired:
-            proc.kill()
-            proc.wait(timeout=5)
-
-    def send(line: str) -> None:
-        proc.stdin.write((line + "\n").encode())
-        proc.stdin.flush()
-
-    def prompt_caller(prompt_bytes: bytes) -> None:
-        nonlocal tail
-        text = prompt_bytes.decode(errors="replace")
-        tail = (tail + text)[-2000:]
-        if answer_source is not None:
-            answer = answer_source(text)
-        else:
-            sys.stdout.write(text)
-            sys.stdout.flush()
-            answer = sys.stdin.readline().rstrip("\n")
-        send(answer)
-
-    last_byte_at = time.monotonic()
-    while True:
-        ready, _, _ = select.select([fd], [], [], IDLE_PROMPT_GAP_SEC)
-        if ready:
-            try:
-                chunk = os.read(fd, 4096)
-            except BlockingIOError:
-                chunk = b""
+    try:
+        while True:
+            chunk = sock.recv(65536)
             if chunk == b"":
-                if proc.poll() is not None:
-                    break
+                return EnrolResult(ok=False, playernum=None, transcript_tail=tail + "\n[connection closed unexpectedly]")
+
+            nul_at = chunk.find(b"\x00")
+            if nul_at != -1:
+                # Everything before the NUL is final passthrough text (e.g.
+                # enrol's own "You are player N" line); relay it, then the
+                # NUL marks the start of the daemon's JSON trailer.
+                if nul_at > 0 and answer_source is None:
+                    sys.stdout.write(chunk[:nul_at].decode(errors="replace"))
+                    sys.stdout.flush()
+                trailer = chunk[nul_at + 1 :]
+                while not trailer.endswith(b"\n"):
+                    more = sock.recv(4096)
+                    if more == b"":
+                        break
+                    trailer += more
+                try:
+                    result = json.loads(trailer.decode())
+                except json.JSONDecodeError:
+                    return EnrolResult(ok=False, playernum=None, transcript_tail=tail + "\n[malformed daemon trailer]")
+                ok = result.get("status") == "ok" and isinstance(result.get("playernum"), int)
+                return EnrolResult(
+                    ok=ok,
+                    playernum=result.get("playernum") if ok else None,
+                    transcript_tail=tail if ok else (tail + "\n" + str(result.get("message", "unknown error"))),
+                )
+
+            # No NUL: the daemon only ever sends a chunk like this once it has
+            # already confirmed (via its own idle-gap accumulation) that this
+            # is one complete, genuine passthrough prompt -- see
+            # gb_provisiond.py's _relay_enrol(). This process just displays it
+            # and relays back exactly one real line of caller input.
+            text = chunk.decode(errors="replace")
+            tail = (tail + text)[-2000:]
+            if answer_source is not None:
+                answer = answer_source(text)
             else:
-                buf += chunk
-                last_byte_at = time.monotonic()
-
-                # Security/identity-sensitive prompts: exact match, answered
-                # immediately, never shown to the caller.
-                if buf.endswith(b"Deity/Guest/Normal (d/g/n) ?"):
-                    send("n")
-                    buf = b""
-                    continue
-                if buf.endswith(b"Enter the password for this race:"):
-                    send(race_password)
-                    buf = b""
-                    continue
-                if buf.endswith(b"Enter the password for this leader:"):
-                    send(governor_password)
-                    buf = b""
-                    continue
-
-                success_at = buf.find(b"You are player ")
-                if success_at != -1:
-                    tail_text = buf.decode(errors="replace")
-                    m = tail_text[tail_text.find("You are player ") :]
-                    try:
-                        playernum = int(m.split()[3].rstrip("."))
-                    except (IndexError, ValueError):
-                        playernum = None
-                    if answer_source is None:
-                        sys.stdout.write(tail_text)
-                        sys.stdout.flush()
-                    safe_wait(5)
-                    return EnrolResult(ok=playernum is not None, playernum=playernum, transcript_tail=tail_text[-2000:])
-                continue
-
-        # Idle gap: if we're holding an unterminated, non-empty buffer that
-        # isn't one of the known injected prompts, it's a genuine passthrough
-        # prompt awaiting a real line of caller input.
-        if buf and (time.monotonic() - last_byte_at) >= IDLE_PROMPT_GAP_SEC:
-            prompt_caller(buf)
-            buf = b""
-
-        if proc.poll() is not None and not buf:
-            break
-
-    safe_wait(5)
-    return EnrolResult(ok=False, playernum=None, transcript_tail=tail)
+                sys.stdout.write(text)
+                sys.stdout.flush()
+                answer = sys.stdin.readline().rstrip("\n")
+            sockfile.write((answer + "\n").encode())
+    finally:
+        try:
+            sockfile.close()
+        finally:
+            sock.close()
 
 
 # --------------------------------------------------------------- login phase
@@ -405,7 +379,7 @@ def main() -> int:
 
     if identity["status"] == "needs_provisioning":
         print("Setting up your Galactic Bloodshed race for the first time...\n")
-        result = run_enrol(identity["race_password"], identity["governor_password"])
+        result = run_enrol_via_provisioner(identity["race_password"], identity["governor_password"])
         if not result.ok or result.playernum is None:
             fail_provisioning(user_id, identity["attempt_token"])
             print("\nRace creation did not complete. Please try again.", file=sys.stderr)
