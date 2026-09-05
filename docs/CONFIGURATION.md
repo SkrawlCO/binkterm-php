@@ -158,8 +158,10 @@ ADMIN_DAEMON_SCHEDULE_INTERVAL=60    # seconds between scheduler ticks
 
 # Shared secret the telnet/SSH daemons use to authorize terminal-originated
 # registrations AND to tell the web side the connecting user's real IP address
-# (recorded on the session and used by registration screening). CHANGE THIS
-# from the default — anything holding it can set its own recorded session IP.
+# (recorded on the session and used by registration screening). Leaving this
+# unset, empty, or at the published default is treated as "not configured" --
+# terminal-originated IP attribution and the registration anti-spam bypass
+# both simply stay off until you set a real, site-specific value here.
 # TERMINAL_REGISTRATION_SECRET=change-me-to-a-long-random-string
 
 # ZMODEM file transfers over the telnet BBS

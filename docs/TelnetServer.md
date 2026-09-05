@@ -228,6 +228,8 @@ PuTTY.
 ### Authentication
 
 - Users authenticate with their BinktermPHP web credentials
+- The plain-text listener (port 2323) does not encrypt the connection between the terminal client and this daemon — a username and password typed there travel over the wire in cleartext, like any unencrypted Telnet session. This is a property of the Telnet protocol itself, not something BinktermPHP adds or removes, and plain Telnet remains fully supported for callers who don't need transport confidentiality.
+- If login credential confidentiality matters, connect over the TLS listener instead (port 8023 by default, see "TLS Support" above) or use the SSH daemon ([SSHServer.md](SSHServer.md)) — both encrypt the entire session, including login.
 - Passwords are transmitted to the API over HTTP(S)
 - Consider using HTTPS for API connections in production
 
