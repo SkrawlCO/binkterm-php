@@ -53,7 +53,7 @@ class Auth
             return $remote;
         }
 
-        $secret = trim((string)Config::env('TERMINAL_REGISTRATION_SECRET', 'Chang3Me'));
+        $secret = Config::terminalRegistrationSecret();
         $token  = trim((string)(
             $_SERVER['HTTP_X_BINKTERM_CLIENT_TOKEN']
             ?? $_SERVER['HTTP_X_BINKTERM_REGISTRATION_TOKEN']
@@ -61,7 +61,7 @@ class Auth
         ));
 
         if ($secret === '') {
-            self::logClientIpRejected("X-Binkterm-Client-IP {$claimed} present but TERMINAL_REGISTRATION_SECRET is empty; using {$remote}");
+            self::logClientIpRejected("X-Binkterm-Client-IP {$claimed} present but no site-specific TERMINAL_REGISTRATION_SECRET is configured (unset, empty, or still the published default); using {$remote}");
             return $remote;
         }
         if ($token === '') {

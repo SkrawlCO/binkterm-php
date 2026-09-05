@@ -34,7 +34,12 @@ class Config
     const FIDONET_ORIGIN = '1:999/999';
     const SYSTEM_NAME = 'BinktermPHP System';
     const SYSOP_NAME = 'System Operator';
-    
+
+    // The TERMINAL_REGISTRATION_SECRET value every install ships with until
+    // an operator sets a site-specific one. Never treated as a real secret —
+    // see terminalRegistrationSecret().
+    private const TERMINAL_REGISTRATION_SECRET_KNOWN_DEFAULT = 'Chang3Me';
+
     /**
      * Load environment variables and configuration
      */
@@ -269,5 +274,35 @@ class Config
     public static function isHttps(): bool
     {
         return str_starts_with(self::getSiteUrl(), 'https://');
+    }
+
+    /**
+     * The canonical, centralized interpretation of TERMINAL_REGISTRATION_SECRET.
+     *
+     * An unset value, an empty value, and the publicly-known shipped default
+     * (`Chang3Me`) are all treated identically as "no trusted terminal
+     * registration secret configured" — every consumer must take its own
+     * existing safe fallback in that case rather than trusting a header any
+     * caller who knows the well-known default could also present. Only a
+     * genuinely site-specific value is returned, unchanged.
+     *
+     * Centralized here so consumers (Auth::resolveClientIp(), the
+     * /api/register and /api/auth/csrf routes) cannot drift into disagreeing
+     * about what counts as "configured" — see docs/CONFIGURATION.md and
+     * docs/UPGRADING_1.9.2.md for the operator-facing guidance this reflects.
+     *
+     * Never logs or exposes the configured value.
+     *
+     * @return string The site-specific secret, or '' if none is configured.
+     */
+    public static function terminalRegistrationSecret(): string
+    {
+        $value = trim((string)self::env('TERMINAL_REGISTRATION_SECRET', ''));
+
+        if ($value === '' || $value === self::TERMINAL_REGISTRATION_SECRET_KNOWN_DEFAULT) {
+            return '';
+        }
+
+        return $value;
     }
 }

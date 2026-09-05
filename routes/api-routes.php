@@ -212,7 +212,7 @@ SimpleRouter::group(['prefix' => '/api'], function() {
         header('Content-Type: application/json');
         $user = RouteHelper::requireAuth();
 
-        $secret   = trim((string)Config::env('TERMINAL_REGISTRATION_SECRET', ''));
+        $secret   = Config::terminalRegistrationSecret();
         $provided = trim((string)($_SERVER['HTTP_X_BINKTERM_CLIENT_TOKEN'] ?? ''));
         if ($secret === '' || $provided === '' || !hash_equals($secret, $provided)) {
             http_response_code(403);
@@ -370,10 +370,7 @@ SimpleRouter::group(['prefix' => '/api'], function() {
         $registrationSource = strtolower(trim((string)($_SERVER['HTTP_X_BINKTERM_REGISTRATION_SOURCE'] ?? 'web')));
         $registrationToken = trim((string)($_SERVER['HTTP_X_BINKTERM_REGISTRATION_TOKEN'] ?? ''));
         $terminalClientIpHeader = trim((string)($_SERVER['HTTP_X_BINKTERM_CLIENT_IP'] ?? ''));
-        $expectedRegistrationToken = trim((string)\BinktermPHP\Config::env(
-            'TERMINAL_REGISTRATION_SECRET',
-            'Chang3Me'
-        ));
+        $expectedRegistrationToken = \BinktermPHP\Config::terminalRegistrationSecret();
         $isTerminalRegistration = in_array($registrationSource, ['telnet', 'ssh'], true)
             && $expectedRegistrationToken !== ''
             && hash_equals($expectedRegistrationToken, $registrationToken);
