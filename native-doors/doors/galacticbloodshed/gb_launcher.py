@@ -80,6 +80,7 @@ GB_PORT = os.environ.get("GALACTICBLOODSHED_PORT", "2010")
 
 POST_LOGIN_MARKER = b"APs:"  # only ever appears once genuinely in-game (client.py scope-prompt parse)
 LOGIN_PASSWORD_PROMPT = b"Please enter your password:"
+MAX_ENROL_ATTEMPTS = 5  # bounds the same-session retry loop in main() -- see its comment
 
 
 class ProvisioningInProgress(Exception):
@@ -161,7 +162,14 @@ def run_enrol_via_provisioner(race_password: str, governor_password: str, answer
 
     try:
         while True:
-            chunk = sock.recv(65536)
+            try:
+                chunk = sock.recv(65536)
+            except (BrokenPipeError, ConnectionResetError, OSError) as e:
+                # The daemon dropped us (most commonly its own
+                # IDLE_TIMEOUT_SEC elapsing on a prior turn -- see below);
+                # recoverable, not a crash -- main()'s retry loop treats this
+                # exactly like any other failed attempt.
+                return EnrolResult(ok=False, playernum=None, transcript_tail=tail + f"\n[connection lost: {e}]")
             if chunk == b"":
                 return EnrolResult(ok=False, playernum=None, transcript_tail=tail + "\n[connection closed unexpectedly]")
 
@@ -175,7 +183,10 @@ def run_enrol_via_provisioner(race_password: str, governor_password: str, answer
                     sys.stdout.flush()
                 trailer = chunk[nul_at + 1 :]
                 while not trailer.endswith(b"\n"):
-                    more = sock.recv(4096)
+                    try:
+                        more = sock.recv(4096)
+                    except (BrokenPipeError, ConnectionResetError, OSError):
+                        break
                     if more == b"":
                         break
                     trailer += more
@@ -203,7 +214,19 @@ def run_enrol_via_provisioner(race_password: str, governor_password: str, answer
                 sys.stdout.write(text)
                 sys.stdout.flush()
                 answer = sys.stdin.readline().rstrip("\n")
-            sockfile.write((answer + "\n").encode())
+            try:
+                sockfile.write((answer + "\n").encode())
+            except (BrokenPipeError, ConnectionResetError, OSError) as e:
+                # The daemon gave up on us while we were blocked in
+                # sys.stdin.readline() waiting for the caller's real
+                # keystroke -- most commonly its own IDLE_TIMEOUT_SEC (30s)
+                # elapsing, which a slow-typing human on a genuine prompt can
+                # hit just as easily as a rapid blank-Enter retry. This used
+                # to be an uncaught BrokenPipeError that crashed the whole
+                # NativeDoor session; recoverable instead, same as any other
+                # failed attempt -- main()'s retry loop reclaims a fresh
+                # identity and starts over in the SAME session.
+                return EnrolResult(ok=False, playernum=None, transcript_tail=tail + f"\n[connection lost: {e}]")
     finally:
         try:
             sockfile.close()
@@ -379,16 +402,50 @@ def main() -> int:
 
     if identity["status"] == "needs_provisioning":
         print("Setting up your Galactic Bloodshed race for the first time...\n")
-        result = run_enrol_via_provisioner(identity["race_password"], identity["governor_password"])
-        if not result.ok or result.playernum is None:
-            fail_provisioning(user_id, identity["attempt_token"])
-            print("\nRace creation did not complete. Please try again.", file=sys.stderr)
-            return 1
-        confirm_provisioned(user_id, identity["attempt_token"], result.playernum)
-        race_password, governor_password = identity["race_password"], identity["governor_password"]
-    else:
-        race_password, governor_password = identity["race_password"], identity["governor_password"]
+        for attempt in range(1, MAX_ENROL_ATTEMPTS + 1):
+            result = run_enrol_via_provisioner(identity["race_password"], identity["governor_password"])
+            if result.ok and result.playernum is not None:
+                confirm_provisioned(user_id, identity["attempt_token"], result.playernum)
+                break
 
+            # enrol exited on its own before finishing -- most commonly
+            # upstream's own hard-exit on an unparseable answer to a numeric
+            # prompt (gb/server/enrol.cc's scn::scan<int> calls have no
+            # reprompt/default of their own: a blank Enter, or anything that
+            # doesn't parse as a number, makes enrol itself return non-zero
+            # immediately). That is upstream's real behavior, not a relay
+            # bug -- preserved, not patched. What IS ours to fix: this used
+            # to be treated as fatal to the whole NativeDoor session, which
+            # ejected the caller to the lobby over a single mistyped
+            # keystroke. Recoverable instead: discard the failed attempt's
+            # credentials (fail_provisioning already does this) and restart
+            # enrol from the top with a fresh claim, in the SAME session.
+            fail_provisioning(user_id, identity["attempt_token"])
+
+            if attempt == MAX_ENROL_ATTEMPTS:
+                print(
+                    "\nRace creation did not complete after several attempts. Please try again later.",
+                    file=sys.stderr,
+                )
+                return 1
+
+            print(
+                "\nThat didn't go through -- every prompt needs a real answer "
+                "(pressing Enter with nothing typed isn't accepted there). "
+                "Let's start over.\n"
+            )
+            try:
+                identity = resolve_identity(user_id)
+            except ProvisioningInProgress:
+                print("Your Galactic Bloodshed race is already being set up elsewhere -- try again in a minute.")
+                return 0
+            except GbLauncherError as e:
+                print(f"Galactic Bloodshed identity lookup failed: {e}", file=sys.stderr)
+                return 1
+            if identity["status"] != "needs_provisioning":
+                break  # reconciled to already-provisioned; fall through to auto-login
+
+    race_password, governor_password = identity["race_password"], identity["governor_password"]
     return auto_login_and_attach(race_password, governor_password)
 
 

@@ -1,0 +1,47 @@
+{
+  "type": "nativedoor",
+  "version": "1.0",
+  "game": {
+    "name": "Galactic Bloodshed",
+    "short_name": "GB",
+    "author": "kaladron (Apache-2.0), L33TEST Crossroads integration",
+    "version": "1.0.0-d575334",
+    "release_year": 1989,
+    "description": "A persistent multiplayer galactic strategy game set in a shared 70-star universe. Build a race, explore and colonize worlds, manage fleets and resources, and contend with other players in a persistent shared galaxy. Deep, command-driven strategy with a decidedly old-school learning curve.",
+    "genre": [
+      "Strategy",
+      "4X",
+      "Multiplayer"
+    ],
+    "players": "Multiplayer",
+    "icon": null,
+    "screenshot": null
+  },
+  "experience": {
+    "category": "game",
+    "featured": false,
+    "multiplayer": true,
+    "participant_messaging": false
+  },
+  "door": {
+    "executable": "launch-galactic-bloodshed.sh",
+    "launch_command": "/bin/bash launch-galactic-bloodshed.sh \"{user_number}\"",
+    "dropfile_format": "DOOR.SYS",
+    "output_encoding": "utf8",
+    "terminal_mode": "raw",
+    "max_nodes": 10,
+    "ansi_required": false,
+    "time_per_day": 480
+  },
+  "requirements": {
+    "admin_only": false
+  },
+  "config": {
+    "enabled": false,
+    "credit_cost": 0,
+    "max_time_minutes": 480,
+    "max_sessions": 10,
+    "allow_anonymous": false,
+    "guest_max_sessions": 0
+  }
+}
