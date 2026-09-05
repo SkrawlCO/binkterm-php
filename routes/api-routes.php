@@ -146,6 +146,7 @@ SimpleRouter::group(['prefix' => '/api'], function() {
                 'path'     => '/',
                 'httponly' => true,
                 'samesite' => 'Lax',
+                'secure'   => Config::isHttps(),
             ];
             if ($remember) {
                 $cookieOptions['expires'] = time() + 86400 * 30;
@@ -651,6 +652,7 @@ SimpleRouter::group(['prefix' => '/api'], function() {
                     'path'     => '/',
                     'httponly' => true,
                     'samesite' => 'Lax',
+                    'secure'   => Config::isHttps(),
                 ]);
 
                 if ($service === 'web' && session_status() === PHP_SESSION_ACTIVE) {

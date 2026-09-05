@@ -252,4 +252,22 @@ class Config
         $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
         return $protocol . '://' . $host;
     }
+
+    /**
+     * True when the externally visible request is HTTPS, per the same
+     * precedence as {@see self::getSiteUrl()}: a configured SITE_URL wins
+     * (so a deployment behind an HTTPS-terminating proxy is still correctly
+     * detected as secure even though PHP itself only sees plain HTTP from
+     * the proxy), falling back to `$_SERVER['HTTPS']` otherwise.
+     *
+     * Deliberately does not consult `X-Forwarded-Proto` or any other
+     * client-influenceable header directly — this reuses the one HTTPS
+     * determination the application already trusts (operator-configured
+     * SITE_URL, or the web server's own HTTPS flag) rather than establishing
+     * a new proxy-trust model.
+     */
+    public static function isHttps(): bool
+    {
+        return str_starts_with(self::getSiteUrl(), 'https://');
+    }
 }
