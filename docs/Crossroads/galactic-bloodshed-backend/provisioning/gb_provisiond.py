@@ -259,16 +259,18 @@ async def main() -> None:
         os.remove(SOCKET_PATH)
 
     server = await asyncio.start_unix_server(handle_client, path=SOCKET_PATH)
-    # 0666: this repo could not conclusively determine which UID
-    # binkterm-app's NativeDoor multiplexing bridge spawns door processes
-    # as (its source isn't in this checkout) -- a tighter mode risks
-    # silently refusing the one legitimate caller. The real access control
-    # here is (a) the shared-secret token checked on every connection
-    # (see handle_client) and (b) the socket living in a directory bind-
-    # mounted only into the containers that need it -- nothing else on the
-    # host or docker network can reach this path at all. File mode on the
-    # socket itself is defense-in-depth on top of those, not the boundary.
-    os.chmod(SOCKET_PATH, 0o666)
+    # 0600, owner-only (this process's own UID, from GB_SERVICE_UID / the
+    # container's service user -- see runtime/Dockerfile.runtime): live
+    # inspection of binkterm-app (see the parent slice report "Final
+    # provisioning permission model") confirmed its NativeDoor multiplexing
+    # bridge -- and everything it spawns, including the launcher that
+    # connects here -- runs as root, which bypasses Unix file-permission
+    # checks entirely. A narrow owner-only mode therefore still admits the
+    # one legitimate caller while actually excluding every other non-root
+    # process that might otherwise share this bind-mounted directory. The
+    # shared-secret token check in handle_client remains the check that
+    # doesn't depend on any of this.
+    os.chmod(SOCKET_PATH, 0o600)
     log.info("listening on %s (enrol=%s db=%s)", SOCKET_PATH, ENROL_BIN, GB_DB_PATH)
 
     loop = asyncio.get_running_loop()
