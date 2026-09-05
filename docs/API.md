@@ -2050,6 +2050,10 @@ Dashboard statistics object. All counts are for the authenticated user.
 | `total_files` | integer | Total approved files |
 | `pending_file_approvals` | integer | _(admin only)_ Files pending approval |
 | `pending_echomail_moderation` | integer | _(admin only)_ Echomail messages pending moderation |
+| `crossroads` | object\|null | Terminal main-menu Crossroads signal (see below). `null` when Crossroads is unavailable, or the current state has nothing worth surfacing on the main menu |
+| `crossroads.state` | string | `others` (other people currently in Crossroads) or `recent_self` (viewer's own most recent Experience, historical only) |
+| `crossroads.count` | integer | _(only when `state` is `others`)_ Distinct other people currently in Crossroads, capped at `DashboardPulse::MAX_OTHER_ROWS` (3) |
+| `crossroads.experience_name` | string | _(only when `state` is `recent_self`)_ Name of the Experience the viewer most recently played |
 
 **Error Responses**
 

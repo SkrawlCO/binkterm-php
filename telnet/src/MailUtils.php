@@ -503,6 +503,7 @@ class MailUtils
             'online_count'     => 0,
             'unread_bulletins' => 0,
             'credit_balance'   => null,
+            'crossroads'       => null,
         ];
 
         $response = TelnetUtils::apiRequest($apiBase, 'GET', '/api/dashboard/stats', null, $session);
@@ -511,12 +512,19 @@ class MailUtils
         }
 
         $data = $response['data'];
+
+        // Passed through as-is (or null) for BbsSession to turn into a
+        // localized main-menu line. A malformed value here must never break
+        // the rest of the dashboard stats — it simply means no signal shows.
+        $crossroads = $data['crossroads'] ?? null;
+
         return [
             'unread_netmail'   => (int)($data['total_netmail']    ?? 0),
             'new_echomail'     => (int)($data['new_echomail']      ?? 0),
             'online_count'     => (int)($data['online_count']      ?? 0),
             'unread_bulletins' => (int)($data['unread_bulletins']  ?? 0),
             'credit_balance'   => isset($data['credit_balance']) ? (int)$data['credit_balance'] : null,
+            'crossroads'       => is_array($crossroads) ? $crossroads : null,
         ];
     }
 

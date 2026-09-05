@@ -193,6 +193,7 @@ The main menu displays a live dashboard panel alongside the navigation options (
 | Online | Users active in the last 15 minutes |
 | Bulletins | Unread bulletins |
 | Credits | Credit balance (only when credits are enabled) |
+| Crossroads | A restrained one-line signal, shown only when there's something truthful to say: other people currently in Crossroads (aggregate headcount, never names), or — if nobody else is there — where the caller last played. Silent otherwise. |
 
 **Layout adapts to terminal width:**
 

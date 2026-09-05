@@ -724,9 +724,11 @@ Primary endpoints used by `BbsSession` and the core handlers:
 | `/api/messages/echomail/ignore-rules` | POST | Create an echomail ignore rule (used by `G` in viewer) |
 | `/api/user/echomail-ignore-rules` | GET | List the user's echomail ignore rules (used by `G` on echoarea list) |
 | `/api/user/echomail-ignore-rules/{id}` | DELETE | Delete an echomail ignore rule |
-| `/api/dashboard/stats` | GET | Main menu dashboard widgets (unread counts, online users, bulletins, credits) |
+| `/api/dashboard/stats` | GET | Main menu dashboard widgets (unread counts, online users, bulletins, credits, Crossroads signal) |
 
 All API requests include cookie-based session management, automatic retry with exponential backoff, and optional SSL certificate verification. Additional endpoints are called by individual feature handlers — see each `*Handler.php` class and the full [API Reference](API.md).
+
+**Crossroads main-menu signal:** `/api/dashboard/stats`'s `crossroads` field is computed server-side by reusing `\BinktermPHP\Crossroads\DashboardPulse::compose()` — the same reducer behind the authenticated web dashboard's Crossroads pulse card — scoped to the terminal's authorized catalog (`ExperienceState::getExperienceStates($user, 'terminal')`). The route strips it down to only what the terminal needs (an aggregate headcount for `others`, or an Experience name for `recent_self`; never usernames or session rows) and returns `null` for every other state. `MailUtils::getDashboardStats()` passes the field through unchanged; `BbsSession::composeCrossroadsSignalLine()` is the pure formatter (mirrors `DoorHandler::composeRecentFootprints()`'s testable shape) that turns it into the localized line rendered in both `renderDashboardSidebar()` and `renderDashboardBottomBar()`.
 
 ### Client IP forwarding
 

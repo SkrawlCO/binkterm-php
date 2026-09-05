@@ -665,6 +665,10 @@ return [
     'ui.terminalserver.dashboard.label.online'    => 'Online',
     'ui.terminalserver.dashboard.label.bulletins' => 'Bulletins',
     'ui.terminalserver.dashboard.label.credits'   => 'Credits',
+    'ui.terminalserver.dashboard.label.crossroads' => 'Crossroads',
+    'ui.terminalserver.dashboard.crossroads_others' => '{count} people out there',
+    'ui.terminalserver.dashboard.crossroads_others_one' => '1 person out there',
+    'ui.terminalserver.dashboard.crossroads_recent_self' => 'Last in {experience}',
 
     // --- Interests handler ---
     'ui.terminalserver.interests.title'              => 'Interests',

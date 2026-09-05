@@ -1145,13 +1145,75 @@ class BbsSession
     }
 
     /**
+     * Compose the terminal main-menu Crossroads signal line from the
+     * `crossroads` field carried on dashboard stats (see
+     * {@see MailUtils::getDashboardStats()}, sourced from the
+     * `GET /api/dashboard/stats` `crossroads` field, itself reduced by
+     * {@see \BinktermPHP\Crossroads\DashboardPulse::compose()}).
+     *
+     * Only two states earn a line at the main menu:
+     *   - `others`      — other people are currently in Crossroads (aggregate
+     *                      headcount only, never usernames).
+     *   - `recent_self` — nobody else is there, but the viewer has a most
+     *                      recent Experience of their own. Historical
+     *                      continuity only — never implies an active session,
+     *                      resumability, or that the Experience is occupied.
+     *
+     * Every other state (`recent`, `participating`, `quiet`) or a missing/
+     * malformed payload returns null so the caller renders no line at all —
+     * dead boilerplate is worse than no signal.
+     *
+     * Pure formatter (no I/O, no `$this`) — same shape as
+     * {@see DoorHandler::composeRecentFootprints()} — so it is directly
+     * unit-testable with a fake `$t`.
+     *
+     * @param array<string,mixed> $stats dashboard stats, including 'crossroads'
+     * @param callable(string,array<string,mixed>,string):string $t key, params, fallback -> translated string
+     */
+    public static function composeCrossroadsSignalLine(array $stats, callable $t): ?string
+    {
+        $crossroads = $stats['crossroads'] ?? null;
+        if (!is_array($crossroads)) {
+            return null;
+        }
+
+        $state = (string)($crossroads['state'] ?? '');
+
+        if ($state === 'others') {
+            $count = (int)($crossroads['count'] ?? 0);
+            if ($count <= 0) {
+                return null;
+            }
+
+            return $count === 1
+                ? $t('ui.terminalserver.dashboard.crossroads_others_one', [], '1 person out there')
+                : $t('ui.terminalserver.dashboard.crossroads_others', ['count' => $count], '{count} people out there');
+        }
+
+        if ($state === 'recent_self') {
+            $experienceName = trim((string)($crossroads['experience_name'] ?? ''));
+            if ($experienceName === '') {
+                return null;
+            }
+
+            return $t(
+                'ui.terminalserver.dashboard.crossroads_recent_self',
+                ['experience' => $experienceName],
+                'Last in {experience}'
+            );
+        }
+
+        return null;
+    }
+
+    /**
      * Draw a dashboard stats panel to the right of the menu using ANSI absolute
      * cursor positioning. Saves and restores cursor so the calling code resumes
      * writing the prompt at the correct location.
      *
      * Widgets are shown in priority order and dropped from the bottom when
      * there is insufficient vertical space: netmail → echomail → online →
-     * bulletins → credits.
+     * bulletins → credits → Crossroads signal.
      *
      * @param resource $conn
      */
@@ -1195,6 +1257,17 @@ class BbsSession
         if ($stats['credit_balance'] !== null && $rowsUsed + 2 <= $availRows) {
             $widgetEntries[] = 'DIVIDER';
             $widgetEntries[] = [$lblCred, $stats['credit_balance']];
+            $rowsUsed += 2;
+        }
+
+        $crossroadsText = self::composeCrossroadsSignalLine(
+            $stats,
+            fn(string $key, array $params, string $fallback): string => $this->t($key, $fallback, $params, $locale)
+        );
+        if ($crossroadsText !== null && $rowsUsed + 2 <= $availRows) {
+            $lblCrossroads = $this->t('ui.terminalserver.dashboard.label.crossroads', 'Crossroads', [], $locale);
+            $widgetEntries[] = 'DIVIDER';
+            $widgetEntries[] = ['TEXT', $lblCrossroads . ': ' . $crossroadsText];
         }
 
         $v      = $chars['v'];
@@ -1224,6 +1297,13 @@ class BbsSession
         foreach ($widgetEntries as $entry) {
             if ($entry === 'DIVIDER') {
                 $lines[] = $this->colorize($divBar, $borderColor);
+                continue;
+            }
+            if (($entry[0] ?? null) === 'TEXT') {
+                $textStr   = $this->fitTerminalLabel($entry[1], $innerWidth, $state);
+                $lines[]   = $this->colorize($this->encodeForTerminal($v), $borderColor)
+                    . $this->colorize($textStr, self::ANSI_DIM)
+                    . $this->colorize($this->encodeForTerminal($v), $borderColor);
                 continue;
             }
             [$label, $value] = $entry;
@@ -1280,6 +1360,14 @@ class BbsSession
         }
         if ($stats['credit_balance'] !== null) {
             $parts[] = $this->colorize($lblCred . ': ', self::ANSI_DIM) . $this->colorize((string)$stats['credit_balance'], self::ANSI_BOLD);
+        }
+        $crossroadsText = self::composeCrossroadsSignalLine(
+            $stats,
+            fn(string $key, array $params, string $fallback): string => $this->t($key, $fallback, $params, $locale)
+        );
+        if ($crossroadsText !== null) {
+            $lblCrossroads = $this->t('ui.terminalserver.dashboard.label.crossroads', 'Crossroads', [], $locale);
+            $parts[] = $this->colorize($lblCrossroads . ': ', self::ANSI_DIM) . $this->colorize($crossroadsText, self::ANSI_BOLD);
         }
 
         $padLen  = $menuLeft + 1; // columns used by left-margin indent

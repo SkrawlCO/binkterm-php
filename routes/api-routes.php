@@ -841,7 +841,56 @@ SimpleRouter::group(['prefix' => '/api'], function() {
 
         header('Content-Type: application/json');
         $db = Database::getInstance()->getPdo();
-        echo json_encode((new \BinktermPHP\DashboardStatsService($db))->getStats($user));
+        $stats = (new \BinktermPHP\DashboardStatsService($db))->getStats($user);
+
+        // Terminal main-menu Crossroads signal: reuse the same DashboardPulse
+        // reducer the authenticated web dashboard's Crossroads pulse card
+        // uses (see routes/web-routes.php), scoped to the terminal's
+        // authorized catalog. Stripped to the minimum presentation-neutral
+        // fields the terminal needs — no usernames, no per-session rows, no
+        // experience ids. Only `others` (aggregate headcount) and
+        // `recent_self` (historical continuity) earn a line on the terminal
+        // main menu; `recent`, `participating`, and `quiet` are left as null
+        // so the caller renders nothing. Any failure here must never break
+        // the rest of the dashboard stats payload.
+        $stats['crossroads'] = null;
+        try {
+            $conditions = \BinktermPHP\DashboardCardRegistry::resolveConditions();
+            if (!empty($conditions['crossroads_available'])) {
+                $userId = (int)($user['user_id'] ?? $user['id'] ?? 0);
+                $experienceStates = (new ExperienceState())->getExperienceStates($user, 'terminal');
+                $authorizedCatalog = array_column($experienceStates, 'experience');
+                $experienceActivity = new \BinktermPHP\ExperienceActivity();
+                $recentFootprints = $experienceActivity->recentAcrossCatalog($authorizedCatalog, 1);
+                $viewerRecentFootprints = $experienceActivity->recentForUser($authorizedCatalog, $userId, 1);
+                $pulse = \BinktermPHP\Crossroads\DashboardPulse::compose(
+                    $experienceStates,
+                    $userId,
+                    $recentFootprints,
+                    $viewerRecentFootprints
+                );
+
+                if (($pulse['state'] ?? null) === 'others') {
+                    $stats['crossroads'] = [
+                        'state' => 'others',
+                        'count' => count($pulse['others'] ?? []),
+                    ];
+                } elseif (($pulse['state'] ?? null) === 'recent_self') {
+                    $experienceName = trim((string)($pulse['recent_self']['experience_name'] ?? ''));
+                    if ($experienceName !== '') {
+                        $stats['crossroads'] = [
+                            'state' => 'recent_self',
+                            'experience_name' => $experienceName,
+                        ];
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            getServerLogger()->warning('Terminal dashboard Crossroads signal failed: ' . $e->getMessage());
+            $stats['crossroads'] = null;
+        }
+
+        echo json_encode($stats);
     });
 
     SimpleRouter::post('/dashboard/layout', function() {
