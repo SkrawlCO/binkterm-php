@@ -21,9 +21,19 @@ const path = require('path');
 const { spawn } = require('child_process');
 const { Client } = require('pg');
 const { createEmulatorAdapter } = require('./emulator-adapters');
-const { waitForProcessExit } = require('./managed-runtime-lifecycle');
+const {
+    captureStableRuntimeIdentity,
+    verifyRuntimeIdentity,
+    terminateOwnedRuntime
+} = require('./managed-runtime-lifecycle');
 const { startKeepalive } = require('./ws-keepalive');
 require('dotenv').config({ path: __dirname + '/../../.env' });
+
+// Bounded wall-clock budget for tearing every tracked runtime down on
+// SIGTERM/SIGINT before the process exits. Must stay under the supervisor's
+// stopwaitsecs (10s default for [program:dosdoor_bridge]) so the bridge always
+// exits on its own terms rather than being SIGKILLed mid-teardown.
+const SHUTDOWN_GRACE_MS = 8000;
 
 // Prepend ISO timestamp to every console.log / .error / .warn line
 ['log', 'error', 'warn'].forEach(method => {
@@ -120,13 +130,14 @@ if (IS_DAEMON && !IS_DAEMON_CHILD) {
     };
 
     process.on('exit', cleanupPidFile);
+    // Note: the bounded graceful-shutdown handler is registered later (once the
+    // servers and session manager exist). These early listeners only log; they
+    // must NOT process.exit() or they would pre-empt runtime teardown.
     process.on('SIGINT', () => {
         console.log('\nReceived SIGINT, shutting down...');
-        process.exit(0);
     });
     process.on('SIGTERM', () => {
         console.log('\nReceived SIGTERM, shutting down...');
-        process.exit(0);
     });
     process.on('SIGHUP', () => {
         reloadEnv();
@@ -134,13 +145,14 @@ if (IS_DAEMON && !IS_DAEMON_CHILD) {
 
 } else {
     // Interactive mode
+    // Note: the bounded graceful-shutdown handler is registered later (once the
+    // servers and session manager exist). These early listeners only log; they
+    // must NOT process.exit() or they would pre-empt runtime teardown.
     process.on('SIGINT', () => {
         console.log('\nReceived SIGINT, shutting down...');
-        process.exit(0);
     });
     process.on('SIGTERM', () => {
         console.log('\nReceived SIGTERM, shutting down...');
-        process.exit(0);
     });
     process.on('SIGHUP', () => {
         reloadEnv();
@@ -356,18 +368,55 @@ class SessionManager {
 
             await client.query(
                 `UPDATE door_sessions
-                 SET tcp_port = $1, dosbox_pid = $2
-                 WHERE session_id = $3`,
-                [tcpPort, dosboxPid, sessionId]
+                 SET tcp_port = $1, dosbox_pid = $2, bridge_pid = $3
+                 WHERE session_id = $4`,
+                [tcpPort, dosboxPid, process.pid, sessionId]
             );
 
-            log(`[DB] Updated session ${sessionId} with tcp_port=${tcpPort}, dosbox_pid=${dosboxPid}`);
+            log(`[DB] Updated session ${sessionId} with tcp_port=${tcpPort}, dosbox_pid=${dosboxPid}, bridge_pid=${process.pid}`);
 
         } catch (err) {
             console.error('[DB] Update error:', err.message);
             throw err;
         } finally {
             await client.end();
+        }
+    }
+
+    /**
+     * Path of the per-session runtime manifest -- the on-disk record of the
+     * launched runtime's immutable identity. Lives inside the session's own
+     * runtime directory (already bridge-owned and swept by
+     * cleanupSessionFiles), so it survives a bridge crash/restart on the
+     * persistent bind mount and needs no schema change.
+     */
+    runtimeManifestPath(sessionId) {
+        return path.join(BASE_PATH, 'data', 'run', 'door_sessions', sessionId, 'runtime.json');
+    }
+
+    /**
+     * Persist the launched runtime's identity so startup reconciliation (or a
+     * later teardown) can prove the recorded PID is still this exact runtime.
+     * Best-effort: a write failure must never fail a launch.
+     */
+    writeRuntimeManifest(session, emulatorName) {
+        try {
+            const dir = path.join(BASE_PATH, 'data', 'run', 'door_sessions', session.sessionId);
+            if (!fs.existsSync(dir)) {
+                fs.mkdirSync(dir, { recursive: true });
+            }
+            const manifest = {
+                sessionId: session.sessionId,
+                emulator: emulatorName,
+                doorType: session.sessionData?.door_type || null,
+                nodeNumber: session.sessionData?.node_number ?? null,
+                bridgePid: process.pid,
+                identity: session.runtimeIdentity, // null for Rlogin (no local process)
+                writtenAt: new Date().toISOString()
+            };
+            fs.writeFileSync(this.runtimeManifestPath(session.sessionId), JSON.stringify(manifest, null, 2));
+        } catch (err) {
+            (session.slog || console).error(`[SESSION] Could not write runtime manifest: ${err.message}`);
         }
     }
 
@@ -654,7 +703,24 @@ class SessionManager {
         session.emulatorProcess = result.process;
         session.emulatorPid = result.pid;
 
-        session.slog.log(`[${emulatorName}] Launched PID ${result.pid}`);
+        // Capture the immutable identity of the runtime we just launched
+        // (pgid + /proc start-time + boot id) and persist it next to the
+        // session so a later teardown -- or a fresh bridge after a restart --
+        // can prove the PID is still this exact runtime before signalling it.
+        // Rlogin has no local process, so identity is null. For the others we
+        // wait for the child to finish becoming its own process-group leader
+        // (detached/setsid) so the recorded pgid is the post-setsid one.
+        session.runtimeIdentity = result.pid
+            ? await captureStableRuntimeIdentity(result.pid, { requireGroupLeader: emulatorName !== 'Rlogin' })
+            : null;
+        this.writeRuntimeManifest(session, emulatorName);
+
+        session.slog.log(
+            `[${emulatorName}] Launched PID ${result.pid}` +
+            (session.runtimeIdentity
+                ? ` (pgid ${session.runtimeIdentity.pgid}, ownsGroup=${session.runtimeIdentity.ownsGroup})`
+                : '')
+        );
 
         if (emulatorName === 'Native' || emulatorName === 'Rlogin' || emulatorName === 'LineRelay') {
             // Native doors connect immediately via PTY, and rlogin doors connect
@@ -854,10 +920,11 @@ class SessionManager {
             args = ['-conf', configPath, '-exit'];
         }
 
-        // Set up spawn options
+        // Set up spawn options. detached: true -> own process-group leader so
+        // teardown can signal the whole owned group (see DOSBoxAdapter).
         const spawnOptions = {
             cwd: BASE_PATH,
-            detached: false,
+            detached: true,
             stdio: 'ignore'
         };
 
@@ -1131,25 +1198,28 @@ class SessionManager {
     handleDosBoxDisconnect(session) {
         session.slog.log(`[SESSION] DOSBox disconnected`);
 
-        // DOSBox TCP connection closed (usually means 'exit' command ran)
-        // Give DOSBox a few seconds to exit gracefully, then force kill if needed
-        if (session.dosboxProcess && session.dosboxPid) {
-            session.slog.log(`[SESSION] Waiting 3 seconds for DOSBox PID ${session.dosboxPid} to exit gracefully...`);
-
-            session.killTimeout = setTimeout(() => {
-                session.slog.log(`[SESSION] DOSBox didn't exit gracefully, force killing PID ${session.dosboxPid}`);
-                try {
-                    if (process.platform === 'win32') {
-                        require('child_process').execSync(`taskkill /F /PID ${session.dosboxPid}`, { stdio: 'ignore' });
-                    } else {
-                        process.kill(session.dosboxPid, 'SIGKILL');
-                    }
-                } catch (err) {
-                    session.slog.error(`[SESSION] Failed to kill DOSBox PID ${session.dosboxPid}:`, err.message);
-                }
-                // handleDosBoxExit will be called when process actually dies
-            }, 3000); // 3 second grace period
+        // DOSBox TCP connection closed (usually means the 'exit' command ran).
+        // Give it a grace window to exit on its own, then force the owned
+        // process group -- identity-gated so a recycled PID is never hit.
+        // Skipped entirely once an explicit end is already driving teardown.
+        if (session.isExplicitlyEnding || session.isRemoving || !session.runtimeIdentity) {
+            return;
         }
+        if (session.teardownPromise) {
+            return; // teardown already in flight
+        }
+        session.teardownPromise = terminateOwnedRuntime(session.runtimeIdentity, {
+            graceful: null,
+            gracefulTimeoutMs: 3000,
+            forceTimeoutMs: 1000,
+            logger: session.slog
+        }).then((result) => {
+            session.slog.log(`[SESSION] DOSBox disconnect teardown: ${result.outcome}`);
+            return result;
+        }).catch((err) => {
+            session.slog.error(`[SESSION] DOSBox disconnect teardown error: ${err.message}`);
+            return { ok: false, outcome: 'error' };
+        });
     }
 
     handleWebSocketDisconnect(session) {
@@ -1215,8 +1285,19 @@ class SessionManager {
     }
 
     async waitForRuntimeExit(session) {
-        const pid = session.emulatorPid;
-        return waitForProcessExit(pid, CARRIER_LOSS_TIMEOUT, 1000, session.slog);
+        // terminateExplicitSession() has already run emulator.close() (the
+        // carrier-loss / SIGHUP step), so no graceful callback here -- just the
+        // identity-gated wait + owned-group SIGKILL + confirmation.
+        const result = await terminateOwnedRuntime(session.runtimeIdentity, {
+            graceful: null,
+            gracefulTimeoutMs: CARRIER_LOSS_TIMEOUT,
+            forceTimeoutMs: 1000,
+            logger: session.slog
+        });
+        if (!result.ok) {
+            session.slog.error(`[SESSION] Runtime teardown not confirmed: ${result.outcome}`);
+        }
+        return result.ok;
     }
 
     removeSession(session, options = {}) {
@@ -1241,26 +1322,25 @@ class SessionManager {
             session.emulator.close();
         }
 
-        // Give emulator process time to detect carrier loss and exit gracefully
-        // Then force kill if still running
-        if (closeEmulator && session.emulatorProcess && session.emulatorPid) {
-            const timeoutSec = (CARRIER_LOSS_TIMEOUT / 1000).toFixed(1);
-            session.slog.log(`[SESSION] Waiting ${timeoutSec} seconds for emulator PID ${session.emulatorPid} to exit after carrier loss...`);
-            setTimeout(() => {
-                // Check if process still running
-                try {
-                    process.kill(session.emulatorPid, 0); // Signal 0 checks if process exists
-                    session.slog.log(`[SESSION] Emulator PID ${session.emulatorPid} still running, force killing`);
-                    if (process.platform === 'win32') {
-                        require('child_process').execSync(`taskkill /F /PID ${session.emulatorPid}`, { stdio: 'ignore' });
-                    } else {
-                        process.kill(session.emulatorPid, 'SIGKILL');
-                    }
-                } catch (err) {
-                    // Process already exited, good
-                    session.slog.log(`[SESSION] Emulator PID ${session.emulatorPid} already exited`);
-                }
-            }, CARRIER_LOSS_TIMEOUT);
+        // Give the emulator time to detect carrier loss and exit, then force
+        // the owned process group -- identity-gated so a recycled PID can
+        // never be signalled. Tracked on session.teardownPromise so a bridge
+        // shutdown can await it instead of racing process.exit().
+        if (closeEmulator && session.runtimeIdentity) {
+            session.teardownPromise = terminateOwnedRuntime(session.runtimeIdentity, {
+                graceful: null, // emulator.close() above is the graceful step
+                gracefulTimeoutMs: CARRIER_LOSS_TIMEOUT,
+                forceTimeoutMs: 1000,
+                logger: session.slog
+            }).then((result) => {
+                session.slog.log(`[SESSION] Runtime teardown: ${result.outcome}`);
+                return result;
+            }).catch((err) => {
+                session.slog.error(`[SESSION] Runtime teardown error: ${err.message}`);
+                return { ok: false, outcome: 'error' };
+            });
+        } else {
+            session.teardownPromise = Promise.resolve({ ok: true, outcome: 'no-runtime' });
         }
 
         // Close WebSocket
@@ -1489,26 +1569,104 @@ console.log(`[WS] Server listening on ${WS_BIND_HOST}:${WS_PORT}`);
 // no terminal bytes, no effect on reconnect/grace/replay/auth semantics.
 const wsKeepalive = startKeepalive(wsServer, WebSocket, { log: (msg) => console.log(msg) });
 
-// Clean up stale sessions from database on startup
-// This handles sessions that weren't cleaned up if bridge crashed/was killed
-(async () => {
+// Startup reconciliation.
+//
+// A previous bridge instance may have been killed while door runtimes were
+// still live. For every still-open door_sessions row we:
+//   1. read its persisted runtime manifest (data/run/door_sessions/<id>/runtime.json);
+//   2. verify the recorded runtime identity against /proc -- ONLY a full
+//      identity match (pgid + start-time + boot id) is treated as "still ours";
+//   3. on a match, terminate the OWNED process group via the identity-gated
+//      primitive; on a mismatch we signal NOTHING (a recycled PID / unrelated
+//      process must never be touched);
+//   4. remove the session's runtime directory;
+//   5. mark the row ended as 'bridge_restart'.
+// Rows with no manifest are finalised in the DB but never trigger a signal.
+async function reconcileOrphanedRuntimes() {
     const client = new Client(DB_CONFIG);
+    let openRows = [];
     try {
         await client.connect();
-        const result = await client.query(`
-            UPDATE door_sessions
-            SET ended_at = NOW(), exit_status = 'bridge_restart'
-            WHERE ended_at IS NULL
-        `);
-        if (result.rowCount > 0) {
-            console.log(`[STARTUP] Cleaned up ${result.rowCount} stale session(s) from database`);
+        const res = await client.query(
+            `SELECT session_id, door_type, session_path FROM door_sessions WHERE ended_at IS NULL`
+        );
+        openRows = res.rows;
+    } catch (err) {
+        console.error('[STARTUP] Could not read open sessions for reconciliation:', err.message);
+        await client.end().catch(() => {});
+        return;
+    }
+
+    let killed = 0, alreadyGone = 0, mismatches = 0, noManifest = 0;
+    for (const row of openRows) {
+        const manifestPath = path.join(
+            BASE_PATH, 'data', 'run', 'door_sessions', row.session_id, 'runtime.json'
+        );
+        let manifest = null;
+        try {
+            manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+        } catch (_) {
+            manifest = null;
+        }
+
+        if (!manifest || !manifest.identity) {
+            noManifest++;
+        } else {
+            const state = verifyRuntimeIdentity(manifest.identity);
+            if (state === 'match') {
+                const result = await terminateOwnedRuntime(manifest.identity, {
+                    graceful: null,
+                    gracefulTimeoutMs: 2000,
+                    forceTimeoutMs: 2000,
+                    logger: console
+                });
+                console.log(`[STARTUP] Reconciled runtime for ${row.session_id}: ${result.outcome}`);
+                if (result.ok) { killed++; } else { mismatches++; }
+            } else if (state === 'mismatch') {
+                mismatches++;
+                console.log(`[STARTUP] ${row.session_id}: recorded PID no longer matches -- not signalling`);
+            } else {
+                alreadyGone++;
+            }
+        }
+
+        // The runtime directory is unambiguously this session's -- remove it.
+        try {
+            const dir = path.join(BASE_PATH, 'data', 'run', 'door_sessions', row.session_id);
+            fs.rmSync(dir, { recursive: true, force: true });
+        } catch (err) {
+            console.error(`[STARTUP] Could not remove runtime dir for ${row.session_id}: ${err.message}`);
+        }
+    }
+
+    try {
+        // Finalise ONLY the rows we actually reconciled -- never a blanket
+        // "WHERE ended_at IS NULL", which could catch a session created while
+        // this (async, unawaited) reconciliation was still running.
+        const ids = openRows.map((r) => r.session_id);
+        const upd = ids.length
+            ? await client.query(
+                `UPDATE door_sessions SET ended_at = NOW(), exit_status = 'bridge_restart'
+                 WHERE session_id = ANY($1) AND ended_at IS NULL`,
+                [ids]
+              )
+            : { rowCount: 0 };
+        if (openRows.length > 0) {
+            console.log(
+                `[STARTUP] Reconciliation: ${openRows.length} open row(s) -- ` +
+                `${killed} runtime(s) terminated, ${alreadyGone} already gone, ` +
+                `${mismatches} identity mismatch (left alone), ${noManifest} without manifest; ` +
+                `${upd.rowCount} row(s) marked bridge_restart`
+            );
         }
     } catch (err) {
-        console.error('[STARTUP] Failed to clean up stale sessions:', err.message);
+        console.error('[STARTUP] Failed to finalise reconciled sessions:', err.message);
     } finally {
-        await client.end();
+        await client.end().catch(() => {});
     }
-})();
+}
+
+reconcileOrphanedRuntimes();
 
 console.log('[WS] Waiting for connections...');
 console.log('');
@@ -1562,42 +1720,45 @@ setInterval(() => {
     }
 }, 60000);
 
-// Graceful shutdown
-process.on('SIGINT', () => {
-    console.log('\n[SHUTDOWN] Received SIGINT, closing all connections...');
-
-    wsKeepalive.stop();
-
-    // Close all sessions
-    for (const session of sessionManager.sessionsByToken.values()) {
-        sessionManager.removeSession(session);
+// Graceful shutdown -- bounded. Stop accepting new work, drive teardown of
+// every tracked runtime through the identity-gated primitive, await those
+// teardowns up to SHUTDOWN_GRACE_MS (< supervisor stopwaitsecs), THEN exit.
+// No fire-and-forget timers that process.exit() would discard.
+let shuttingDown = false;
+async function gracefulShutdown(signal) {
+    if (shuttingDown) {
+        return;
     }
+    shuttingDown = true;
+    console.log(`\n[SHUTDOWN] ${signal} received -- tearing down ${sessionManager.sessionsByToken.size} tracked session(s) (budget ${SHUTDOWN_GRACE_MS}ms)`);
 
-    // Close WebSocket server
-    wsServer.close(() => {
-        controlServer.close();
-        console.log('[SHUTDOWN] Server closed');
-        process.exit(0);
-    });
-});
+    try { wsKeepalive.stop(); } catch (_) {}
+    // Stop accepting new connections immediately.
+    try { wsServer.close(); } catch (_) {}
+    try { controlServer.close(); } catch (_) {}
 
-process.on('SIGTERM', () => {
-    console.log('\n[SHUTDOWN] Received SIGTERM, closing all connections...');
+    const sessions = Array.from(sessionManager.sessionsByToken.values());
+    const teardown = Promise.allSettled(sessions.map((session) => {
+        try {
+            // Drive the standard removal (carrier-loss close, file cleanup,
+            // DB finalise) and await its runtime-teardown promise.
+            const presence = sessionManager.removeSession(session);
+            const runtime = session.teardownPromise || Promise.resolve();
+            return Promise.allSettled([presence, runtime]);
+        } catch (err) {
+            console.error(`[SHUTDOWN] teardown error for ${session.sessionId}: ${err.message}`);
+            return Promise.resolve();
+        }
+    }));
 
-    wsKeepalive.stop();
+    const deadline = new Promise((resolve) => setTimeout(() => resolve('deadline'), SHUTDOWN_GRACE_MS));
+    const outcome = await Promise.race([teardown.then(() => 'complete'), deadline]);
+    console.log(`[SHUTDOWN] runtime teardown ${outcome === 'complete' ? 'completed' : 'hit the time budget'}; exiting`);
+    process.exit(0);
+}
 
-    // Close all sessions
-    for (const session of sessionManager.sessionsByToken.values()) {
-        sessionManager.removeSession(session);
-    }
-
-    // Close WebSocket server
-    wsServer.close(() => {
-        controlServer.close();
-        console.log('[SHUTDOWN] Server closed');
-        process.exit(0);
-    });
-});
+process.on('SIGINT', () => { gracefulShutdown('SIGINT'); });
+process.on('SIGTERM', () => { gracefulShutdown('SIGTERM'); });
 
 // Handle uncaught errors
 process.on('uncaughtException', (err) => {

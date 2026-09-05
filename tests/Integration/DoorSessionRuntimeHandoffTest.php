@@ -179,7 +179,12 @@ PHP
         self::assertStringContainsString('clearTimeout(session.disconnectTimer)', $bridge);
         self::assertStringContainsString('Explicit end in progress - reconnect grace bypassed', $bridge);
         self::assertStringContainsString('await this.waitForRuntimeExit(session)', $bridge);
-        self::assertStringContainsString("process.kill(pid, 'SIGKILL')", $lifecycle);
+        // The lifecycle helper still escalates to SIGKILL, but only after
+        // verifying the recorded runtime identity (guards against PID reuse)
+        // and, where owned, against the whole process group.
+        self::assertStringContainsString("'SIGKILL'", $lifecycle);
+        self::assertStringContainsString('verifyRuntimeIdentity', $lifecycle);
+        self::assertStringContainsString('terminateOwnedRuntime', $lifecycle);
         self::assertStringContainsString("new \\BinktermPHP\\DoorBridgeControlClient()", $route);
         self::assertStringContainsString("(int)(\$session['dosbox_pid'] ?? 0) > 0", $route);
         self::assertStringContainsString('$runtimeTerminationConfirmed', $route);

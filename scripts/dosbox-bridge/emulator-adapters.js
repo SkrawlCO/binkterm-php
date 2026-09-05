@@ -142,10 +142,16 @@ class DOSBoxAdapter extends EmulatorAdapter {
             args = ['-conf', configPath, '-exit'];
         }
 
-        // Spawn options
+        // Spawn options.
+        // detached: true makes the emulator its own session/process-group
+        // leader (setsid), so the bridge can later SIGKILL the whole owned
+        // group -- covering ordinary child processes the door spawns -- via
+        // process.kill(-pgid, ...) without ever signalling the bridge or a
+        // sibling session. A door that deliberately double-forks / setsid()s
+        // still leaves this group; that is intentionally out of scope.
         const spawnOptions = {
             cwd: this.basePath,
-            detached: false,
+            detached: true,
             stdio: 'ignore'
         };
 
@@ -380,9 +386,11 @@ class DOSEMUAdapter extends EmulatorAdapter {
         // Spawn DOSEMU with normal spawn (not PTY)
         const dosemuCwd = path.join(this.basePath, 'dosbox-bridge', 'dos');
 
+        // detached: true -> own session/process-group leader; see DOSBoxAdapter.
         this.process = spawn(dosemuExe, args, {
             cwd: dosemuCwd,
             env: process.env,
+            detached: true,
             stdio: 'ignore'
         });
 
@@ -923,9 +931,13 @@ class LineRelayAdapter extends EmulatorAdapter {
         ];
         slog.log(`[${this.getName()}] Starting generic runtime for door '${args[0]}'`);
 
+        // detached: true -> own session/process-group leader (see
+        // DOSBoxAdapter). stdio pipes are unaffected; the bridge keeps the
+        // ChildProcess reference so it still receives 'exit'.
         this.process = spawn(runtime, args, {
             cwd: this.basePath,
             env: process.env,
+            detached: true,
             stdio: ['pipe', 'pipe', 'pipe']
         });
 

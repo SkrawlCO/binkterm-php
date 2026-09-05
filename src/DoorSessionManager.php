@@ -249,14 +249,18 @@ class DoorSessionManager
         $dosboxPid = $session['dosbox_pid'] ?? null;
         $bridgePid = $session['bridge_pid'] ?? null;
 
-        // Kill DOSBox process using PID (taskkill works, proc_terminate doesn't)
+        // Fallback runtime kill -- only when the bridge has NOT already
+        // confirmed teardown for us. Gated on the immutable identity tuple the
+        // bridge persisted at launch (pgid + /proc start-time + boot id): a
+        // recycled PID, or the absence of that record, means we signal nothing.
         if ($dosboxPid && !$runtimeTerminationConfirmed) {
-            $this->logger->debug("[EndSession] Killing DOSBox PID: $dosboxPid");
-            $killed = $this->killProcess($dosboxPid);
+            $identity = $this->loadRuntimeIdentity($session);
+            $this->logger->debug("[EndSession] Fallback runtime kill for PID: $dosboxPid");
+            $killed = $this->killProcess((int)$dosboxPid, $identity);
             if ($killed) {
-                $this->logger->debug("[EndSession] DOSBox killed successfully");
+                $this->logger->debug("[EndSession] Runtime terminated");
             } else {
-                $this->logger->warning("[EndSession] Failed to kill DOSBox PID: $dosboxPid (may already be dead)");
+                $this->logger->warning("[EndSession] Runtime not terminated for PID $dosboxPid (already gone, identity mismatch, or unprovable ownership)");
             }
         }
 
@@ -989,28 +993,127 @@ class DoorSessionManager
     }
 
     /**
-     * Kill a process by PID
+     * Load the runtime identity tuple the multiplexing bridge persisted for a
+     * session at launch (data/run/door_sessions/<id>/runtime.json). Returns
+     * null when there is no manifest or it has no identity (e.g. rlogin, which
+     * has no local process).
      *
-     * @param int $pid Process ID
-     * @return bool Success
+     * @param array $session door_sessions row
+     * @return array{pid:int,pgid:int,starttime:string,bootId:?string,ownsGroup:bool}|null
      */
-    private function killProcess(int $pid): bool
+    private function loadRuntimeIdentity(array $session): ?array
     {
-        if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
-            // Windows
-            exec("taskkill /F /PID $pid 2>&1", $output, $returnCode);
-            if ($returnCode !== 0) {
-                $this->logger->warning("[KillProcess] taskkill failed for PID $pid - code: $returnCode, output: " . implode(' ', $output));
-            }
-        } else {
-            // Linux/Mac
-            exec("kill -9 $pid 2>&1", $output, $returnCode);
-            if ($returnCode !== 0) {
-                $this->logger->warning("[KillProcess] kill failed for PID $pid - code: $returnCode, output: " . implode(' ', $output));
-            }
+        $sessionId = (string)($session['session_id'] ?? '');
+        if ($sessionId === '') {
+            return null;
+        }
+        $manifestPath = __DIR__ . '/../data/run/door_sessions/' . $sessionId . '/runtime.json';
+        if (!is_file($manifestPath) || !is_readable($manifestPath)) {
+            return null;
+        }
+        $decoded = json_decode((string)file_get_contents($manifestPath), true);
+        $identity = is_array($decoded) ? ($decoded['identity'] ?? null) : null;
+        if (!is_array($identity) || empty($identity['pid'])) {
+            return null;
+        }
+        return $identity;
+    }
+
+    /**
+     * Compare a recorded runtime identity against the live process at that PID.
+     *
+     * @return string 'gone' | 'match' | 'mismatch'
+     */
+    private function verifyRuntimeIdentity(int $pid, array $identity): string
+    {
+        if ($pid < 1) {
+            return 'gone';
+        }
+        // A record from a previous boot can never be re-validated (start-time
+        // is ticks-since-boot); refuse to match it.
+        $bootId = @trim((string)@file_get_contents('/proc/sys/kernel/random/boot_id'));
+        if (!empty($identity['bootId']) && $bootId !== '' && $identity['bootId'] !== $bootId) {
+            return 'mismatch';
+        }
+        $stat = @file_get_contents("/proc/$pid/stat");
+        if ($stat === false) {
+            return 'gone';
+        }
+        $rparen = strrpos($stat, ')');
+        if ($rparen === false) {
+            return 'gone';
+        }
+        $rest = preg_split('/\s+/', trim(substr($stat, $rparen + 2)));
+        // rest[0] = field 3 (state); a zombie/dead process has already exited.
+        if (in_array($rest[0] ?? '', ['Z', 'X', 'x'], true)) {
+            return 'gone';
+        }
+        // stat field 5 (pgrp) -> rest[2]; field 22 (starttime) -> rest[19]
+        $livePgid = isset($rest[2]) ? (int)$rest[2] : -1;
+        $liveStart = $rest[19] ?? '';
+        if ((string)$liveStart === (string)($identity['starttime'] ?? '__x')
+            && $livePgid === (int)($identity['pgid'] ?? -2)) {
+            return 'match';
+        }
+        return 'mismatch';
+    }
+
+    /**
+     * Kill a managed door runtime.
+     *
+     * When an $identity record is supplied this fails closed unless the live
+     * process at $pid is provably the same runtime the bridge launched, and
+     * signals the whole owned process group when we own its leader. Without an
+     * identity record (no bridge manifest) it signals nothing -- the bridge is
+     * the authority for managed runtimes and PHP must not raw-kill an
+     * unvalidated PID.
+     *
+     * @param int $pid
+     * @param array|null $identity from loadRuntimeIdentity()
+     * @return bool true when the runtime is confirmed gone
+     */
+    private function killProcess(int $pid, ?array $identity = null): bool
+    {
+        if ($pid < 1) {
+            return false;
+        }
+        $isWindows = strtoupper(substr(PHP_OS, 0, 3)) === 'WIN';
+
+        if ($identity === null) {
+            $this->logger->warning("[KillProcess] No bridge runtime manifest for PID $pid - not signalling (fail closed)");
+            return $isWindows ? false : !$this->isProcessRunning($pid);
         }
 
-        return $returnCode === 0;
+        if ($isWindows) {
+            // No /proc on Windows; validate PID liveness only, then taskkill.
+            if (!$this->isProcessRunning($pid)) {
+                return true;
+            }
+            exec("taskkill /F /T /PID $pid 2>&1", $output, $returnCode);
+            if ($returnCode !== 0) {
+                $this->logger->warning("[KillProcess] taskkill failed for PID $pid - code: $returnCode");
+            }
+            return $returnCode === 0;
+        }
+
+        $state = $this->verifyRuntimeIdentity($pid, $identity);
+        if ($state === 'gone') {
+            return true;
+        }
+        if ($state === 'mismatch') {
+            $this->logger->warning("[KillProcess] Runtime identity mismatch for PID $pid - not signalling (fail closed)");
+            return false;
+        }
+
+        $ownsGroup = !empty($identity['ownsGroup']) && (int)$identity['pgid'] === $pid;
+        $target = $ownsGroup ? '-' . (int)$identity['pgid'] : (string)$pid;
+        exec('kill -9 ' . escapeshellarg($target) . ' 2>&1', $output, $returnCode);
+        if ($returnCode !== 0) {
+            $this->logger->warning("[KillProcess] kill -9 $target failed - code: $returnCode");
+        }
+
+        // Confirm the recorded runtime is actually gone.
+        return $this->verifyRuntimeIdentity($pid, $identity) === 'gone';
     }
 
     /**
