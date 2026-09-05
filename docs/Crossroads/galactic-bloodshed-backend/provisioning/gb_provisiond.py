@@ -181,6 +181,14 @@ async def _relay_enrol(reader: asyncio.StreamReader, writer: asyncio.StreamWrite
             except asyncio.TimeoutError:
                 await kill()
                 return False, None, "caller went idle waiting for a prompt answer", b""
+            except asyncio.IncompleteReadError:
+                # The client (gb_launcher.py) closed its connection to us
+                # mid-prompt -- a genuine disconnect, distinct from the
+                # idle timeout above. Previously uncaught here (only
+                # TimeoutError was), so it fell through to handle_client's
+                # generic Exception handler with a less specific reason.
+                await kill()
+                return False, None, "connection closed while awaiting a prompt answer", b""
             proc.stdin.write(answer)
             await proc.stdin.drain()
 
