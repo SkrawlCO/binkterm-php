@@ -172,9 +172,10 @@ binkterm-php/
 │           ├── EDIT.COM                    # DOS text editor
 │           ├── EDIT.HLP                    # Editor help file
 │           └── README.txt
-└── scripts/
-    └── cleanup_expired_dosdoor_sessions.php # Cleanup script
 ```
+
+Session cleanup is not a separate script — the multiplexing bridge owns the
+full session lifecycle (see [Doors.md](Doors.md#managed-session-termination)).
 
 ---
 
@@ -379,8 +380,9 @@ private const MAX_SESSIONS = 100;    // Maximum concurrent sessions
 
 **Session Expiration:**
 - Default: 2 hours per session
-- Configurable in `startSession()` method (line 101)
-- Enforced by cleanup script
+- Configurable in `startSession()` method
+- Expired sessions are reconciled by the bridge on the next launch and on
+  bridge restart
 
 ---
 
@@ -1138,11 +1140,10 @@ You should see authentication error (expected - test token invalid) but connecti
 
 ### Performance
 
-1. **Run cleanup script regularly** (every 10 minutes recommended)
-2. **Monitor active sessions** - adjust `DOSDOOR_MAX_SESSIONS` in `.env` based on server capacity
-3. **Set reasonable session timeouts** (2 hours default)
-4. **Use immediate disconnect mode** (`DOSDOOR_DISCONNECT_TIMEOUT=0`) to free resources quickly
-5. **Optimize FOSSIL loading** for faster door response:
+1. **Monitor active sessions** - adjust `DOSDOOR_MAX_SESSIONS` in `.env` based on server capacity
+2. **Set reasonable session timeouts** (2 hours default)
+3. **Use immediate disconnect mode** (`DOSDOOR_DISCONNECT_TIMEOUT=0`) to free resources quickly
+4. **Optimize FOSSIL loading** for faster door response:
    - Test if doors work without FOSSIL (internal comm routines)
    - Set `fossil_required: false` in manifest for doors that support it
    - Example: LORD performs significantly faster without FOSSIL
@@ -1153,8 +1154,8 @@ You should see authentication error (expected - test token invalid) but connecti
 1. **Test doors before making them public**
 2. **Document door-specific requirements** (memory, special configs)
 3. **Keep backups** of working door installations
-4. **Monitor bridge server** for crashes or errors
-5. **Set up automated cleanup** via Task Scheduler or cron
+4. **Monitor bridge server** for crashes or errors — it recovers session state
+   and reconciles orphaned runtimes on restart
 
 ---
 
@@ -1168,24 +1169,19 @@ You should see authentication error (expected - test token invalid) but connecti
 ### Useful Commands Reference
 
 ```bash
-# Check active sessions
-php test/check-db-sessions.php
+# Bridge status / PID
+cat data/run/multiplexing-server.pid
 
-# Verify processes
-php test/verify-session-procs.php
+# Bridge log (session lifecycle, reconciliation, teardown)
+tail -f data/logs/multiplexing-server.log
 
-# Clean up expired sessions
-php scripts/cleanup_expired_dosdoor_sessions.php
-
-# Kill all door processes
-kill-all-door-procs.cmd
-
-# Check WebSocket port in use
-netstat -ano | findstr :6001
-
-# Check dynamically allocated TCP ports
-netstat -ano | findstr :500
+# Check the WebSocket port in use
+ss -ltnp | grep :6001
 ```
+
+Session cleanup and orphaned-runtime recovery are handled by the bridge itself
+(see [Doors.md](Doors.md#managed-session-termination)) — there is no external
+cleanup script, and door processes must never be killed by name.
 
 ---
 

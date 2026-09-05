@@ -30,6 +30,29 @@ only then is the database session marked ended, so a replacement launch cannot
 race a still-connected backend runtime. The control socket is local runtime
 infrastructure and must not be published by a reverse proxy.
 
+**How a runtime is identified and killed.** Each DOS/native door runtime is
+launched as its own process-group leader, and the bridge records an immutable
+identity for it — PID, process-group ID, `/proc` start time, and boot ID —
+alongside the session. Termination targets that **owned process group**, so
+ordinary child processes the door spawns are cleaned up with it; nothing is
+ever matched or killed by process name. Every signal is gated on the recorded
+identity: if the PID has been reused or otherwise no longer matches, the bridge
+signals nothing and reports failure (fail-closed) rather than risk hitting an
+unrelated process. When the bridge itself restarts, it reconciles still-open
+sessions against those recorded identities, terminates only the runtimes it can
+still prove it owns, and marks the rest ended. Bridge shutdown waits for that
+teardown within a bounded budget instead of exiting out from under it, and
+repeating a termination request is harmless.
+
+**Limitation.** Owned-process-group cleanup does not contain a descendant that
+*deliberately* detaches itself — a process that calls `setsid()` or
+double-forks leaves the group and will not be terminated by the group signal.
+The expired-session sweep marks such a row ended but does not by itself prove
+the runtime died; the next bridge restart's reconciliation is what recovers a
+provably-owned orphan. Guaranteeing termination of an actively escaping
+descendant would require cgroup- or scope-based confinement, which BinktermPHP
+does not currently impose on door runtimes.
+
 ## Table of Contents
 
 - [Choosing a Door Type: DOSBox-X vs JS-DOS](#choosing-a-door-type-dosbox-x-vs-js-dos)

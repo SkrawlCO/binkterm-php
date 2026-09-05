@@ -205,19 +205,23 @@ See `configs/nodelists.json.example` for more examples.
 
 ## Step 5: Verify File System Permissions
 
-Ensure the web server has write access to the outbound spool directory:
+Ensure the account that runs BinktermPHP has write access to the outbound spool directory:
 
 ```bash
-# Check permissions
+# Check ownership and mode
 ls -la data/outbound
 
-# Fix if needed
-chmod 1777 data/outbound
-# or
-chmod a+rwxt data/outbound
+# Fix if needed: owned by the BinktermPHP user, not world-writable
+chown <binkterm-user>:<binkterm-group> data/outbound
+chmod 0755 data/outbound
 ```
 
-The `data/outbound` directory must be writable by the web server for message spooling to work.
+The `data/outbound` directory must be writable by the BinktermPHP application
+user for message spooling to work. It does **not** need to be world-writable —
+earlier revisions of this guide suggested `1777` / `a+rwxt`; use `0755` (owned
+by the application user) instead. On a host that runs other, less-trusted
+service accounts, a world-writable spool lets any of them inject packets into
+your outbound FTN mail queue.
 
 ## Step 6: Import Network-Specific Nodelists
 

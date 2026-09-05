@@ -184,6 +184,16 @@ On bare metal these run via crontab entries (see `docs/CLI.md`); in Docker they'
 
 Schedule variables take standard 5-field cron syntax. Job output is appended to its own log under `data/logs/` (e.g. `data/logs/rss_poster.log`).
 
+**Database maintenance is not in the table above.** `scripts/database_maintenance.php` (periodic Postgres cleanup — session-log retention, delivered/failed queue pruning, `VACUUM`; conservative defaults, supports `--dry-run`) is documented in [MAINTENANCE.md](MAINTENANCE.md) with its recommended daily cadence. The auto-generated `/etc/cron.d/binkterm` does not include it, so schedule it yourself — the simplest place is the host scheduler described next.
+
+**Externalizing the schedule.** You are not required to run cron inside the container. An operator managing several containers may prefer to drive maintenance from a single trusted host scheduler, invoking the same scripts at the same cadences, e.g.:
+
+```cron
+0 3 * * * cd /path/to/deploy && docker compose exec -T binkterm php scripts/database_maintenance.php >> /path/to/logs/maintenance.log 2>&1
+```
+
+If you do this, set `ENABLE_RSS_POSTER=false` / `ENABLE_ECHOMAIL_ROBOTS=false` / `ENABLE_LOGROTATE=false` so the jobs are not also run by the in-container cron.
+
 ## First Run Setup
 
 ### Option 1: Environment Variable (Recommended)
