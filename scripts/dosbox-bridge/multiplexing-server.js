@@ -1454,9 +1454,20 @@ const controlServer = net.createServer((socket) => {
 });
 
 controlServer.listen(CONTROL_SOCKET_PATH, () => {
-    // Authentication is still mandatory. World read/write permits the PHP-FPM
-    // account to connect when the bridge is supervised by a different user.
-    fs.chmodSync(CONTROL_SOCKET_PATH, 0o666);
+    // Authentication is still mandatory (every request must present a
+    // database-issued session token). Restrict the socket itself to root
+    // (owner) and the web-application group so unrelated local accounts on a
+    // shared host cannot connect at all. The bridge runs as root, so it can
+    // adjust the socket's group after bind; the target group is whichever
+    // group owns the application's .env, i.e. the web application's own group
+    // (www-data, or a dedicated app user in other deployments).
+    try {
+        const appGid = fs.statSync(path.join(BASE_PATH, '.env')).gid;
+        fs.chownSync(CONTROL_SOCKET_PATH, 0, appGid);
+    } catch (err) {
+        console.error(`[CONTROL] Could not set control socket group: ${err.message}`);
+    }
+    fs.chmodSync(CONTROL_SOCKET_PATH, 0o660);
     console.log(`[CONTROL] Listening on Unix socket ${CONTROL_SOCKET_PATH}`);
 });
 

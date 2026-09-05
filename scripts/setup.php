@@ -47,17 +47,25 @@ class SetupManager
         $baseDir = __DIR__ . '/../data';
         $outboundDir = $baseDir . '/outbound';
 
-        if (is_dir($outboundDir)) {
-            // chmod a+rwxt (1777) - world writable with sticky bit
-            $result = chmod($outboundDir, 01777);
-            if ($result) {
-                echo "✓ Set permissions on data/outbound (a+rwxt)\n";
-            } else {
-                echo "⚠ Could not set permissions on data/outbound\n";
-                echo "  Run manually: chmod a+rwxt data/outbound\n";
+        // data/outbound and its hold/ subdirectory are the FTN outbound mail
+        // queue. The web/application user owns them and is the only non-root
+        // writer; root-run BinkP daemons bypass permission checks. 0755 is
+        // sufficient -- there is no legitimate need for world or group write.
+        foreach ([$outboundDir, $outboundDir . '/hold'] as $dir) {
+            $label = str_replace($baseDir . '/', 'data/', $dir);
+            if (!is_dir($dir)) {
+                mkdir($dir, 0755, true);
+                if (!file_exists($dir . '/.gitkeep')) {
+                    file_put_contents($dir . '/.gitkeep', '');
+                }
             }
-        } else {
-            echo "⚠ data/outbound directory not found\n";
+            $result = chmod($dir, 0755);
+            if ($result) {
+                echo "✓ Set permissions on {$label} (0755)\n";
+            } else {
+                echo "⚠ Could not set permissions on {$label}\n";
+                echo "  Run manually: chmod 0755 {$label}\n";
+            }
         }
 
         // Create and set permissions for file areas directories
@@ -66,8 +74,7 @@ class SetupManager
             $baseDir . '/files/.quarantine',
             $baseDir . '/files/private',
             $baseDir . '/netmail_attachments',
-            $baseDir . '/freq_outbound',
-            $baseDir . '/outbound/hold'
+            $baseDir . '/freq_outbound'
         ];
 
         foreach ($filesDirs as $dir) {

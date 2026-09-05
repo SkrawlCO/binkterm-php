@@ -251,7 +251,11 @@ class Installer
         echo "5. Setting directory permissions...\n";
 
         $dirs = [
-            "Outbound queue" => [__DIR__ . '/../data/outbound', 01777],
+            // data/outbound is the FTN outbound mail queue. The application
+            // user owns it and is the only non-root writer; root-run BinkP
+            // daemons bypass permission checks. 0755 is sufficient -- no world
+            // or group write is required.
+            "Outbound queue" => [__DIR__ . '/../data/outbound', 0755],
             'File Base' => [__DIR__ . '/../data/files', 02777],
         ];
 
@@ -261,11 +265,12 @@ class Installer
             if (is_dir($dirparams[0])) {
 
                 $result = chmod($dirparams[0], $dirparams[1]);
+                $modeStr = sprintf('%04o', $dirparams[1]);
                 if ($result) {
-                    echo "   ✓ Set permissions on ".$dirparams[0]." (".$dirparams[1].")\n";
+                    echo "   ✓ Set permissions on ".$dirparams[0]." (".$modeStr.")\n";
                 } else {
                     echo "   ⚠ Could not set permissions on ".$dirparams[0]."\n";
-                    echo "     Run manually: chmod ".$dirparams[1]." ".$dirparams[0]."\n";
+                    echo "     Run manually: chmod ".$modeStr." ".$dirparams[0]."\n";
                 }
             } else {
                 echo "   ⚠ ".$dirparams[0]." (".$label.") directory not found\n";
