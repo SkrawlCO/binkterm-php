@@ -87,3 +87,7 @@ docker-compose.override.yml
 /supervisord.pid
 *.bak.*
 *.before-identity-placeholders
+
+# Galactic Bloodshed native-door client runtime artifacts
+native-doors/doors/galacticbloodshed/gb-client.log
+native-doors/doors/galacticbloodshed/**/__pycache__/
