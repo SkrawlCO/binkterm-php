@@ -351,20 +351,14 @@ $tests['injected mid-import failure rolls back: no receipt, no partial rows'] = 
 };
 
 // 19
-$tests['no out-of-scope transport/outbound/relay schema or code introduced'] = static function () use ($db): void {
-    foreach (['qwk_outbound_messages', 'qwk_rep_batches', 'echo_area_gates', 'echo_area_relay_rules'] as $t) {
+$tests['no relay/gating schema or code (still out of scope after the outbound slice)'] = static function () use ($db): void {
+    // The QWKnet outbound + FTP corridor is now in scope; relay/gating is not.
+    foreach (['echo_area_gates', 'echo_area_relay_rules'] as $t) {
         check($db->query("SELECT to_regclass('public.$t')")->fetchColumn() === null, "table $t exists");
     }
     check($db->query("SELECT 1 FROM information_schema.columns WHERE table_name='echoareas' AND column_name='relay_mode'")->fetchColumn() === false, 'echoareas.relay_mode added');
-    $qwkFiles = array_map('basename', glob(__DIR__ . '/../src/Qwk/*.php'));
-    sort($qwkFiles);
-    $expected = ['QwkBuilder.php', 'QwkConferenceNumberManager.php', 'QwkHttpController.php', 'QwkImportException.php',
-        'QwkInbound.php', 'QwkMailboxManager.php', 'QwkSubscriptionManager.php', 'RepProcessor.php'];
-    sort($expected);
-    check($qwkFiles === $expected, 'unexpected src/Qwk files: ' . implode(',', $qwkFiles));
-    check(!is_file(__DIR__ . '/../src/Qwk/QwkOutbound.php'), 'QwkOutbound.php present');
-    check(!is_file(__DIR__ . '/../src/Qwk/QwkPoller.php'), 'QwkPoller.php present');
-    check(!is_dir(__DIR__ . '/../src/Qwk/Transport'), 'src/Qwk/Transport present');
+    check(!is_file(__DIR__ . '/../src/Qwk/GateProcessor.php'), 'GateProcessor.php present');
+    check(!class_exists('BinktermPHP\\Echomail\\RelayPolicyManager'), 'RelayPolicyManager reintroduced');
 };
 
 $failures = 0;

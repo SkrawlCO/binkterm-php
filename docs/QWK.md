@@ -84,6 +84,32 @@ outbound REP, or relay/gating yet.
   later. Links are never made across mailboxes or conferences, and a bounded
   cycle check prevents `reply_to_id` loops.
 
+### Outbound
+
+- A **locally-authored** echomail post in an area that has a QWK subscription is
+  queued for export (`qwk_outbound_messages`, one row per subscribed mailbox,
+  state `pending`). The enqueue is wired from `MessageHandler::postEchomail()`
+  and `approveEchomail()`. Imported QWK messages and inbound FTN messages are
+  never queued (this slice is not the FTN&harr;QWK relay).
+- A poll batches all `pending` rows for a mailbox into one `qwk_rep_batches`
+  row and builds a single `<BBSID>.REP` (`<BBSID>.MSG` records + `HEADERS.DAT`).
+  Batch states: `built` &rarr; `upload_attempted` &rarr; `uploaded` / `failed`.
+  A batch's message set is frozen when it is created, and each message keeps a
+  stable MSGID, so retrying a `failed` batch rebuilds a byte-identical REP. An
+  `upload_attempted` batch (a STOR issued but never confirmed) is **not**
+  retried automatically -- it is surfaced for an operator to confirm or clear.
+- **Transport** is `BinktermPHP\Qwk\Transport\FtpStreamTransport`, built on
+  PHP's native `ftp://` stream wrapper (no `ext-ftp` needed). It is
+  **passive-mode only** and **plain FTP** -- credentials and data cross the wire
+  unencrypted, matching the Synchronet "QNET over FTP" convention these hubs
+  use. The decrypted password only ever appears in the in-memory request URL; it
+  is never logged (log lines show `ftp://<user>:***@<host>`).
+- One mailbox is run end to end with `php scripts/qwknet_poll.php <mailbox-id>`
+  (add `--dry-run` to build the REP without uploading). There is no scheduler
+  wiring.
+- The mailbox FTP password is stored `SysK`-encrypted; set it with
+  `php scripts/qwknet_set_password.php <mailbox-id>` (interactive, no-echo).
+
 QWK is an offline mail format originating from the BBS era. Instead of reading
 and writing messages while connected, you download a packet containing all new
 messages, disconnect, read and reply at your leisure in a local reader

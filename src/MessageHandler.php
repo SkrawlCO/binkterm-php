@@ -2004,6 +2004,7 @@ class MessageHandler
 
             $this->spoolOutboundEchomail($messageId, $echoareaTag, $domain);
             $this->fanoutToHubNodes($messageId);
+            $this->enqueueQwkOutbound($messageId);
         }
 
         return $messageId > 0;
@@ -2061,6 +2062,7 @@ class MessageHandler
 
         $this->spoolOutboundEchomail($messageId, $echoareaTag, $domain);
         $this->fanoutToHubNodes($messageId);
+        $this->enqueueQwkOutbound($messageId);
 
         // Check whether the author should be auto-promoted
         $userId = $message['user_id'] ? (int)$message['user_id'] : null;
@@ -3662,6 +3664,21 @@ class MessageHandler
     {
         // Check if user is admin - adjust this logic based on your user role system
         return isset($user['is_admin']) && $user['is_admin'] == 1;
+    }
+
+    /**
+     * Queue a just-created locally-authored echomail message for QWKnet export
+     * to every QWK mailbox its echo area is subscribed to. A no-op unless the
+     * area has QWK subscriptions. Enqueue failure is logged, never fatal to the
+     * post. Imported QWK / inbound FTN messages are rejected inside the service.
+     */
+    private function enqueueQwkOutbound(int $echomailId): void
+    {
+        try {
+            (new \BinktermPHP\Qwk\QwkOutboundQueue($this->db))->enqueueForEchomail($echomailId);
+        } catch (\Throwable $e) {
+            $this->logger->error('[QWK] outbound enqueue failed for echomail #' . $echomailId . ': ' . $e->getMessage());
+        }
     }
 
     /**

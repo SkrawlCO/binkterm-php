@@ -42,6 +42,8 @@ BinktermPHP includes a full suite of CLI tools for managing your system from the
 - [Import BBS List](#import-bbs-list)
 - [RLogin Synchronet Service Client](#rlogin-synchronet-service-client)
 - [QWK Networking Inbound Import](#qwk-networking-inbound-import)
+- [QWK Networking Poll](#qwk-networking-poll)
+- [QWK Mailbox Password](#qwk-mailbox-password)
 
 ## Message Posting Tool
 Post netmail or echomail from command line:
@@ -1344,3 +1346,30 @@ php scripts/qwknet_import.php <mailbox-id> <local-packet.qwk>
   counted and skipped; areas and subscriptions are never auto-created.
 - Prints a JSON result (counts only — never the mailbox password). Exit `0` on
   success or "already imported", `1` on failure, `2` on usage error.
+
+## QWK Networking Poll
+
+Run one full QWKnet exchange for a mailbox: download `<BBSID>.QWK` and import it,
+then build and upload the outbound `<BBSID>.REP` for anything queued. Passive
+FTP, plain (no FTPS). No scheduler wiring. See
+[QWK.md](QWK.md#inter-bbs-qwk-networking--inbound-import).
+
+```bash
+php scripts/qwknet_poll.php <mailbox-id> [--dry-run] [--no-download] [--no-upload]
+```
+
+- `--dry-run` / `--no-upload` build the REP but do not upload it.
+- An `upload_attempted` (uncertain) batch is reported and blocks the poll until
+  an operator confirms or clears it — it is never re-uploaded automatically.
+- Prints a JSON summary of counts and states. The decrypted mailbox password is
+  never printed or logged. Exit `0` on success, `1` if any step errored.
+
+## QWK Mailbox Password
+
+Interactively set (or replace) a QWK mailbox's FTP password. Read with terminal
+echo disabled, encrypted immediately with `SysK`, stored in
+`qwk_mailboxes.password`. Never taken from argv, never printed, never logged.
+
+```bash
+php scripts/qwknet_set_password.php <mailbox-id>
+```
