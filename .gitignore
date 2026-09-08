@@ -11,6 +11,8 @@ config/systemnews.twig
 templates/custom/*
 data/*
 !data/.gitkeep
+# SysK symmetric key for encrypt-at-rest secrets — never commit (also covered by data/* above)
+data/sysk.dat
 !data/run/
 !data/logs/
 data/logs/*
