@@ -3613,6 +3613,11 @@ class MessageHandler
 
                 // Check permissions - only allow users to delete their own messages or admins to delete any
                 $isOwner = ($message['from_name'] === $user['real_name'] || $message['from_name'] === $user['username']);
+                // A QWK-networked message is a remote post with no local author; a
+                // coincidental display-name match must never confer delete ownership.
+                if ($isOwner && $this->isQwkImportedEchomail((int)$messageId)) {
+                    $isOwner = false;
+                }
                 $isAdmin = $this->isAdmin($user);
                 
                 $this->logger->debug("Permission check for message $messageId: isOwner=$isOwner, isAdmin=$isAdmin");
@@ -3657,6 +3662,26 @@ class MessageHandler
     {
         // Check if user is admin - adjust this logic based on your user role system
         return isset($user['is_admin']) && $user['is_admin'] == 1;
+    }
+
+    /**
+     * True when an echomail row was imported from an inter-BBS QWK packet
+     * (it has a row in the qwk_inbound_messages provenance sidecar). Such
+     * messages have no local author and must not be deletable by a user whose
+     * name merely coincides with the remote sender's display name.
+     */
+    private function isQwkImportedEchomail(int $echomailId): bool
+    {
+        try {
+            $stmt = $this->db->prepare("SELECT 1 FROM qwk_inbound_messages WHERE echomail_id = ? LIMIT 1");
+            $stmt->execute([$echomailId]);
+            return (bool)$stmt->fetchColumn();
+        } catch (\Throwable $e) {
+            // Table absent (pre-migration) or transient error: fail safe by not
+            // treating the message as locally owned is handled by the caller;
+            // here we simply report "not known to be QWK-imported".
+            return false;
+        }
     }
 
     /**

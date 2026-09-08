@@ -42,6 +42,48 @@ Ctrl-A pairs receive visible markers. Raw archive members, fixed headers, and
 padded body blocks are preserved byte-for-byte. External conference numbering is
 independent of the local offline-reader conference map described below.
 
+## Inter-BBS QWK networking — inbound import
+
+This is a separate subsystem from the offline reader below: instead of a user
+downloading their own packet, BinktermPHP exchanges QWK packets with another BBS
+("QWK networking", as used by WeedNet and Synchronet's QNet). This slice covers
+**local-file inbound import only** — there is no FTP, polling, scheduler,
+outbound REP, or relay/gating yet.
+
+- **Mailboxes** (`qwk_mailboxes`) describe a remote QWK peer: its BBS/packet ID,
+  connection details, and a `SysK`-encrypted password. Configure them through
+  the admin interface (model: `BinktermPHP\Qwk\QwkMailboxManager`).
+- **Subscriptions** (`echo_area_qwk_subscriptions`) map one remote conference
+  number on one mailbox to one local echo area. Mappings are explicit — nothing
+  is auto-created. The remote conference number comes from that peer's
+  `CONTROL.DAT`; it is unrelated to `echoareas.qwk_conference_number` (the local
+  offline-reader numbering).
+- **Import** (`BinktermPHP\Qwk\QwkInbound`, CLI `scripts/qwknet_import.php`):
+  the archive is parsed by the M1 parser above, its `CONTROL.DAT` BBS ID must
+  match the mailbox's `bbs_id` (uppercased) or the whole packet is rejected
+  before any write, and each message is routed by `mailbox + conference` to a
+  subscribed echo area. Messages in unmapped conferences are counted and skipped.
+- **Replay safety**: `qwk_inbound_packets` has `UNIQUE (mailbox_id,
+  archive_sha256)` — re-importing a byte-identical packet is a clean no-op.
+  Per-message, `qwk_inbound_messages` has `UNIQUE (mailbox_id, conference_number,
+  dedupe_key)`, where `dedupe_key` is `msgid:<id>` when the packet supplies a
+  MSGID for the record and the hub-stable `qwknum:<n>` otherwise (never the
+  filename or import time). Each import is a single transaction: an unexpected
+  failure rolls back the receipt and every message.
+- **Provenance**: `qwk_inbound_messages` keeps the untruncated external MSGID and
+  reply MSGID, VIA hops, TZ token, remote message number, and record offset for
+  each imported `echomail` row.
+- **Isolation**: imported messages are inserted with `user_id` NULL and the
+  synthetic non-FTN sender address `qwk:<BBSID>` (it parses to the null FTN
+  address, so no FTN spool/export path treats it as a real node). The FTN
+  outbound spool, hub fan-out, and uplink relay are never invoked. A remote
+  display name that coincides with a local username does not confer local delete
+  ownership on an imported message.
+- **Reply linking** is by external MSGID within the same mailbox + conference,
+  with one bounded backfill pass per import for replies whose parent arrived
+  later. Links are never made across mailboxes or conferences, and a bounded
+  cycle check prevents `reply_to_id` loops.
+
 QWK is an offline mail format originating from the BBS era. Instead of reading
 and writing messages while connected, you download a packet containing all new
 messages, disconnect, read and reply at your leisure in a local reader

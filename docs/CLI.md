@@ -41,6 +41,7 @@ BinktermPHP includes a full suite of CLI tools for managing your system from the
 - [Auto Feed Poster](#auto-feed-poster)
 - [Import BBS List](#import-bbs-list)
 - [RLogin Synchronet Service Client](#rlogin-synchronet-service-client)
+- [QWK Networking Inbound Import](#qwk-networking-inbound-import)
 
 ## Message Posting Tool
 Post netmail or echomail from command line:
@@ -1324,3 +1325,22 @@ frames, holds no game state, and authorizes every request against the existing
 `GET /api/webdoor/session?game_id=openglad` authority. Deployment, limits and
 rollback: [`Crossroads/OpenGladProduction.md`](Crossroads/OpenGladProduction.md).
 Regression: `docs/Crossroads/openglad-backend/test/run-regression.sh`.
+
+## QWK Networking Inbound Import
+
+Import a QWK packet that was obtained from a QWK-networking peer by other means
+into the echo areas explicitly mapped to that mailbox's conferences. Local file
+only — no FTP, polling, or scheduler. See [QWK.md](QWK.md#inter-bbs-qwk-networking--inbound-import).
+
+```bash
+php scripts/qwknet_import.php <mailbox-id> <local-packet.qwk>
+```
+
+- The packet's `CONTROL.DAT` BBS ID must match the mailbox's `bbs_id`, or the
+  whole packet is rejected before anything is written.
+- Re-importing a byte-identical packet is a safe no-op (`status:
+  "already_imported"`).
+- Messages in conferences with no `echo_area_qwk_subscriptions` mapping are
+  counted and skipped; areas and subscriptions are never auto-created.
+- Prints a JSON result (counts only — never the mailbox password). Exit `0` on
+  success or "already imported", `1` on failure, `2` on usage error.
