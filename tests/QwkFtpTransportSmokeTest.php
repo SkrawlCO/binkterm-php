@@ -74,6 +74,22 @@ $tests['upload a REP, then download it back byte-identical'] = static function (
     }
 };
 
+$tests["regression: ftp_remote_path '/' and '' both list the root and download"] = static function () use ($t, $mailbox): void {
+    // The original bug: ftp_remote_path='/' normalised remoteBase() to a
+    // path-less ftp:// URL, and PHP's ftp wrapper returns false for scandir()
+    // on that. The runner seeds a WEEDNET.QWK at the FTP root for this case.
+    if (getenv('QWK_FTP_ROOT_PACKET') !== '1') {
+        throw new RuntimeException('regression fixture missing: QWK_FTP_ROOT_PACKET not set by the runner');
+    }
+    foreach (['/', '', '\\'] as $path) {
+        $dest = tempnam(sys_get_temp_dir(), 'rootqwk');
+        $got = $t->downloadPacket(array_merge($mailbox, ['bbs_id' => 'WEEDNET', 'ftp_remote_path' => $path]), $dest);
+        check($got === true, "downloadPacket failed for ftp_remote_path=" . var_export($path, true));
+        check(filesize($dest) > 100, "root packet too small for ftp_remote_path=" . var_export($path, true));
+        @unlink($dest);
+    }
+};
+
 $tests['download a pre-seeded WEEDNET.QWK (case-insensitive match)'] = static function () use ($t, $mailbox): void {
     $dest = tempnam(sys_get_temp_dir(), 'qwk');
     $got = $t->downloadPacket($mailbox, $dest);
@@ -98,14 +114,57 @@ $tests['passive_mode=false is rejected'] = static function () use ($t, $mailbox)
     }
 };
 
-$tests['bad credentials surface as a connection error, not a silent false'] = static function () use ($t, $mailbox): void {
+$tests['bad credentials surface as an error (that does not falsely imply unreachable)'] = static function () use ($t, $mailbox): void {
     try {
         $t->downloadPacket(array_merge($mailbox, ['password_plain' => 'wrong-' . bin2hex(random_bytes(4))]), tempnam(sys_get_temp_dir(), 'x'));
         throw new RuntimeException('expected an auth failure');
     } catch (RuntimeException $e) {
-        check(str_contains($e->getMessage(), 'login failed') || str_contains($e->getMessage(), 'inaccessible'),
-            'wrong error: ' . $e->getMessage());
+        $m = $e->getMessage();
+        check(str_contains($m, 'could not be listed'), 'wrong error: ' . $m);
+        check(!str_contains($m, 'Cannot reach'), 'error falsely implies the host is unreachable: ' . $m);
+        check(str_contains($m, 'username') && str_contains($m, 'password'), 'error does not hint at credentials: ' . $m);
     }
+};
+
+$tests['isNoPacketRefusal classifies "no new messages" as empty, but not permission/transport/login errors'] = static function (): void {
+    $m = new ReflectionMethod(FtpStreamTransport::class, 'isNoPacketRefusal');
+    $m->setAccessible(true);
+    // empty pickup -> true
+    foreach ([
+        'FTP server reports 550 No QWK packet created (no new messages)',
+        'FTP server reports 550 weednet.qwk: No such file or directory',
+        'FTP server reports 550 File not found',
+        'FTP server reports 450 No mail waiting',
+        'FTP server reports 550 Nothing to download',
+    ] as $s) {
+        check($m->invoke(null, $s) === true, 'should be empty-pickup: ' . $s);
+    }
+    // genuine failures -> false (stay errors)
+    foreach ([
+        'FTP server reports 550 Permission denied',
+        'FTP server reports 550 Access is denied',
+        'FTP server reports 425 Failed to establish connection',
+        'FTP server reports 530 Not logged in',
+        'Failed to open stream: operation failed',
+    ] as $s) {
+        check($m->invoke(null, $s) === false, 'should stay an error: ' . $s);
+    }
+};
+
+$tests['an unreadable remote packet (550 permission) stays an error, not an empty pickup'] = static function () use ($t, $mailbox): void {
+    if (getenv('QWK_FTP_DENY_PACKET') !== '1') {
+        throw new RuntimeException('regression fixture missing: QWK_FTP_DENY_PACKET not set by the runner');
+    }
+    // The runner seeds a DENY.QWK that is present in the listing but mode 000.
+    $dest = tempnam(sys_get_temp_dir(), 'deny');
+    try {
+        $t->downloadPacket(array_merge($mailbox, ['bbs_id' => 'DENY']), $dest);
+        throw new RuntimeException('expected a RETR failure for the unreadable packet');
+    } catch (RuntimeException $e) {
+        check(str_contains($e->getMessage(), 'failed after the directory listing succeeded'), 'wrong error: ' . $e->getMessage());
+        check(!str_contains($e->getMessage(), 'empty pickup'), 'unreadable packet was wrongly treated as empty pickup');
+    }
+    @unlink($dest);
 };
 
 $failures = 0;

@@ -301,6 +301,20 @@ $tests['poller: download failure sets last_error, imports nothing, does not thro
     check(str_contains($lastErr, 'fake download failure') && !str_contains($lastErr, $SECRET), 'last_error wrong: ' . $lastErr);
 };
 
+$tests['poller: empty pickup + no outbound completes as success with a clear last_error'] = static function () use ($db, $resetOutbound, $mbx): void {
+    $resetOutbound($db, $mbx);
+    // FakeTransport with no serve path -> downloadPacket() returns false (empty pickup).
+    $res = (new QwkPoller($db, new FakeTransport(null)))->poll($mbx, ['upload' => true]);
+    check($res['status'] === 'ok', 'empty pickup did not complete as success: ' . json_encode($res));
+    check($res['errors'] === [], 'errors recorded on an empty pickup: ' . json_encode($res['errors']));
+    check(($res['download']['performed'] ?? null) === true && ($res['download']['packet_received'] ?? null) === false, 'download not reported: ' . json_encode($res['download']));
+    check($res['inbound'] === null, 'inbound should be null on empty pickup');
+    check($res['outbound']['batch'] === null, 'phantom batch on empty pickup: ' . json_encode($res['outbound']));
+    check($db->query("SELECT last_error FROM qwk_mailboxes WHERE id=$mbx")->fetchColumn() === null, 'last_error not cleared on a successful empty poll');
+    check($db->query("SELECT last_polled_at IS NOT NULL FROM qwk_mailboxes WHERE id=$mbx")->fetchColumn() === 't'
+        || (bool)$db->query("SELECT last_polled_at IS NOT NULL FROM qwk_mailboxes WHERE id=$mbx")->fetchColumn(), 'last_polled_at not updated');
+};
+
 $tests['poller: inbound import + replay both run through the committed QwkInbound'] = static function () use ($db, $SPECIMEN): void {
     // fresh mailbox + area so there is nothing to clean up
     $db->exec("INSERT INTO echoareas (tag, description, is_local, is_active) VALUES ('PI_AREA', 'poller inbound', FALSE, TRUE)");

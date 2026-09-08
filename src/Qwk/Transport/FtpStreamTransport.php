@@ -44,11 +44,18 @@ class FtpStreamTransport implements QwkTransportInterface
         $base = $this->remoteBase($mailbox);
         $wantPrefix = $this->bbsId($mailbox) . '.QWK';
 
-        $entries = $this->withSocketTimeout(fn() => @scandir($base, SCANDIR_SORT_NONE, $this->context()));
+        // The trailing slash matters: PHP's ftp:// wrapper returns false for
+        // scandir() on a path-less URL, which happens when ftp_remote_path is '/'.
+        $entries = $this->withSocketTimeout(fn() => @scandir($base . '/', SCANDIR_SORT_NONE, $this->context()));
         if ($entries === false) {
-            // Could not list the remote directory. Distinguish auth from network.
+            // The listing failed. A reachable control port means it is almost
+            // certainly authentication or a directory-permission problem, not
+            // connectivity -- probe() throws with a connectivity message if the
+            // host is actually unreachable.
             $this->probe($mailbox);
-            throw new \RuntimeException('FTP login failed or the remote directory is inaccessible');
+            throw new \RuntimeException(
+                'FTP connected but the remote directory could not be listed (check the username, password, and ftp_remote_path)'
+            );
         }
 
         $match = null;
@@ -67,27 +74,43 @@ class FtpStreamTransport implements QwkTransportInterface
         $this->log('RETR ' . $this->redact($base) . '/' . $match);
         $tmp = $destPath . '.part';
 
-        $bytes = $this->withSocketTimeout(function () use ($url, $tmp): int {
+        /** @var array{bytes:int, open_error:?string} $result */
+        $result = $this->withSocketTimeout(function () use ($url, $tmp): array {
             // fopen + stream copy: does not need SIZE, which some FTP servers reject.
+            error_clear_last();
             $in = @fopen($url, 'rb', false, $this->context());
             if ($in === false) {
-                return -1;
+                return ['bytes' => -1, 'open_error' => (string)(error_get_last()['message'] ?? '')];
             }
             $out = @fopen($tmp, 'wb');
             if ($out === false) {
                 fclose($in);
-                return -1;
+                return ['bytes' => -1, 'open_error' => null];
             }
             $copied = @stream_copy_to_stream($in, $out);
             fclose($in);
             $ok = fclose($out);
 
-            return ($copied === false || $ok === false) ? -1 : $copied;
+            return ['bytes' => ($copied === false || $ok === false) ? -1 : $copied, 'open_error' => null];
         });
 
+        $bytes = $result['bytes'];
         if ($bytes < 0) {
             @unlink($tmp);
-            throw new \RuntimeException('FTP download of ' . $match . ' failed after the directory listing succeeded');
+            // A RETR that is refused *because the hub built no packet this cycle*
+            // is a normal empty pickup, not an error. Be specific: only a
+            // "no packet / no new messages / file not found" style refusal
+            // qualifies -- permission, transport, and unexpected failures stay errors.
+            if ($result['open_error'] !== null && self::isNoPacketRefusal($result['open_error'])) {
+                $this->log('remote reports no QWK packet this cycle (empty pickup)');
+                return false;
+            }
+            throw new \RuntimeException(
+                'FTP download of ' . $match . ' failed after the directory listing succeeded'
+                . ($result['open_error'] !== null && $result['open_error'] !== ''
+                    ? ': ' . $this->redact($result['open_error'])
+                    : '')
+            );
         }
         if ($bytes === 0) {
             @unlink($tmp);
@@ -214,9 +237,29 @@ class FtpStreamTransport implements QwkTransportInterface
         }
     }
 
+    /**
+     * True only when a RETR was refused because the hub has no packet to send
+     * this cycle (a normal empty pickup), not because of a permission, transport,
+     * or unexpected failure.
+     */
+    private static function isNoPacketRefusal(string $ftpError): bool
+    {
+        // Must be a "file/resource not available" FTP reply...
+        if (!preg_match('/\b(?:450|550)\b/', $ftpError)) {
+            return false;
+        }
+        // ...for a reason that is specifically "nothing to download".
+        return (bool)preg_match(
+            '/no\s+(?:new\s+message|qwk\s+packet|packet|mail|file)|'
+            . 'no\s+such\s+file|file\s+not\s+found|not\s+found|does\s+not\s+exist|'
+            . 'nothing\s+to\s+(?:send|download)/i',
+            $ftpError
+        );
+    }
+
     private function redact(string $url): string
     {
-        return (string)preg_replace('#^(ftps?://[^:/@]+):[^@]*@#', '$1:***@', $url);
+        return (string)preg_replace('#(ftps?://[^:/@\s]+):[^@\s]*@#', '$1:***@', $url);
     }
 
     private function log(string $message): void
