@@ -149,6 +149,27 @@ class GameCatalog
     }
 
     /**
+     * Normalize an optional Crossroads Experience category from a manifest's
+     * `experience.category` field.
+     *
+     * A blank/missing/non-string value defaults to 'game' (the historical
+     * behaviour for every manifest that declares nothing). Any other value is
+     * lower-cased and trimmed and passed through as-is: {@see CrossroadsShelves}
+     * treats 'gateway' specially and routes every other non-'game' category to
+     * the Utilities shelf, so new non-game categories need no change here.
+     */
+    private function normalizeExperienceCategory(mixed $category): string
+    {
+        if (!is_string($category)) {
+            return 'game';
+        }
+
+        $category = strtolower(trim($category));
+
+        return $category !== '' ? $category : 'game';
+    }
+
+    /**
      * Normalize an optional Experience conversation capability.
      *
      * Manifests may reference a chat room by local numeric room_id or by the
@@ -407,6 +428,10 @@ class GameCatalog
                 continue;
             }
 
+            $experienceBlock = is_array($manifest['experience'] ?? null)
+                ? $manifest['experience']
+                : [];
+
             $id = (string)($entry['id'] ?? $game['id'] ?? $entry['path']);
 
             if (!$this->isWebDoorDiscoverable($id, $manifest, $user)) {
@@ -454,7 +479,13 @@ class GameCatalog
                 'id' => $id,
                 'name' => $name,
                 'description' => $description,
-                'category' => 'game',
+                // A WebDoor manifest may declare a non-game Crossroads category
+                // (e.g. utility, chat) in its `experience` block; it defaults to
+                // 'game'. Shelf placement is derived from this by
+                // {@see CrossroadsShelves}.
+                'category' => $this->normalizeExperienceCategory(
+                    $experienceBlock['category'] ?? null
+                ),
 
                 'backend' => [
                     'type' => 'web',
@@ -468,7 +499,7 @@ class GameCatalog
                     'multiplayer' => $multiplayer,
                     'participant_messaging' => false,
                     'conversation' => $this->normalizeConversationCapability(
-                        $manifest['experience']['conversation'] ?? null
+                        $experienceBlock['conversation'] ?? null
                     ),
                 ],
 
@@ -574,6 +605,10 @@ class GameCatalog
                 continue;
             }
 
+            $experienceBlock = is_array($manifest['experience'] ?? null)
+                ? $manifest['experience']
+                : [];
+
             $config = JsdosDoorConfig::getGameConfig($id) ?? [];
             $path = (string)$entry['path'];
 
@@ -608,7 +643,9 @@ class GameCatalog
                 'id' => $id,
                 'name' => $name,
                 'description' => $description,
-                'category' => 'game',
+                'category' => $this->normalizeExperienceCategory(
+                    $experienceBlock['category'] ?? null
+                ),
 
                 'backend' => [
                     'type' => 'jsdos',
@@ -622,7 +659,7 @@ class GameCatalog
                     'multiplayer' => false,
                     'participant_messaging' => false,
                     'conversation' => $this->normalizeConversationCapability(
-                        $manifest['experience']['conversation'] ?? null
+                        $experienceBlock['conversation'] ?? null
                     ),
                 ],
 

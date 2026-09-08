@@ -4,7 +4,7 @@ namespace BinktermPHP;
 
 /**
  * Pure classification and composition of normalized Experience entries into the
- * three Crossroads Curated Catalog shelves.
+ * Crossroads Curated Catalog shelves.
  *
  * Input entries may be raw {@see GameCatalog} rows, {@see ExperiencePresentation}
  * view models, or route wrappers of the form `['experience_presentation' => $view,
@@ -15,33 +15,41 @@ namespace BinktermPHP;
  * Rules, in order:
  *   1. entry is curated (`curation.curated`)      -> CURATED
  *   2. else category === 'gateway'                -> GATEWAY
- *   3. else                                       -> GAME_HALL
+ *   3. else category is a non-empty, non-'game'   -> UTILITY
+ *      value (e.g. 'utility', 'chat', 'tool')
+ *   4. else (category 'game', empty, or absent)   -> GAME_HALL
  *
  * Curation deliberately wins over category: an operator may curate something
- * that is otherwise a gateway, and it then belongs on the curated shelf.
+ * that is otherwise a gateway or a utility, and it then belongs on the curated
+ * shelf. The UTILITY branch is a generic catch for any explicitly non-game,
+ * non-gateway category so new non-game categories need no code change here.
  *
  * Ordering:
  *   - CURATED   : ascending `curation.order` (the operator's list order);
  *                 entries without a numeric order sort last, then by input order.
  *   - GAME_HALL : input order preserved (caller supplies display/alpha order).
+ *   - UTILITY   : input order preserved.
  *   - GATEWAY   : input order preserved.
  */
 final class CrossroadsShelves
 {
     public const CURATED = 'curated';
     public const GAME_HALL = 'game_hall';
+    public const UTILITY = 'utility';
     public const GATEWAY = 'gateway';
 
-    /** Shelf order + default open/closed policy for Curated Catalog v1.0. */
-    private const SHELF_ORDER = [self::CURATED, self::GAME_HALL, self::GATEWAY];
+    /** Shelf order + default open/closed policy for the Curated Catalog. */
+    private const SHELF_ORDER = [self::CURATED, self::GAME_HALL, self::UTILITY, self::GATEWAY];
     private const COLLAPSIBLE = [
         self::CURATED => false,
         self::GAME_HALL => true,
+        self::UTILITY => true,
         self::GATEWAY => true,
     ];
     private const DEFAULT_EXPANDED = [
         self::CURATED => true,
         self::GAME_HALL => true,
+        self::UTILITY => true,
         self::GATEWAY => false,
     ];
 
@@ -63,7 +71,7 @@ final class CrossroadsShelves
      * The shelf a single entry belongs on.
      *
      * @param array<string,mixed> $entry
-     * @return self::CURATED|self::GAME_HALL|self::GATEWAY
+     * @return self::CURATED|self::GAME_HALL|self::UTILITY|self::GATEWAY
      */
     public static function classify(array $entry): string
     {
@@ -73,8 +81,17 @@ final class CrossroadsShelves
             return self::CURATED;
         }
 
-        if (($facet['category'] ?? null) === 'gateway') {
+        $category = $facet['category'] ?? null;
+        $category = is_string($category) ? strtolower(trim($category)) : '';
+
+        if ($category === 'gateway') {
             return self::GATEWAY;
+        }
+
+        // Any explicit non-game, non-gateway category (utility, chat, tool, ...)
+        // is a non-game destination and belongs on the Utilities shelf.
+        if ($category !== '' && $category !== 'game') {
+            return self::UTILITY;
         }
 
         return self::GAME_HALL;
@@ -84,13 +101,14 @@ final class CrossroadsShelves
      * Partition a list of entries into ordered shelves.
      *
      * @param iterable<array<string,mixed>> $entries
-     * @return array{curated:list<array<string,mixed>>,game_hall:list<array<string,mixed>>,gateway:list<array<string,mixed>>}
+     * @return array{curated:list<array<string,mixed>>,game_hall:list<array<string,mixed>>,utility:list<array<string,mixed>>,gateway:list<array<string,mixed>>}
      */
     public static function group(iterable $entries): array
     {
         $shelves = [
             self::CURATED => [],
             self::GAME_HALL => [],
+            self::UTILITY => [],
             self::GATEWAY => [],
         ];
 

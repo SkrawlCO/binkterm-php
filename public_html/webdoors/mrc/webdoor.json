@@ -9,6 +9,12 @@
     "entry_point": "index.php",
     "icon": "icon.svg"
   },
+  "experience": {
+    "category": "chat"
+  },
+  "multiplayer": {
+    "enabled": true
+  },
   "requirements": {
     "min_host_version": "1.0",
     "features": [],

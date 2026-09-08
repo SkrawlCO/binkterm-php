@@ -132,6 +132,36 @@ final class ExperiencePresentationTest extends TestCase
         self::assertSame('single_player', $view['capabilities']['player_mode']);
     }
 
+    public function testUtilityExperienceIsNeverLabelledSinglePlayer(): void
+    {
+        // A non-game, non-gateway Experience (e.g. Gemini Browser) that is not
+        // multiplayer carries no player-mode label at all — never "Single player".
+        $experience = $this->experience();
+        $experience['category'] = 'utility';
+        $experience['capabilities']['multiplayer'] = false;
+
+        $view = ExperiencePresentation::build($experience, 'web');
+
+        self::assertSame('utility', $view['category']);
+        self::assertFalse($view['capabilities']['multiplayer']);
+        self::assertNull($view['capabilities']['player_mode']);
+    }
+
+    public function testMultiplayerUtilityIsLabelledMultiplayer(): void
+    {
+        // A shared-room Experience (e.g. MRC Chat) is genuinely multiplayer and
+        // is labelled so, but is still not a "game" category.
+        $experience = $this->experience();
+        $experience['category'] = 'chat';
+        $experience['capabilities']['multiplayer'] = true;
+
+        $view = ExperiencePresentation::build($experience, 'web');
+
+        self::assertSame('chat', $view['category']);
+        self::assertTrue($view['capabilities']['multiplayer']);
+        self::assertSame('multiplayer', $view['capabilities']['player_mode']);
+    }
+
     public function testCurationDefaultsToNotCuratedWhenAbsent(): void
     {
         $view = ExperiencePresentation::build($this->experience(), 'web');

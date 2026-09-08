@@ -59,10 +59,15 @@
                                         <i class="fas fa-user me-1" aria-hidden="true"></i>
                                         {{ t('ui.webdoors.single_player', {}, locale, ['common']) }}
                                     </span>
-                                {% else %}
+                                {% elseif view.category == 'gateway' %}
                                     <span class="badge bg-secondary-subtle text-dark border">
                                         <i class="fas fa-door-open me-1" aria-hidden="true"></i>
                                         {{ t('ui.webdoors.category_gateway', {}, locale, ['common']) }}
+                                    </span>
+                                {% else %}
+                                    <span class="badge bg-secondary-subtle text-dark border">
+                                        <i class="fas fa-toolbox me-1" aria-hidden="true"></i>
+                                        {% if view.category == 'chat' %}{{ t('ui.webdoors.category_chat', {}, locale, ['common']) }}{% else %}{{ t('ui.webdoors.category_utility', {}, locale, ['common']) }}{% endif %}
                                     </span>
                                 {% endif %}
 

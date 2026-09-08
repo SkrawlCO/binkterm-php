@@ -19,11 +19,13 @@
 {% set shelf_titles = {
     'curated': 'ui.webdoors.shelf_curated_title',
     'game_hall': 'ui.webdoors.shelf_game_hall_title',
+    'utility': 'ui.webdoors.shelf_utility_title',
     'gateway': 'ui.webdoors.shelf_gateway_title'
 } %}
 {% set shelf_captions = {
     'curated': 'ui.webdoors.shelf_curated_caption',
     'game_hall': 'ui.webdoors.shelf_game_hall_caption',
+    'utility': 'ui.webdoors.shelf_utility_caption',
     'gateway': 'ui.webdoors.shelf_gateway_caption'
 } %}
 {% set shelf_title = t(shelf_titles[shelf.key]|default('ui.webdoors.experiences'), {}, locale, ['common']) %}

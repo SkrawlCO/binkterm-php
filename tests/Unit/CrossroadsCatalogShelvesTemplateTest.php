@@ -38,8 +38,13 @@ final class CrossroadsCatalogShelvesTemplateTest extends TestCase
     }
 
     /** @param array{curated?:bool,order?:int|null} $curation */
-    private function game(string $id, string $category = 'game', array $curation = [], int $playerCount = 0): array
-    {
+    private function game(
+        string $id,
+        string $category = 'game',
+        array $curation = [],
+        int $playerCount = 0,
+        ?string $playerMode = 'multiplayer'
+    ): array {
         return [
             'id' => $id,
             'launch' => ['type' => 'native', 'id' => $id, 'url' => '/games/nativedoors/' . $id],
@@ -59,7 +64,7 @@ final class CrossroadsCatalogShelvesTemplateTest extends TestCase
                 ],
                 'presentation' => ['icon_url' => '/icon/' . $id],
                 'backend' => ['type' => 'native', 'label' => 'Native'],
-                'capabilities' => ['multiplayer' => true, 'player_mode' => 'multiplayer'],
+                'capabilities' => ['multiplayer' => $playerMode === 'multiplayer', 'player_mode' => $playerMode],
                 'capacity' => ['max_sessions' => 8, 'limited' => true, 'at_capacity' => false],
                 'cost' => ['credits' => 0, 'free' => true],
                 'surfaces' => ['requested' => 'web', 'current' => 'full', 'web' => 'full', 'telnet' => 'full', 'static_launchable' => true],
@@ -207,5 +212,68 @@ final class CrossroadsCatalogShelvesTemplateTest extends TestCase
         self::assertStringNotContainsString('data-experience-filter-controls', $html);
         self::assertStringContainsString('<details class="experience-shelf-disclosure" open', $html); // game hall
         self::assertSame(7, substr_count($html, 'experience-library-card h-100'));
+    }
+
+    /** @return list<array<string,mixed>> */
+    private function catalogWithUtilities(): array
+    {
+        return [
+            $this->game('multizork', 'game', ['curated' => true, 'order' => 0]),
+            $this->game('blackjack'),
+            $this->game('lord'),
+            $this->game('gemini-browser', 'utility', [], 0, null),
+            $this->game('mrc', 'chat', [], 0, 'multiplayer'),
+            $this->game('doorparty', 'gateway', [], 0, null),
+        ];
+    }
+
+    public function testUtilityShelfRendersAsAnExpandedDisclosureWithItsOwnCopy(): void
+    {
+        $shelves = CrossroadsShelves::compose($this->catalogWithUtilities());
+        $utility = array_values(array_filter($shelves, fn ($s) => $s['key'] === 'utility'))[0];
+
+        self::assertSame(2, $utility['count']);
+        self::assertSame(
+            ['gemini-browser', 'mrc'],
+            array_column($utility['entries'], 'id')
+        );
+
+        $html = $this->renderShelf($utility);
+
+        self::assertStringContainsString('data-experience-shelf="utility"', $html);
+        self::assertStringContainsString('<details class="experience-shelf-disclosure" open data-experience-shelf-disclosure>', $html);
+        self::assertStringContainsString('ui.webdoors.shelf_utility_title', $html);
+        self::assertStringContainsString('ui.webdoors.shelf_utility_caption', $html);
+
+        // The chat Experience reads as Chat, never "Single player".
+        self::assertStringContainsString('ui.webdoors.category_chat', $html);
+        self::assertStringContainsString('ui.webdoors.category_utility', $html);
+        self::assertStringNotContainsString('ui.webdoors.single_player', $html);
+    }
+
+    public function testWebdoorsPageOrdersUtilityBetweenGameHallAndGateway(): void
+    {
+        $games = $this->catalogWithUtilities();
+        $html = $this->twig()->render('webdoors.twig', [
+            'system_name' => 'L33Test',
+            'games' => $games,
+            'catalog_shelves' => CrossroadsShelves::compose($games),
+            'your_places' => [], 'live_experiences' => [], 'recent_activity' => [],
+            'experience_states' => [], 'current_user' => null,
+            'around_active_players' => 0, 'around_active_experiences' => 0,
+            'show_global_presence_summary' => true,
+            'leaderboard' => [], 'leaderboard_month_label' => 'x',
+            'leaderboard_month_offset' => 0, 'scoreboard_expanded' => false,
+        ]);
+
+        $curated = strpos($html, 'data-experience-shelf="curated"');
+        $hall = strpos($html, 'data-experience-shelf="game_hall"');
+        $utility = strpos($html, 'data-experience-shelf="utility"');
+        $gateway = strpos($html, 'data-experience-shelf="gateway"');
+
+        self::assertNotFalse($utility);
+        self::assertGreaterThan($curated, $hall);
+        self::assertGreaterThan($hall, $utility);
+        self::assertGreaterThan($utility, $gateway);
     }
 }

@@ -73,14 +73,18 @@ final class ExperiencePresentation
         $category = self::nonEmptyString($experience['category'] ?? null) ?? 'game';
         $curation = self::curation($experience['curation'] ?? null);
         $multiplayer = !empty($experience['capabilities']['multiplayer']);
-        // Player-mode descriptor. Only Game Experiences carry a single/multi
-        // player label; a Gateway Experience is a destination whose internal
-        // session model is opaque to Crossroads, so it is neither — consumers
-        // must not fall back to "Single Player" merely because multiplayer is
-        // false. Null means "no player-mode label applies".
-        $playerMode = $category === 'game'
-            ? ($multiplayer ? 'multiplayer' : 'single_player')
-            : null;
+        // Player-mode descriptor. Only Game Experiences carry the full
+        // single/multi player label. A Gateway Experience is a destination whose
+        // internal session model is opaque to Crossroads, so it is neither —
+        // consumers must not fall back to "Single Player" for it. A non-game,
+        // non-gateway Experience (utility, chat, ...) is likewise never
+        // "Single Player", but is labelled "Multiplayer" when it genuinely is
+        // (e.g. a shared chat room). Null means "no player-mode label applies".
+        $playerMode = match (true) {
+            $category === 'game' => $multiplayer ? 'multiplayer' : 'single_player',
+            $category === 'gateway' => null,
+            default => $multiplayer ? 'multiplayer' : null,
+        };
 
         return [
             'id' => $id,

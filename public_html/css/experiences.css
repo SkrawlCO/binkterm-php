@@ -166,9 +166,14 @@
     background: var(--experience-surface-muted);
     border: 1px solid var(--experience-border);
     border-radius: 0.45rem;
-    height: 48px;
     object-fit: cover;
-    width: 48px;
+}
+
+/* Compact library card: a smaller identity icon keeps the card dense without
+   shrinking any text. The resume/live cards keep the larger 48px icon. */
+.experience-card-icon {
+    height: 40px;
+    width: 40px;
 }
 
 .experience-resume-icon {
@@ -240,8 +245,8 @@
 .experience-card-layout {
     display: flex;
     flex-direction: column;
-    gap: 0.4rem;
-    padding: 0.65rem;
+    gap: 0.25rem;
+    padding: 0.45rem 0.55rem;
 }
 
 /* Planned / web-unavailable Experiences read as visibly quieter. */
@@ -250,12 +255,13 @@
 }
 
 .experience-card-identity {
-    min-height: 48px;
+    align-items: center;
     min-width: 0;
 }
 
 .experience-card-identity h3 {
     display: -webkit-box;
+    font-size: 1rem;
     line-height: 1.2;
     overflow-wrap: anywhere;
     overflow: hidden;
@@ -285,7 +291,8 @@
 
 .experience-card-description {
     display: -webkit-box;
-    line-height: 1.3;
+    line-height: 1.25;
+    margin: 0;
     overflow: hidden;
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 2;
@@ -296,6 +303,13 @@
     display: flex;
     flex-wrap: wrap;
     gap: 0.25rem;
+}
+
+/* A multiplayer card always renders the presence token as a JS hook, hidden
+   until someone is actually online. Collapse the empty cluster so it costs no
+   vertical space (and no layout gap) until JS reveals a token. */
+.experience-metadata-cluster:not(:has(> :not(.d-none))) {
+    display: none;
 }
 
 .experience-metadata-token {
@@ -323,16 +337,48 @@
     font-weight: 600;
 }
 
-.experience-card-footer {
-    margin-top: auto;
-    min-height: 1.9rem;
-    padding-top: 0.15rem;
+/* Compact action affordance in the top-right of the identity row. The whole
+   card is the click target (Bootstrap .stretched-link on the title); this is
+   the visible echo, so it needs no footer band and adds no card height beyond
+   the 40px icon row it sits in. */
+.experience-card-action-slot {
+    align-self: center;
+    display: flex;
+    max-width: 45%;
 }
 
-.experience-card-action.btn-sm {
+.experience-card-action-badge {
+    align-items: center;
+    border-radius: 999px;
+    display: inline-flex;
     font-size: 0.75rem;
-    line-height: 1.2;
-    padding: 0.2rem 0.45rem;
+    font-weight: 600;
+    gap: 0.25rem;
+    line-height: 1.15;
+    padding: 0.12rem 0.5rem;
+    text-align: center;
+}
+
+.experience-card-action-badge--go {
+    background: color-mix(in srgb, var(--experience-accent) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--experience-accent) 42%, var(--experience-border));
+    color: var(--experience-accent);
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.experience-library-card:hover .experience-card-action-badge--go,
+.experience-library-card:focus-within .experience-card-action-badge--go {
+    background: color-mix(in srgb, var(--experience-accent) 24%, transparent);
+    border-color: var(--experience-accent);
+}
+
+.experience-card-action-badge--muted {
+    background: var(--experience-surface-muted);
+    border: 1px solid var(--experience-border);
+    color: var(--text-color-muted, #6c757d);
+    font-weight: 500;
+    white-space: normal;
 }
 
 /* At-capacity occupancy: no green "come on in" dot, muted text. */
@@ -345,8 +391,11 @@
     opacity: 0.6;
 }
 
-/* Four columns begin only when each directory card retains a readable width. */
-@media (min-width: 1320px) {
+/* Four columns on ordinary desktop widths. The compact card stays readable
+   down to ~285px (the 4-column width at this breakpoint), so it starts well
+   below the wide-desktop range; narrower viewports fall back to the Bootstrap
+   3/2/1 progression (row-cols-lg-3 / -md-2 / -1). */
+@media (min-width: 1200px) {
     .experience-library-grid > * {
         flex: 0 0 auto;
         width: 25%;
@@ -379,19 +428,63 @@
     display: none;
 }
 
-/* Curated: strengthen the SURROUNDING composition, not the cards. A quiet
-   inset panel + a single cyan top rule sets it apart; no glow, no bigger
-   cards, no "premium" language. */
+/* Curated: the featured band. Differentiate the whole shelf from the page —
+   a richer dark-teal wash, a full cyan-tinted border with a stronger top rule,
+   and a restrained depth cue — plus a differentiated card surface, so a caller
+   reads "look here first" before reading a word. Cyan is the site accent
+   (--experience-accent) reused, never a second hue; the compact card geometry
+   is unchanged. */
 .experience-shelf--curated {
-    background: color-mix(in srgb, var(--experience-accent) 5%, transparent);
-    border-top: 2px solid var(--experience-accent);
-    border-radius: 0 0 6px 6px;
-    margin-bottom: 0.35rem;
-    padding: 0.85rem 0.9rem 1rem;
+    background:
+        linear-gradient(
+            180deg,
+            color-mix(in srgb, var(--experience-accent) 15%, transparent),
+            color-mix(in srgb, var(--experience-accent) 7%, transparent) 55%,
+            color-mix(in srgb, var(--experience-accent) 4%, transparent)
+        );
+    border: 1px solid color-mix(in srgb, var(--experience-accent) 32%, var(--experience-border));
+    border-top: 3px solid var(--experience-accent);
+    border-radius: 8px;
+    box-shadow:
+        0 1px 2px color-mix(in srgb, var(--experience-accent) 12%, transparent),
+        inset 0 1px 0 color-mix(in srgb, var(--experience-accent) 18%, transparent);
+    margin-bottom: 0.5rem;
+    padding: 0.9rem 1rem 1.05rem;
+}
+
+.experience-shelf--curated .experience-shelf-heading--static {
+    align-items: center;
 }
 
 .experience-shelf--curated .experience-shelf-title {
-    color: color-mix(in srgb, var(--experience-accent) 30%, var(--text-color, #1a1a1a));
+    color: color-mix(in srgb, var(--experience-accent) 45%, var(--text-color, #1a1a1a));
+    font-size: 1.2rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+}
+
+.experience-shelf--curated .experience-shelf-title::before {
+    color: var(--experience-accent);
+    content: "\25C6"; /* ◆ */
+    font-size: 0.72em;
+    margin-right: 0.45rem;
+    vertical-align: 0.06em;
+}
+
+/* Differentiated curated-card surface: a faint accent-tinted fill, an
+   accent-leaning border, and a soft lift. Hover deepens the same cue. */
+.experience-shelf--curated .experience-library-card {
+    background: color-mix(in srgb, var(--experience-accent) 6%, var(--experience-surface));
+    border-color: color-mix(in srgb, var(--experience-accent) 38%, var(--experience-border));
+    box-shadow: 0 1px 3px color-mix(in srgb, var(--experience-accent) 14%, transparent);
+}
+
+.experience-shelf--curated .experience-library-card:hover,
+.experience-shelf--curated .experience-library-card:focus-within {
+    border-color: var(--experience-accent);
+    box-shadow:
+        0 0 0 1px var(--experience-accent),
+        0 4px 12px color-mix(in srgb, var(--experience-accent) 20%, transparent);
 }
 
 .experience-shelf-heading {
@@ -489,16 +582,6 @@
 
 .experience-scoreboard .card-header h2 {
     font-size: 1rem;
-}
-
-@media (min-width: 768px) {
-    .experience-card-identity {
-        min-height: 4.3rem;
-    }
-
-    .experience-card-description {
-        min-height: 2.6em;
-    }
 }
 
 .experience-scoreboard .card-footer {

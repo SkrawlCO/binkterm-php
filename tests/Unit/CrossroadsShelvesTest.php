@@ -41,6 +41,40 @@ final class CrossroadsShelvesTest extends TestCase
         );
     }
 
+    public function testExplicitNonGameCategoryGoesToUtility(): void
+    {
+        // Any explicit non-game, non-gateway category is a non-game destination.
+        foreach (['utility', 'chat', 'tool', 'Utility', ' communication '] as $category) {
+            self::assertSame(
+                CrossroadsShelves::UTILITY,
+                CrossroadsShelves::classify($this->entry('x', $category)),
+                "category '{$category}' should classify as UTILITY"
+            );
+        }
+    }
+
+    public function testEmptyOrGameCategoryStaysInGameHall(): void
+    {
+        self::assertSame(
+            CrossroadsShelves::GAME_HALL,
+            CrossroadsShelves::classify($this->entry('lord', 'game'))
+        );
+        self::assertSame(
+            CrossroadsShelves::GAME_HALL,
+            CrossroadsShelves::classify($this->entry('lord', ''))
+        );
+    }
+
+    public function testCurationBeatsUtilityCategory(): void
+    {
+        self::assertSame(
+            CrossroadsShelves::CURATED,
+            CrossroadsShelves::classify(
+                $this->entry('mrc', 'chat', ['curated' => true, 'order' => 0])
+            )
+        );
+    }
+
     public function testCuratedGameGoesToCurated(): void
     {
         self::assertSame(
@@ -82,6 +116,8 @@ final class CrossroadsShelvesTest extends TestCase
             $this->entry('openglad', 'game', ['curated' => true, 'order' => 2]),
             $this->entry('blackjack'),
             $this->entry('bbslinknative', 'gateway'),
+            $this->entry('gemini-browser', 'utility'),
+            $this->entry('mrc', 'chat'),
             $this->entry('multizork', 'game', ['curated' => true, 'order' => 0]),
             $this->entry('ascii-royale-m3', 'game', ['curated' => true, 'order' => 1]),
         ];
@@ -99,6 +135,11 @@ final class CrossroadsShelvesTest extends TestCase
             'game hall preserves input order'
         );
         self::assertSame(
+            ['gemini-browser', 'mrc'],
+            array_column($shelves[CrossroadsShelves::UTILITY], 'id'),
+            'utility shelf preserves input order'
+        );
+        self::assertSame(
             ['bcrgames', 'bbslinknative'],
             array_column($shelves[CrossroadsShelves::GATEWAY], 'id'),
             'gateway shelf preserves input order'
@@ -107,11 +148,12 @@ final class CrossroadsShelvesTest extends TestCase
         // Nothing lost, nothing duplicated.
         $total = count($shelves[CrossroadsShelves::CURATED])
             + count($shelves[CrossroadsShelves::GAME_HALL])
+            + count($shelves[CrossroadsShelves::UTILITY])
             + count($shelves[CrossroadsShelves::GATEWAY]);
         self::assertSame(count($entries), $total);
     }
 
-    public function testGroupAlwaysReturnsAllThreeShelfKeys(): void
+    public function testGroupAlwaysReturnsAllShelfKeys(): void
     {
         $shelves = CrossroadsShelves::group([]);
 
@@ -119,12 +161,14 @@ final class CrossroadsShelvesTest extends TestCase
             [
                 CrossroadsShelves::CURATED,
                 CrossroadsShelves::GAME_HALL,
+                CrossroadsShelves::UTILITY,
                 CrossroadsShelves::GATEWAY,
             ],
             array_keys($shelves)
         );
         self::assertSame([], $shelves[CrossroadsShelves::CURATED]);
         self::assertSame([], $shelves[CrossroadsShelves::GAME_HALL]);
+        self::assertSame([], $shelves[CrossroadsShelves::UTILITY]);
         self::assertSame([], $shelves[CrossroadsShelves::GATEWAY]);
     }
 
@@ -210,23 +254,31 @@ final class CrossroadsShelvesTest extends TestCase
 
     // ---- compose(): render-ready shelf list ----
 
-    public function testComposeReturnsThreeShelvesInDisplayOrderWithPolicy(): void
+    public function testComposeReturnsEveryShelfInDisplayOrderWithPolicy(): void
     {
         $shelves = CrossroadsShelves::compose([]);
 
-        self::assertCount(3, $shelves);
+        self::assertCount(4, $shelves);
         self::assertSame(
-            [CrossroadsShelves::CURATED, CrossroadsShelves::GAME_HALL, CrossroadsShelves::GATEWAY],
+            [
+                CrossroadsShelves::CURATED,
+                CrossroadsShelves::GAME_HALL,
+                CrossroadsShelves::UTILITY,
+                CrossroadsShelves::GATEWAY,
+            ],
             array_column($shelves, 'key')
         );
 
-        [$curated, $hall, $gateway] = $shelves;
+        [$curated, $hall, $utility, $gateway] = $shelves;
 
         self::assertFalse($curated['collapsible']);
         self::assertTrue($curated['default_expanded']);
 
         self::assertTrue($hall['collapsible']);
         self::assertTrue($hall['default_expanded']);
+
+        self::assertTrue($utility['collapsible']);
+        self::assertTrue($utility['default_expanded']);
 
         self::assertTrue($gateway['collapsible']);
         self::assertFalse($gateway['default_expanded']);
@@ -245,6 +297,8 @@ final class CrossroadsShelvesTest extends TestCase
             $this->entry('openglad', 'game', ['curated' => true, 'order' => 2]),
             $this->entry('lord'),
             $this->entry('doorparty', 'gateway'),
+            $this->entry('gemini-capsule', 'utility'),
+            $this->entry('mrc', 'chat'),
             $this->entry('multizork', 'game', ['curated' => true, 'order' => 0]),
             $this->entry('ascii-royale-m3', 'game', ['curated' => true, 'order' => 1]),
         ];
@@ -262,6 +316,8 @@ final class CrossroadsShelvesTest extends TestCase
         );
         self::assertSame(2, $byKey['game_hall']['count']);
         self::assertSame(['blackjack', 'lord'], array_column($byKey['game_hall']['entries'], 'id'));
+        self::assertSame(2, $byKey['utility']['count']);
+        self::assertSame(['gemini-capsule', 'mrc'], array_column($byKey['utility']['entries'], 'id'));
         self::assertSame(2, $byKey['gateway']['count']);
         self::assertSame(['bcrgames', 'doorparty'], array_column($byKey['gateway']['entries'], 'id'));
 

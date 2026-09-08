@@ -150,9 +150,24 @@ Curation is an editorial/operator decision, independent of backend type and of
 the game's own manifest (it is not the legacy manifest `experience.featured`
 flag). `ExperiencePresentation::build()` and `buildPublic()` pass the block
 through unchanged; it carries no viewer identity and is safe on anonymous
-surfaces. `CrossroadsShelves` derives the three Curated Catalog shelves from it
-plus `category`: an entry is `curated` if `curation.curated`, else `gateway` if
-`category === 'gateway'`, else `game_hall` (curation wins over category).
+surfaces. `CrossroadsShelves` derives the Curated Catalog shelves from it plus
+`category`, in this order (curation wins over category):
+
+1. `curated` if `curation.curated` — the featured shelf.
+2. else `gateway` if `category === 'gateway'` — roads to larger collections.
+3. else `utility` if `category` is any other non-empty, non-`game` value
+   (e.g. `utility`, `chat`) — the Utilities shelf: useful non-game
+   destinations such as the Gemini Browser, Gemini Capsule, and MRC Chat.
+4. else `game_hall` — the broader game library (the default for `game`, an
+   empty category, or no category).
+
+The `utility` branch is a generic catch: a manifest opts an Experience out of
+the Game Hall by declaring any non-`game`, non-`gateway`
+`experience.category`, and no code change to `CrossroadsShelves` is needed for
+a new non-game category. WebDoor and JS-DOS manifests carry this in their
+`experience` block (`GameCatalog` defaults it to `game`); a non-game category
+also suppresses the "Single player" player-mode label — a non-game Experience
+is labelled "Multiplayer" only when it genuinely is one.
 
 Compatibility fields are also currently retained where existing BinkTerm code
 still expects the older game/door representation.

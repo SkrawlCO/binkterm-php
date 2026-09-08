@@ -10,6 +10,9 @@
         "icon": "icon.svg",
         "screenshots": []
     },
+    "experience": {
+        "category": "utility"
+    },
     "requirements": {
         "min_host_version": "1.8.3",
         "features": [],

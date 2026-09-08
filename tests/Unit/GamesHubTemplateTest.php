@@ -517,7 +517,7 @@ final class GamesHubTemplateTest extends TestCase
         $card = $this->libraryCard($this->game('lateania', 3));
 
         self::assertStringContainsString(
-            '<a href="/experiences/lateania" class="experience-title-link">Lateania</a>',
+            '<a href="/experiences/lateania" class="experience-title-link stretched-link">Lateania</a>',
             $card
         );
         self::assertStringContainsString('experience-card-taxonomy', $card);
@@ -543,16 +543,24 @@ final class GamesHubTemplateTest extends TestCase
     {
         $card = $this->libraryCard($this->game('available-one'));
 
-        // Text-only action — no door/fuel-pump icon, no replacement icon.
+        // The whole card is the click target: the title link carries
+        // .stretched-link to the lobby, and the top-right affordance is a
+        // compact, text-only "Enter" badge (decorative, no icon).
         self::assertStringContainsString(
-            '<a href="/experiences/available-one" class="btn btn-fidonet btn-sm experience-card-action">Enter</a>',
+            '<a href="/experiences/available-one" class="experience-title-link stretched-link">Available-one</a>',
+            $card
+        );
+        self::assertStringContainsString(
+            '<span class="experience-card-action-badge experience-card-action-badge--go" aria-hidden="true">Enter</span>',
             $card
         );
         self::assertStringNotContainsString('>Play</a>', $card);
         self::assertStringNotContainsString('>Open</a>', $card);
         self::assertStringNotContainsString('fa-door-open', $card);
+        // No footer band and no icon inside the affordance.
+        self::assertStringNotContainsString('experience-card-footer', $card);
         self::assertDoesNotMatchRegularExpression(
-            '/class="btn btn-fidonet[^"]*"[^>]*>\s*<i /s',
+            '/experience-card-action-badge[^"]*"[^>]*>\s*<i /s',
             $card
         );
     }
@@ -561,12 +569,15 @@ final class GamesHubTemplateTest extends TestCase
     {
         $card = $this->libraryCard($this->game('resume-one', 2, true));
 
-        // Text-only action — no icon.
         self::assertStringContainsString(
-            '<a href="/experiences/resume-one" class="btn btn-fidonet btn-sm experience-card-action">Return</a>',
+            '<a href="/experiences/resume-one" class="experience-title-link stretched-link">Resume-one</a>',
             $card
         );
-        self::assertStringNotContainsString('>Enter</a>', $card);
+        self::assertStringContainsString(
+            '<span class="experience-card-action-badge experience-card-action-badge--go" aria-hidden="true">Return</span>',
+            $card
+        );
+        self::assertStringNotContainsString('>Enter<', $card);
         self::assertStringNotContainsString('fa-sign-in-alt', $card);
     }
 
@@ -580,13 +591,15 @@ final class GamesHubTemplateTest extends TestCase
         // Occupancy reads Full · N/M.
         self::assertStringContainsString('experience-presence--full', $card);
         self::assertMatchesRegularExpression('/Full\s*·\s*10\/10/s', $card);
-        // Action is a disabled, non-interactive "Full" — never a live link.
+        // Action is a muted, non-interactive "Full" badge (a <span>, not a link).
         self::assertStringContainsString(
-            '<span class="btn btn-outline-secondary btn-sm experience-card-action disabled" aria-disabled="true">Full</span>',
+            '<span class="experience-card-action-badge experience-card-action-badge--muted">Full</span>',
             $card
         );
+        // The card is not whole-clickable and carries no launch affordance.
+        self::assertStringNotContainsString('stretched-link', $card);
         self::assertDoesNotMatchRegularExpression(
-            '/<a [^>]*class="btn btn-fidonet[^"]*"[^>]*>(?:(?!<\/a>).)*(?:Enter|Play|Return)/s',
+            '/experience-card-action-badge--go/s',
             $card
         );
     }
@@ -600,10 +613,12 @@ final class GamesHubTemplateTest extends TestCase
 
         self::assertStringContainsString('experience-library-card--muted', $card);
         self::assertStringContainsString(
-            '<span class="btn btn-outline-secondary btn-sm experience-card-action disabled" aria-disabled="true">Coming soon</span>',
+            '<span class="experience-card-action-badge experience-card-action-badge--muted">Coming soon</span>',
             $card
         );
         self::assertStringNotContainsString('btn btn-fidonet', $card);
+        self::assertStringNotContainsString('experience-card-action-badge--go', $card);
+        self::assertStringNotContainsString('stretched-link', $card);
     }
 
     public function testLibraryCardWebUnavailableCannotLookPlayable(): void

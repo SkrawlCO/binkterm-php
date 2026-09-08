@@ -9,6 +9,9 @@
         "entry_point": "index.html",
         "icon": "icon.svg"
     },
+    "experience": {
+        "category": "utility"
+    },
     "requirements": {
         "min_host_version": "1.8.2",
         "features": ["storage"],

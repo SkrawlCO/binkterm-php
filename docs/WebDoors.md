@@ -78,6 +78,9 @@ Each WebDoor must include a `webdoor.json` manifest file in its root directory. 
   "multiplayer": {
     "enabled": false
   },
+  "experience": {
+    "category": "game"
+  },
   "config": {
     "comment": "This is a comment that is for informational use only",
     "custom_setting": "default_value"
@@ -134,6 +137,20 @@ Storage requirements for games that save user data.
 Multiplayer capabilities (reserved for future use).
 
 - `enabled` (boolean): Whether the game supports multiplayer.
+
+#### `experience` (object, optional)
+Crossroads presentation metadata for the normalized Experience contract.
+
+- `category` (string, optional): The Crossroads shelf category. Defaults to
+  `"game"` (the Game Hall). `"gateway"` places the Experience on the Gateways
+  shelf. Any other non-empty value (e.g. `"utility"`, `"chat"`) places it on
+  the **Utilities** shelf — the shelf for useful non-game destinations such as
+  the Gemini Browser, Gemini Capsule, and MRC Chat — and suppresses the
+  "Single player" label (a non-game Experience shows "Multiplayer" only when
+  `multiplayer.enabled` is `true`). This is not overridable from
+  `config/webdoors.json`; the manifest is authoritative.
+- `conversation` (object, optional): Links the Experience to a chat room.
+- `group` / `primary` / `surface` (optional): Multi-backend grouping metadata.
 
 #### `config` (object, optional)
 Default configuration values. These serve as defaults and can be overridden by the sysop in `config/webdoors.json`.
