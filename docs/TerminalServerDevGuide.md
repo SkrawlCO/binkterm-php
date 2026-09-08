@@ -356,6 +356,30 @@ asserts identical output across a `{geometry} x {charset} x {colour}` matrix.
 The abstractions themselves are covered by `TerminalCapabilitiesTest`,
 `TerminalRenderContextTest`, `TerminalOutputSinkTest`, and `GlyphPolicyTest`.
 
+### Deterministic render fixtures
+
+`tests/Unit/Support/TerminalRenderHarness.php` builds a `TerminalRenderContext`
+backed by a `BufferSink` at an arbitrary geometry / charset / colour / style /
+locale — no socket, no `BbsSession`, no auth, no database. Use it for any test
+or (future) preview that needs to render a screen off-session:
+
+```php
+$ctx = TerminalRenderHarness::geometry('132x36')->charset('cp437')->mono()->context();
+// ... render into $ctx ...
+$bytes = TerminalRenderHarness::at(132, 36)->charset('cp437')->mono()->bytes();
+```
+
+`TerminalRenderHarness::standardMatrix()` yields the 18-cell
+`{80x24, 132x36, 132x51} x {utf8, cp437, ascii} x {colour, mono}` set used by
+`tests/Unit/DeterministicRenderTest.php`, which asserts geometry-safe layout
+(no content line exceeds the terminal width), glyph + charset fallback, and
+colour behaviour through the real `TerminalBoxRenderer` / `TelnetUtils` helpers.
+
+`TerminalRenderContext::selectorRows()` is the canonical "effective rows"
+computation (SyncTERM reserves one bottom row); it agrees byte-for-byte with the
+legacy `TelnetUtils::getSelectorRows($state)`, whose call sites migrate
+opportunistically.
+
 ### Not yet wired (later stages)
 
 - `TerminalCapabilities.charsetSupport` / `.colorSupport` stay `unknown` — F1

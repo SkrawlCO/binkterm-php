@@ -106,6 +106,24 @@ final class TerminalRenderContext
 
     public function rows(): int { return $this->rows; }
 
+    /**
+     * Effective row count for selector-style full-screen widgets that anchor a
+     * status/input line to the last row.
+     *
+     * SyncTERM keeps its own local bottom status line even when the negotiated
+     * height includes that row, so one row is reserved for it. This is the
+     * canonical implementation of the concept `TelnetUtils::getSelectorRows()`
+     * computes from `$state` today; the two agree byte-for-byte and existing
+     * call sites are migrated opportunistically (see the render-seam migration
+     * rule).
+     */
+    public function selectorRows(): int
+    {
+        $reserve = $this->capabilities->isSyncTerm() ? 1 : 0;
+
+        return max(1, $this->rows - $reserve);
+    }
+
     public function effectiveCharset(): string { return $this->effectiveCharset; }
 
     public function isColorEnabled(): bool { return $this->colorEnabled; }
