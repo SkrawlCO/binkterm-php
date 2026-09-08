@@ -1,5 +1,47 @@
 # QWK Offline Mail
 
+## Local QWKnet parser proof (M1)
+
+The isolated `src/QwkNet/Parser.php` accepts an explicit local ZIP path and returns
+`Packet` / `Message` objects. It does not load the application, access a database,
+extract files, connect to a hub, or invoke the offline-reader REP posting path.
+Run the diagnostic from the repository root:
+
+```sh
+php -n -d extension=zip -d extension=iconv -d allow_url_fopen=0 tools/qwknet-preview.php /explicit/packet.qwk
+php -n -d extension=zip -d extension=iconv -d allow_url_fopen=0 tests/QwkNetParserTest.php
+```
+
+Add `--details` to the preview for display bodies, base64 original body blocks,
+and selected metadata. Add the original local WeedNet specimen path to the test
+command to enable the hash-pinned ten-message acceptance test. The specimen is
+not distributed in the repository. Diagnostics omit header passwords and sender
+IP/host fields and escape controls using JSON.
+
+Limits are constructor options: 16 MiB archive, 64 MiB total uncompressed content,
+256 root-level files, and 10,000 messages. The reader rejects unsafe/duplicate
+names, links, encrypted members, corrupt ZIP entries, truncated records,
+unmapped conferences, and conflicting metadata. CONTROL.DAT and MESSAGES.DAT are
+required. Additional components are retained verbatim; VOTING/NDX/NETFLAGS are
+not interpreted in M1.
+
+HEADERS.DAT sections are hexadecimal byte offsets to MESSAGES.DAT record headers.
+Every supplied section must resolve exactly. Conference, fixed-header name/subject
+prefixes, written wall clock, and inline IDs/timezone tokens are cross-checked
+where present. Conflicts fail rather than choosing a source. Compatible extended
+names/subjects take precedence over truncated fixed fields; IDs use extended
+values when present and inline values otherwise. Repeated import/export times
+and ExportedFrom hops remain ordered lists, with the complete raw sections also
+retained. No hop is selected as a final provenance policy.
+
+M1 supports CP437, non-QWKE packets. It normalizes a written UTC timestamp only
+from an explicit HEADERS.DAT WhenWritten offset. Inline Synchronet timezone tokens
+and packet creation time remain raw when no explicit offset is available. Known
+Ctrl-A color attributes are removed only from the display projection; unknown
+Ctrl-A pairs receive visible markers. Raw archive members, fixed headers, and
+padded body blocks are preserved byte-for-byte. External conference numbering is
+independent of the local offline-reader conference map described below.
+
 QWK is an offline mail format originating from the BBS era. Instead of reading
 and writing messages while connected, you download a packet containing all new
 messages, disconnect, read and reply at your leisure in a local reader
