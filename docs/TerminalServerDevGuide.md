@@ -29,6 +29,10 @@ Terminal-side bulletin rendering in `telnet/src/BulletinsHandler.php` follows th
 | `telnet/src/MailUtils.php` | Shared compose and drafts flow used by both netmail and echomail handlers |
 | `telnet/src/TerminalBoxRenderer.php` | Paged and framed box widgets, configurable border styles |
 | `telnet/src/TerminalMarkupRenderer.php` | Markdown and StyleCodes body renderer for message viewing |
+| `telnet/src/OutputSink.php` | Interface — the single write target for terminal rendering (`SocketSink` live, `BufferSink` for tests/preview) |
+| `telnet/src/TerminalCapabilities.php` | Immutable value object — negotiated facts about the caller's client (type, charset support, colour support, sixel) |
+| `telnet/src/TerminalRenderContext.php` | Per-session mutable holder of render inputs (geometry, effective charset/colour, style profile, locale, glyphs) + the `OutputSink` |
+| `telnet/src/GlyphPolicy.php` | Pure box-drawing glyph resolution for a charset + border style |
 
 Both daemon entry points manually `require_once` every `telnet/src/` class they use. New classes added under `telnet/src/` must be registered in both `telnet/telnet_daemon.php` and `ssh/ssh_daemon.php` — they are not Composer-autoloaded. See also `telnet/CLAUDE.md` for the include-list rule.
 
@@ -295,6 +299,55 @@ Both daemons hand off to the same `BbsSession` flow after transport setup:
 | `charset` | Effective charset: `utf8`, `cp437`, or `ascii` |
 | `ansi_color` | Whether ANSI color is enabled for this session |
 | `repaint_fn` | Callable set by the active screen; overlays call it to repaint the background on resize |
+
+---
+
+## Terminal Render Seam
+
+The render seam decouples "produce a frame" from "put bytes on a socket" so that
+**one rendering path** serves three consumers: the live Telnet/SSH session,
+deterministic render tests, and (later) a sysop preview.
+
+Three abstractions (all in `telnet/src/`, loaded by both daemons before
+`BbsSession`):
+
+| Type | Kind | Responsibility |
+|------|------|----------------|
+| `OutputSink` | interface (`write`/`flush`/`isWritable`) | the single write target. `SocketSink` wraps a live connection resource with the historical `safeWrite()` byte semantics and **never** closes it; `BufferSink` accumulates raw bytes for tests/preview. Writes-only — no semantic cursor/clear/frame API. |
+| `TerminalCapabilities` | immutable value object | negotiated **facts** about the client: `clientType`, `charsetSupport`, `colorSupport`, `sixelSupported`. Not preferences, not geometry, not effective values. Replaced (never mutated) via `with*()` when a fact resolves. `forProfile()` names are test/preview vocabulary only — never a config surface. |
+| `TerminalRenderContext` | per-session mutable holder | the single source of render inputs: geometry (mutates on NAWS), effective charset, effective colour flag, ascii-text mode, style profile, locale, border-style/glyph policy, and the `OutputSink`. Exposes `write`/`writeLine`/`colorize`/`encodeForTerminal`/`lineDrawingChars`/`t`. |
+
+**`TerminalRenderContext` must never carry:** auth/session lifecycle, session id,
+user identity / access (ACS) context, the `$state` array wholesale, API/service
+clients, a DB connection, input reading, navigation state, door state, or
+Telnet/SSH negotiation. Access-control filtering of what a caller may see is the
+job of a future declarative-navigation runtime, which hands the renderer an
+already-filtered screen model — the renderer never sees a user.
+
+### The one-renderer invariant
+
+Given the same `capabilities`, `geometry`, effective charset, colour flag, style
+profile, border style, and locale, a screen renders **byte-identically**
+regardless of whether the sink is a `SocketSink` (live), a `BufferSink` (test),
+or a `BufferSink` (preview). What may differ across the three: the sink, the
+capability profile, geometry, style/locale, and injected presentation data.
+What must **not** differ: layout maths, ANSI-aware truncation, glyph fallback,
+charset conversion, colour application, and screen-model rendering.
+
+### Migration rule
+
+- **All new rendering code targets `TerminalRenderContext` / `OutputSink`.** Do
+  not add new `$conn` / `$state`-coupled render helpers.
+- **Existing rendering code is not migrated as standalone churn** — it moves to
+  the context only when a slice already needs to touch it, and never in a way
+  that changes output bytes.
+- `BbsSession`'s render-accessor methods (`safeWrite`, `writeLine`, `colorize`,
+  `colorizeForTerminal`, `encodeForTerminal`, `getTerminalCharset`,
+  `getTerminalLineDrawingChars`, `t`) now delegate to the session's
+  `TerminalRenderContext`; their signatures and output are unchanged.
+- `TelnetUtils::safeWrite` / `TelnetUtils::colorize` / the
+  `TelnetUtils::$ansiColorEnabled` static remain as compatibility bridges for
+  their many static call sites and are kept consistent with the context.
 
 ---
 

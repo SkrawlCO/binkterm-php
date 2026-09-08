@@ -3,6 +3,13 @@
 
 require_once __DIR__ . '/../vendor/autoload.php';
 require_once __DIR__ . '/src/TelnetServer.php';
+// F1 terminal render seam — must load before BbsSession.
+require_once __DIR__ . '/src/OutputSink.php';
+require_once __DIR__ . '/src/SocketSink.php';
+require_once __DIR__ . '/src/BufferSink.php';
+require_once __DIR__ . '/src/GlyphPolicy.php';
+require_once __DIR__ . '/src/TerminalCapabilities.php';
+require_once __DIR__ . '/src/TerminalRenderContext.php';
 require_once __DIR__ . '/src/BbsSession.php';
 require_once __DIR__ . '/src/TelnetUtils.php';
 require_once __DIR__ . '/src/TerminalMarkupRenderer.php';

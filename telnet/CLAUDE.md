@@ -57,6 +57,8 @@ Two concrete shells implement the interface:
 
 **Always call `TerminalShellInterface` methods — never call `TelnetUtils` methods directly from a handler.** `TelnetUtils` is the underlying implementation used internally by `TuiShell`; `LineShell` has its own plain-text equivalents. Calling `TelnetUtils` from a handler bypasses the shell contract and breaks line-shell sessions.
 
+**New rendering code targets `TerminalRenderContext` / `OutputSink`, not `$conn` / `$state`.** See "Terminal Render Seam" in `docs/TerminalServerDevGuide.md`. Do not add new render helpers that take a raw connection resource or read geometry/charset/colour out of `$state`; get them from the session's render context. Existing helpers stay on their current signatures until a slice already needs to touch them.
+
 | Intent | Shell method |
 |--------|-------------|
 | Select from a list | `chooseFromList()` |

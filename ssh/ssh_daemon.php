@@ -5,6 +5,13 @@ require_once __DIR__ . '/../vendor/autoload.php';
 require_once __DIR__ . '/src/SshSession.php';
 require_once __DIR__ . '/src/SshStreamWrapper.php';
 require_once __DIR__ . '/src/SshServer.php';
+// F1 terminal render seam — must load before BbsSession (shared with the telnet daemon).
+require_once __DIR__ . '/../telnet/src/OutputSink.php';
+require_once __DIR__ . '/../telnet/src/SocketSink.php';
+require_once __DIR__ . '/../telnet/src/BufferSink.php';
+require_once __DIR__ . '/../telnet/src/GlyphPolicy.php';
+require_once __DIR__ . '/../telnet/src/TerminalCapabilities.php';
+require_once __DIR__ . '/../telnet/src/TerminalRenderContext.php';
 require_once __DIR__ . '/../telnet/src/BbsSession.php';
 require_once __DIR__ . '/../telnet/src/TelnetUtils.php';
 require_once __DIR__ . '/../telnet/src/TerminalMarkupRenderer.php';
