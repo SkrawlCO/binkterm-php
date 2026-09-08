@@ -349,6 +349,26 @@ charset conversion, colour application, and screen-model rendering.
   `TelnetUtils::$ansiColorEnabled` static remain as compatibility bridges for
   their many static call sites and are kept consistent with the context.
 
+Byte-parity of the delegation is enforced by
+`tests/Unit/BbsSessionRenderSeamParityTest.php`, which renders `renderBox` and
+each accessor through both the pre-context inline path and the context path and
+asserts identical output across a `{geometry} x {charset} x {colour}` matrix.
+The abstractions themselves are covered by `TerminalCapabilitiesTest`,
+`TerminalRenderContextTest`, `TerminalOutputSinkTest`, and `GlyphPolicyTest`.
+
+### Not yet wired (later stages)
+
+- `TerminalCapabilities.charsetSupport` / `.colorSupport` stay `unknown` — F1
+  only populates the client type and sixel flag as genuine facts; structured
+  charset/colour capability detection (and TTYPE cycling, CHARSET negotiation,
+  keepalive) is F3.
+- The context's geometry is synced from `$state` at render boundaries
+  (context build + main-menu-loop iteration), not directly on each NAWS event;
+  existing widgets still read `$state['rows'/'cols']`. Wiring geometry straight
+  from NAWS is F3.
+- `TerminalRenderContext.t()` is param-driven for parity; it does not yet
+  substitute the stored locale when a caller omits one.
+
 ---
 
 ## Terminal Shell Abstraction

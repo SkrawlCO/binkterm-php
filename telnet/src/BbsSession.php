@@ -87,6 +87,14 @@ class BbsSession
     private bool $ansiColorEnabled = true;
     /** @var bool Whether the terminal supports Sixel graphics (Primary DA attribute 4) */
     private bool $sixelSupported = false;
+    /**
+     * F1 render seam. Built once in run() and kept in sync with the terminal
+     * state properties above. The render-accessor methods delegate here; new
+     * rendering code should consume the context directly (see
+     * docs/TerminalServerDevGuide.md → Terminal Render Seam).
+     */
+    private ?TerminalCapabilities $capabilities = null;
+    private ?TerminalRenderContext $renderContext = null;
     private array $failedLoginAttempts = [];
     private Translator $translator;
     private string $systemLocale;
@@ -200,6 +208,27 @@ class BbsSession
                 $this->sixelSupported = (bool)$this->preAuthSession['sixel_supported'];
             }
         }
+
+        // F1 render seam: build the per-session render context now, before the
+        // first byte is written (negotiateTelnet() below is the first writer).
+        // It mirrors the terminal state properties; syncRenderContext() keeps it
+        // current whenever those properties change.
+        $seedTtype = (string)($state['terminal_type'] ?? '');
+        $this->capabilities = TerminalCapabilities::unknown()
+            ->withClientType($seedTtype !== '' ? $seedTtype : null)
+            ->withSixel($this->sixelSupported);
+        $this->renderContext = new TerminalRenderContext(
+            new SocketSink($conn),
+            $this->capabilities,
+            (int)($state['cols'] ?? 80),
+            (int)($state['rows'] ?? 24),
+            $this->terminalCharset,
+            $this->ansiColorEnabled,
+            $this->asciiTextMode,
+            TelnetUtils::getStyleProfile($state),
+            (string)($state['locale'] ?? $this->systemLocale),
+            $this->translator
+        );
 
         if ($this->debug) {
             $this->log("Connection initialized: screen size {$state['cols']}x{$state['rows']}");
@@ -805,6 +834,7 @@ class BbsSession
             } else {
                 unset($state['_shell_style_profile']);
             }
+            $this->syncRenderContext($state);
             $action = null;
 
             if ($shell instanceof TuiShell) {
@@ -986,6 +1016,9 @@ class BbsSession
      */
     public function t(string $key, string $fallback, array $params = [], string $locale = ''): string
     {
+        if ($this->renderContext !== null) {
+            return $this->renderContext->t($key, $fallback, $params, $locale);
+        }
         $result = $this->translator->translate($key, $params, $locale !== '' ? $locale : null, ['terminalserver']);
         if ($result === $key) {
             foreach ($params as $k => $v) {
@@ -1000,9 +1033,20 @@ class BbsSession
 
     /**
      * Write to the connection, suppressing notices on broken pipes.
+     *
+     * F1: routes through the session's {@see TerminalRenderContext} sink. The
+     * $conn argument is retained for signature compatibility with ~500 call
+     * sites; it is always $this->conn, which is what the SocketSink wraps. The
+     * inline loop below is a byte-identical fallback for the (not normally
+     * reachable) window before the context is built.
      */
     public function safeWrite($conn, string $data): void
     {
+        if ($this->renderContext !== null) {
+            $this->renderContext->write($data);
+            return;
+        }
+
         if (!is_resource($conn)) { return; }
         $prev = error_reporting();
         error_reporting($prev & ~E_NOTICE);
@@ -1032,6 +1076,9 @@ class BbsSession
      */
     private function colorize(string $text, string $color): string
     {
+        if ($this->renderContext !== null) {
+            return $this->renderContext->colorize($text, $color);
+        }
         if (!$this->ansiColorEnabled) {
             return $text;
         }
@@ -1045,6 +1092,9 @@ class BbsSession
      */
     public function colorizeForTerminal(string $text, string $color): string
     {
+        if ($this->renderContext !== null) {
+            return $this->renderContext->colorize($text, $color);
+        }
         if (!$this->ansiColorEnabled) {
             return $text;
         }
@@ -1603,6 +1653,7 @@ class BbsSession
         }
         $this->ansiColorEnabled = ($state['terminal_ansi_color'] ?? 'yes') !== 'no';
         TelnetUtils::setAnsiColorEnabled($this->ansiColorEnabled);
+        $this->syncRenderContext($state);
     }
 
     /**
@@ -1610,6 +1661,9 @@ class BbsSession
      */
     public function encodeForTerminal(string $text): string
     {
+        if ($this->renderContext !== null) {
+            return $this->renderContext->encodeForTerminal($text);
+        }
         return match ($this->terminalCharset) {
             'utf8'  => $text,
             'cp437' => $this->convertToCP437($text),
@@ -1643,6 +1697,10 @@ class BbsSession
      */
     private function getLineDrawingChars(): array
     {
+        if ($this->renderContext !== null) {
+            return $this->renderContext->lineDrawingChars();
+        }
+
         // Border glyphs depend on character-set capability, not color
         // preference. Monochrome UTF-8/CP437 sessions should still keep their
         // line-drawing characters; only ASCII terminals need ASCII framing.
@@ -1748,7 +1806,64 @@ class BbsSession
      */
     public function getTerminalCharset(): string
     {
+        if ($this->renderContext !== null) {
+            return $this->renderContext->effectiveCharset();
+        }
         return $this->terminalCharset;
+    }
+
+    /**
+     * The session's render context (F1). Null only before run() has built it.
+     * New rendering code should consume this directly rather than the delegating
+     * accessor methods on this class.
+     */
+    public function getRenderContext(): ?TerminalRenderContext
+    {
+        return $this->renderContext;
+    }
+
+    /**
+     * Push the current terminal-state properties into the render context.
+     * Called at the defined sync points: after applyTerminalSettings(), after
+     * recordTerminalType(), and at the top of the main menu loop. The context
+     * is a view of state this class already computed — it never computes
+     * anything itself.
+     */
+    private function syncRenderContext(array $state): void
+    {
+        if ($this->renderContext === null) {
+            return;
+        }
+        $this->renderContext->setGeometry(
+            (int)($state['cols'] ?? 80),
+            (int)($state['rows'] ?? 24)
+        );
+        $this->renderContext->setEffectiveCharset($this->terminalCharset);
+        $this->renderContext->setColorEnabled($this->ansiColorEnabled);
+        $this->renderContext->setAsciiTextMode($this->asciiTextMode);
+        if (isset($state['locale']) && $state['locale'] !== '') {
+            $this->renderContext->setLocale((string)$state['locale']);
+        }
+        $this->renderContext->setStyleProfile(TelnetUtils::getStyleProfile($state));
+        $this->refreshCapabilities($state);
+    }
+
+    /**
+     * Rebuild the immutable capabilities value from currently-known facts.
+     * F1 populates only genuine negotiated facts: the reported client type and
+     * sixel support. Structured charset/colour capability detection is a later
+     * stage (F3); those fields remain 'unknown' until then.
+     */
+    private function refreshCapabilities(array $state): void
+    {
+        if ($this->renderContext === null) {
+            return;
+        }
+        $ttype = (string)($state['terminal_type'] ?? '');
+        $this->capabilities = $this->capabilities
+            ->withClientType($ttype !== '' ? $ttype : null)
+            ->withSixel($this->sixelSupported);
+        $this->renderContext->setCapabilities($this->capabilities);
     }
 
     /**
@@ -3921,6 +4036,7 @@ class BbsSession
             $this->terminalCharset = 'ascii';
         }
         $this->applyTerminalQuirks($conn, $normalized);
+        $this->syncRenderContext($state);
         $this->log("TTYPE detected: {$normalized}");
     }
 
