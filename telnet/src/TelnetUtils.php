@@ -105,6 +105,19 @@ class TelnetUtils
     private static ?string $csrfToken = null;
 
     /**
+     * Frame-coalescing scope for the legacy {@see safeWrite()} render path
+     * (boxed dialogs, selectable lists, the message viewer). Between
+     * {@see beginFrame()} and the matching {@see endFrame()}, safeWrite() bytes
+     * accumulate and are delivered to the socket in a single write so the screen
+     * paints atomically instead of line by line. Ref-counted; only the outermost
+     * endFrame() flushes. The bytes are byte-for-byte identical to the unframed
+     * sequence — only their delivery changes. Never open a frame around a prompt
+     * that then blocks for input, a realtime/chat stream, or door/raw traffic.
+     */
+    private static ?string $frameBuf = null;
+    private static int $frameDepth = 0;
+
+    /**
      * Record the connecting user's real IP and the shared terminal secret so
      * subsequent apiRequest() calls carry X-Binkterm-Client-IP / -Client-Token.
      */
@@ -536,6 +549,10 @@ class TelnetUtils
      */
     public static function safeWrite($conn, string $data): void
     {
+        if (self::$frameBuf !== null) {
+            self::$frameBuf .= $data;
+            return;
+        }
         if (!is_resource($conn)) {
             return;
         }
@@ -552,6 +569,64 @@ class TelnetUtils
         }
         @fflush($conn);
         error_reporting($prev);
+    }
+
+    /**
+     * Open a frame scope for the legacy safeWrite() render path so a whole
+     * boxed screen paints in one write. Nests (ref-counted). Pair every call
+     * with {@see endFrame()} via try/finally so an exception cannot strand the
+     * buffer. See the $frameBuf docblock for what must NOT be wrapped.
+     */
+    public static function beginFrame(): void
+    {
+        if (self::$frameDepth === 0) {
+            self::$frameBuf = '';
+        }
+        self::$frameDepth++;
+    }
+
+    /**
+     * Close a frame scope. The outermost call writes the accumulated bytes to
+     * $conn in a single {@see safeWrite()} and leaves framing mode.
+     *
+     * @param resource $conn
+     */
+    public static function endFrame($conn): void
+    {
+        if (self::$frameDepth === 0) {
+            return; // unbalanced — ignore
+        }
+        if (--self::$frameDepth > 0) {
+            return; // still nested
+        }
+        $buf = (string) self::$frameBuf;
+        self::$frameBuf = null;
+        if ($buf !== '') {
+            self::safeWrite($conn, $buf);
+        }
+    }
+
+    /**
+     * Wrap a screen-render callable so each invocation delivers its whole frame
+     * in one write. The wrapper is drop-in: same arguments, same return value.
+     * try/finally guarantees the frame is flushed even if the render throws.
+     *
+     * Use this only for a self-contained repaint. A render that then blocks for
+     * input is fine (the frame flushes before the read); a loop that streams
+     * live output is not.
+     *
+     * @param resource $conn
+     */
+    public static function framed($conn, callable $render): callable
+    {
+        return static function (...$args) use ($conn, $render) {
+            self::beginFrame();
+            try {
+                return $render(...$args);
+            } finally {
+                self::endFrame($conn);
+            }
+        };
     }
 
     /**
@@ -1799,7 +1874,7 @@ class TelnetUtils
         // to call both from within the key loop and as $state['repaint_fn'] from overlays.
         // Mutable variables ($cols, $termRows, etc.) are captured by reference so that
         // the key loop sees up-to-date values after each render.
-        $render = function() use (
+        $render = self::framed($conn, function() use (
             $conn, &$state,
             &$rows, &$title, &$statusLine, &$selectedIndex, &$selectedRows,
             &$cols, &$termRows, &$inputRow, &$maxDisplayRows,
@@ -1821,7 +1896,7 @@ class TelnetUtils
             self::safeWrite($conn, "\033[{$inputRow};1H\033[K");
             self::safeWrite($conn, $statusLine . "\r");
             self::safeWrite($conn, "\033[{$inputRow};1H");
-        };
+        });
 
         // Register as the active repaint function so overlays shown by the caller
         // after this function returns can repaint the list on resize.  Intentionally
@@ -2179,7 +2254,7 @@ class TelnetUtils
             return max(0, min($selectedIndex, $count - 1));
         };
 
-        $render = function() use (
+        $render = self::framed($conn, function() use (
             $conn, &$state, &$sourceRows, &$blocks, &$title, &$selectedIndex, &$cols, &$termRows, &$inputRow, &$maxDisplayRows, &$statusLine,
             $statusBar, $listStartRow, $computeOffset, $rebuildBlocks, $colorScheme
         ): void {
@@ -2249,7 +2324,7 @@ class TelnetUtils
             self::safeWrite($conn, "\033[{$inputRow};1H\033[K");
             self::safeWrite($conn, $statusLine . "\r");
             self::safeWrite($conn, "\033[{$inputRow};1H");
-        };
+        });
 
         $state['repaint_fn'] = $render;
         $render();
@@ -2962,7 +3037,7 @@ class TelnetUtils
         $hint  = (string)($scheme['hint'] ?? self::ANSI_YELLOW);
         $choiceKey = (string)($scheme['choice_key'] ?? (self::ANSI_RED . self::ANSI_BOLD));
         $choiceLabel = (string)($scheme['choice_label'] ?? $body);
-        $renderDialog = function () use (
+        $renderDialog = self::framed($conn, function () use (
             $conn,
             &$state,
             $title,
@@ -3102,7 +3177,7 @@ class TelnetUtils
             }
 
             self::safeWrite($conn, "\033[?25h");
-        };
+        });
 
         $renderDialog();
 
@@ -3200,7 +3275,7 @@ class TelnetUtils
             return [$startRow, $startCol, $innerWidth, $hasPrompt];
         };
 
-        $render = function() use (
+        $render = self::framed($conn, function() use (
             $conn, &$state, &$value, &$cursorPos,
             $title, $prompt,
             $tl, $tr, $bl, $br, $hz, $vt,
@@ -3305,7 +3380,7 @@ class TelnetUtils
             self::safeWrite($conn, "\033[{$inputRow};{$cursorCol}H\033[?25h");
 
             return [$inputRow, $startCol, $innerWidth];
-        };
+        });
 
         $render();
 

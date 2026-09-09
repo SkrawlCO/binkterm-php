@@ -69,10 +69,17 @@ final class NavigationScreenRenderer
         $cols = max(20, $ctx->cols());
         $rows = max(6, $ctx->selectorRows());
 
-        $ctx->write($clear ? "\033[2J\033[H" : "\033[H");
+        // One screen, one write: paint the whole frame atomically rather than
+        // line by line (which can tear on a high-latency link).
+        $ctx->beginFrame();
+        try {
+            $ctx->write($clear ? "\033[2J\033[H" : "\033[H");
 
-        foreach ($this->composeLines($ctx, $screen, $cols, $rows, $showHotkeys, $cursor) as $line) {
-            $ctx->writeLine($this->clip($line, $cols));
+            foreach ($this->composeLines($ctx, $screen, $cols, $rows, $showHotkeys, $cursor) as $line) {
+                $ctx->writeLine($this->clip($line, $cols));
+            }
+        } finally {
+            $ctx->endFrame();
         }
     }
 

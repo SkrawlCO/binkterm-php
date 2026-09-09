@@ -190,6 +190,23 @@ final class TerminalRenderContext
     }
 
     /**
+     * Open a frame scope on the sink so a whole screen is delivered in one
+     * write instead of line by line. Nests (ref-counted). Must wrap only a
+     * self-contained render — never a prompt that then blocks for input or any
+     * live/interactive stream. See {@see OutputSink::beginFrame()}.
+     */
+    public function beginFrame(): void
+    {
+        $this->sink->beginFrame();
+    }
+
+    /** Close a frame scope; the outermost call flushes the accumulated bytes. */
+    public function endFrame(): void
+    {
+        $this->sink->endFrame();
+    }
+
+    /**
      * Wrap text in an ANSI colour sequence, honouring the effective colour flag.
      * Byte-identical to the historical `BbsSession::colorize()` /
      * `TelnetUtils::colorize()`.

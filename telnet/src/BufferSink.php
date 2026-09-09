@@ -28,6 +28,16 @@ final class BufferSink implements OutputSink
         // No downstream buffer.
     }
 
+    public function beginFrame(): void
+    {
+        // Already an in-memory accumulator — framing changes nothing.
+    }
+
+    public function endFrame(): void
+    {
+        // See beginFrame().
+    }
+
     public function isWritable(): bool
     {
         return true;

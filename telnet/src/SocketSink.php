@@ -22,6 +22,12 @@ final class SocketSink implements OutputSink
     /** @var resource|mixed The connection resource; lifecycle owned by the caller. */
     private $conn;
 
+    /** Bytes accumulated while inside a frame scope (see {@see beginFrame()}). */
+    private string $frameBuf = '';
+
+    /** Frame-scope nesting depth; only the outermost {@see endFrame()} flushes. */
+    private int $frameDepth = 0;
+
     /**
      * @param resource $conn A bidirectional stream resource. May become invalid
      *                       during the session; every method tolerates that.
@@ -33,7 +39,18 @@ final class SocketSink implements OutputSink
 
     public function write(string $bytes): void
     {
-        if (!is_resource($this->conn)) {
+        if ($this->frameDepth > 0) {
+            $this->frameBuf .= $bytes;
+            return;
+        }
+
+        $this->rawWrite($bytes);
+    }
+
+    /** Unbuffered write with the historical safeWrite() byte semantics. */
+    private function rawWrite(string $bytes): void
+    {
+        if ($bytes === '' || !is_resource($this->conn)) {
             return;
         }
 
@@ -52,6 +69,25 @@ final class SocketSink implements OutputSink
 
         @fflush($this->conn);
         error_reporting($prev);
+    }
+
+    public function beginFrame(): void
+    {
+        $this->frameDepth++;
+    }
+
+    public function endFrame(): void
+    {
+        if ($this->frameDepth === 0) {
+            return; // unbalanced endFrame() — ignore
+        }
+        if (--$this->frameDepth > 0) {
+            return; // still nested
+        }
+
+        $buf = $this->frameBuf;
+        $this->frameBuf = '';
+        $this->rawWrite($buf);
     }
 
     public function flush(): void
