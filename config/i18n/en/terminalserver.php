@@ -286,6 +286,9 @@ return [
     // --- Netmail ---
     'ui.terminalserver.netmail.no_messages'            => 'No netmail messages.',
     'ui.terminalserver.netmail.no_sent_messages'       => 'No sent netmail messages.',
+    'ui.terminalserver.netmail.empty_title'            => 'Netmail',
+    'ui.terminalserver.netmail.empty_action_compose'   => 'Compose',
+    'ui.terminalserver.netmail.empty_action_back'      => 'Back',
     'ui.terminalserver.netmail.inbox_header'           => 'Netmail Inbox (page {page}/{total}):',
     'ui.terminalserver.netmail.sent_header'            => 'Netmail Sent (page {page}/{total}):',
     'ui.terminalserver.netmail.header'                 => 'Netmail (page {page}/{total}):',

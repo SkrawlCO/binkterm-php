@@ -292,6 +292,9 @@ return [
     // --- Netmail ---
     'ui.terminalserver.netmail.no_messages'            => 'Keine Netmail-Nachrichten.',
     'ui.terminalserver.netmail.no_sent_messages'       => 'Keine gesendeten Netmail-Nachrichten.',
+    'ui.terminalserver.netmail.empty_title'            => 'Netmail',
+    'ui.terminalserver.netmail.empty_action_compose'   => 'Verfassen',
+    'ui.terminalserver.netmail.empty_action_back'      => 'Zurück',
     'ui.terminalserver.netmail.inbox_header'           => 'Netmail Posteingang (Seite {page}/{total}):',
     'ui.terminalserver.netmail.sent_header'            => 'Gesendete Netmail (Seite {page}/{total}):',
     'ui.terminalserver.netmail.header'                 => 'Netmail (Seite {page}/{total}):',

@@ -107,7 +107,34 @@ class NetmailHandler
                     continue;
                 }
 
-                TelnetUtils::writeLine($conn, $this->server->t($noMsgKey, $noMsgFallback, [], $locale));
+                // Netmail is a destination, not "show unread netmail if any".
+                // An empty inbox must land on a stable, intentional screen —
+                // with the same compose affordance the populated list has and a
+                // deliberate way back — never a flash-and-return that makes the
+                // destination look broken.
+                $emptyChoice = $shell->promptKey(
+                    $conn,
+                    $state,
+                    $this->server->t('ui.terminalserver.netmail.empty_title', 'Netmail', [], $locale),
+                    $this->server->t($noMsgKey, $noMsgFallback, [], $locale),
+                    ['c', 'q'],
+                    [
+                        'labels' => [
+                            'c' => $this->server->t('ui.terminalserver.netmail.empty_action_compose', 'Compose', [], $locale),
+                            'q' => $this->server->t('ui.terminalserver.netmail.empty_action_back', 'Back', [], $locale),
+                        ],
+                        'default' => 'q',
+                    ]
+                );
+                if ($emptyChoice === 'c') {
+                    $this->compose($conn, $state, $session, null);
+                    // Re-fetch: a self-addressed local message would now show;
+                    // otherwise the empty state is presented again.
+                    $page              = 1;
+                    $selectedIndex     = 0;
+                    $selectedMessageId = null;
+                    continue;
+                }
                 return;
             }
 
@@ -888,10 +915,16 @@ class NetmailHandler
     /**
      * Fetch a page of netmail messages.
      *
+     * The inbox folder maps to filter 'all' (every received netmail), never
+     * 'unread' — "Netmail" is a destination, not "show unread netmail if any".
+     * Read/unread state must not change whether the destination is reachable.
+     *
+     * `protected` so tests can substitute a deterministic page source.
+     *
      * @param string $folder 'inbox' or 'sent'
      * @return array [messages, totalPages]
      */
-    private function fetchMessagesPage(string $session, int $page, int $perPage, string $folder = 'inbox', string $sort = 'date_desc'): array
+    protected function fetchMessagesPage(string $session, int $page, int $perPage, string $folder = 'inbox', string $sort = 'date_desc'): array
     {
         $filter = $folder === 'sent' ? 'sent' : 'all';
         $sort = $this->normalizeSort($sort);
@@ -915,7 +948,7 @@ class NetmailHandler
      *
      * @return array{page:int, selected_message_id:?int, folder:string, sort:string}
      */
-    private function loadSavedListState(string $session): array
+    protected function loadSavedListState(string $session): array
     {
         $response = TelnetUtils::apiRequest(
             $this->apiBase,
@@ -943,7 +976,7 @@ class NetmailHandler
     /**
      * Save netmail list state to user meta.
      */
-    private function saveListState(string $session, int $page, ?int $selectedMessageId, string $folder = 'inbox', string $sort = 'date_desc', ?string $csrfToken = null): void
+    protected function saveListState(string $session, int $page, ?int $selectedMessageId, string $folder = 'inbox', string $sort = 'date_desc', ?string $csrfToken = null): void
     {
         $payload = [
             'terminal_netmail_page' => max(1, $page),
