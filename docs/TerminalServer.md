@@ -63,6 +63,11 @@ Custom shells can be added by placing plugin definition files in
 - Who's Online display
 - Reusable public profile viewer for terminal user lookups
 - Full-screen message editor with cursor navigation and line editing controls
+- Consistent single-line text entry: UTF-8-safe, cursor keys (Left/Right/Home/End)
+  and backspace/delete, and — where a field opts in (e.g. search) — Up/Down recall
+  of earlier entries from the current session. Pasted multi-line text stops at the
+  first line instead of spilling onto the next screen; password prompts keep no
+  history.
 - ANSI color and screen-aware rendering (auto-detected on Telnet via TTYPE negotiation)
 - Sixel image rendering for terminal clients that support it
 - Per-user localization (same i18n flow used by web/API)

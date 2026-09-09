@@ -705,6 +705,36 @@ $statusLine = TelnetUtils::buildStatusBar($segments, $width);
 
 If a widget genuinely lacks a capability needed by multiple features, extend it in `TelnetUtils` — do not work around it in a handler. When adding or extending a widget, update the table in `telnet/CLAUDE.md`.
 
+### Line input
+
+All editable single-line input edits through one shared, UTF-8-codepoint state
+machine, `TerminalLineEditor` (`telnet/src/TerminalLineEditor.php`) — never a
+per-handler key switch. It is pure (no socket) and handles append, backspace,
+forward-delete, Left/Right/Home/End (+ Ctrl-A/E), a max length, and
+submit/cancel. `TelnetUtils::showInputDialog()` and `LineShell::readPromptLine()`
+are its adapters.
+
+- Read keys for a text field with `BbsSession::readLineKeyWithIdleCheck()`, **not**
+  `readKeyWithIdleCheck()` — the latter applies a menu-style "swallow a queued
+  line terminator after a printable" peek that eats an LF a text field needs to
+  submit on. `readLineKeyWithIdleCheck()` still collapses a real CR-LF into one
+  ENTER.
+- `readRawChar()` reassembles a UTF-8 lead byte and its continuation bytes into
+  one codepoint; the key normalisers emit `CHAR:<codepoint>`. Editing is by
+  codepoint, so a backspace never bisects a multi-byte character.
+- After a line reader accepts or cancels, it calls
+  `BbsSession::drainPendingInput()` (non-blocking, IAC/NAWS-aware) to discard
+  anything still queued behind the terminator — a multi-line paste, or a
+  `hotkey<Enter>` burst — so it cannot run against the next screen or a password
+  field.
+- History: opt-in only. `showInputDialog()` takes an `history_key` option;
+  `readPromptLine()` reads `$state['line_prompt_history_key']`. Recall is
+  `TerminalLineHistory` — bounded (30), per-session, non-persistent, walked with
+  Up/Down. A masked prompt (`$echo === false`) is never given a history key.
+- Single-key surfaces (menus, the lightbar, message-viewer controls, Newscan
+  interstitials), the full-screen compose editor, and door/raw input do **not**
+  use this — they are not line input.
+
 ### Status Bar Discipline
 
 The bottom status bar has limited width. Keep it to the **most-used primary actions only** — typically scroll, prev/next, reply, and quit. Every other key belongs exclusively in the Ctrl-K help overlay.
