@@ -17,9 +17,16 @@ final class NavigationConfigTest extends TestCase
 
     protected function setUp(): void
     {
+        // Force Config to parse the real .env first, then neutralise the keys we
+        // control. Setting them to '' (rather than unset) is order-independent:
+        // Config::loadEnvFile() only re-populates keys that are ABSENT from
+        // $_ENV, so a present-but-empty key stays empty even if this test runs
+        // before anything else has warmed the config loader — important now that
+        // the live .env carries TERMINAL_NAV_RUNTIME=on.
+        \BinktermPHP\Config::env('__nav_test_warm__');
         foreach (['TERMINAL_NAV_RUNTIME', 'TERMINAL_NAV_CONFIG'] as $k) {
             $this->envBackup[$k] = $_ENV[$k] ?? null;
-            unset($_ENV[$k]);
+            $_ENV[$k] = '';
         }
         NavigationConfig::reset();
     }

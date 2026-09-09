@@ -159,21 +159,22 @@ final class NavigationRuntime
         if (str_starts_with($token, 'CHAR:')) {
             $ch = mb_strtolower(substr($token, 5));
 
-            // A hotkey the current screen actually defines always wins — this is
-            // how an explicit "[Q] Log Off" item (or any other letter) works.
+            // Precedence: a screen-local explicit item hotkey ALWAYS wins over a
+            // framework convenience alias. This is how an explicit "[B] BBS
+            // Directory" or "[Q] Log Off" item works.
             $item = $screen->itemForHotkey($ch);
             if ($item !== null) {
                 return ['do' => 'select', 'cursor' => $cursor, 'item' => $item];
             }
 
-            // R5's own fallback navigation letters, only when the screen does not
-            // bind them: B = Back, H = Home. Q is deliberately NOT a global key —
-            // it terminates only via a screen's own quit-action item, so a stray
-            // 'q' (e.g. leaked from a delegated legacy screen) does nothing here.
-            if ($ch === 'b') {
+            // Convenience navigation aliases — only when the screen does not bind
+            // the letter to any item (selectable or not). B = Back, H = Home.
+            // Q is deliberately never a global alias (see the Q-ownership fix):
+            // it terminates only via a screen's own quit-action item.
+            if ($ch === 'b' && !$screen->bindsHotkey('b')) {
                 return ['do' => 'back', 'cursor' => $cursor];
             }
-            if ($ch === 'h' && $screen->homeAvailable) {
+            if ($ch === 'h' && $screen->homeAvailable && !$screen->bindsHotkey('h')) {
                 return ['do' => 'home', 'cursor' => $cursor];
             }
         }

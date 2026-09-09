@@ -370,4 +370,104 @@ final class NavigationRuntimeTest extends TestCase
             self::assertSame('Main', $this->rendered[count($this->rendered) - 1], "back key {$backKey}: returned to root");
         }
     }
+
+    // ===== shortcut-alias vs explicit item-hotkey precedence ================
+    //
+    // Live: the Explore submenu has "[B] BBS Directory", but the footer still
+    // said "B/Left Back" and B was expected to be Back. An explicit item hotkey
+    // must win over the framework's convenience alias, and the footer must not
+    // advertise the conflicting alias.
+
+    /** A submenu that binds B and H to items, mirroring the live "Explore" node. */
+    private function collidingDefinition(): NavigationDefinition
+    {
+        return NavigationDefinition::fromArray([
+            'schema' => 1, 'id' => 'collide', 'root' => 'main',
+            'nodes' => [
+                ['id' => 'main', 'label_fallback' => 'Main', 'items' => [
+                    ['id' => 'explore', 'label_fallback' => 'Explore', 'hotkey' => 'x', 'submenu' => 'explore'],
+                    ['id' => 'quit', 'label_fallback' => 'Log Off', 'hotkey' => 'q', 'action' => 'quit'],
+                ]],
+                ['id' => 'explore', 'label_fallback' => 'Explore', 'items' => [
+                    ['id' => 'bbslist', 'label_fallback' => 'BBS Directory', 'hotkey' => 'b', 'action' => 'bbslist'],
+                    ['id' => 'sub', 'label_fallback' => 'Deeper', 'hotkey' => 'd', 'submenu' => 'deeper'],
+                ]],
+                ['id' => 'deeper', 'label_fallback' => 'Deeper', 'items' => [
+                    ['id' => 'homeitem', 'label_fallback' => 'Homestead', 'hotkey' => 'h', 'action' => 'settings'],
+                ]],
+            ],
+        ]);
+    }
+
+    public function testExplicitBHotkeyWinsOverTheBackAlias(): void
+    {
+        // On "explore", B must activate BBS Directory, NOT go Back.
+        $exit = $this->drive($this->collidingDefinition(), [
+            'CHAR:x',   // main -> explore
+            'CHAR:b',   // must select BBS Directory (not Back)
+            'CHAR:d',   // still on explore afterwards -> go Deeper
+            'LEFT',     // back to explore
+            'LEFT',     // back to main
+            'CHAR:q',   // quit
+        ]);
+
+        self::assertSame(NavigationRuntime::EXIT_QUIT, $exit);
+        self::assertSame(['bbslist'], $this->invoked, 'B activated the item, it did not go Back');
+        // Screens rendered: Main, Explore (x2, once after the action), Deeper, Explore, Main
+        self::assertContains('Deeper', $this->rendered, 'D still worked from explore, so B did not leave the screen');
+        self::assertSame('Main', $this->rendered[count($this->rendered) - 1]);
+    }
+
+    public function testBackStillWorksViaLeftAndEscWhenBIsAnItemHotkey(): void
+    {
+        foreach (['LEFT', 'ESC'] as $backKey) {
+            $exit = $this->drive($this->collidingDefinition(), ['CHAR:x', $backKey, 'CHAR:q']);
+            self::assertSame(NavigationRuntime::EXIT_QUIT, $exit, "back via {$backKey}");
+            self::assertSame([], $this->invoked, "back via {$backKey}: nothing activated");
+            self::assertSame('Explore', $this->rendered[1] ?? null, "back via {$backKey}: entered explore");
+            self::assertSame('Main', $this->rendered[count($this->rendered) - 1], "back via {$backKey}: returned to root");
+        }
+    }
+
+    public function testExplicitHHotkeyWinsOverTheHomeAlias(): void
+    {
+        // "deeper" is at depth 3 (Home would normally be available) and binds H.
+        // Pressing H must activate the item, not jump Home.
+        $exit = $this->drive($this->collidingDefinition(), [
+            'CHAR:x',   // -> explore
+            'CHAR:d',   // -> deeper (depth 3)
+            'CHAR:h',   // must activate the [H] Homestead item, not go Home
+            'LEFT', 'LEFT', 'CHAR:q',
+        ]);
+
+        self::assertSame(NavigationRuntime::EXIT_QUIT, $exit);
+        self::assertSame(['settings'], $this->invoked, 'H activated the item, it did not jump Home');
+    }
+
+    public function testAStrayLeakedBOnAScreenThatBindsBDoesNothing(): void
+    {
+        // Combined with the delegated-input-boundary + Q fixes: a stray 'b' that
+        // somehow reaches a screen binding B to a *disabled* item is a no-op
+        // (the letter is taken; the alias is suppressed).
+        $def = NavigationDefinition::fromArray([
+            'schema' => 1, 'id' => 'x', 'root' => 'main',
+            'nodes' => [
+                ['id' => 'main', 'label_fallback' => 'Main', 'items' => [
+                    ['id' => 's', 'label_fallback' => 'Section', 'hotkey' => 's', 'submenu' => 'sub'],
+                    ['id' => 'q', 'label_fallback' => 'Log Off', 'hotkey' => 'q', 'action' => 'quit'],
+                ]],
+                ['id' => 'sub', 'label_fallback' => 'Sub', 'items' => [
+                    ['id' => 'b', 'label_fallback' => 'Broken', 'hotkey' => 'b', 'action' => 'bbslist', 'enabled' => false],
+                    ['id' => 'n', 'label_fallback' => 'Netmail', 'hotkey' => 'n', 'action' => 'netmail'],
+                ]],
+            ],
+        ]);
+
+        $exit = $this->drive($def, ['CHAR:s', 'CHAR:b', 'CHAR:b', 'LEFT', 'CHAR:q']);
+
+        self::assertSame(NavigationRuntime::EXIT_QUIT, $exit);
+        self::assertSame([], $this->invoked, 'B on a screen binding B to a disabled item is a no-op, not Back');
+        self::assertSame('Sub', $this->rendered[1] ?? null);
+        self::assertSame('Main', $this->rendered[count($this->rendered) - 1]);
+    }
 }

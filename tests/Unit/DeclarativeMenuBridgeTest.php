@@ -32,9 +32,13 @@ final class DeclarativeMenuBridgeTest extends TestCase
 
     protected function setUp(): void
     {
+        // See NavigationConfigTest::setUp — order-independent env neutralisation
+        // (present-but-empty survives Config::loadEnvFile() re-population; the
+        // live .env carries TERMINAL_NAV_RUNTIME=on).
+        \BinktermPHP\Config::env('__nav_test_warm__');
         foreach (['TERMINAL_NAV_RUNTIME', 'TERMINAL_NAV_CONFIG'] as $k) {
             $this->envBackup[$k] = $_ENV[$k] ?? null;
-            unset($_ENV[$k]);
+            $_ENV[$k] = '';
         }
         NavigationConfig::reset();
     }

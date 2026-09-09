@@ -170,9 +170,14 @@ final class NavigationScreenRenderer
             $parts[] = 'Select an option';
         }
         if ($screen->backAvailable) {
-            $parts[] = 'B/Left Back';
+            // "B" is only a Back affordance when the screen does not bind it to
+            // an item; otherwise advertise the non-conflicting Back keys only.
+            $parts[] = ($screen->bindsHotkey('b') ? 'Left/Esc' : 'B/Left') . ' Back';
         }
-        if ($screen->homeAvailable) {
+        // "H Home" only when the screen does not bind H to an item. When it does,
+        // the Home affordance is left to the terminal's Home key (unconditional
+        // in the runtime) rather than a conflicting shortcut.
+        if ($screen->homeAvailable && !$screen->bindsHotkey('h')) {
             $parts[] = 'H Home';
         }
         // "Q" is only a hint when THIS screen actually binds it (an explicit

@@ -147,6 +147,58 @@ final class NavigationRenderTest extends TestCase
         $subFooter = $strip($svc->render($def, new NavigationPreviewProfile(), 'sub'));
         self::assertStringNotContainsString(' Q ', $subFooter, 'submenu does not bind Q, so it is not advertised');
         self::assertStringContainsString('Back', $subFooter, 'submenu still shows Back');
+        self::assertStringContainsString('B/Left Back', $subFooter, 'submenu without a B item advertises B as Back');
+    }
+
+    public function testFooterDoesNotAdvertiseBAsBackWhenBIsAnItemHotkey(): void
+    {
+        // Mirrors the live "Explore" node: [B] BBS Directory + [L] Node List.
+        $def = NavigationDefinition::fromArray([
+            'schema' => 1, 'id' => 'x', 'root' => 'main',
+            'nodes' => [
+                ['id' => 'main', 'label_fallback' => 'Main', 'items' => [
+                    ['id' => 'x', 'label_fallback' => 'Explore', 'hotkey' => 'x', 'submenu' => 'explore'],
+                ]],
+                ['id' => 'explore', 'label_fallback' => 'Explore', 'items' => [
+                    ['id' => 'b', 'label_fallback' => 'BBS Directory', 'hotkey' => 'b', 'action' => 'bbslist'],
+                    ['id' => 'l', 'label_fallback' => 'Node List', 'hotkey' => 'l', 'action' => 'nodelist'],
+                ]],
+            ],
+        ]);
+        $svc = new NavigationPreviewService();
+        $strip = static fn (string $b): string => preg_replace('/\033\[[0-9;?]*[A-Za-z]/', '', $b);
+
+        $footer = $strip($svc->render($def, (new NavigationPreviewProfile())->withAllFeaturesEnabled(
+            TerminalActionCatalog::defaultRegistry()
+        ), 'explore'));
+
+        self::assertStringNotContainsString('B/Left Back', $footer, 'B is an item hotkey here — not advertised as Back');
+        self::assertStringNotContainsString('B Back', $footer);
+        self::assertStringContainsString('Back', $footer, 'Back is still offered');
+        self::assertStringContainsString('Left/Esc Back', $footer, 'the non-conflicting Back keys are advertised');
+    }
+
+    public function testFooterDoesNotAdvertiseHHomeWhenHIsAnItemHotkey(): void
+    {
+        $def = NavigationDefinition::fromArray([
+            'schema' => 1, 'id' => 'x', 'root' => 'main',
+            'nodes' => [
+                ['id' => 'main', 'label_fallback' => 'Main', 'items' => [
+                    ['id' => 'a', 'label_fallback' => 'A', 'hotkey' => 'a', 'submenu' => 'a'],
+                ]],
+                ['id' => 'a', 'label_fallback' => 'A', 'items' => [
+                    ['id' => 'b', 'label_fallback' => 'B', 'hotkey' => 'b', 'submenu' => 'deep'],
+                ]],
+                ['id' => 'deep', 'label_fallback' => 'Deep', 'items' => [
+                    ['id' => 'h', 'label_fallback' => 'Homestead', 'hotkey' => 'h', 'action' => 'settings'],
+                ]],
+            ],
+        ]);
+        $svc = new NavigationPreviewService();
+        $strip = static fn (string $b): string => preg_replace('/\033\[[0-9;?]*[A-Za-z]/', '', $b);
+
+        $footer = $strip($svc->render($def, new NavigationPreviewProfile(), 'deep'));
+        self::assertStringNotContainsString('H Home', $footer, 'H is an item hotkey at this depth — no conflicting Home shortcut');
     }
 
     // ===== deterministic rendering (R5I) =====
