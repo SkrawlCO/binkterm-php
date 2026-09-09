@@ -231,6 +231,51 @@ final class DeclarativeMenuBridgeTest extends TestCase
         self::assertSame('', $state['pushback'], 'the stray input was discarded at the action boundary');
     }
 
+    public function testStandaloneEscTakesTheRuntimeBackFromASubmenu(): void
+    {
+        // Full path: a lone 0x1B through readKeyWithTimeout() -> the bridge's
+        // readToken -> NavigationRuntime -> Back. (Live: "Left works, Esc does not".)
+        $def = [
+            'schema' => 1, 'id' => 'esc.test', 'root' => 'main',
+            'nodes' => [
+                ['id' => 'main', 'label_fallback' => 'Main Menu', 'items' => [
+                    ['id' => 'x', 'label_fallback' => 'Explore', 'hotkey' => 'x', 'submenu' => 'explore'],
+                    ['id' => 'q', 'label_fallback' => 'Log Off', 'hotkey' => 'q', 'action' => 'quit'],
+                ]],
+                ['id' => 'explore', 'label_fallback' => 'Explore Section', 'items' => [
+                    ['id' => 'b', 'label_fallback' => 'BBS Directory', 'hotkey' => 'b', 'action' => 'bbslist'],
+                ]],
+            ],
+        ];
+        $path = sys_get_temp_dir() . '/navbridge_esc_' . bin2hex(random_bytes(5)) . '.json';
+        file_put_contents($path, json_encode($def));
+        register_shutdown_function(static fn () => @unlink($path));
+
+        $_ENV['TERMINAL_NAV_RUNTIME'] = 'on';
+        $_ENV['TERMINAL_NAV_CONFIG']  = $path;
+        NavigationConfig::reset();
+
+        $session = $this->session();
+        $bridge  = new DeclarativeMenuBridge($session);
+
+        $conn = fopen('php://temp', 'r+');
+        fwrite($conn, "x");      // into Explore
+        fwrite($conn, "\x1b");   // standalone ESC -> Back to Main
+        // (stream then hits EOF -> disconnect -> loop ends)
+        rewind($conn);
+        $state = ['username' => 'alice', 'is_admin' => false, 'locale' => 'en', 'cols' => 80, 'rows' => 24, 'pushback' => '', 'last_activity' => time(), 'idle_warned' => false, 'idle_warning_timeout' => 300, 'idle_disconnect_timeout' => 420];
+
+        $bridge->run($conn, $state, 'sess', []);
+
+        $plain = preg_replace('/\033\[[0-9;?]*[A-Za-z]/', '', $session->getRenderContext()->sink()->getBytes());
+        // Rendered: Main Menu, then Explore Section, then Main Menu again (ESC = Back).
+        self::assertGreaterThanOrEqual(2, substr_count($plain, 'Main Menu'), 'ESC returned to the root screen');
+        self::assertStringContainsString('Explore Section', $plain, 'the submenu was entered first');
+        $lastMain = strrpos($plain, 'Main Menu');
+        $lastExplore = strrpos($plain, 'Explore Section');
+        self::assertGreaterThan($lastExplore, $lastMain, 'the final screen rendered is the root, reached via ESC');
+    }
+
     public function testInvalidDefinitionFileFallsBackToLegacy(): void
     {
         $path = sys_get_temp_dir() . '/navbridge_bad_' . bin2hex(random_bytes(5)) . '.json';

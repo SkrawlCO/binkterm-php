@@ -2123,6 +2123,14 @@ class BbsSession
         if ($char === self::KEY_SHIFT_TAB) { return ['SHIFT_TAB', false, false]; }
         if ($char === self::KEY_DELETE) { return ['DELETE', false, false]; }
 
+        // Standalone ESC. readRawChar() has already applied its ~50ms ANSI-
+        // sequence disambiguation window and only returns a bare 0x1B (exactly
+        // one byte) when no sequence followed; a real escape sequence comes back
+        // multi-byte and is matched above or falls through as an unknown token.
+        // Without this, a lone ESC normalised to '' (an empty/no-op token) and
+        // handlers that offer "Esc = Back/Cancel" never saw it.
+        if (strlen($char) === 1 && ord($char) === 27) { return ['ESC', false, false]; }
+
         $ord = ord($char[0]);
         if ($ord === 9) { return ['TAB', false, false]; }
         if ($ord === 13) {

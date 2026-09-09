@@ -103,6 +103,75 @@ final class ScriptedTerminalSessionTest extends TestCase
         self::assertSame([100, 30], $this->s->geometry(), 'the interleaved resize was applied');
     }
 
+    public function testStandaloneEscByteNormalisesToTheEscToken(): void
+    {
+        // Live: SyncTerm's Esc key sends a lone 0x1B with no continuation.
+        // readRawChar()'s ~50ms disambiguation window elapses, and the timeout
+        // reader must surface it as 'ESC' (it used to return an empty token).
+        $this->s = (new ScriptedTelnetSession())->negotiate();
+        $this->s->serverOutput();
+
+        $this->s->send("\x1b"); // standalone ESC, nothing follows
+        [$tok, $timedOut, $disc] = $this->s->readKey(200);
+
+        self::assertFalse($disc);
+        self::assertFalse($timedOut);
+        self::assertSame('ESC', $tok);
+    }
+
+    public function testEscDoesNotStealARealArrowSequence(): void
+    {
+        // ESC that IS the prefix of an arrow (arrives as one write) stays an
+        // arrow — not ESC + garbage — and a following standalone ESC is still ESC.
+        $this->s = (new ScriptedTelnetSession())->negotiate();
+        $this->s->serverOutput();
+
+        $this->s->send("\x1b[C")   // right arrow
+                ->send("\x1b[D")   // left arrow
+                ->send("\x1b");    // then a genuine standalone ESC
+
+        $tokens = [];
+        for ($i = 0; $i < 8; $i++) {
+            [$tok, $to, $dc] = $this->s->readKey(200);
+            if ($dc || $to) {
+                break;
+            }
+            if ($tok !== '' && $tok !== null) {
+                $tokens[] = $tok;
+            }
+        }
+
+        self::assertSame(['RIGHT', 'LEFT', 'ESC'], $tokens);
+    }
+
+    public function testEscImmediatelyFollowedByAPrintableIsHeldForTheNextRead(): void
+    {
+        // A byte within the disambiguation window after ESC is pushed back (it
+        // could be Alt+<key>), so ESC is still delivered as ESC and the byte is
+        // read on the next keystroke — not lost, not merged.
+        $this->s = (new ScriptedTelnetSession())->negotiate();
+        $this->s->serverOutput();
+
+        $this->s->send("\x1bz");   // ESC then 'z' in one write
+
+        [$first] = $this->s->readKey(200);
+        self::assertSame('ESC', $first);
+
+        // 'z' is now in pushback; the next real key on the wire flushes it first.
+        $this->s->send('y');
+        $rest = [];
+        for ($i = 0; $i < 6; $i++) {
+            [$tok, $to, $dc] = $this->s->readKey(200);
+            if ($dc || $to) {
+                break;
+            }
+            if ($tok !== '' && $tok !== null) {
+                $rest[] = $tok;
+            }
+        }
+        self::assertSame(['CHAR:z', 'CHAR:y'], $rest);
+    }
+
     public function testResizeMidSessionUpdatesGeometryForTheNextRender(): void
     {
         $this->s = (new ScriptedTelnetSession())->negotiate();
