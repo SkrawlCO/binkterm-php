@@ -27,6 +27,8 @@ require_once __DIR__ . '/../telnet/src/NetmailHandler.php';
 require_once __DIR__ . '/../telnet/src/EchomailHandler.php';
 require_once __DIR__ . '/../telnet/src/ShoutboxHandler.php';
 require_once __DIR__ . '/../telnet/src/BulletinsHandler.php';
+require_once __DIR__ . '/../telnet/src/TerminalMessageQueueViewer.php';
+require_once __DIR__ . '/../telnet/src/NewscanHandler.php';
 require_once __DIR__ . '/../telnet/src/TerminalShellInterface.php';
 require_once __DIR__ . '/../telnet/src/TuiShell.php';
 require_once __DIR__ . '/../telnet/src/LineShell.php';

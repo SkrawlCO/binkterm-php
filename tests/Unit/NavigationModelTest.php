@@ -192,10 +192,15 @@ final class NavigationModelTest extends TestCase
     {
         $registry = TerminalActionCatalog::defaultRegistry();
 
-        foreach (['netmail', 'echomail', 'doors', 'files', 'settings', 'quit'] as $id) {
+        foreach (['newscan', 'netmail', 'echomail', 'doors', 'files', 'settings', 'quit'] as $id) {
             self::assertTrue($registry->has($id), "action {$id} registered");
         }
         self::assertFalse($registry->has('nuke_the_site'));
+        self::assertFalse($registry->get('newscan')->terminates);
+        self::assertTrue(
+            $registry->isAvailable('newscan', new AccessContext(true, false, false, fn () => false, fn () => false, [])),
+            'newscan only needs authentication'
+        );
         self::assertTrue($registry->get('quit')->terminates);
         self::assertFalse($registry->get('netmail')->terminates);
     }

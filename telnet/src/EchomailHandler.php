@@ -538,21 +538,74 @@ class EchomailHandler
      */
     private function displaySearchMessage($conn, array &$state, string $session, array $allMessages, int $index, string $searchTerm = ''): int
     {
-        $shell = TerminalShellFactory::create($this->server, $state);
         while (true) {
             $msg = $allMessages[$index] ?? null;
             if (!$msg) {
                 return $index;
             }
 
+            $result = $this->viewSingleMessage($conn, $state, $session, $msg, ['search_term' => $searchTerm]);
+
+            switch ($result['action']) {
+                case 'quit':
+                case 'reply':
+                case 'forward':
+                    return $index;
+                case 'prev':
+                    if ($index > 0) {
+                        $index--;
+                    }
+                    break;
+                case 'next':
+                    if ($index < count($allMessages) - 1) {
+                        $index++;
+                    }
+                    break;
+            }
+        }
+    }
+
+    /**
+     * Open one already-listed echomail message in the full message viewer and
+     * run its read loop (scroll, headers, images, save, download, e-mail
+     * forward, help) until the caller navigates away.
+     *
+     * This is the single-message seam shared by echomail search and the unified
+     * newscan queue viewer ({@see \BinktermPHP\TelnetServer\TerminalMessageQueueViewer}).
+     * Fetching the message marks it read through the same canonical path the web
+     * uses (`GET /api/messages/echomail/{area}/{id}`); this method adds no read
+     * state of its own.
+     *
+     * @param array<string,mixed> $msg  a list row (needs `id`, `echoarea`,
+     *                                   `echoarea_domain`, `from_name`,
+     *                                   `from_address`, `subject`, `to_name`,
+     *                                   `date_written`)
+     * @param array<string,mixed> $opts `search_term` (string) to highlight;
+     *                                  `context` (string) for logging
+     * @return array{action:string,detail:array} action is one of
+     *         quit|prev|next|reply|forward. reply/forward are handled here before
+     *         returning (the caller only needs to unwind).
+     */
+    public function viewSingleMessage($conn, array &$state, string $session, array $msg, array $opts = []): array
+    {
+        $searchTerm = (string)($opts['search_term'] ?? '');
+        $context    = (string)($opts['context'] ?? 'list');
+        $shell      = TerminalShellFactory::create($this->server, $state);
+
+        while (true) {
             $id     = (int)($msg['id'] ?? 0);
             $tag    = (string)($msg['echoarea'] ?? '');
             $domain = (string)($msg['echoarea_domain'] ?? '');
             $area   = $this->formatEchoareaIdentifier($tag, $domain);
 
-            $this->server->logAction($state['username'] ?? 'unknown', "Echomail search: read message #{$id} in {$area}");
+            $this->server->logAction($state['username'] ?? 'unknown', "Echomail {$context}: read message #{$id} in {$area}");
 
             $detail       = TelnetUtils::apiRequest($this->apiBase, 'GET', '/api/messages/echomail/' . urlencode($area) . '/' . $id, null, $session);
+            if ($context === 'newscan') {
+                // The newscan queue supplies only {id, echoarea, echoarea_domain};
+                // fill the header fields the viewer needs from the fetched message.
+                $msg = array_merge(is_array($detail['data'] ?? null) ? $detail['data'] : [], $msg);
+            }
             $body         = $detail['data']['message_text'] ?? '';
             $markupFormat = $detail['data']['markup_format'] ?? null;
             $rawKludges   = ($detail['data']['kludge_lines'] ?? '') . "\n" . ($detail['data']['bottom_kludges'] ?? '');
@@ -642,21 +695,19 @@ class EchomailHandler
 
             switch ($result['action']) {
                 case 'quit':
-                    return $index;
+                    return ['action' => 'quit', 'detail' => $detail];
                 case 'prev':
-                    if ($index > 0) { $index--; }
-                    break;
+                    return ['action' => 'prev', 'detail' => $detail];
                 case 'next':
-                    if ($index < count($allMessages) - 1) { $index++; }
-                    break;
+                    return ['action' => 'next', 'detail' => $detail];
                 case 'reply':
                     TelnetUtils::safeWrite($conn, "\033[2J\033[H");
                     $this->compose($conn, $state, $session, $area, $detail['data'] ?? $msg);
                     TelnetUtils::setCursorVisible($conn, true);
-                    return $index;
+                    return ['action' => 'reply', 'detail' => $detail];
                 case 'forward':
                     $this->forwardMessage($conn, $state, $session, $area, $msg, $detail['data'] ?? $msg);
-                    return $index;
+                    return ['action' => 'forward', 'detail' => $detail];
                 case 'save':
                     $csrfToken = $state['csrf_token'] ?? null;
                     if ($isSaved) {

@@ -19,6 +19,7 @@ final class TerminalActionCatalog
     public static function descriptors(): array
     {
         return [
+            ['id' => 'newscan',      'key' => 'ui.terminalserver.server.menu.newscan',     'fallback' => "What's New",           'availability' => 'authenticated',         'hotkey' => 'a', 'group' => 'messaging', 'terminates' => false],
             ['id' => 'netmail',      'key' => 'ui.terminalserver.server.menu.netmail',     'fallback' => 'Netmail',              'availability' => 'authenticated',         'hotkey' => 'n', 'group' => 'messaging', 'terminates' => false],
             ['id' => 'echomail',     'key' => 'ui.terminalserver.server.menu.echomail',    'fallback' => 'Echomail',             'availability' => 'authenticated',         'hotkey' => 'e', 'group' => 'messaging', 'terminates' => false],
             ['id' => 'bulletins',    'key' => 'ui.terminalserver.server.menu.bulletins',   'fallback' => 'Bulletins',            'availability' => 'authenticated',         'hotkey' => 'u', 'group' => 'messaging', 'terminates' => false],

@@ -516,6 +516,7 @@ class BbsSession
         $chatHandler          = new ChatHandler($this, $this->apiBase);
         $shoutboxHandler      = new ShoutboxHandler($this, $this->apiBase);
         $bulletinsHandler     = new BulletinsHandler($this, $this->apiBase);
+        $newscanHandler       = new NewscanHandler($this, $this->apiBase, $netmailHandler, $echomailHandler, $bulletinsHandler);
         $pollsHandler         = new PollsHandler($this, $this->apiBase);
         $doorHandler          = new DoorHandler($this, $this->apiBase);
         $fileHandler          = new FileHandler($this, $this->apiBase, $this->isSsh);
@@ -858,6 +859,7 @@ class BbsSession
         // unchanged.
         if (\BinktermPHP\Terminal\Navigation\NavigationConfig::isFlagEnabled()) {
             $navHandled = (new DeclarativeMenuBridge($this))->run($conn, $state, $session, [
+                'newscan'      => fn () => $newscanHandler->show($conn, $state, $session),
                 'netmail'      => $netmailHandler,
                 // EchomailHandler's menu entrypoint is showEchoareas(), not
                 // show() — pass a closure (as whosonline does) so the bridge

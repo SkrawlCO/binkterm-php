@@ -279,6 +279,48 @@ final class DeclarativeMenuBridgeTest extends TestCase
         self::assertSame('sess', $spy->calls[0]['session']);
     }
 
+    public function testNewscanActionIsBoundViaAClosure(): void
+    {
+        // BbsSession maps 'newscan' to a closure (NewscanHandler::show), like
+        // echomail — the bridge must invoke it when the item is selected.
+        $def = [
+            'schema' => 1, 'id' => 'newscan.test', 'root' => 'main',
+            'nodes' => [['id' => 'main', 'label_fallback' => 'Main', 'items' => [
+                ['id' => 'a', 'label_fallback' => "What's New", 'hotkey' => 'a', 'action' => 'newscan'],
+                ['id' => 'q', 'label_fallback' => 'Quit', 'hotkey' => 'q', 'action' => 'quit'],
+            ]]],
+        ];
+        $path = sys_get_temp_dir() . '/navbridge_newscan_' . bin2hex(random_bytes(5)) . '.json';
+        file_put_contents($path, json_encode($def));
+        register_shutdown_function(static fn () => @unlink($path));
+
+        $_ENV['TERMINAL_NAV_RUNTIME'] = 'on';
+        $_ENV['TERMINAL_NAV_CONFIG']  = $path;
+        NavigationConfig::reset();
+
+        $session = $this->session();
+        $bridge  = new DeclarativeMenuBridge($session);
+
+        $conn = fopen('php://temp', 'r+');
+        fwrite($conn, 'a'); // select What's New
+        rewind($conn);
+        $state = ['username' => 'alice', 'is_admin' => false, 'locale' => 'en', 'cols' => 80, 'rows' => 24, 'pushback' => '', 'last_activity' => time(), 'idle_warned' => false, 'idle_warning_timeout' => 300, 'idle_disconnect_timeout' => 420];
+
+        $spy = new class {
+            public int $calls = 0;
+            public function show($conn, array &$state, string $session): void
+            {
+                $this->calls++;
+            }
+        };
+
+        $bridge->run($conn, $state, 'sess', [
+            'newscan' => fn () => $spy->show($conn, $state, 'sess'),
+        ]);
+
+        self::assertSame(1, $spy->calls, 'the newscan action launched exactly once');
+    }
+
     public function testAMappedHandlerWithNoShowMethodLeavesTheActionInert(): void
     {
         // The pre-fix shape: a bare object with no show() -> not bound ->

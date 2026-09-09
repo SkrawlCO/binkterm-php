@@ -632,20 +632,73 @@ class NetmailHandler
      */
     private function displayMessage($conn, array &$state, string $session, int $page, int $perPage, int $totalPages, int $index, string $folder = 'inbox', string $sort = 'date_desc'): array
     {
-        $shell = TerminalShellFactory::create($this->server, $state);
         while (true) {
             [$messages, $totalPages] = $this->fetchMessagesPage($session, $page, $perPage, $folder, $sort);
             $msg = $messages[$index] ?? null;
             if (!$msg) {
                 return [$page, 0];
             }
-            $id = $msg['id'] ?? null;
-            if (!$id) {
+            if (empty($msg['id'])) {
                 return [$page, $index];
             }
 
-            $this->server->logAction($state['username'] ?? 'unknown', "Netmail: read message #{$id}");
+            $result = $this->viewSingleMessage($conn, $state, $session, $msg, $folder);
+
+            switch ($result['action']) {
+                case 'quit':
+                case 'reply':
+                case 'forward':
+                    return [$page, $index];
+                case 'deleted':
+                    return [$page, max(0, $index - 1)];
+                case 'prev':
+                    if ($index > 0) { $index--; break; }
+                    if ($page > 1)  { $page--; $index = max(0, $perPage - 1); }
+                    break;
+                case 'next':
+                    if ($index < count($messages) - 1) { $index++; break; }
+                    if ($page < $totalPages)            { $page++; $index = 0; }
+                    break;
+            }
+        }
+    }
+
+    /**
+     * Open one already-listed netmail message in the full message viewer and run
+     * its read loop (scroll, headers, images, attachments, save, download,
+     * e-mail forward, delete, help) until the caller navigates away.
+     *
+     * This is the single-message seam shared by the netmail list and the unified
+     * newscan queue viewer ({@see \BinktermPHP\TelnetServer\TerminalMessageQueueViewer}).
+     * Fetching the message marks it read through the same canonical path the web
+     * uses (`GET /api/messages/netmail/{id}`); this method adds no read state of
+     * its own.
+     *
+     * @param array<string,mixed> $msg    a list row (needs `id`; also uses
+     *                                     `from_name`/`from_address` or
+     *                                     `to_name`/`to_address`, `subject`,
+     *                                     `date_written`)
+     * @param string              $folder `inbox` or `sent`
+     * @param array<string,mixed> $opts   `context` (string) for logging
+     * @return array{action:string,detail:array} action is one of
+     *         quit|prev|next|reply|forward|deleted. reply/forward/delete are
+     *         handled here before returning.
+     */
+    public function viewSingleMessage($conn, array &$state, string $session, array $msg, string $folder = 'inbox', array $opts = []): array
+    {
+        $context = (string)($opts['context'] ?? 'list');
+        $shell   = TerminalShellFactory::create($this->server, $state);
+
+        while (true) {
+            $id = (int)($msg['id'] ?? 0);
+
+            $this->server->logAction($state['username'] ?? 'unknown', "Netmail {$context}: read message #{$id}");
             $detail       = TelnetUtils::apiRequest($this->apiBase, 'GET', '/api/messages/netmail/' . $id, null, $session);
+            if ($context === 'newscan') {
+                // The newscan queue supplies only {id}; fill the header fields
+                // the viewer needs from the fetched message.
+                $msg = array_merge(is_array($detail['data'] ?? null) ? $detail['data'] : [], $msg);
+            }
             $body         = $detail['data']['message_text'] ?? '';
             $markupFormat = $detail['data']['markup_format'] ?? null;
             $attachments  = $detail['data']['attachments'] ?? [];
@@ -764,15 +817,11 @@ class NetmailHandler
 
             switch ($result['action']) {
                 case 'quit':
-                    return [$page, $index];
+                    return ['action' => 'quit', 'detail' => $detail];
                 case 'prev':
-                    if ($index > 0) { $index--; break; }
-                    if ($page > 1)  { $page--; $index = max(0, $perPage - 1); }
-                    break;
+                    return ['action' => 'prev', 'detail' => $detail];
                 case 'next':
-                    if ($index < count($messages) - 1) { $index++; break; }
-                    if ($page < $totalPages)            { $page++; $index = 0; }
-                    break;
+                    return ['action' => 'next', 'detail' => $detail];
                 case 'reply':
                     TelnetUtils::safeWrite($conn, "\033[2J\033[H");
                     $replyData = $detail['data'] ?? $msg;
@@ -785,7 +834,7 @@ class NetmailHandler
                     }
                     $this->compose($conn, $state, $session, $replyData);
                     TelnetUtils::setCursorVisible($conn, true);
-                    return [$page, $index];
+                    return ['action' => 'reply', 'detail' => $detail];
                 case 'forward':
                     TelnetUtils::safeWrite($conn, "\033[2J\033[H");
                     $forwardData = $detail['data'] ?? $msg;
@@ -793,7 +842,7 @@ class NetmailHandler
                     unset($forwardData['replyto_name'], $forwardData['replyto_address']);
                     $this->compose($conn, $state, $session, $forwardData);
                     TelnetUtils::setCursorVisible($conn, true);
-                    return [$page, $index];
+                    return ['action' => 'forward', 'detail' => $detail];
                 case 'download':
                     $this->downloadAttachment($conn, $state, $attachments);
                     TelnetUtils::setCursorVisible($conn, true);
@@ -805,7 +854,7 @@ class NetmailHandler
                 case 'delete':
                     $deleted = $this->confirmAndDeleteMessage($conn, $state, $session, (int)$id);
                     if ($deleted) {
-                        return [$page, max(0, $index - 1)];
+                        return ['action' => 'deleted', 'detail' => $detail];
                     }
                     break;
                 case 'emailforward':

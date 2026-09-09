@@ -819,6 +819,30 @@ stack. It is a new *screen type* on the shared seam, like `TerminalBoxRenderer`.
 
 ---
 
+## Unified newscan ("What's New")
+
+The `newscan` action (`telnet/src/NewscanHandler`) answers *"what's new for me?"*
+by composing canonical read state — it introduces no new read-state table, no
+shadow pointer, and no migration.
+
+| Piece | Role |
+|-------|------|
+| `src/Newscan/UnifiedNewscanService` | Transport-agnostic planner. `plan(array $user, array $opts): NewscanPlan` runs **SELECTs only**. Netmail unread via `MessageHandler::getNetmail(..., 'unread', 'date_asc')` (recipient predicate reused, never re-derived). Echomail "new" = a two-phase pass: phase 1 finds subscribed areas with messages above `user_echoarea_subscriptions.last_read_id` (cheap `idx_echomail(echoarea_id, id)` range scan), phase 2 pulls the bounded, oldest-first id list per candidate area with `em.id > watermark` + a `message_read_status` anti-join + the web's ignore / moderation filters. Bulletins = a count only. QWK is not a source. The four data-access methods are `protected` for deterministic fixture tests. |
+| `src/Newscan/NewscanPlan` / `NewscanArea` | Immutable result — netmail ids, per-area new-message ids, bulletin count, `truncated` flag. Building/reading them writes nothing. |
+| `telnet/src/TerminalMessageQueueViewer` | Steps a flat cross-source queue, opening each message through the extracted single-message seam and mapping its exit action (quit / prev / next / reply …) to queue navigation. No rendering, no read state of its own. |
+| `EchomailHandler::viewSingleMessage()` / `NetmailHandler::viewSingleMessage()` | The single-message read loop (viewer + scroll + reply + save + forward + delete + help), extracted from `displaySearchMessage()` / `displayMessage()` so the newscan and the existing search / list flows share one reader. Opening a message marks it read through the same `GET /api/messages/{type}/…` path the web uses. In `newscan` context the fetched message backfills the header fields, so the queue only needs `{id}` (+ `{echoarea, echoarea_domain}` for echomail). |
+| `NewscanHandler` | Orchestration only: summary screen, per-phase interstitials (`Read` / `Skip` / `Quit scan`, plus `Catch up` per echomail area — a deliberate mark-read through `POST /api/messages/echomail/read`, the canonical bulk-read endpoint), bulletin hand-off to `BulletinsHandler::showUnread()`. |
+
+**Read-state contract:** planning and the summary write nothing; a message is
+marked read only when actually opened; quitting or disconnecting mid-scan leaves
+unopened messages new; skipping an area or the scan marks nothing; re-entry
+rescans whatever is still new (canonical state is the only pointer). "New" for
+echomail is the watermark (`echomail_badge_mode = 'new'` semantics) — messages
+older than the caller's last read in an area are considered seen, exactly like
+the classic BBS newscan pointer and the default dashboard badge.
+
+---
+
 ## Data Access
 
 The terminal server is a trusted first-party component. Code under `telnet/src/` and `ssh/` may access the application's shared classes and database, but must respect clear boundaries.

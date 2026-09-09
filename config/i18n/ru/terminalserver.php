@@ -779,5 +779,25 @@ return [
     'ui.terminalserver.chat.help.line4' => 'Панель пользователей онлайн: Enter открывает ЛС',
     'ui.terminalserver.chat.help.line5' => 'Панель написания: Enter отправляет сообщение, Ctrl+E открывает многострочный редактор',
     'ui.terminalserver.chat.help.line6' => 'Ctrl+C — выход из локального чата, R — обновить списки',
-    'ui.terminalserver.chat.help.line7' => 'Администраторы: в чате сфокусируйтесь на панели «Пользователи онлайн» и нажмите K или B для модерации.'
+    'ui.terminalserver.chat.help.line7' => 'Администраторы: в чате сфокусируйтесь на панели «Пользователи онлайн» и нажмите K или B для модерации.',
+
+    // Unified newscan ("What's New")
+    'ui.terminalserver.server.menu.newscan'           => 'What\'s New',
+    'ui.terminalserver.newscan.title'                 => 'What\'s New',
+    'ui.terminalserver.newscan.all_caught_up'         => 'You\'re all caught up - nothing new since your last visit.',
+    'ui.terminalserver.newscan.scan_complete'         => 'Newscan complete - nothing else new.',
+    'ui.terminalserver.newscan.summary_prompt'        => 'What would you like to do?',
+    'ui.terminalserver.newscan.phase_prompt'          => 'Read these now?',
+    'ui.terminalserver.newscan.action_read'           => 'Read new',
+    'ui.terminalserver.newscan.action_later'          => 'Later',
+    'ui.terminalserver.newscan.action_skip'           => 'Skip',
+    'ui.terminalserver.newscan.action_quit'           => 'Quit scan',
+    'ui.terminalserver.newscan.action_catchup'        => 'Catch up (mark area read)',
+    'ui.terminalserver.newscan.action_bulletins'      => 'Bulletins',
+    'ui.terminalserver.newscan.phase_netmail'         => 'Netmail',
+    'ui.terminalserver.newscan.phase_netmail_count'   => '{count} new netmail message(s).',
+    'ui.terminalserver.newscan.phase_area_count'      => '{count} new message(s) in {area}.',
+    'ui.terminalserver.newscan.summary_netmail'       => 'Netmail    {count}{plus} new',
+    'ui.terminalserver.newscan.summary_echomail'      => 'Echomail   {count}{plus} new across {areas} area(s)',
+    'ui.terminalserver.newscan.summary_bulletins'     => 'Bulletins  {count} new',
 ];

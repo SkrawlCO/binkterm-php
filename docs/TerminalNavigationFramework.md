@@ -137,12 +137,16 @@ One selectable entry. Exactly one of `action` or `submenu`:
 ### Registered actions
 
 Configuration can only name an action the platform already provides — it can
-never reference a PHP class or callback. The available ids mirror the built-in
-menu:
+never reference a PHP class or callback. The available ids:
 
-`netmail`, `echomail`, `bulletins`, `qwk`, `shoutbox`, `localchat`, `polls`,
-`whosonline`, `doors`, `interests`, `files`, `freqrequests`, `bbslist`,
+`newscan`, `netmail`, `echomail`, `bulletins`, `qwk`, `shoutbox`, `localchat`,
+`polls`, `whosonline`, `doors`, `interests`, `files`, `freqrequests`, `bbslist`,
 `nodelist`, `settings`, `quit`.
+
+`newscan` opens the unified **"What's New"** scan — unread netmail then each
+subscribed echomail area with new messages, traversed one message at a time
+through the normal reader, plus an unread-bulletins count. It is only reachable
+through a declarative definition; the built-in menu does not include it.
 
 Some actions are only available when their feature is enabled (e.g. `doors`
 needs `webdoors`); an item bound to an unavailable action is hidden

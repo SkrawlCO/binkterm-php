@@ -400,7 +400,16 @@ or missing file falls back to the built-in menu, so it can never break login.
 Menu items can also carry a `badge` hint that shows a small live-context figure
 next to the option (for example a caller count next to a "People" item, or a
 "playing" count next to a games menu); it is drawn only when there is something
-to show. See [Terminal Navigation Framework](TerminalNavigationFramework.md).
+to show.
+
+A declarative definition may also bind the **`newscan`** action — a unified
+"What's New" scan that walks the caller through unread netmail and new echomail
+(area by area, one message at a time in the normal reader) and shows an
+unread-bulletins count. Reading a message during the scan marks it read exactly
+as reading it from the message list does; skipping marks nothing, so a scan is
+always resumable. `newscan` is not part of the built-in menu — add it to your
+`config/terminal_navigation.json` to expose it. See
+[Terminal Navigation Framework](TerminalNavigationFramework.md).
 
 ### Local Chat
 

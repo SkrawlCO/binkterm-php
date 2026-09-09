@@ -25,6 +25,8 @@ require_once __DIR__ . '/src/NetmailHandler.php';
 require_once __DIR__ . '/src/EchomailHandler.php';
 require_once __DIR__ . '/src/ShoutboxHandler.php';
 require_once __DIR__ . '/src/BulletinsHandler.php';
+require_once __DIR__ . '/src/TerminalMessageQueueViewer.php';
+require_once __DIR__ . '/src/NewscanHandler.php';
 require_once __DIR__ . '/src/TerminalShellInterface.php';
 require_once __DIR__ . '/src/TuiShell.php';
 require_once __DIR__ . '/src/LineShell.php';
