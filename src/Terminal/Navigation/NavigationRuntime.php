@@ -125,10 +125,10 @@ final class NavigationRuntime
         if ($token === 'DOWN') {
             return ['do' => 'noop', 'cursor' => $count === 0 ? 0 : ($cursor + 1) % $count];
         }
-        if ($token === 'PGUP' || $token === 'HOME_KEY') {
+        if ($token === 'PGUP') {
             return ['do' => 'noop', 'cursor' => 0];
         }
-        if ($token === 'PGDN' || $token === 'END_KEY') {
+        if ($token === 'PGDOWN' || $token === 'PGDN' || $token === 'END') {
             return ['do' => 'noop', 'cursor' => max(0, $count - 1)];
         }
         if ($token === 'ENTER') {
@@ -138,6 +138,9 @@ final class NavigationRuntime
         }
         if ($token === 'LEFT' || $token === 'ESC') {
             return ['do' => 'back', 'cursor' => $cursor];
+        }
+        if ($token === 'HOME') {
+            return ['do' => 'home', 'cursor' => 0];
         }
 
         if (str_starts_with($token, 'CHAR:')) {

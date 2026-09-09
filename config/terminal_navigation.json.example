@@ -1,0 +1,92 @@
+{
+  "schema": 1,
+  "id": "example.board",
+  "root": "main",
+  "nodes": [
+    {
+      "id": "main",
+      "label_fallback": "Main Menu",
+      "label_key": "ui.terminalserver.server.menu.title",
+      "items": [
+        {
+          "id": "messages",
+          "label_fallback": "Messages",
+          "hotkey": "m",
+          "submenu": "messages",
+          "presentation": { "emphasis": "primary", "group": "messaging" }
+        },
+        {
+          "id": "files",
+          "label_fallback": "Files",
+          "hotkey": "f",
+          "action": "files",
+          "access": "feature:file_areas"
+        },
+        {
+          "id": "doors",
+          "label_fallback": "Games & Doors",
+          "hotkey": "g",
+          "action": "doors",
+          "access": "feature:webdoors"
+        },
+        {
+          "id": "community",
+          "label_fallback": "Community",
+          "hotkey": "c",
+          "submenu": "community"
+        },
+        {
+          "id": "sysop",
+          "label_fallback": "Sysop Tools",
+          "hotkey": "y",
+          "submenu": "sysop",
+          "access": "admin",
+          "presentation": { "emphasis": "danger" }
+        },
+        {
+          "id": "settings",
+          "label_fallback": "Settings",
+          "hotkey": "t",
+          "action": "settings"
+        },
+        {
+          "id": "quit",
+          "label_fallback": "Log Off",
+          "hotkey": "q",
+          "action": "quit",
+          "presentation": { "emphasis": "muted" }
+        }
+      ]
+    },
+    {
+      "id": "messages",
+      "label_fallback": "Messages",
+      "items": [
+        { "id": "netmail",   "label_fallback": "Netmail",   "hotkey": "n", "action": "netmail" },
+        { "id": "echomail",  "label_fallback": "Echomail",  "hotkey": "e", "action": "echomail" },
+        { "id": "bulletins", "label_fallback": "Bulletins", "hotkey": "b", "action": "bulletins" },
+        { "id": "qwk",       "label_fallback": "QWK Offline Mail", "hotkey": "q", "action": "qwk", "access": "feature:qwk" }
+      ]
+    },
+    {
+      "id": "community",
+      "label_fallback": "Community",
+      "items": [
+        { "id": "chat",     "label_fallback": "Local Chat", "hotkey": "c", "action": "localchat", "access": "feature:chat" },
+        { "id": "shoutbox", "label_fallback": "Shoutbox",   "hotkey": "s", "action": "shoutbox", "access": "feature:shoutbox" },
+        { "id": "polls",    "label_fallback": "Polls",      "hotkey": "p", "action": "polls",    "access": "feature:voting_booth" },
+        { "id": "who",      "label_fallback": "Who's Online","hotkey": "w", "action": "whosonline" },
+        { "id": "bbslist",  "label_fallback": "BBS Directory","hotkey": "d","action": "bbslist",  "access": "feature:bbs_directory" }
+      ]
+    },
+    {
+      "id": "sysop",
+      "label_fallback": "Sysop Tools",
+      "access": "admin",
+      "items": [
+        { "id": "nodelist", "label_fallback": "Node List", "hotkey": "l", "action": "nodelist" },
+        { "id": "settings", "label_fallback": "Terminal Settings", "hotkey": "t", "action": "settings" }
+      ]
+    }
+  ]
+}

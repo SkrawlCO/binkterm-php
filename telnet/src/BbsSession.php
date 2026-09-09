@@ -847,6 +847,50 @@ class BbsSession
             $this->writeLine($conn, '');
         };
 
+        // ===== DECLARATIVE NAVIGATION (opt-in) =====
+        // When a sysop has supplied a valid config/terminal_navigation.json AND
+        // set TERMINAL_NAV_RUNTIME on, the generic declarative navigation runtime
+        // drives the session instead of the built-in menu loop below. Any problem
+        // (missing/invalid file, gate off, runtime error) falls through to the
+        // legacy loop, so terminal login is never at risk.
+        if (\BinktermPHP\Terminal\Navigation\NavigationConfig::isRuntimeEnabled()) {
+            $navHandled = (new DeclarativeMenuBridge($this))->run($conn, $state, $session, [
+                'netmail'      => $netmailHandler,
+                'echomail'     => $echomailHandler,
+                'shoutbox'     => $shoutboxHandler,
+                'bulletins'    => $bulletinsHandler,
+                'polls'        => $pollsHandler,
+                'localchat'    => $chatHandler,
+                'interests'    => $interestsHandler,
+                'qwk'          => $qwkHandler,
+                'doors'        => $doorHandler,
+                'files'        => $fileHandler,
+                'freqrequests' => $freqHandler,
+                'bbslist'      => $bbsListHandler,
+                'nodelist'     => $nodelistHandler,
+                'whosonline'   => fn () => $this->showWhosOnline($conn, $state, $session, null),
+                'settings'     => $settingsHandler,
+            ]);
+            if ($navHandled) {
+                if (!($this->sixelSupported && TelnetUtils::showSixelScreenIfExists('bye.sixel', $this, $conn))) {
+                    TelnetUtils::showScreenIfExists('bye.ans', $this, $conn);
+                }
+                $this->writeLine($conn, '');
+                $this->writeLine($conn, $this->colorize(
+                    $this->t('ui.terminalserver.server.farewell', 'Thank you for visiting, have a great day!', [], $state['locale']),
+                    self::ANSI_CYAN . self::ANSI_BOLD
+                ));
+                if (is_resource($conn)) { fflush($conn); }
+                sleep(1);
+                $this->logDuration('Logout', $username, $loginTime);
+                $this->setTerminalTitle($conn, '');
+                $this->logoutSession($session);
+                fclose($conn);
+                if ($forked) { exit(0); }
+                return;
+            }
+        }
+
         // ===== MAIN MENU LOOP =====
         while (true) {
             $this->logTerminalInfoOnce($state);

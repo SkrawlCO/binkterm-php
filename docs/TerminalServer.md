@@ -388,6 +388,17 @@ If no custom map is saved the built-in defaults above are used. When a custom ma
 
 The key map is returned as part of the `GET /api/config/session-init` call made immediately after login.
 
+### Declarative Navigation Framework (optional)
+
+For sysops who need more than key rebinding — nested submenus, per-item access
+rules, custom labels/help, and board-specific organisation — BinktermPHP has an
+optional **declarative navigation framework**: the whole menu tree is described
+in `config/terminal_navigation.json` and rendered by the platform. It is
+**off by default**; the built-in menu above is unchanged until a sysop both
+supplies a valid definition file and sets `TERMINAL_NAV_RUNTIME=on`. An invalid
+or missing file falls back to the built-in menu, so it can never break login.
+See [Terminal Navigation Framework](TerminalNavigationFramework.md).
+
 ### Local Chat
 
 The terminal server includes the same local chat system used by the web UI.

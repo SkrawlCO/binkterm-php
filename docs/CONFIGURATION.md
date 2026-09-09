@@ -169,6 +169,18 @@ ADMIN_DAEMON_SCHEDULE_INTERVAL=60    # seconds between scheduler ticks
 # TELNET_SZ_BIN=/usr/bin/sz   # override path to sz binary (lrzsz)
 # TELNET_RZ_BIN=/usr/bin/rz   # override path to rz binary (lrzsz)
 # TELNET_ZMODEM_DEBUG=false   # log to data/logs/zmodem.log
+
+# Transport keepalive: seconds between Telnet NOP probes on an idle connection so
+# a dropped TCP session is detected promptly. Liveness only -- it never counts as
+# user activity, so the idle-warning/disconnect timers are unaffected. 0 = off.
+# SSH sessions ignore this. Default 60.
+# TELNET_KEEPALIVE_SECONDS=60
+
+# Optional declarative terminal navigation (docs/TerminalNavigationFramework.md).
+# Both must be set to activate it; otherwise the built-in menu is used unchanged.
+# An invalid/missing definition file silently falls back to the built-in menu.
+# TERMINAL_NAV_RUNTIME=off
+# TERMINAL_NAV_CONFIG=config/terminal_navigation.json
 ```
 
 ### SSH Daemon

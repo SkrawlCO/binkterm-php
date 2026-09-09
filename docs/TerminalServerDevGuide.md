@@ -784,6 +784,37 @@ Menu actions are data-driven via the key map in `AppearanceConfig`. Every new ac
 
 The admin save route derives its valid action list from `array_keys(AppearanceConfig::DEFAULT_TERM_MENU_KEYS)` automatically — no route change needed.
 
+When you add a main-menu action, also add a matching descriptor to
+`TerminalActionCatalog::descriptors()` (see below) so a declarative navigation
+definition can bind to it, and bind it in `DeclarativeMenuBridge`.
+
+---
+
+## Declarative Navigation Framework
+
+`src/Terminal/Navigation/` is a generic, capability-aware layer that lets a
+sysop compose the terminal menu as data. It is **opt-in** and additive — with no
+`config/terminal_navigation.json` and `TERMINAL_NAV_RUNTIME` unset, the built-in
+menu loop in `BbsSession::handle()` runs exactly as before. See
+[TerminalNavigationFramework.md](TerminalNavigationFramework.md) for the sysop
+guide and schema.
+
+| Layer | Class(es) | Role |
+|-------|-----------|------|
+| Model | `NavigationDefinition` / `NavigationNode` / `NavigationItem` / `ActionReference` / `PresentationHints` | Pure parsed structure (schema v1, JSON). No sockets, no session, no DB. |
+| Access | `AccessExpression` / `AccessContext` | Safe declarative ACS: bare predicates (`authenticated`, `admin`, `feature:<x>`, `action:<x>`, `capability:<x>`, `env:<x>`) composed with `all`/`any`/`not`. No eval, unknown predicates fail closed. Limited to state the platform actually has (binary `is_admin` + guest + feature flags). |
+| Actions | `ActionRegistry` / `TerminalAction` / `TerminalActionCatalog` | The config→PHP boundary. Config names an id only; the registry maps it to metadata (validation/preview) and, separately at runtime, to a bound callable. |
+| Loading | `NavigationDefinitionLoader` / `NavigationValidator` / `ValidationError` / `NavigationLoadResult` / `NavigationConfig` | Parse + full semantic validation (unknown actions, hotkey conflicts, dangling/self submenus, cycles, unreachable nodes, missing fallbacks). An invalid definition is never returned; the runtime falls back to legacy. `NavigationConfig` owns the double gate. |
+| Screen model | `NavigationScreenModel` / `NavigationScreenItem` / `NavigationPath` / `NavigationScreenBuilder` | `definition → validation → access/action resolution → screen model → renderer → TerminalRenderContext → OutputSink`. Socket-free; constructible in tests/preview. Hidden items are absent (no dangling hotkeys); disabled items are present but non-selectable. |
+| Rendering | `NavigationScreenRenderer` / `NavigationLineRenderer` | One rendering path for the live session, tests, and preview — differs only in sink and the capability/geometry the context carries. Top-anchored, clipped from the bottom, footer status line pinned. `NavigationLineRenderer` is the line-shell projection. |
+| Runtime | `NavigationRuntime` | The interactive loop, driven by injected callables (no telnet/SSH dependency): hotkeys + arrow/lightbar + nested Back/Home, action invocation, `quit`/`back_at_root`/`disconnect` exit reasons, rebuild-every-iteration for NAWS reflow. |
+| Preview | `NavigationPreviewService` / `NavigationPreviewProfile` | Deterministic off-session render at arbitrary geometry/charset/colour/access into a `BufferSink`. `standardProfiles()` = the R5I matrix. |
+| Bridge | `telnet/src/DeclarativeMenuBridge` | The only glue into `BbsSession`: builds the registry + bindings from the live handlers, the `AccessContext` from `$state`, and runs `NavigationRuntime`. Any error falls back to the legacy menu. |
+
+The one-renderer invariant holds: `NavigationScreenRenderer` reuses
+`TerminalRenderContext` (glyphs, charset, colour) and shares no parallel layout
+stack. It is a new *screen type* on the shared seam, like `TerminalBoxRenderer`.
+
 ---
 
 ## Data Access

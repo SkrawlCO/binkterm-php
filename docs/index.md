@@ -40,6 +40,7 @@ Complete reference for sysops and developers. New here? Start with [Getting Star
 ## Access Methods
 
 - [Terminal Server](TerminalServer.md) — Terminal access layer for BBS-style sessions over text protocols
+- [Terminal Navigation Framework](TerminalNavigationFramework.md) — Optional declarative (data-driven) terminal menu structure, access rules, and multi-geometry preview
 - [Telnet Daemon](TelnetServer.md) — Telnet access method setup, configuration, and troubleshooting
 - [SSH Server](SSHServer.md) — Secure shell access method for terminal users
 - [PacketBBS Gateway](PacketBBS.md) — Packet/mesh access method for low-bandwidth nodes using compact text commands
