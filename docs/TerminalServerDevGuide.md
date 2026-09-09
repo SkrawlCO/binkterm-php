@@ -596,7 +596,7 @@ if ($confirmed !== 'y') {
 |--------|-------------|
 | `showMessageViewer(...)` | `TelnetUtils::runMessageViewer()` with help overlay profile |
 | `showMessageList(...)` | `TelnetUtils::runMessageList()` with help overlay profile |
-| `showSelectableList(...)` | `TelnetUtils::runSelectableList()` with help overlay profile |
+| `showSelectableList(...)` | `TelnetUtils::runSelectableList()` with help overlay profile; `$options['header_lines']` (string[]) renders a fixed informational block under the title |
 | `showScrollablePanel(...)` | Inline framed scrollable panel |
 | `showConfirmDialog(...)` | `TelnetUtils::showConfirmDialog()` with dialog profile |
 | `showWorkingOverlay(...)` | `TelnetUtils::showWorkingOverlay()` with working overlay profile |
@@ -648,6 +648,41 @@ text.
 First consumer: the Crossroads arrival (`DoorHandler::show()`). The
 `NavigationScreenRenderer` themed/flowing path is a separate renderer and is not
 routed through `DirectoryView` in this milestone.
+
+### Shared dense-list presentation primitive
+
+The sibling of the directory primitive, in the same
+`BinktermPHP\Terminal\Presentation` namespace, for L33TEST-owned **dense,
+tabular, selectable** lists (echomail areas, file areas, a nodelist) where row
+density is the point and cards would be a regression. It shares the M1
+vocabulary and the `TextBlock` geometry helpers but **not** `DirectoryView`'s
+composition: a dense list spends exactly two chrome lines — a location identity
+line with a right-aligned page indicator, and one optional compact context line
+— and one screen row per item.
+
+| Class | Role |
+|-------|------|
+| `DenseList` | resolved model: `location`, `crumbs[]`, `context`, `columns[]`, `rows[]`, `page`, `totalPages` |
+| `DenseListColumn` | `key`, fixed `width` (0 = the flexible column), `align`, `minWidth` |
+| `DenseListRow` | `cells` (column key => plain text), an opaque `value`, an optional `prefix` badge + `prefixSgr` |
+| `DenseListView::compose()` | composes a `DenseList` + `TerminalRenderContext` into `['title', 'headerLines', 'rows', 'values']` for the **flat** selectable-list contract |
+
+`DenseListView::compose()` produces flat pre-formatted row strings; the caller
+hands `title`, `rows` and `headerLines` to `$shell->showSelectableList()` with
+`['header_lines' => $composed['headerLines']]`. That option is the only renderer
+change: `TelnetUtils::runSelectableList()` (flat-row path) and
+`LineShell::showSelectableList()` render the header block directly under the
+title, above the first selectable row. With no `header_lines` the list is
+byte-for-byte identical to its historical behaviour. Column widths are
+geometry-aware: the flexible column takes the remainder, and fixed columns are
+shrunk widest-first (never below `minWidth`) before the flexible column clips.
+
+First consumer: the Echomail Areas selector (`EchomailHandler::pickEchoarea()`),
+which now shows `Messages ` + `Echomail Areas` + a right-aligned `Page n/m`, a
+dim context line (`Areas you follow - N` / `All areas - N total` /
+`Filter: term - N matching`), and the same `tag / network / description` grid,
+lightbar, paging, `Q`, `Ctrl-K` help and `/` `s` `a` `u` `g` `i` `c` keys as
+before.
 
 ### Adding a New Shell
 

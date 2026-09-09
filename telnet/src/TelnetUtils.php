@@ -1964,9 +1964,13 @@ class TelnetUtils
      * @param array         $extraKeys     Optional extra single-char key bindings (lowercase): ['c' => 'compose', ...]
      *                                     Built-in keys (q, n, p, and digits) always take precedence;
      *                                     attempting to bind those keys here is silently ignored.
-     * @param callable|null $rebuildFn     Optional resize callback: fn(array &$state): array{rows: string[], title: string}
+     * @param callable|null $rebuildFn     Optional resize callback: fn(array &$state): array{rows: string[], title: string, header_lines?: string[]}
      *                                     When provided, called on terminal resize to reformat rows and title at the
-     *                                     new dimensions before triggering a full repaint.
+     *                                     new dimensions before triggering a full repaint. May also return
+     *                                     `header_lines` to re-fit the informational block (see $options).
+     * @param array         $options       Optional: 'header_lines' => string[] renders fixed pre-formatted lines
+     *                                     directly under the title, above the first row (flat-row lists only);
+     *                                     'color_scheme', 'multiSelect', 'toggleKey', 'selectedRows' as before.
      * @return array{action: string, index: int, selectedIndex: int}
      *   action:        'quit' | 'disconnect' | 'select' | 'prev' | 'next' | (value from $extraKeys)
      *   index:         item index (meaningful for 'select')
@@ -2007,10 +2011,19 @@ class TelnetUtils
             );
         }
 
+        // Optional fixed informational lines rendered directly under the title,
+        // above the first selectable row (e.g. a dense-list context/subtitle
+        // line). Pre-formatted by the caller; written verbatim. With none, the
+        // list is byte-for-byte identical to its historical behaviour.
+        $headerLines = [];
+        foreach ((array)($options['header_lines'] ?? []) as $headerLine) {
+            $headerLines[] = (string)$headerLine;
+        }
+
         $cols         = $state['cols'] ?? 80;
         $termRows     = self::getSelectorRows($state);
         $rowCount     = count($rows);
-        $listStartRow = 2;
+        $listStartRow = 2 + count($headerLines);
         $inputRow     = max(1, $termRows);
         $maxDisplayRows = max(1, $inputRow - $listStartRow);
         $selectedRows = array_fill_keys(array_map('intval', $options['selectedRows'] ?? []), true);
@@ -2025,12 +2038,13 @@ class TelnetUtils
         // the key loop sees up-to-date values after each render.
         $render = self::framed($conn, function() use (
             $conn, &$state,
-            &$rows, &$title, &$statusLine, &$selectedIndex, &$selectedRows,
+            &$rows, &$title, &$statusLine, &$selectedIndex, &$selectedRows, &$headerLines, &$listStartRow,
             &$cols, &$termRows, &$inputRow, &$maxDisplayRows,
-            $showMarker, $listStartRow, $statusBar, $colorScheme
+            $showMarker, $statusBar, $colorScheme
         ): void {
             $cols           = $state['cols'] ?? 80;
             $termRows       = self::getSelectorRows($state);
+            $listStartRow   = 2 + count($headerLines);
             $inputRow       = max(1, $termRows);
             $maxDisplayRows = max(1, $inputRow - $listStartRow);
             $statusLine     = self::buildStatusBar($statusBar, $cols);
@@ -2039,6 +2053,9 @@ class TelnetUtils
 
             self::safeWrite($conn, "\033[2J\033[H");
             self::writeLine($conn, self::colorize($title, $titleColor));
+            foreach ($headerLines as $headerLine) {
+                self::writeLine($conn, $headerLine);
+            }
             foreach (array_slice($rows, 0, $maxDisplayRows) as $idx => $row) {
                 self::writeLine($conn, self::buildSelectableListDisplayLine($row, $idx === $selectedIndex, isset($selectedRows[$idx]), $cols, $showMarker, $selectedBg));
             }
@@ -2074,6 +2091,9 @@ class TelnetUtils
                     $rebuilt       = $rebuildFn($state);
                     $rows          = $rebuilt['rows'];
                     $title         = $rebuilt['title'];
+                    if (isset($rebuilt['header_lines']) && is_array($rebuilt['header_lines'])) {
+                        $headerLines = array_map('strval', $rebuilt['header_lines']);
+                    }
                     $rowCount      = count($rows);
                     $selectedIndex = min($selectedIndex, max(0, $rowCount - 1));
                 }
@@ -2128,6 +2148,9 @@ class TelnetUtils
                         $rebuilt   = $rebuildFn($state);
                         $rows      = $rebuilt['rows'];
                         $title     = $rebuilt['title'];
+                        if (isset($rebuilt['header_lines']) && is_array($rebuilt['header_lines'])) {
+                            $headerLines = array_map('strval', $rebuilt['header_lines']);
+                        }
                         $rowCount  = count($rows);
                         $selectedIndex = min($selectedIndex, max(0, $rowCount - 1));
                     }

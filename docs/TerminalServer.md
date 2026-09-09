@@ -262,6 +262,14 @@ Stats are refreshed from the API after returning from netmail, echomail, or bull
   selectable line per place (`name - Gateway`, `name - Multiplayer`, or
   `name - Game`) without consuming a selector number. Full descriptions and
   detailed metadata remain on the Experience detail.
+- The **Echomail Areas** list uses the same "you are somewhere" treatment
+  applied to a high-density list: an identity line (`Messages ` +
+  `Echomail Areas`) with the page position pushed to the right edge, and one
+  dim context line under it (`Areas you follow - N`, `All areas - N total`, or
+  `Filter: term - N matching`). The area / network / description grid, the
+  lightbar, number keys, paging, `Q`, `Ctrl-K` help and the `/` `s` `a` `u`
+  `g` shortcuts are unchanged; the screen keeps essentially the same row count
+  it had before.
 - Selecting an experience from the menu opens an **experience detail screen**
   before anything launches. It shows the description, type, availability status,
   how many players are online (and the capacity limit when the experience has

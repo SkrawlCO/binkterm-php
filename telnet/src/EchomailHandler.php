@@ -3,6 +3,10 @@
 namespace BinktermPHP\TelnetServer;
 
 use BinktermPHP\TelnetServer\TelnetServer;
+use BinktermPHP\Terminal\Presentation\DenseList;
+use BinktermPHP\Terminal\Presentation\DenseListColumn;
+use BinktermPHP\Terminal\Presentation\DenseListRow;
+use BinktermPHP\Terminal\Presentation\DenseListView;
 
 /**
  * EchomailHandler - Handles echomail (forum/echo) functionality for telnet daemon
@@ -161,7 +165,13 @@ class EchomailHandler
                 $searchFilter,
                 $allAreasMode,
                 $this->buildEchoareaHelpItems($locale, $showInterestKey, $searchFilter !== null, $allAreasMode),
-                $shell
+                $shell,
+                [
+                    'crumbs'   => [$this->server->t('ui.terminalserver.echomail.areas_crumb', 'Messages', [], $locale)],
+                    'location' => $allAreasMode
+                        ? $this->server->t('ui.terminalserver.echomail.areas_location_all', 'All Echomail Areas', [], $locale)
+                        : $this->server->t('ui.terminalserver.echomail.areas_location', 'Echomail Areas', [], $locale),
+                ]
             );
             $page = $result['page'];
 
@@ -993,7 +1003,8 @@ class EchomailHandler
         ?string $searchFilter = null,
         bool $allAreasMode = false,
         array $helpItems = [],
-        ?TerminalShellInterface $shell = null
+        ?TerminalShellInterface $shell = null,
+        ?array $identity = null
     ): array {
         $locale     = $state['locale'];
         $totalPages = max(1, (int)ceil(count($allAreas) / $perPage));
@@ -1001,48 +1012,8 @@ class EchomailHandler
         $offset     = ($page - 1) * $perPage;
         $areas      = array_slice($allAreas, $offset, $perPage);
 
-        $header = str_replace(['{page}', '{total}'], [$page, $totalPages], $title);
-        if ($searchFilter !== null) {
-            $header .= ' — ' . $this->server->t(
-                'ui.terminalserver.echomail.areas_filter',
-                'Filter: {term} ({count} results)',
-                ['term' => $searchFilter, 'count' => count($allAreas)],
-                $locale
-            );
-        }
-        $styledHeader  = TelnetUtils::colorize($header, TelnetUtils::ANSI_CYAN . TelnetUtils::ANSI_BOLD);
-        $encodedHeader = method_exists($this->server, 'encodeForTerminal')
-            ? $this->server->encodeForTerminal($styledHeader)
-            : $styledHeader;
-
-        $buildRows = function (array $pageAreas) use ($allAreasMode): array {
-            $rows = [];
-            foreach ($pageAreas as $idx => $area) {
-                $subscribed = !empty($area['subscribed']);
-                $tagWidth   = $allAreasMode ? 16 : 20;
-                $row = $this->renderEchoAreaSelectionLine(
-                    $idx + 1,
-                    (string)substr($area['tag'] ?? '', 0, $tagWidth),
-                    (string)substr($area['domain'] ?? '', 0, 10),
-                    (string)substr($area['description'] ?? '', 0, 38),
-                    $allAreasMode,
-                    $subscribed
-                );
-                if (method_exists($this->server, 'encodeForTerminal')) {
-                    $row = $this->server->encodeForTerminal($row);
-                }
-                $rows[] = $row;
-            }
-            return $rows;
-        };
-
-        $rows = $buildRows($areas);
-        if (empty($rows)) {
-            $rows = [TelnetUtils::colorize(
-                $this->server->t('ui.terminalserver.echomail.areas_no_results', 'No areas match your search.', [], $locale),
-                TelnetUtils::ANSI_YELLOW
-            )];
-        }
+        $shell ??= TerminalShellFactory::create($this->server, $state);
+        $ctx   = $this->server->getRenderContext();
 
         $extraKeys = ['/' => 'filter', 's' => 'search', 'a' => 'allareas', 'u' => 'unsubscribe', 'g' => 'ignorerules'];
         if ($showInterestKey) {
@@ -1052,7 +1023,6 @@ class EchomailHandler
             $extraKeys['c'] = 'clearfilter';
         }
 
-        $allAreasLabel = $allAreasMode ? 'My Areas' : 'All';
         $statusBar = [
             ['text' => 'U/D',        'color' => TelnetUtils::ANSI_RED],
             ['text' => ' Move  ',    'color' => TelnetUtils::ANSI_BLUE],
@@ -1066,15 +1036,139 @@ class EchomailHandler
             ['text' => ' ' . $this->server->t('ui.terminalserver.list.status_help', 'Help', [], $locale), 'color' => TelnetUtils::ANSI_BLUE],
         ];
 
-        $rebuildFn = function (array &$s) use ($areas, $encodedHeader, $buildRows): array {
-            return ['rows' => $buildRows($areas), 'title' => $encodedHeader];
+        // ── Location identity + compact context line (Terminal Experience
+        //    Unification dense-list primitive). The caller may pass an explicit
+        //    identity; otherwise the location is derived from the legacy title
+        //    and the context reflects the active mode.
+        $location = $identity['location'] ?? rtrim(
+            (string)preg_replace('/\s*\(page\b.*$/i', '', $title),
+            ": \t"
+        );
+        $crumbs = $identity['crumbs'] ?? [];
+
+        if (isset($identity['context'])) {
+            $context = (string)$identity['context'];
+        } elseif ($searchFilter !== null) {
+            $context = $this->server->t(
+                'ui.terminalserver.echomail.areas_context_filter',
+                'Filter: {term} - {count} matching',
+                ['term' => $searchFilter, 'count' => count($allAreas)],
+                $locale
+            );
+        } elseif ($allAreasMode) {
+            $context = $this->server->t(
+                'ui.terminalserver.echomail.areas_context_all',
+                'All areas - {count} total',
+                ['count' => count($allAreas)],
+                $locale
+            );
+        } else {
+            $context = $this->server->t(
+                'ui.terminalserver.echomail.areas_context_subscribed',
+                'Areas you follow - {count}',
+                ['count' => count($allAreas)],
+                $locale
+            );
+        }
+
+        $columns = [
+            new DenseListColumn('tag', $allAreasMode ? 16 : 20),
+            new DenseListColumn('net', 10),
+            new DenseListColumn('desc', 0),
+        ];
+
+        $buildList = function (array $pageAreas, int $pageNum) use (
+            $columns, $location, $crumbs, $context, $totalPages, $allAreasMode
+        ): DenseList {
+            $rows = [];
+            foreach ($pageAreas as $area) {
+                $subscribed = !empty($area['subscribed']);
+                $rows[] = new DenseListRow(
+                    [
+                        'tag'  => (string)($area['tag'] ?? ''),
+                        'net'  => (string)($area['domain'] ?? ''),
+                        'desc' => (string)($area['description'] ?? ''),
+                    ],
+                    $area,
+                    $allAreasMode ? ($subscribed ? '[+]' : '[ ]') : null,
+                    $allAreasMode ? ($subscribed ? TelnetUtils::ANSI_GREEN : TelnetUtils::ANSI_DIM) : null
+                );
+            }
+
+            return new DenseList($location, $crumbs, $context, $columns, $rows, $pageNum, $totalPages);
         };
 
-        $shell ??= TerminalShellFactory::create($this->server, $state);
+        // Fallback used only when there is no render context (pre-auth paths);
+        // reproduces the historical flat row + plain header.
+        $legacyRows = function (array $pageAreas) use ($allAreasMode): array {
+            $out = [];
+            foreach ($pageAreas as $idx => $area) {
+                $tagWidth = $allAreasMode ? 16 : 20;
+                $row = $this->renderEchoAreaSelectionLine(
+                    $idx + 1,
+                    (string)substr($area['tag'] ?? '', 0, $tagWidth),
+                    (string)substr($area['domain'] ?? '', 0, 10),
+                    (string)substr($area['description'] ?? '', 0, 38),
+                    $allAreasMode,
+                    !empty($area['subscribed'])
+                );
+                if (method_exists($this->server, 'encodeForTerminal')) {
+                    $row = $this->server->encodeForTerminal($row);
+                }
+                $out[] = $row;
+            }
+
+            return $out;
+        };
+
+        if ($ctx !== null) {
+            $composed    = DenseListView::compose($buildList($areas, $page), $ctx);
+            $listTitle   = $composed['title'];
+            $listRows    = $composed['rows'];
+            $headerLines = $composed['headerLines'];
+
+            if ($areas === []) {
+                $headerLines[] = $ctx->colorize(
+                    $ctx->encodeForTerminal($this->server->t(
+                        'ui.terminalserver.echomail.areas_no_results',
+                        'No areas match your search.',
+                        [],
+                        $locale
+                    )),
+                    TelnetUtils::ANSI_YELLOW
+                );
+            }
+
+            $rebuildFn = function (array &$s) use ($buildList, $areas, $page): array {
+                $ctx = $this->server->getRenderContext();
+                $ctx->setGeometry((int)($s['cols'] ?? 80), (int)($s['rows'] ?? 24));
+                $c = DenseListView::compose($buildList($areas, $page), $ctx);
+
+                return ['rows' => $c['rows'], 'title' => $c['title'], 'header_lines' => $c['headerLines']];
+            };
+        } else {
+            $header = str_replace(['{page}', '{total}'], [$page, $totalPages], $title);
+            if ($searchFilter !== null) {
+                $header .= ' - ' . $context;
+            }
+            $listTitle   = TelnetUtils::colorize($header, TelnetUtils::ANSI_CYAN . TelnetUtils::ANSI_BOLD);
+            $listRows    = $legacyRows($areas);
+            $headerLines = [];
+            if ($listRows === []) {
+                $listRows = [TelnetUtils::colorize(
+                    $this->server->t('ui.terminalserver.echomail.areas_no_results', 'No areas match your search.', [], $locale),
+                    TelnetUtils::ANSI_YELLOW
+                )];
+            }
+            $rebuildFn = function (array &$s) use ($legacyRows, $areas, $listTitle): array {
+                return ['rows' => $legacyRows($areas), 'title' => $listTitle];
+            };
+        }
+
         $result = $shell->showSelectableList(
             $conn, $state,
-            $encodedHeader, $rows, $page, $totalPages, 0,
-            $statusBar, $extraKeys, $rebuildFn, [], $helpItems
+            $listTitle, $listRows, $page, $totalPages, 0,
+            $statusBar, $extraKeys, $rebuildFn, ['header_lines' => $headerLines], $helpItems
         );
 
         switch ($result['action']) {

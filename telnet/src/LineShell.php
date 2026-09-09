@@ -102,9 +102,15 @@ class LineShell implements TerminalShellInterface
         TelnetUtils::writeLine($conn, '');
     }
 
-    private function renderCurrentPageRows($conn, array &$state, string $title, array $rows, int $page, int $totalPages, ?int $selectedIndex = null, array $markedRows = []): void
+    private function renderCurrentPageRows($conn, array &$state, string $title, array $rows, int $page, int $totalPages, ?int $selectedIndex = null, array $markedRows = [], array $headerLines = []): void
     {
         $this->clearAndTitle($conn, $title);
+        foreach ($headerLines as $headerLine) {
+            $plain = trim($this->stripAnsi((string)$headerLine));
+            if ($plain !== '') {
+                TelnetUtils::writeLine($conn, $this->fitPlainLine($plain, $this->wrapWidth($state)));
+            }
+        }
         TelnetUtils::writeLine($conn, sprintf('Page %d/%d', $page, max(1, $totalPages)));
         TelnetUtils::writeLine($conn, '');
 
@@ -396,9 +402,9 @@ class LineShell implements TerminalShellInterface
         return max(1, min(max($minimum, (int)($state['rows'] ?? 24) - $reservedRows), $maximum));
     }
 
-    private function renderSelectableListScreen($conn, array &$state, string $title, array $rows, int $page, int $totalPages, ?int $selectedIndex, array $commandLines, array $markedRows = []): void
+    private function renderSelectableListScreen($conn, array &$state, string $title, array $rows, int $page, int $totalPages, ?int $selectedIndex, array $commandLines, array $markedRows = [], array $headerLines = []): void
     {
-        $this->renderCurrentPageRows($conn, $state, $this->stripAnsi($title), $rows, $page, $totalPages, $selectedIndex, $markedRows);
+        $this->renderCurrentPageRows($conn, $state, $this->stripAnsi($title), $rows, $page, $totalPages, $selectedIndex, $markedRows, $headerLines);
         $this->renderFooterLines($conn, $commandLines);
     }
 
@@ -1014,12 +1020,16 @@ class LineShell implements TerminalShellInterface
         $selectedRows = array_fill_keys(array_map('intval', $options['selectedRows'] ?? []), true);
         $extraKeyMap = $this->normalizeCommandMap($extraKeys);
         $commandLines = [];
+        $headerLines = array_map('strval', (array)($options['header_lines'] ?? []));
 
-        $renderList = function () use ($conn, &$state, &$title, &$rows, $rebuildFn, $page, $totalPages, $selectedIndex, $options, $extraKeyMap, $helpItems, &$commandLines, &$selectedRows): void {
+        $renderList = function () use ($conn, &$state, &$title, &$rows, $rebuildFn, $page, $totalPages, $selectedIndex, $options, $extraKeyMap, $helpItems, &$commandLines, &$selectedRows, &$headerLines): void {
             if ($rebuildFn !== null) {
                 $rebuilt = (array)$rebuildFn($state);
                 $rows = $rebuilt['rows'] ?? $rows;
                 $title = $rebuilt['title'] ?? $title;
+                if (isset($rebuilt['header_lines']) && is_array($rebuilt['header_lines'])) {
+                    $headerLines = array_map('strval', $rebuilt['header_lines']);
+                }
             }
 
             $commands = ['number = select', 'P = prev page', 'N = next page', 'Q = quit'];
@@ -1030,7 +1040,7 @@ class LineShell implements TerminalShellInterface
                 $commands[] = '? = help';
             }
             $commandLines = [implode('  ', $commands)];
-            $this->renderSelectableListScreen($conn, $state, $title, $rows, $page, $totalPages, $selectedIndex, $commandLines, $selectedRows);
+            $this->renderSelectableListScreen($conn, $state, $title, $rows, $page, $totalPages, $selectedIndex, $commandLines, $selectedRows, $headerLines);
         };
 
         while (true) {
