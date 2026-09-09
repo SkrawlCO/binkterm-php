@@ -644,7 +644,7 @@ class EchomailHandler
 
                 $wrappedLines = $markupFormat !== null
                     ? TerminalMarkupRenderer::render($markupFormat, $body, $width)
-                    : TelnetUtils::wrapTextLines($body, $width);
+                    : TelnetUtils::wrapTextLines(TerminalMarkupRenderer::stripNonDisplayAnsi($body), $width);
                 $wrappedLines = array_map(fn(string $line): string => $this->server->encodeForTerminal($line), $wrappedLines);
                 if ($searchTerm !== '') {
                     $wrappedLines = $this->highlightSearchTerm($wrappedLines, $searchTerm);
@@ -1781,7 +1781,7 @@ class EchomailHandler
 
                 $wrappedLines = $markupFormat !== null
                     ? TerminalMarkupRenderer::render($markupFormat, $body, $width)
-                    : TelnetUtils::wrapTextLines($body, $width);
+                    : TelnetUtils::wrapTextLines(TerminalMarkupRenderer::stripNonDisplayAnsi($body), $width);
                 $wrappedLines = array_map(fn(string $line): string => $this->server->encodeForTerminal($line), $wrappedLines);
 
                 return [

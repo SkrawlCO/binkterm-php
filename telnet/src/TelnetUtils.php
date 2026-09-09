@@ -759,8 +759,15 @@ class TelnetUtils
      * Word-wrap a string into an array of display lines.
      *
      * Each existing newline in $text starts a new element. Long lines are split
-     * at word boundaries up to $width characters. Hard-wraps at $width when no
-     * word boundary is available. Always returns at least one element (empty string).
+     * at word boundaries up to $width visible characters; an over-long word is
+     * hard-cut at $width. Always returns at least one element (empty string).
+     *
+     * Width is measured in visible units: a UTF-8 codepoint counts once and an
+     * ANSI escape sequence counts zero, and neither is ever split across lines.
+     * (The historical byte-oriented `wordwrap(…, cut: true)` bisected multi-byte
+     * glyphs and escape sequences, producing invalid UTF-8 that a downstream
+     * charset conversion then mangled — literal `[0;33m` fragments in ANSI art.)
+     * For pure-ASCII input the result is identical to the old behaviour.
      *
      * @param string $text  Input text; may contain \r\n or \n line endings.
      * @param int    $width Maximum visible characters per line (clamped to at least 10).
@@ -768,27 +775,108 @@ class TelnetUtils
      */
     public static function wrapTextLines(string $text, int $width): array
     {
-        $lines = preg_split("/\\r?\\n/", $text);
+        $wrapWidth    = max(10, $width);
         $wrappedLines = [];
-        $wrapWidth = max(10, $width);
 
-        foreach ($lines as $line) {
+        foreach (preg_split("/\\r?\\n/", $text) as $line) {
             if ($line === '') {
                 $wrappedLines[] = '';
                 continue;
             }
-            $wrapped = wordwrap($line, $wrapWidth, "\n", true);
-            $parts = explode("\n", $wrapped);
-            foreach ($parts as $part) {
+            foreach (self::wrapVisualLine($line, $wrapWidth) as $part) {
                 $wrappedLines[] = $part;
             }
         }
 
-        if ($wrappedLines === []) {
-            $wrappedLines[] = '';
+        return $wrappedLines === [] ? [''] : $wrappedLines;
+    }
+
+    /**
+     * Wrap one already-newline-free line to $width visible columns.
+     *
+     * Atoms are ANSI escape sequences (visible width 0, never split) and single
+     * UTF-8 codepoints (visible width 1, never split). Greedy word wrap: when a
+     * non-space token would overflow the current line it starts a new one; a
+     * token that on its own exceeds the width is hard-cut on atom boundaries.
+     * Trailing spaces are preserved (ANSI art fills lines with coloured blanks).
+     *
+     * @return string[]
+     */
+    private static function wrapVisualLine(string $line, int $width): array
+    {
+        preg_match_all('/\033\[[0-9;?]*[ -\/]*[@-~]|\033[@-Z\\\\-_]|\X/u', $line, $m);
+        $atoms = $m[0];
+        if ($atoms === [] && $line !== '') {
+            $atoms = str_split($line); // non-UTF-8 fallback: one byte = one unit
         }
 
-        return $wrappedLines;
+        $isEsc = static fn (string $a): bool => isset($a[0]) && $a[0] === "\033";
+
+        // Group atoms into space / non-space tokens; ANSI escapes ride with the
+        // token being built.
+        $tokens = [];               // list of [atoms[], isSpace, visWidth]
+        $curAtoms = [];
+        $curSpace = null;
+        $curVis   = 0;
+        $flush = static function () use (&$tokens, &$curAtoms, &$curSpace, &$curVis): void {
+            if ($curAtoms !== []) {
+                $tokens[] = [$curAtoms, (bool) $curSpace, $curVis];
+            }
+            $curAtoms = [];
+            $curSpace = null;
+            $curVis   = 0;
+        };
+        foreach ($atoms as $a) {
+            if ($isEsc($a)) {
+                $curAtoms[] = $a;
+                continue;
+            }
+            $sp = ($a === ' ' || $a === "\t");
+            if ($curSpace !== null && $sp !== $curSpace) {
+                $flush();
+            }
+            $curSpace = $sp;
+            $curAtoms[] = $a;
+            $curVis++;
+        }
+        $flush();
+
+        $out = [];
+        $cur = '';
+        $vis = 0;
+        foreach ($tokens as [$tokAtoms, $isSpace, $tw]) {
+            if (!$isSpace && $vis > 0 && $vis + $tw > $width) {
+                // Soft word break: drop the run of break spaces (matches the
+                // historical wordwrap()); hard cuts and real line ends keep
+                // their trailing spaces so ANSI colour fills survive.
+                $out[] = rtrim($cur, " \t");
+                $cur = '';
+                $vis = 0;
+            }
+
+            if (!$isSpace && $tw > $width) {
+                foreach ($tokAtoms as $a) {
+                    $aw = $isEsc($a) ? 0 : 1;
+                    if ($aw === 1 && $vis >= $width) {
+                        $out[] = $cur;
+                        $cur = '';
+                        $vis = 0;
+                    }
+                    $cur .= $a;
+                    $vis += $aw;
+                }
+                continue;
+            }
+
+            $cur .= implode('', $tokAtoms);
+            $vis += $tw;
+        }
+
+        if ($cur !== '' || $out === []) {
+            $out[] = $cur;
+        }
+
+        return $out;
     }
 
     /**

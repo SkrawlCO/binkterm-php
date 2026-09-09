@@ -1765,13 +1765,19 @@ class BbsSession
         if (!preg_match('/[^\x20-\x7E\r\n\t]/', $text)) {
             return $text;
         }
+        // Repair invalid UTF-8 first: iconv() aborts (returns false) on a
+        // malformed sequence even with //IGNORE, and the byte-strip fallback
+        // would then delete every ESC, turning ANSI art into literal "[0;33m".
+        if (!mb_check_encoding($text, 'UTF-8')) {
+            $text = mb_convert_encoding($text, 'UTF-8', 'UTF-8');
+        }
         if (function_exists('iconv')) {
             $converted = @iconv('UTF-8', 'CP437//TRANSLIT//IGNORE', $text);
             if (is_string($converted) && $converted !== '') {
                 return $converted;
             }
         }
-        return preg_replace('/[^\x20-\x7E\r\n\t]/', '', $text) ?? $text;
+        return preg_replace('/[^\x20-\x7E\r\n\t\x1b]/', '', $text) ?? $text;
     }
 
     /**

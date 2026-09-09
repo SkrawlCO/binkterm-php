@@ -117,6 +117,27 @@ class TerminalMarkupRenderer
     }
 
     /**
+     * Reduce ANSI in an untrusted message body to a safe display subset:
+     * SGR colour/style ({@code ESC[…m}) is kept; cursor movement, erase, scroll,
+     * OSC (window title, clipboard), DCS/APC/PM device strings and every other
+     * ESC-introduced control are removed. Message bodies from the network are
+     * untrusted input — a boxed or scrolling viewer must not let them drive the
+     * terminal. Mirrors {@see \BinktermPHP\TelnetServer\BulletinsHandler}'s
+     * bulletin renderer.
+     */
+    public static function stripNonDisplayAnsi(string $text): string
+    {
+        // OSC: ESC ] … (BEL | ST) — window title, clipboard (OSC 52), hyperlinks.
+        $text = preg_replace('/\033\][^\007\033]*(?:\007|\033\\\\)?/', '', $text) ?? $text;
+        // DCS / SOS / PM / APC: ESC (P|X|^|_) … ST
+        $text = preg_replace('/\033[PX^_][^\033]*(?:\033\\\\)?/', '', $text) ?? $text;
+        // CSI that is not SGR: cursor moves, erase, scroll, private modes, DA/DSR …
+        $text = preg_replace('/\033\[[0-9;?]*[ -\/]*[@-ln-~]/', '', $text) ?? $text;
+        // Any remaining lone ESC + single byte (SS2/SS3, charset designators, RIS …).
+        return preg_replace('/\033[^\[]/', '', $text) ?? $text;
+    }
+
+    /**
      * Strip SOH-prefixed kludge lines from message text, preserving blank lines.
      *
      * @param string $text Raw message body
