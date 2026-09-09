@@ -72,6 +72,7 @@ class BbsConfig
                 'shoutbox' => true,
                 'advertising' => true,
                 'voting_booth' => true,
+                'meshcore' => true,
                 'pgp' => false,
                 'pgp_public_keyserver' => true,
                 'pgp_managed_keys' => false

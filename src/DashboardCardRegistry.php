@@ -58,8 +58,8 @@ class DashboardCardRegistry
         return [
             'referral_enabled' => !empty($creditsConfig['enabled'])
                 && !empty($creditsConfig['referral_enabled']),
-            'packetbbs_nodes_exist' =>
-                (new \BinktermPHP\PacketBbs\PacketBbsNodeService())->getNodeCount() > 0,
+            'packetbbs_nodes_exist' => BbsConfig::isFeatureEnabled('meshcore')
+                && (new \BinktermPHP\PacketBbs\PacketBbsNodeService())->getNodeCount() > 0,
             'crossroads_available' => GameConfig::isGameSystemEnabled()
                 && BbsConfig::isFeatureEnabled('webdoors'),
         ];

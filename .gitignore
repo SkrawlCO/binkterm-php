@@ -91,3 +91,6 @@ docker-compose.override.yml
 # Galactic Bloodshed native-door client runtime artifacts
 native-doors/doors/galacticbloodshed/gb-client.log
 native-doors/doors/galacticbloodshed/**/__pycache__/
+
+# Native door local secrets
+native-doors/doors/bbslinknative/vars.sh

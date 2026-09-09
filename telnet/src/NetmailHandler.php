@@ -749,14 +749,16 @@ class NetmailHandler
                 // the viewer needs from the fetched message.
                 $msg = array_merge(is_array($detail['data'] ?? null) ? $detail['data'] : [], $msg);
             }
-            $body         = $detail['data']['message_text'] ?? '';
+            // GHSA-4225: sanitize the body before the art-fidelity layer.
+            // stripNonDisplayAnsi() delegates to TerminalTextSanitizer::sanitize().
+            $body         = TerminalMarkupRenderer::stripNonDisplayAnsi($detail['data']['message_text'] ?? '');
             $markupFormat = $detail['data']['markup_format'] ?? null;
             $artFormat    = \BinktermPHP\ArtFormatDetector::detectArtFormat(
-                TerminalMarkupRenderer::stripNonDisplayAnsi($body),
+                $body,
                 $detail['data']['message_charset'] ?? null
             );
             $attachments  = $detail['data']['attachments'] ?? [];
-            $rawKludges   = ($detail['data']['kludge_lines'] ?? '') . "\n" . ($detail['data']['bottom_kludges'] ?? '');
+            $rawKludges   = \BinktermPHP\TerminalTextSanitizer::sanitize(($detail['data']['kludge_lines'] ?? '') . "\n" . ($detail['data']['bottom_kludges'] ?? ''));
             $kludgeLines  = TerminalMarkupRenderer::extractKludgeLines($rawKludges);
             $kludgeLines  = array_map(fn(string $line): string => $this->server->encodeForTerminal($line), $kludgeLines);
             $imageRefs    = TerminalMarkupRenderer::extractImageRefs((string)($markupFormat ?? ''), $body);

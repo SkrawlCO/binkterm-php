@@ -635,13 +635,18 @@ class EchomailHandler
                 // fill the header fields the viewer needs from the fetched message.
                 $msg = array_merge(is_array($detail['data'] ?? null) ? $detail['data'] : [], $msg);
             }
-            $body         = $detail['data']['message_text'] ?? '';
+            // GHSA-4225: strip every terminal control sequence except SGR colour
+            // before the body or kludges reach the reader. stripNonDisplayAnsi()
+            // now delegates to BinktermPHP\TerminalTextSanitizer::sanitize(); the
+            // ANSI-art fidelity layer (ArtFormatDetector gate, clipArtLines,
+            // visible-unit wrap, CP437 repair) runs after this, unchanged.
+            $body         = TerminalMarkupRenderer::stripNonDisplayAnsi($detail['data']['message_text'] ?? '');
             $markupFormat = $detail['data']['markup_format'] ?? null;
             $artFormat    = \BinktermPHP\ArtFormatDetector::detectArtFormat(
-                TerminalMarkupRenderer::stripNonDisplayAnsi($body),
+                $body,
                 $detail['data']['message_charset'] ?? null
             );
-            $rawKludges   = ($detail['data']['kludge_lines'] ?? '') . "\n" . ($detail['data']['bottom_kludges'] ?? '');
+            $rawKludges   = TerminalMarkupRenderer::stripNonDisplayAnsi(($detail['data']['kludge_lines'] ?? '') . "\n" . ($detail['data']['bottom_kludges'] ?? ''));
             $kludgeLines  = TerminalMarkupRenderer::extractKludgeLines($rawKludges);
             $kludgeLines  = array_map(fn(string $line): string => $this->server->encodeForTerminal($line), $kludgeLines);
             $imageRefs    = TerminalMarkupRenderer::extractImageRefs((string)($markupFormat ?? ''), $body);
@@ -1774,14 +1779,16 @@ class EchomailHandler
             }
 
             $this->server->logAction($state['username'] ?? 'unknown', "Echomail: read message #{$id} in {$area}");
+            // GHSA-4225: sanitize body + kludges (stripNonDisplayAnsi delegates
+            // to TerminalTextSanitizer::sanitize) before the art-fidelity layer.
             $detail       = $this->detailService()->echomailDetail($area, (int) $id, ((int) ($state['user_id'] ?? 0)) ?: null);
-            $body         = $detail['data']['message_text'] ?? '';
+            $body         = TerminalMarkupRenderer::stripNonDisplayAnsi($detail['data']['message_text'] ?? '');
             $markupFormat = $detail['data']['markup_format'] ?? null;
             $artFormat    = \BinktermPHP\ArtFormatDetector::detectArtFormat(
-                TerminalMarkupRenderer::stripNonDisplayAnsi($body),
+                $body,
                 $detail['data']['message_charset'] ?? null
             );
-            $rawKludges   = ($detail['data']['kludge_lines'] ?? '') . "\n" . ($detail['data']['bottom_kludges'] ?? '');
+            $rawKludges   = TerminalMarkupRenderer::stripNonDisplayAnsi(($detail['data']['kludge_lines'] ?? '') . "\n" . ($detail['data']['bottom_kludges'] ?? ''));
             $kludgeLines  = TerminalMarkupRenderer::extractKludgeLines($rawKludges);
             $kludgeLines  = array_map(fn(string $line): string => $this->server->encodeForTerminal($line), $kludgeLines);
             $imageRefs    = TerminalMarkupRenderer::extractImageRefs((string)($markupFormat ?? ''), $body);

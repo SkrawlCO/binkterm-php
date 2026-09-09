@@ -2291,6 +2291,11 @@ SimpleRouter::get('/shell-art/{name}', function(string $name) {
 
 // Public Meshcore Nodes page
 SimpleRouter::get('/packetbbs-nodes', function() {
+    if (!\BinktermPHP\BbsConfig::isFeatureEnabled('meshcore')) {
+        http_response_code(404);
+        return;
+    }
+
     $service       = new \BinktermPHP\PacketBbs\PacketBbsNodeService();
     $nodes         = $service->getPublicNodes();
     $mappableNodes = $service->getMappableNodes();

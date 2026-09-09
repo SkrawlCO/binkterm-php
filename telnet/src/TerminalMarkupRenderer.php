@@ -124,23 +124,17 @@ class TerminalMarkupRenderer
      * bodies from the network are untrusted input — a boxed or scrolling viewer
      * must not let them drive the terminal. Mirrors
      * {@see \BinktermPHP\TelnetServer\BulletinsHandler}'s bulletin renderer.
+     *
+     * Since BinktermPHP 1.10.5 the escape/control strip is owned by
+     * {@see \BinktermPHP\TerminalTextSanitizer::sanitize()} (GHSA-4225-c933-76f3):
+     * SGR colour is kept, every other escape sequence plus C0/C1 (except
+     * TAB/CR/LF) is removed. This wrapper stays as the terminal-render entry
+     * point — the ANSI-art fidelity layer (ArtFormatDetector, clipArtLines,
+     * visible-unit wrapping, CP437 repair) runs on its output, unchanged.
      */
     public static function stripNonDisplayAnsi(string $text): string
     {
-        // OSC: ESC ] … (BEL | ST) — window title, clipboard (OSC 52), hyperlinks.
-        $text = preg_replace('/\033\][^\007\033]*(?:\007|\033\\\\)?/', '', $text) ?? $text;
-        // DCS / SOS / PM / APC: ESC (P|X|^|_) … ST
-        $text = preg_replace('/\033[PX^_][^\033]*(?:\033\\\\)?/', '', $text) ?? $text;
-        // CSI that is not SGR: cursor moves, erase, scroll, private modes, DA/DSR …
-        $text = preg_replace('/\033\[[0-9;?]*[ -\/]*[@-ln-~]/', '', $text) ?? $text;
-        // Any remaining lone ESC + single byte (SS2/SS3, charset designators, RIS …).
-        $text = preg_replace('/\033[^\[]/', '', $text) ?? $text;
-        // Bare C0 control bytes — range excludes TAB (09), LF (0A), CR (0D) and
-        // ESC (1B), which the surviving SGR sequences still need. A raw byte such
-        // as 0x02 would otherwise reach a CP437 terminal as a glyph (☻ beside
-        // game names in ANSI door ads); the web viewer likewise drops every
-        // sub-0x20 control that is not a cursor/line control.
-        return preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1A\x1C-\x1F]/', '', $text) ?? $text;
+        return \BinktermPHP\TerminalTextSanitizer::sanitize($text);
     }
 
     /**

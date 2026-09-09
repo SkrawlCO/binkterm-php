@@ -147,6 +147,7 @@ declare -A OPTIONAL_DAEMONS=(
     [ENABLE_AI_BOT]=ai_bot_daemon
     [ENABLE_MATTERBRIDGE]=matterbridge_daemon
     [ENABLE_MCP_SERVER]=mcp_server
+    [ENABLE_NNTP]=nntp_daemon
 )
 
 for var in "${!OPTIONAL_DAEMONS[@]}"; do
@@ -194,6 +195,9 @@ fi
 } > /etc/cron.d/binkterm
 
 chmod 644 /etc/cron.d/binkterm
+
+# Clean up any stale PID files from unclean container shutdowns
+rm -f /var/run/apache2/apache2.pid /var/run/apache2/*.pid
 
 echo "Initialization complete!"
 echo ""

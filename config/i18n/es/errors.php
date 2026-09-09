@@ -241,6 +241,7 @@ return [
     'errors.messages.drafts.not_found' => 'Borrador no encontrado',
     'errors.messages.drafts.get_failed' => 'No se pudo cargar el borrador',
     'errors.messages.drafts.delete_failed' => 'No se pudo eliminar el borrador',
+    'errors.messages.drafts.bulk_delete.invalid_input' => 'Se requiere una lista no vacia de ID de borradores',
     'errors.messages.templates.not_licensed' => 'Las plantillas de mensajes requieren una licencia registrada',
     'errors.messages.templates.not_found' => 'Plantilla no encontrada',
     'errors.messages.templates.name_required' => 'El nombre de la plantilla es obligatorio',
@@ -677,6 +678,7 @@ return [
     'errors.admin.areafix.send_failed' => 'Error al enviar el comando',
     'errors.admin.areafix.history_failed' => 'Error al cargar el historial de mensajes',
     'errors.admin.areafix.sync_failed' => 'Error al sincronizar las áreas',
+    'errors.admin.areafix.no_area_list_found' => 'No se encontró lista de áreas en las respuestas recientes para este uplink',
     'errors.admin.poll.failed' => 'No se pudo consultar el uplink BinkP',
 
     'errors.admin.lovlynet.invalid_json' => 'Carga de solicitud no válida',
@@ -780,6 +782,7 @@ return [
     'errors.admin.networks.delete_failed' => 'Failed to delete network',
 
     // MeshCore
+    'errors.meshcore.disabled' => 'MeshCore está desactivado en este sistema.',
     'errors.meshcore.invalid_node_id' => 'El ID de nodo debe tener 12 o 64 caracteres hexadecimales en minusculas.',
     'errors.meshcore.contact_exists' => 'Ya existe un contacto con este ID de nodo.',
     'errors.meshcore.not_found' => 'Contacto no encontrado.',
@@ -825,4 +828,6 @@ return [
     'errors.admin.users.autocomplete_failed' => 'No se pudo buscar usuarios.',
     'errors.admin.bbs_settings.invalid_screening_config' => 'Configuración de detección de registros no válida',
     'errors.admin.terminal_navigation.preview_failed' => 'Preview render failed',
+    'errors.admin.nntp_settings.load_failed' => 'No se pudo cargar la configuración NNTP',
+    'errors.admin.nntp_settings.save_failed' => 'No se pudo guardar la configuración NNTP',
 ];
