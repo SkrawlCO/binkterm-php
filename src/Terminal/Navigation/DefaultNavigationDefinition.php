@@ -22,9 +22,11 @@ final class DefaultNavigationDefinition
     {
         $items = [];
         foreach (TerminalActionCatalog::descriptors() as $d) {
+            // The built-in definition intentionally uses plain literal labels
+            // (no i18n key): it is a board-agnostic safety net / fixture. A real
+            // sysop definition supplies its own `label_key` per item.
             $items[] = [
                 'id'        => $d['id'],
-                'label_key' => $d['key'],
                 'label_fallback' => $d['fallback'],
                 'hotkey'    => $d['hotkey'],
                 'action'    => $d['id'],
@@ -43,7 +45,6 @@ final class DefaultNavigationDefinition
             'nodes'  => [
                 [
                     'id'        => 'main',
-                    'label_key' => 'ui.terminalserver.server.menu.title',
                     'label_fallback' => 'Main Menu',
                     'items'     => $items,
                 ],
