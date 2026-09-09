@@ -29,7 +29,9 @@ final class NavigationPreviewService
     }
 
     /**
-     * Render one node of a definition and return the raw terminal bytes.
+     * Render one node of a definition through the canonical flowing renderer
+     * and return the raw terminal bytes. This is the theme-independent content
+     * preview; {@see renderReport()} applies the presentation theme.
      */
     public function render(
         NavigationDefinition $definition,
@@ -43,6 +45,65 @@ final class NavigationPreviewService
         (new NavigationScreenRenderer())->render($ctx, $screen);
 
         return $sink->getBytes();
+    }
+
+    /**
+     * Render one node through the SAME renderer selection the live terminal
+     * uses — a validated, enabled theme for a themed geometry, the flowing
+     * renderer otherwise — and report which path ran.
+     *
+     * `lines` is a flattened 80x24-style grid (absolute positioning resolved,
+     * SGR preserved) so a browser preview that only understands SGR can show
+     * the themed layout faithfully; for the fallback path it is the flowing
+     * output split into lines.
+     *
+     * @return array{
+     *     bytes:string, mode:string, reason:?string,
+     *     geometry:string, lines:array<int,string>,
+     *     theme_status:string, theme_errors:array<int,string>
+     * }
+     */
+    public function renderReport(
+        NavigationDefinition $definition,
+        NavigationPreviewProfile $profile,
+        ?string $nodeId = null
+    ): array {
+        $sink   = new BufferSink();
+        $ctx    = $this->context($sink, $profile);
+        $screen = $this->screen($definition, $profile, $nodeId);
+        $inner  = new NavigationScreenRenderer();
+
+        $result = NavigationThemeConfig::load();
+        $mode   = 'fallback';
+        $reason = null;
+
+        if ($result->isOk() && $result->theme() !== null && $result->theme()->isEnabled()) {
+            $themed = new ThemedNavigationRenderer($inner, $result->theme());
+            $themed->render($ctx, $screen);
+            $report = $themed->lastReport();
+            $mode   = $report['mode'];
+            $reason = $report['reason'];
+        } else {
+            $inner->render($ctx, $screen);
+            $reason = match (true) {
+                $result->isAbsent()                               => 'no theme configured',
+                $result->isInvalid()                              => 'theme config invalid: ' . $result->errorSummary(),
+                $result->theme() !== null && !$result->theme()->isEnabled() => 'theme present but disabled',
+                default                                           => 'flowing renderer',
+            };
+        }
+
+        $bytes = $sink->getBytes();
+
+        return [
+            'bytes'        => $bytes,
+            'mode'         => $mode,
+            'reason'       => $reason,
+            'geometry'     => $profile->cols . 'x' . $profile->rows,
+            'lines'        => (new AnsiScreenBuffer($profile->cols, $profile->rows))->write($bytes)->toLines(),
+            'theme_status' => $result->isOk() ? 'ok' : ($result->isInvalid() ? 'invalid' : 'absent'),
+            'theme_errors' => array_map(static fn ($e) => (string) $e, $result->errors()),
+        ];
     }
 
     /**

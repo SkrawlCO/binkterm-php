@@ -56,7 +56,11 @@ final class TerminalNavigationEditorTest extends TestCase
     {
         $body = $this->routeBody("SimpleRouter::post('/terminal-navigation/preview'");
         self::assertStringContainsString('NavigationPreviewService', $body);
-        self::assertStringContainsString('->render(', $body);
+        // The preview runs the same renderer selection the live terminal uses
+        // and reports themed vs fallback.
+        self::assertStringContainsString('->renderReport(', $body);
+        self::assertStringContainsString("'render_mode'", $body);
+        self::assertStringContainsString("'lines'", $body);
         self::assertStringContainsString('NavigationPreviewProfile::geometry(', $body);
         // Invalid JSON returns errors[] instead of a render; never writes.
         self::assertStringContainsString('$load->isOk()', $body);
@@ -65,6 +69,72 @@ final class TerminalNavigationEditorTest extends TestCase
         self::assertStringNotContainsString('file_put_contents', $body);
         // Only the three supported geometries are honoured.
         self::assertStringContainsString('NavigationPreviewProfile::GEOMETRIES', $body);
+    }
+
+    public function testPreviewReportsThemedAt80x24AndFallbackAt132(): void
+    {
+        $root = dirname(__DIR__, 2);
+
+        // Point the theme loader at the shipped example theme.
+        $prev = getenv('TERMINAL_NAV_THEME_CONFIG');
+        putenv('TERMINAL_NAV_THEME_CONFIG=' . $root . '/config/terminal_theme.json.example');
+        $_ENV['TERMINAL_NAV_THEME_CONFIG'] = $root . '/config/terminal_theme.json.example';
+        \BinktermPHP\Terminal\Navigation\NavigationThemeConfig::reset();
+
+        try {
+            $registry = \BinktermPHP\Terminal\Navigation\TerminalActionCatalog::defaultRegistry();
+            $def = (new \BinktermPHP\Terminal\Navigation\NavigationDefinitionLoader($registry))->fromJson(
+                (string) file_get_contents($root . '/config/terminal_navigation.json.example'),
+                'example'
+            );
+            if (!$def->isOk()) {
+                // The example may be absent in some checkouts; fall back to a minimal def.
+                $def = (new \BinktermPHP\Terminal\Navigation\NavigationDefinitionLoader($registry))->fromJson(
+                    json_encode([
+                        'schema' => 1, 'id' => 't', 'root' => 'main',
+                        'nodes' => [['id' => 'main', 'label_fallback' => 'Main', 'items' => [
+                            ['id' => 'n', 'label_fallback' => 'Netmail', 'hotkey' => 'n', 'action' => 'netmail'],
+                            ['id' => 'q', 'label_fallback' => 'Log Off', 'hotkey' => 'q', 'action' => 'quit'],
+                        ]]],
+                    ]),
+                    't'
+                );
+            }
+            self::assertTrue($def->isOk(), $def->errorSummary());
+
+            $svc = new \BinktermPHP\Terminal\Navigation\NavigationPreviewService($registry);
+
+            $themed = $svc->renderReport(
+                $def->definition(),
+                \BinktermPHP\Terminal\Navigation\NavigationPreviewProfile::geometry('80x24')->withAllFeaturesEnabled($registry)
+            );
+            self::assertSame('themed', $themed['mode'], (string) $themed['reason']);
+            self::assertSame('ok', $themed['theme_status']);
+            self::assertCount(24, $themed['lines']);
+            self::assertStringContainsString('L33TEST', implode("\n", $themed['lines']));
+
+            foreach (['132x36', '132x51'] as $geo) {
+                $fb = $svc->renderReport(
+                    $def->definition(),
+                    \BinktermPHP\Terminal\Navigation\NavigationPreviewProfile::geometry($geo)->withAllFeaturesEnabled($registry)
+                );
+                self::assertSame('fallback', $fb['mode'], $geo);
+                self::assertStringContainsString('not a themed geometry', (string) $fb['reason']);
+            }
+        } finally {
+            putenv($prev === false ? 'TERMINAL_NAV_THEME_CONFIG' : 'TERMINAL_NAV_THEME_CONFIG=' . $prev);
+            unset($_ENV['TERMINAL_NAV_THEME_CONFIG']);
+            \BinktermPHP\Terminal\Navigation\NavigationThemeConfig::reset();
+        }
+    }
+
+    public function testConfigRouteReportsThemeStatus(): void
+    {
+        $body = $this->routeBody("SimpleRouter::get('/terminal-navigation/config'");
+        self::assertStringContainsString('NavigationThemeConfig::load()', $body);
+        self::assertStringContainsString("'theme'", $body);
+        // Read-only in M1: the config route must not write a theme.
+        self::assertStringNotContainsString('NavigationThemeLoader())->fromJson', $body);
     }
 
     public function testPreviewGeometriesAreThe80And132Set(): void

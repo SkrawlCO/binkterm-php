@@ -9,10 +9,11 @@ use BinktermPHP\TelnetServer\TerminalRenderContext;
  *
  * It is driven entirely by injected callables so it has no dependency on the
  * telnet/SSH engine: the caller supplies a key reader and an action-invocation
- * context. It renders through {@see NavigationScreenRenderer} (the same renderer
- * as tests and preview), keeps hotkey behaviour, adds arrow/lightbar and
- * Back/Home navigation, and rebuilds the screen on every loop so a geometry
- * change (NAWS -> render context) reflows immediately.
+ * context. It renders through a {@see NavigationRenderer} — the canonical
+ * {@see NavigationScreenRenderer}, or a {@see ThemedNavigationRenderer}
+ * decorating it — keeps hotkey behaviour, adds arrow/lightbar and Back/Home
+ * navigation, and rebuilds the screen on every loop so a geometry change
+ * (NAWS -> render context) reflows immediately.
  *
  * The result of {@see run()} tells the caller how the loop ended.
  */
@@ -26,7 +27,7 @@ final class NavigationRuntime
         private readonly NavigationDefinition $definition,
         private readonly ActionRegistry $registry,
         private readonly NavigationScreenBuilder $builder,
-        private readonly NavigationScreenRenderer $renderer,
+        private readonly NavigationRenderer $renderer,
     ) {
     }
 

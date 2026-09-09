@@ -4446,6 +4446,16 @@ SimpleRouter::group(['prefix' => '/admin'], function() {
             try {
                 $daemon = (new \BinktermPHP\Admin\AdminDaemonClient())->getTerminalNavigationConfig();
 
+                // Presentation theme status (read-only in M1 — no editor yet).
+                $themeResult = \BinktermPHP\Terminal\Navigation\NavigationThemeConfig::load();
+                $themeInfo   = [
+                    'status'         => $themeResult->isOk() ? 'ok' : ($themeResult->isInvalid() ? 'invalid' : 'absent'),
+                    'enabled'        => $themeResult->isOk() && $themeResult->theme() !== null && $themeResult->theme()->isEnabled(),
+                    'id'             => $themeResult->isOk() && $themeResult->theme() !== null ? $themeResult->theme()->id : null,
+                    'geometry_keys'  => $themeResult->isOk() && $themeResult->theme() !== null ? $themeResult->theme()->geometryKeys() : [],
+                    'errors'         => array_map(static fn ($e) => (string) $e, $themeResult->errors()),
+                ];
+
                 echo json_encode([
                     'success'          => true,
                     'exists'           => (bool)($daemon['exists'] ?? false),
@@ -4454,6 +4464,7 @@ SimpleRouter::group(['prefix' => '/admin'], function() {
                     'errors'           => $daemon['errors'] ?? [],
                     'runtime_enabled'  => \BinktermPHP\Terminal\Navigation\NavigationConfig::isRuntimeEnabled(),
                     'flag_enabled'     => \BinktermPHP\Terminal\Navigation\NavigationConfig::isFlagEnabled(),
+                    'theme'            => $themeInfo,
                     'actions'          => \BinktermPHP\Terminal\Navigation\TerminalActionCatalog::descriptors(),
                     'access_predicates' => [
                         'always', 'authenticated', 'guest', 'admin (alias: sysop)',
@@ -4556,8 +4567,8 @@ SimpleRouter::group(['prefix' => '/admin'], function() {
                 ->withAllFeaturesEnabled($registry);
 
             try {
-                $ansi = (new \BinktermPHP\Terminal\Navigation\NavigationPreviewService($registry))
-                    ->render($load->definition(), $profile, $nodeId);
+                $report = (new \BinktermPHP\Terminal\Navigation\NavigationPreviewService($registry))
+                    ->renderReport($load->definition(), $profile, $nodeId);
             } catch (\Throwable $e) {
                 http_response_code(500);
                 apiError('errors.admin.terminal_navigation.preview_failed', apiLocalizedText('errors.admin.terminal_navigation.preview_failed', 'Preview render failed'), 500);
@@ -4565,10 +4576,17 @@ SimpleRouter::group(['prefix' => '/admin'], function() {
             }
 
             echo json_encode([
-                'success'  => true,
-                'valid'    => true,
-                'geometry' => $geometry,
-                'ansi'     => $ansi,
+                'success'      => true,
+                'valid'        => true,
+                'geometry'     => $geometry,
+                // Raw bytes for reference; `lines` is the positioning-resolved
+                // grid the preview pane renders.
+                'ansi'         => $report['bytes'],
+                'lines'        => $report['lines'],
+                'render_mode'  => $report['mode'],       // 'themed' | 'fallback'
+                'render_reason' => $report['reason'],
+                'theme_status' => $report['theme_status'], // 'ok' | 'invalid' | 'absent'
+                'theme_errors' => $report['theme_errors'],
             ]);
         });
 

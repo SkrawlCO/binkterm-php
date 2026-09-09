@@ -1,0 +1,16 @@
+{
+  "_comment": "Optional terminal PRESENTATION theme. ANSI frames the declarative navigation; it never carries navigation structure, actions, ACS, or scripting. Copy to config/terminal_theme.json (written via the admin daemon in a later release) to activate. Zero-config = the flowing declarative renderer, which also stays the fallback for every geometry and terminal this theme does not cover. Schema 1 themes exactly one geometry (80x24) with two regions (MENU, FOOTER).",
+  "schema": 1,
+  "id": "example.frame",
+  "enabled": true,
+  "geometries": {
+    "80x24": {
+      "_comment": "template names telnet/screens/<token>.ans (a trusted sysop asset). Region rectangles are 1-based row/col with width/height, must sit wholly inside 80x24, and MENU/FOOTER must not overlap. The renderer paints every cell of each rectangle, so leave those cells blank in the .ans art.",
+      "template": "nav-crossroads",
+      "regions": {
+        "MENU":   { "row": 3,  "col": 5, "width": 70, "height": 18 },
+        "FOOTER": { "row": 22, "col": 5, "width": 70, "height": 1 }
+      }
+    }
+  }
+}

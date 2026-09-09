@@ -13,6 +13,7 @@
         {{ t('ui.admin.terminal_navigation.info_text', {}, locale, ['common']) }}
         <code>config/terminal_navigation.json</code>.
         <span id="runtimeState" class="ms-2"></span>
+        <span id="themeState" class="ms-2"></span>
     </div>
 
     <div class="row">
@@ -47,8 +48,11 @@
             </div>
 
             <div class="card shadow mt-3" id="previewCard" style="display:none;">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <h6 class="mb-0">{{ t('ui.admin.terminal_navigation.preview_heading', {}, locale, ['common']) }}</h6>
+                <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <h6 class="mb-0">
+                        {{ t('ui.admin.terminal_navigation.preview_heading', {}, locale, ['common']) }}
+                        <span id="previewMode" class="badge ms-1"></span>
+                    </h6>
                     <div class="btn-group btn-group-sm" role="group" id="geometryTabs">
                         <button type="button" class="btn btn-outline-secondary active" data-geo="80x24" onclick="setGeometry('80x24')">80&times;24</button>
                         <button type="button" class="btn btn-outline-secondary" data-geo="132x36" onclick="setGeometry('132x36')">132&times;36</button>
@@ -57,6 +61,7 @@
                 </div>
                 <div class="card-body">
                     <pre id="previewPane" class="mb-0 p-2 rounded" style="background:#000;color:#bbb;overflow:auto;line-height:1.15;font-size:12px;"></pre>
+                    <small class="text-muted d-block mt-1" id="previewReason"></small>
                     <small class="text-muted d-block mt-1">{{ t('ui.admin.terminal_navigation.preview_note', {}, locale, ['common']) }}</small>
                 </div>
             </div>
@@ -239,6 +244,21 @@ function setGeometry(geo) {
     previewConfig();
 }
 
+function setPreviewMode(mode, reason) {
+    const badge = document.getElementById('previewMode');
+    const reasonEl = document.getElementById('previewReason');
+    if (mode === 'themed') {
+        badge.textContent = uiT('ui.admin.terminal_navigation.preview_mode_themed', 'THEMED');
+        badge.className = 'badge ms-1 bg-success';
+    } else {
+        badge.textContent = uiT('ui.admin.terminal_navigation.preview_mode_fallback', 'FALLBACK');
+        badge.className = 'badge ms-1 bg-secondary';
+    }
+    reasonEl.textContent = reason
+        ? uiT('ui.admin.terminal_navigation.preview_reason', 'Renderer:') + ' ' + reason
+        : '';
+}
+
 function previewConfig() {
     const btn = document.getElementById('previewBtn');
     btn.disabled = true;
@@ -254,15 +274,44 @@ function previewConfig() {
                 renderErrors(data.errors);
                 document.getElementById('previewPane').textContent =
                     uiT('ui.admin.terminal_navigation.preview_invalid', 'Fix the definition errors to preview.');
+                document.getElementById('previewMode').className = 'badge ms-1';
+                document.getElementById('previewMode').textContent = '';
+                document.getElementById('previewReason').textContent = '';
                 setStatus(uiT('ui.admin.terminal_navigation.status_has_errors', 'Definition has errors'), 'danger');
                 return;
             }
             renderErrors([]);
-            document.getElementById('previewPane').innerHTML = ansiToHtml(data.ansi || '');
+            // `lines` is the positioning-resolved grid (themed or flowing);
+            // render it row by row through the SGR-only ANSI->HTML pass.
+            const lines = Array.isArray(data.lines) ? data.lines : [];
+            document.getElementById('previewPane').innerHTML =
+                lines.map(l => ansiToHtml(l)).join('\n') || ansiToHtml(data.ansi || '');
+            setPreviewMode(data.render_mode, data.render_reason);
             setStatus(uiT('ui.admin.terminal_navigation.status_previewed', 'Preview rendered at') + ' ' + data.geometry, 'muted');
         })
         .catch(() => setStatus(uiT('ui.admin.terminal_navigation.status_preview_failed', 'Preview request failed'), 'danger'))
         .finally(() => { btn.disabled = false; });
+}
+
+function renderThemeState(theme) {
+    const el = document.getElementById('themeState');
+    if (!el) { return; }
+    if (theme.status === 'ok' && theme.enabled) {
+        el.innerHTML = '<span class="badge bg-info text-dark" title="' +
+            escapeHtml((theme.geometry_keys || []).join(', ')) + '">' +
+            uiT('ui.admin.terminal_navigation.theme_active', 'Theme active') + ': ' +
+            escapeHtml(theme.id || '') + '</span>';
+    } else if (theme.status === 'ok') {
+        el.innerHTML = '<span class="badge bg-secondary">' +
+            uiT('ui.admin.terminal_navigation.theme_disabled', 'Theme present, disabled') + '</span>';
+    } else if (theme.status === 'invalid') {
+        el.innerHTML = '<span class="badge bg-danger" title="' +
+            escapeHtml((theme.errors || []).join('; ')) + '">' +
+            uiT('ui.admin.terminal_navigation.theme_invalid', 'Theme config invalid') + '</span>';
+    } else {
+        el.innerHTML = '<span class="badge bg-light text-dark">' +
+            uiT('ui.admin.terminal_navigation.theme_none', 'No theme') + '</span>';
+    }
 }
 
 function renderReference(actions, predicates) {
@@ -291,6 +340,8 @@ function load() {
             } else {
                 rs.innerHTML = '<span class="badge bg-secondary">' + uiT('ui.admin.terminal_navigation.runtime_off', 'Runtime off (TERMINAL_NAV_RUNTIME not set)') + '</span>';
             }
+
+            renderThemeState(data.theme || { status: 'absent' });
 
             if (!data.exists) {
                 setStatus(uiT('ui.admin.terminal_navigation.status_no_file', 'No definition file yet'), 'muted');

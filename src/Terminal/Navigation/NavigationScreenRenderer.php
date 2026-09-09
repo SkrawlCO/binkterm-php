@@ -32,8 +32,14 @@ use BinktermPHP\TelnetServer\TerminalRenderContext;
  * On a terminal too short for the whole block the top margin collapses and the
  * item list is clipped from the bottom (header, status line and footer stay
  * visible), with a "… more" marker.
+ *
+ * It is also the content composer for {@see ThemedNavigationRenderer}: that
+ * decorator asks {@see composeRegions()} for the MENU and FOOTER blocks and
+ * positions them inside a trusted template. All layout, grouping, clipping,
+ * glyph and colour logic stays here — the themed renderer owns presentation
+ * placement only.
  */
-final class NavigationScreenRenderer
+final class NavigationScreenRenderer implements NavigationRenderer
 {
     /** Widest the content column is ever drawn, regardless of terminal width. */
     public const CONTENT_MAX = 78;
@@ -163,6 +169,128 @@ final class NavigationScreenRenderer
             ...$body,
             ...$footerZone,
         ];
+    }
+
+    /**
+     * Compose the MENU and FOOTER blocks for a themed layout.
+     *
+     * Unlike {@see composeLines()} this returns two fixed-size blocks — exactly
+     * `$menuHeight` lines of `$menuWidth` visible cells, and `$footerHeight`
+     * lines of `$footerWidth` — every cell painted (space-padded), each line
+     * prefixed with a reset so it does not inherit SGR from the template
+     * underneath. The caller ({@see ThemedNavigationRenderer}) positions each
+     * block absolutely; there is no top margin and no left pad.
+     *
+     * All the composition logic — header band, grouping, lightbar, inline vs
+     * roaming descriptions, "… more" clipping — is the same as the flowing
+     * renderer; only the framing differs.
+     *
+     * @param array<string,mixed> $opts 'show_hotkeys' (bool), 'cursor' (int|null)
+     * @return array{menu:array<int,string>,footer:array<int,string>}
+     */
+    public function composeRegions(
+        TerminalRenderContext $ctx,
+        NavigationScreenModel $screen,
+        int $menuWidth,
+        int $menuHeight,
+        int $footerWidth,
+        int $footerHeight,
+        array $opts = []
+    ): array {
+        $showHotkeys = $opts['show_hotkeys'] ?? true;
+        $cursor      = $opts['cursor'] ?? null;
+
+        $menuWidth    = max(8, $menuWidth);
+        $menuHeight   = max(1, $menuHeight);
+        $footerWidth  = max(8, $footerWidth);
+        $footerHeight = max(1, $footerHeight);
+
+        $glyphs = $ctx->lineDrawingChars();
+        $hglyph = $glyphs['h'] ?? '-';
+        $utf8   = $ctx->effectiveCharset() === 'utf8';
+
+        $contentWidth = min($menuWidth, self::CONTENT_MAX);
+
+        // --- MENU block -------------------------------------------------------
+        $header  = $this->headerBlock($ctx, $screen, $contentWidth, '', $hglyph);
+        $hasDesc = $this->anyItemHasDescription($screen);
+
+        $rich = $this->bodyBlock($ctx, $screen, $contentWidth, '', $showHotkeys, $cursor, true);
+        $useRich = $hasDesc && (count($header) + count($rich)) <= $menuHeight;
+
+        $status = '';
+        if ($useRich) {
+            $body = $rich;
+        } else {
+            $body = $this->bodyBlock($ctx, $screen, $contentWidth, '', $showHotkeys, $cursor, false);
+            if ($hasDesc) {
+                $status = $this->statusLine($screen, $contentWidth - 4, $cursor);
+            }
+        }
+
+        $reserve = ($status !== '') ? 1 : 0;
+        $limit   = max(1, $menuHeight - $reserve);
+
+        $lines = [...$header, ...$body];
+        if (count($lines) > $limit) {
+            $lines   = array_slice($lines, 0, max(1, $limit - 1));
+            $lines[] = '  ' . $ctx->colorize(
+                $ctx->encodeForTerminal($this->moreMarker($glyphs)),
+                self::EMPHASIS_COLOR['muted']
+            );
+        }
+        if ($reserve === 1) {
+            while (count($lines) < $limit) {
+                $lines[] = '';
+            }
+            $marker  = ($utf8 ? "\u{25B8}" : '>') . ' ';
+            $lines[] = '  ' . $ctx->colorize(
+                $ctx->encodeForTerminal($marker . $status),
+                self::EMPHASIS_COLOR['muted']
+            );
+        }
+
+        $menu = $this->fitBlock($lines, $menuWidth, $menuHeight);
+
+        // --- FOOTER block ----------------------------------------------------
+        $footerLines = [
+            $ctx->colorize(
+                $ctx->encodeForTerminal(str_repeat($hglyph, min($footerWidth, $contentWidth))),
+                self::EMPHASIS_COLOR['muted']
+            ),
+            $ctx->colorize($ctx->encodeForTerminal($this->footerHints($screen)), self::EMPHASIS_COLOR['muted']),
+        ];
+        // A one-row FOOTER keeps only the hints.
+        if ($footerHeight === 1) {
+            $footerLines = [$footerLines[1]];
+        }
+
+        $footer = $this->fitBlock($footerLines, $footerWidth, $footerHeight);
+
+        return ['menu' => $menu, 'footer' => $footer];
+    }
+
+    /**
+     * Force $lines into exactly $height rows of exactly $width visible cells:
+     * clip over-wide lines, right-pad short ones with spaces, pad the block with
+     * blank rows. Each row is prefixed with a reset so it cannot inherit SGR
+     * from whatever the themed renderer painted underneath.
+     *
+     * @param array<int,string> $lines
+     * @return array<int,string>
+     */
+    private function fitBlock(array $lines, int $width, int $height): array
+    {
+        $out = [];
+        for ($i = 0; $i < $height; $i++) {
+            $line    = $lines[$i] ?? '';
+            $clipped = $this->clip($line, $width);
+            $visible = mb_strlen(preg_replace('/\033\[[0-9;]*m/', '', $clipped) ?? $clipped, 'UTF-8');
+            $padding = str_repeat(' ', max(0, $width - $visible));
+            $out[]   = "\033[0m" . $clipped . "\033[0m" . $padding;
+        }
+
+        return $out;
     }
 
     /**

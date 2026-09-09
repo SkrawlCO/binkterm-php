@@ -235,6 +235,74 @@ bare list:
 
 ---
 
+## ANSI presentation theme (optional)
+
+A theme is a trusted, absolute-positioned ANSI frame drawn *around* the composed
+navigation for one exact geometry. **ANSI is presentation only** — it never
+carries navigation structure, actions, ACS, or executable behaviour, and the
+flowing `NavigationScreenRenderer` above stays the canonical content composer and
+the universal fallback.
+
+**Zero-config** is the flowing renderer. A theme is used only when
+`config/terminal_theme.json` exists, validates clean, is not disabled, and the
+live terminal's size, charset (`utf8` / `cp437`) and colour all match a themed
+geometry. Any mismatch — a different size, ANSI colour off, a missing or unsafe
+template, a validation failure — falls back to the flowing renderer for that
+frame. A theme can never make navigation unusable.
+
+### `config/terminal_theme.json`
+
+Schema 1 themes exactly **one** geometry, `80x24`, with exactly two regions,
+`MENU` and `FOOTER`. See `config/terminal_theme.json.example`.
+
+```json
+{
+  "schema": 1,
+  "id": "l33test.crossroads",
+  "enabled": true,
+  "geometries": {
+    "80x24": {
+      "template": "nav-crossroads",
+      "regions": {
+        "MENU":   { "row": 3,  "col": 5, "width": 70, "height": 18 },
+        "FOOTER": { "row": 22, "col": 5, "width": 70, "height": 1 }
+      }
+    }
+  }
+}
+```
+
+- `template` names a trusted sysop asset `telnet/screens/<token>.ans` (token is
+  `[A-Za-z0-9_-]`). Authored in CP437 by convention; converted to the terminal's
+  charset at render time.
+- Region rectangles are **1-based** `row`/`col` with `width`/`height`, all
+  integers `>= 1`. Each must sit wholly inside `80x24`, and `MENU`/`FOOTER` must
+  not overlap. The config is a set of named placement rectangles, **not a drawing
+  language** — no ANSI, no per-cell instructions, no coordinate expressions.
+- Any other geometry key (`132x36`, …) is rejected; those sizes always use the
+  flowing renderer.
+
+### Template safety — `TemplateArtSanitizer`
+
+Before a template is painted it is: truncated at the DOS EOF byte (`0x1A`, drops
+a SAUCE record); stripped of every control sequence except SGR — cursor moves,
+erase, scroll region, mode changes, OSC / DCS, charset designation, C0/C1 bytes
+are all removed (the same whitelist the message-body read path uses); and
+converted to the terminal's charset. A template that relies on cursor
+positioning simply loses it; the allowed capability is printable text and colour.
+
+### `ThemedNavigationRenderer`
+
+Wraps `NavigationScreenRenderer`. On each render it re-checks the geometry (it can
+change mid-session), paints the sanitised template line by line, then asks the
+inner renderer's `composeRegions()` for the MENU and FOOTER blocks — every cell
+space-filled to the rectangle — and positions them with `ESC [ r;c H`. The whole
+frame is one coalesced write. It never touches the screen model, so hotkeys,
+actions, ACS and item order are exactly what the flowing renderer would show.
+`NavigationRendererFactory::create()` chooses the renderer for a session.
+
+---
+
 ## Behaviour at runtime
 
 - **Hotkeys** work as before. Arrow keys / Enter drive a lightbar.
@@ -263,6 +331,15 @@ uses. This is the foundation the planned sysop editor's live preview builds on.
 $service = new NavigationPreviewService();
 $bytes = $service->render($definition, NavigationPreviewProfile::geometry('132x51'));
 ```
+
+`render()` always uses the flowing renderer (theme-independent content preview).
+`renderReport()` uses the **same renderer selection the live terminal uses** — a
+validated, enabled theme where the geometry is themed, the flowing renderer
+otherwise — and returns `{bytes, mode: 'themed'|'fallback', reason, lines,
+theme_status}`. `lines` is a positioning-resolved 24-row grid (via
+`AnsiScreenBuffer`) so a browser preview that only understands SGR can show a
+themed layout faithfully. The F6 admin editor's preview pane renders `lines` and
+shows a **THEMED** / **FALLBACK** badge with the reason.
 
 `NavigationPreviewService::standardProfiles()` covers the standard matrix
 (80x24 UTF-8 / CP437 / ASCII, 132x36, 132x51).

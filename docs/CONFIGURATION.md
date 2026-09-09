@@ -181,6 +181,10 @@ ADMIN_DAEMON_SCHEDULE_INTERVAL=60    # seconds between scheduler ticks
 # An invalid/missing definition file silently falls back to the built-in menu.
 # TERMINAL_NAV_RUNTIME=off
 # TERMINAL_NAV_CONFIG=config/terminal_navigation.json
+# Optional ANSI presentation theme (config/terminal_theme.json.example). No flag —
+# it activates when the file exists and validates; a non-matching terminal uses
+# the normal layout. TERMINAL_NAV_THEME_CONFIG overrides the path (advanced/tests).
+# TERMINAL_NAV_THEME_CONFIG=config/terminal_theme.json
 ```
 
 ### SSH Daemon

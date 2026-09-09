@@ -7,9 +7,9 @@ use BinktermPHP\BbsConfig;
 use BinktermPHP\Config;
 use BinktermPHP\Terminal\Navigation\AccessContext;
 use BinktermPHP\Terminal\Navigation\NavigationConfig;
+use BinktermPHP\Terminal\Navigation\NavigationRendererFactory;
 use BinktermPHP\Terminal\Navigation\NavigationRuntime;
 use BinktermPHP\Terminal\Navigation\NavigationScreenBuilder;
-use BinktermPHP\Terminal\Navigation\NavigationScreenRenderer;
 use BinktermPHP\Terminal\Navigation\TerminalActionCatalog;
 
 /**
@@ -89,7 +89,12 @@ final class DeclarativeMenuBridge
                 $this->liveBadgeResolver($state),
             );
 
-            $runtime = new NavigationRuntime($definition, $registry, $builder, new NavigationScreenRenderer());
+            // Presentation: an optional, validated ANSI theme frames the
+            // navigation for one geometry; every other case (no theme, disabled,
+            // invalid, non-themed size) uses the accepted flowing renderer.
+            $renderer = NavigationRendererFactory::create(fn (string $msg) => $this->server->logInfo($msg));
+
+            $runtime = new NavigationRuntime($definition, $registry, $builder, $renderer);
 
             $readToken = function () use ($conn, &$state): array {
                 [$key, $timedOut, $disconnect] = $this->server->readKeyWithTimeout($conn, $state, 30000);

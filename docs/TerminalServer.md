@@ -414,7 +414,14 @@ A declarative definition may also bind the **`newscan`** action — a unified
 unread-bulletins count. Reading a message during the scan marks it read exactly
 as reading it from the message list does; skipping marks nothing, so a scan is
 always resumable. `newscan` is not part of the built-in menu — add it to your
-`config/terminal_navigation.json` to expose it. See
+`config/terminal_navigation.json` to expose it.
+
+A sysop can optionally add an **ANSI presentation theme** (`config/terminal_theme.json`,
+see `config/terminal_theme.json.example`): a trusted `.ans` frame drawn around the
+navigation at exactly 80x24, with the menu and footer positioned into named
+rectangles. The theme is presentation only — it changes nothing about what the
+menu does — and every terminal it does not cover (a wider size, ANSI colour off,
+a plain-ASCII client) keeps the normal flowing layout. See
 [Terminal Navigation Framework](TerminalNavigationFramework.md).
 
 ### Local Chat
