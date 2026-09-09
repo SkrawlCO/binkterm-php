@@ -4245,9 +4245,17 @@ class BbsSession
                         }
 
                         $seq .= $next;
-                        if (preg_match('/^[0-9;]*[A-Za-z]$/', $seq)) {
-                            // Device reports like CPR (ESC[row;colR) are not
-                            // keypresses and should not enter the input stream.
+                        if (preg_match('/^[0-9;]*([A-Za-z])$/', $seq, $m)) {
+                            // Parametrised / modified cursor and navigation keys
+                            // (SyncTerm sends ESC[1D for Left; xterm sends
+                            // ESC[1;5D for Ctrl-Left) behave exactly as the bare
+                            // ESC[D arrow — normalise to that so the key readers
+                            // decode them. Everything else ending in a letter
+                            // (CPR ESC[..R, DSR, DA, SGR …) is a terminal-
+                            // generated device report, not a keypress.
+                            if (in_array($m[1], ['A', 'B', 'C', 'D', 'H', 'F'], true)) {
+                                return chr(27) . '[' . $m[1];
+                            }
                             return "\x00";
                         }
 
@@ -4257,6 +4265,20 @@ class BbsSession
                     }
                 }
                 return chr(27) . '[' . $next2;
+            }
+            if ($next1 === 'O') {
+                // SS3 — application cursor-key mode (DECCKM). A terminal that has
+                // been switched into it (by an ANSI screen or a door) sends
+                // ESC O A/B/C/D for the arrows and ESC O H/F for Home/End.
+                // Normalise to the ANSI-BBS bare CSI form the key readers know.
+                $next2 = $this->nextByte($conn, $state, 50000);
+                if ($next2 !== null && in_array($next2, ['A', 'B', 'C', 'D', 'H', 'F'], true)) {
+                    return chr(27) . '[' . $next2;
+                }
+                // Not an SS3 cursor key — hand the bytes back in order and
+                // report the bare ESC (matches the generic fall-through below).
+                $state['pushback'] = 'O' . ($next2 ?? '') . ($state['pushback'] ?? '');
+                return chr(27);
             }
             // Preserve ordering: put the unconsumed byte back at the front of
             // pushback, since it may itself have come from pushback ahead of

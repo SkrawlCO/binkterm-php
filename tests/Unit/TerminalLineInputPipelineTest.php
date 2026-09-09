@@ -370,6 +370,62 @@ final class TerminalLineInputPipelineTest extends TestCase
         self::assertSame("cafX\u{00E9}", $out);
     }
 
+    // ===== parametrised / SS3 cursor keys (the real production failure) =====
+    // The live SyncTerm Search-dialog cursor FAIL was NOT bare ESC[D: the client
+    // sends the parametrised form ESC[1D, which readRawChar() folded to "\x00"
+    // (device report) so the editor never saw a LEFT. SS3 (ESC O D) is the other
+    // form a terminal switched into DECCKM would send.
+
+    public function testShowInputDialogParametrisedLeftArrowMovesTheCursor(): void
+    {
+        // Exactly what real SyncTerm sends for the Left key: ESC [ 1 D.
+        $this->client("abcdef\033[1D\033[1D\033[1Dx\r\n");
+        $out = \BinktermPHP\TelnetServer\TelnetUtils::showInputDialog(
+            $this->srv, $this->state, $this->bbs, 'Search', 'Find:', '', 60, null, [], []
+        );
+
+        self::assertSame('abcxdef', $out);
+    }
+
+    public function testShowInputDialogSs3LeftArrowMovesTheCursor(): void
+    {
+        $this->client("abcdef\033OD\033OD\033ODx\r\n");
+        $out = \BinktermPHP\TelnetServer\TelnetUtils::showInputDialog(
+            $this->srv, $this->state, $this->bbs, 'Search', 'Find:', '', 60, null, [], []
+        );
+
+        self::assertSame('abcxdef', $out);
+    }
+
+    public function testReadKeyWithTimeoutDecodesParametrisedAndSs3CursorKeys(): void
+    {
+        foreach ([
+            "\033[1D"   => 'LEFT',
+            "\033[1C"   => 'RIGHT',
+            "\033[1;5D" => 'LEFT',   // Ctrl-Left: modifier ignored, still LEFT
+            "\033[1;2C" => 'RIGHT',  // Shift-Right
+            "\033OD"    => 'LEFT',
+            "\033OC"    => 'RIGHT',
+            "\033OH"    => 'HOME',
+            "\033OF"    => 'END',
+        ] as $bytes => $expected) {
+            $this->client($bytes);
+            [$key, $timedOut, $disc] = $this->bbs->readKeyWithTimeout($this->srv, $this->state, 50);
+            self::assertFalse($timedOut, "$expected not timed out");
+            self::assertFalse($disc);
+            self::assertSame($expected, $key, 'decoded ' . bin2hex($bytes));
+        }
+    }
+
+    public function testCprDeviceReportIsStillTreatedAsChatterNotAKey(): void
+    {
+        // The greedy fold must still swallow a real terminal device report.
+        $this->client("\033[24;80R");
+        [$key, $timedOut] = $this->bbs->readKeyWithTimeout($this->srv, $this->state, 50);
+        self::assertTrue($timedOut, 'CPR is chatter, not a keypress');
+        self::assertSame('', $key);
+    }
+
     public function testLineShellPasswordPromptMasksAndKeepsNoHistory(): void
     {
         $this->state['line_prompt_history_key'] = 'should_be_ignored_when_sensitive';
