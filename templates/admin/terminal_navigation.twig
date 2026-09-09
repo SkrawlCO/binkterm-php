@@ -1,0 +1,215 @@
+{% extends "base.twig" %}
+
+{% block title %}{{ t('ui.admin.terminal_navigation.page_title', {}, locale, ['common']) }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+        <h1 class="h2">{{ t('ui.admin.terminal_navigation.heading', {}, locale, ['common']) }}</h1>
+    </div>
+
+    <div class="alert alert-info">
+        <i class="fas fa-info-circle"></i>
+        {{ t('ui.admin.terminal_navigation.info_text', {}, locale, ['common']) }}
+        <code>config/terminal_navigation.json</code>.
+        <span id="runtimeState" class="ms-2"></span>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-8">
+            <div class="card shadow">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0">{{ t('ui.admin.terminal_navigation.definition', {}, locale, ['common']) }}</h6>
+                    <div class="btn-group">
+                        <button class="btn btn-sm btn-outline-secondary" onclick="formatJson()">
+                            <i class="fas fa-align-left"></i> {{ t('ui.admin.terminal_navigation.format', {}, locale, ['common']) }}
+                        </button>
+                        <button class="btn btn-sm btn-outline-secondary" onclick="validateConfig()" id="validateBtn">
+                            <i class="fas fa-check-double"></i> {{ t('ui.admin.terminal_navigation.validate', {}, locale, ['common']) }}
+                        </button>
+                        <button class="btn btn-sm btn-outline-primary" onclick="saveConfig()" id="saveBtn">
+                            <i class="fas fa-save"></i> {{ t('ui.common.save', {}, locale, ['common']) }}
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div id="editorAlert"></div>
+                    <textarea id="configEditor" class="form-control font-monospace" rows="22" spellcheck="false"></textarea>
+                    <div class="d-flex justify-content-between align-items-center mt-2">
+                        <small class="text-muted" id="jsonStatus">{{ t('ui.common.loading', {}, locale, ['common']) }}</small>
+                        <small class="text-muted">{{ t('ui.admin.terminal_navigation.validated_before_save', {}, locale, ['common']) }}</small>
+                    </div>
+                    <div id="errorList" class="mt-2"></div>
+                </div>
+            </div>
+
+            <div class="alert alert-secondary mt-3 mb-0 small">
+                <i class="fas fa-lightbulb"></i>
+                {{ t('ui.admin.terminal_navigation.apply_note', {}, locale, ['common']) }}
+            </div>
+        </div>
+
+        <div class="col-lg-4">
+            <div class="card shadow">
+                <div class="card-header"><h6 class="mb-0">{{ t('ui.admin.terminal_navigation.actions_reference', {}, locale, ['common']) }}</h6></div>
+                <div class="card-body p-0">
+                    <table class="table table-sm table-borderless mb-0 small">
+                        <thead><tr>
+                            <th>{{ t('ui.admin.terminal_navigation.col_action', {}, locale, ['common']) }}</th>
+                            <th>{{ t('ui.admin.terminal_navigation.col_key', {}, locale, ['common']) }}</th>
+                            <th>{{ t('ui.admin.terminal_navigation.col_availability', {}, locale, ['common']) }}</th>
+                        </tr></thead>
+                        <tbody id="actionsTable"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="card shadow mt-3">
+                <div class="card-header"><h6 class="mb-0">{{ t('ui.admin.terminal_navigation.access_reference', {}, locale, ['common']) }}</h6></div>
+                <div class="card-body">
+                    <ul class="small mb-0" id="predicateList"></ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function uiT(key, fallback, params = {}) {
+    if (window.t) { return window.t(key, params, fallback); }
+    return fallback;
+}
+function apiErr(payload, fallback) {
+    if (window.getApiErrorMessage) { return window.getApiErrorMessage(payload, fallback); }
+    return (payload && (payload.error || payload.message)) || fallback;
+}
+
+let navState = { exists: false };
+
+function setStatus(text, cls) {
+    const el = document.getElementById('jsonStatus');
+    el.textContent = text;
+    el.className = 'text-' + (cls || 'muted');
+}
+
+function renderErrors(errors) {
+    const box = document.getElementById('errorList');
+    if (!errors || errors.length === 0) { box.innerHTML = ''; return; }
+    box.innerHTML = '<div class="alert alert-danger py-2 mb-0"><strong>' +
+        uiT('ui.admin.terminal_navigation.errors_heading', 'Definition errors') + '</strong><ul class="mb-0 mt-1">' +
+        errors.map(e => '<li><code>' + escapeHtml(e.path || '') + '</code> &mdash; ' + escapeHtml(e.message || e.code || '') + '</li>').join('') +
+        '</ul></div>';
+}
+
+function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function formatJson() {
+    const ed = document.getElementById('configEditor');
+    try {
+        ed.value = JSON.stringify(JSON.parse(ed.value), null, 2);
+        setStatus(uiT('ui.admin.terminal_navigation.status_formatted', 'Formatted'), 'muted');
+    } catch (e) {
+        setStatus(uiT('ui.admin.terminal_navigation.status_invalid_json', 'Not valid JSON') + ': ' + e.message, 'danger');
+    }
+}
+
+function validateConfig() {
+    const btn = document.getElementById('validateBtn');
+    btn.disabled = true;
+    fetch('/admin/api/terminal-navigation/validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ json: document.getElementById('configEditor').value })
+    })
+        .then(r => r.json())
+        .then(data => {
+            renderErrors(data.errors);
+            if (data.valid) {
+                setStatus(uiT('ui.admin.terminal_navigation.status_valid', 'Valid — safe to save'), 'success');
+            } else {
+                setStatus(uiT('ui.admin.terminal_navigation.status_has_errors', 'Definition has errors'), 'danger');
+            }
+        })
+        .catch(() => setStatus(uiT('ui.admin.terminal_navigation.status_validate_failed', 'Validation request failed'), 'danger'))
+        .finally(() => { btn.disabled = false; });
+}
+
+function saveConfig() {
+    const btn = document.getElementById('saveBtn');
+    btn.disabled = true;
+    setStatus(uiT('ui.common.saving', 'Saving...'), 'muted');
+    fetch('/admin/api/terminal-navigation/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ json: document.getElementById('configEditor').value })
+    })
+        .then(async r => ({ ok: r.ok, data: await r.json() }))
+        .then(({ ok, data }) => {
+            if (!ok) {
+                renderErrors([]);
+                setStatus(apiErr(data, uiT('ui.admin.terminal_navigation.status_save_failed', 'Save failed')), 'danger');
+                return;
+            }
+            if (data.written) {
+                renderErrors([]);
+                document.getElementById('editorAlert').innerHTML =
+                    '<div class="alert alert-success py-2">' +
+                    uiT('ui.admin.terminal_navigation.saved_success', 'Saved. New terminal logins pick it up immediately.') +
+                    '</div>';
+                setStatus(uiT('ui.admin.terminal_navigation.status_saved', 'Saved') + ' (' + data.bytes + ' bytes)', 'success');
+                setTimeout(() => { document.getElementById('editorAlert').innerHTML = ''; }, 6000);
+            } else {
+                renderErrors(data.errors);
+                setStatus(uiT('ui.admin.terminal_navigation.status_not_written', 'Not saved — fix the errors above'), 'danger');
+            }
+        })
+        .catch(() => setStatus(uiT('ui.admin.terminal_navigation.status_save_failed', 'Save failed'), 'danger'))
+        .finally(() => { btn.disabled = false; });
+}
+
+function renderReference(actions, predicates) {
+    document.getElementById('actionsTable').innerHTML = (actions || []).map(a =>
+        '<tr><td><code>' + escapeHtml(a.id) + '</code></td><td><code>' + escapeHtml(a.hotkey || '') +
+        '</code></td><td class="text-muted">' + escapeHtml(typeof a.availability === 'string' ? a.availability : JSON.stringify(a.availability)) +
+        '</td></tr>').join('');
+    document.getElementById('predicateList').innerHTML = (predicates || []).map(p =>
+        '<li><code>' + escapeHtml(p) + '</code></li>').join('');
+}
+
+function load() {
+    fetch('/admin/api/terminal-navigation/config')
+        .then(r => r.json())
+        .then(data => {
+            navState = data;
+            const ed = document.getElementById('configEditor');
+            ed.value = data.json || '';
+            renderReference(data.actions, data.access_predicates);
+
+            const rs = document.getElementById('runtimeState');
+            if (data.runtime_enabled) {
+                rs.innerHTML = '<span class="badge bg-success">' + uiT('ui.admin.terminal_navigation.runtime_on', 'Runtime active') + '</span>';
+            } else if (data.flag_enabled) {
+                rs.innerHTML = '<span class="badge bg-warning text-dark">' + uiT('ui.admin.terminal_navigation.runtime_flag_only', 'Flag on, no file yet') + '</span>';
+            } else {
+                rs.innerHTML = '<span class="badge bg-secondary">' + uiT('ui.admin.terminal_navigation.runtime_off', 'Runtime off (TERMINAL_NAV_RUNTIME not set)') + '</span>';
+            }
+
+            if (!data.exists) {
+                setStatus(uiT('ui.admin.terminal_navigation.status_no_file', 'No definition file yet'), 'muted');
+            } else if (data.valid) {
+                setStatus(uiT('ui.admin.terminal_navigation.status_loaded_valid', 'Loaded — current file is valid'), 'success');
+            } else {
+                renderErrors(data.errors);
+                setStatus(uiT('ui.admin.terminal_navigation.status_loaded_invalid', 'Loaded — current file has errors'), 'danger');
+            }
+        })
+        .catch(() => setStatus(uiT('ui.admin.terminal_navigation.status_load_failed', 'Failed to load'), 'danger'));
+}
+
+document.addEventListener('DOMContentLoaded', load);
+</script>
+{% endblock %}

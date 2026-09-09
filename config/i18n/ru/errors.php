@@ -425,6 +425,10 @@ return [
     'errors.admin.dosdoors_config.load_failed' => 'Не удалось загрузить конфигурацию DOS‑дверей',
     'errors.admin.dosdoors_config.save_failed' => 'Не удалось сохранить конфигурацию DOS‑дверей',
     'errors.admin.native_doors.load_failed' => 'Не удалось загрузить конфигурацию нативных дверей',
+    'errors.admin.terminal_navigation.load_failed' => 'Failed to load terminal navigation configuration',
+    'errors.admin.terminal_navigation.save_failed' => 'Failed to save terminal navigation configuration',
+    'errors.admin.terminal_navigation.empty' => 'The definition cannot be empty',
+
     'errors.admin.native_doors.save_failed' => 'Не удалось сохранить конфигурацию нативных дверей',
     'errors.admin.native_doors.sync_failed' => 'Не удалось синхронизировать нативные двери',
     'errors.admin.rlogin_doors.load_failed' => 'Не удалось загрузить конфигурацию rlogin-дверей',

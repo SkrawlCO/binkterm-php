@@ -429,6 +429,10 @@ return [
     'errors.admin.dosdoors_config.load_failed' => 'Failed to load DOS doors configuration',
     'errors.admin.dosdoors_config.save_failed' => 'Failed to save DOS doors configuration',
     'errors.admin.native_doors.load_failed' => 'Failed to load native doors configuration',
+    'errors.admin.terminal_navigation.load_failed' => 'Failed to load terminal navigation configuration',
+    'errors.admin.terminal_navigation.save_failed' => 'Failed to save terminal navigation configuration',
+    'errors.admin.terminal_navigation.empty' => 'The definition cannot be empty',
+
     'errors.admin.native_doors.save_failed' => 'Failed to save native doors configuration',
     'errors.admin.native_doors.sync_failed' => 'Failed to sync native doors',
     'errors.admin.rlogin_doors.load_failed' => 'Failed to load rlogin doors configuration',

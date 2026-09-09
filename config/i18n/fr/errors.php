@@ -313,6 +313,10 @@ return [
     'errors.admin.dosdoors_config.load_failed' => 'Échec du chargement de la configuration des portes DOS',
     'errors.admin.dosdoors_config.save_failed' => 'Échec de l\'enregistrement de la configuration des portes DOS',
     'errors.admin.native_doors.load_failed' => 'Échec du chargement de la configuration des portes natives',
+    'errors.admin.terminal_navigation.load_failed' => 'Failed to load terminal navigation configuration',
+    'errors.admin.terminal_navigation.save_failed' => 'Failed to save terminal navigation configuration',
+    'errors.admin.terminal_navigation.empty' => 'The definition cannot be empty',
+
     'errors.admin.native_doors.save_failed' => 'Échec de l\'enregistrement de la configuration des portes natives',
     'errors.admin.native_doors.sync_failed' => 'Échec de la synchronisation des portes natives',
     'errors.admin.rlogin_doors.load_failed' => 'Échec du chargement de la configuration des portes rlogin',

@@ -676,6 +676,14 @@ SimpleRouter::group(['prefix' => '/admin'], function() {
         $template->renderResponse('admin/nativedoors_config.twig');
     });
 
+    // Terminal Navigation editor (F6 M1)
+    SimpleRouter::get('/terminal-navigation', function() {
+        $user = RouteHelper::requireAdmin();
+
+        $template = new Template();
+        $template->renderResponse('admin/terminal_navigation.twig');
+    });
+
     // JS-DOS Doors config page
     SimpleRouter::get('/jsdosdoors', function() {
         $user = RouteHelper::requireAdmin();
@@ -4423,6 +4431,94 @@ SimpleRouter::group(['prefix' => '/admin'], function() {
                 http_response_code(500);
                 apiError('errors.admin.native_doors.sync_failed', apiLocalizedText('errors.admin.native_doors.sync_failed', 'Failed to sync native doors'), 500);
             }
+        });
+
+        // Terminal Navigation editor (F6 M1) — a thin admin frontend over the
+        // existing NavigationConfigWriter / admin-daemon write boundary. It only
+        // reads + validates + writes the single active
+        // config/terminal_navigation.json; it never touches .env / the
+        // TERMINAL_NAV_RUNTIME flag and never restarts the terminal daemon.
+        SimpleRouter::get('/terminal-navigation/config', function() {
+            $user = RouteHelper::requireAdmin();
+            header('Content-Type: application/json');
+            header('Cache-Control: no-store');
+
+            try {
+                $daemon = (new \BinktermPHP\Admin\AdminDaemonClient())->getTerminalNavigationConfig();
+
+                echo json_encode([
+                    'success'          => true,
+                    'exists'           => (bool)($daemon['exists'] ?? false),
+                    'json'             => $daemon['json'] ?? null,
+                    'valid'            => (bool)($daemon['valid'] ?? false),
+                    'errors'           => $daemon['errors'] ?? [],
+                    'runtime_enabled'  => \BinktermPHP\Terminal\Navigation\NavigationConfig::isRuntimeEnabled(),
+                    'flag_enabled'     => \BinktermPHP\Terminal\Navigation\NavigationConfig::isFlagEnabled(),
+                    'actions'          => \BinktermPHP\Terminal\Navigation\TerminalActionCatalog::descriptors(),
+                    'access_predicates' => [
+                        'always', 'authenticated', 'guest', 'admin (alias: sysop)',
+                        'feature:<name>', 'action:<id>', 'capability:<name>', 'env:<VAR>',
+                        '{ "all": [ ... ] }', '{ "any": [ ... ] }', '{ "not": ... }',
+                    ],
+                ]);
+            } catch (\Throwable $e) {
+                http_response_code(500);
+                apiError('errors.admin.terminal_navigation.load_failed', apiLocalizedText('errors.admin.terminal_navigation.load_failed', 'Failed to load terminal navigation configuration'), 500);
+            }
+        });
+
+        SimpleRouter::post('/terminal-navigation/validate', function() {
+            $user = RouteHelper::requireAdmin();
+            header('Content-Type: application/json');
+
+            $payload = json_decode(file_get_contents('php://input'), true);
+            $json = is_array($payload) && is_string($payload['json'] ?? null) ? $payload['json'] : '';
+
+            $load = (new \BinktermPHP\Terminal\Navigation\NavigationDefinitionLoader(
+                \BinktermPHP\Terminal\Navigation\TerminalActionCatalog::defaultRegistry()
+            ))->fromJson($json, 'terminal_navigation.json');
+
+            echo json_encode([
+                'success' => true,
+                'valid'   => $load->isOk(),
+                'errors'  => array_map(
+                    static fn($e) => ['code' => $e->code, 'message' => $e->message, 'path' => $e->path],
+                    $load->errors()
+                ),
+            ]);
+        });
+
+        SimpleRouter::post('/terminal-navigation/config', function() {
+            $user = RouteHelper::requireAdmin();
+            header('Content-Type: application/json');
+
+            $payload = json_decode(file_get_contents('php://input'), true);
+            $json = is_array($payload) && is_string($payload['json'] ?? null) ? $payload['json'] : '';
+            if (trim($json) === '') {
+                http_response_code(400);
+                apiError('errors.admin.terminal_navigation.empty', apiLocalizedText('errors.admin.terminal_navigation.empty', 'The definition cannot be empty'), 400);
+                return;
+            }
+
+            try {
+                // AdminDaemonClient::saveTerminalNavigationConfig() returns the
+                // NavigationWriteResult array on ok (including validation
+                // failures: written=false + errors[]); it throws only on a real
+                // I/O / daemon failure.
+                $result = (new \BinktermPHP\Admin\AdminDaemonClient())->saveTerminalNavigationConfig($json);
+            } catch (\Throwable $e) {
+                http_response_code(500);
+                apiError('errors.admin.terminal_navigation.save_failed', apiLocalizedText('errors.admin.terminal_navigation.save_failed', 'Failed to save terminal navigation configuration'), 500);
+                return;
+            }
+
+            echo json_encode([
+                'success' => true,
+                'written' => (bool)($result['written'] ?? false),
+                'valid'   => (bool)($result['valid'] ?? false),
+                'errors'  => $result['errors'] ?? [],
+                'bytes'   => (int)($result['bytes'] ?? 0),
+            ]);
         });
 
         // RLogin Doors API endpoints — DB-backed CRUD (no manifest files: rlogin
