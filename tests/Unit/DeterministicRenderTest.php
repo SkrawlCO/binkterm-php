@@ -65,6 +65,29 @@ final class DeterministicRenderTest extends TestCase
         TelnetUtils::setAnsiColorEnabled(true);
     }
 
+    /**
+     * renderBox() must not emit anything to the PHP error log — it once carried
+     * a stray `error_log('DEBUG topBorder …')` that fired on every box render.
+     */
+    public function testRenderBoxEmitsNothingToTheErrorLog(): void
+    {
+        $logFile = tempnam(sys_get_temp_dir(), 'renderbox_errlog_');
+        $previous = ini_get('error_log');
+        ini_set('error_log', $logFile);
+
+        try {
+            $ctx = TerminalRenderHarness::at(80, 24)->charset('cp437')->color(true)->context();
+            $this->renderBox($ctx, 'Café → Status', ['line one', str_repeat('overflow ', 30)]);
+        } finally {
+            ini_set('error_log', $previous === false ? '' : $previous);
+        }
+
+        $contents = (string) file_get_contents($logFile);
+        @unlink($logFile);
+
+        self::assertSame('', trim($contents), "renderBox wrote to the error log: {$contents}");
+    }
+
     /** @dataProvider matrixProvider */
     public function testRenderBoxIsGeometryAndCharsetSafe(string $name, string $geo, string $charset, bool $color): void
     {
