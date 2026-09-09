@@ -219,6 +219,34 @@ class AdminDaemonClient
         return $this->sendCommand('save_native_doors_config', ['json' => $json]);
     }
 
+    /**
+     * Read the current declarative terminal navigation definition and its
+     * validation status.
+     *
+     * @return array{exists:bool,path:string,json:?string,valid:bool,errors:array<int,array<string,string>>}
+     */
+    public function getTerminalNavigationConfig(): array
+    {
+        return $this->sendCommand('get_terminal_navigation_config');
+    }
+
+    /**
+     * Validate + atomically write a declarative terminal navigation definition.
+     *
+     * The daemon validates the payload as a full NavigationDefinition before
+     * writing anything, serialises canonical JSON, and writes via temp file +
+     * atomic rename into the fixed `config/terminal_navigation.json` path. An
+     * invalid definition is reported in the result (`written:false`,
+     * `errors:[…]`) without disturbing the existing file; a real I/O failure
+     * throws (previous config left intact).
+     *
+     * @return array{written:bool,valid:bool,path:string,bytes:int,errors:array<int,array<string,string>>,io_error:?string,io_error_message:?string,canonical:?string}
+     */
+    public function saveTerminalNavigationConfig(string $json): array
+    {
+        return $this->sendCommand('save_terminal_navigation_config', ['json' => $json]);
+    }
+
     public function listDoorManifestTargets(string $doorType): array
     {
         return $this->sendCommand('list_door_manifest_targets', ['door_type' => $doorType]);

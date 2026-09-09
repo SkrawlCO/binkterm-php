@@ -217,3 +217,43 @@ $bytes = $service->render($definition, NavigationPreviewProfile::geometry('132x5
 
 `NavigationPreviewService::standardProfiles()` covers the standard matrix
 (80x24 UTF-8 / CP437 / ASCII, 132x36, 132x51).
+
+---
+
+## Saving a definition (backend)
+
+The web process cannot write `config/`, so a saved definition goes through the
+admin daemon:
+
+```
+admin/web layer  →  AdminDaemonClient::saveTerminalNavigationConfig($json)
+                 →  admin daemon: save_terminal_navigation_config
+                 →  NavigationConfigWriter::write($json, <fixed config path>, <config dir>)
+```
+
+`NavigationConfigWriter` is a plain service (no IPC) with these guarantees:
+
+- **Validate before write** — the payload must parse and fully validate as a
+  `NavigationDefinition`; on failure the result carries the errors and nothing
+  is written.
+- **Canonical JSON** — pretty-printed, unescaped slashes/unicode, one trailing
+  newline; key order preserved.
+- **Atomic** — written to a randomly-named temp file in the same directory
+  (`fopen` with `x` so it can't clobber a racing file), flushed and `fsync`-ed,
+  `chmod`-ed to the existing file's mode (else `0644`), then `rename`-d into
+  place. A failure at any step unlinks the temp file and leaves the previous
+  valid config untouched — there is never a partial or truncated destination.
+- **Path-constrained** — the target must be a plain `*.json` name sitting
+  *directly* inside the caller-supplied base directory (resolved with
+  `realpath`); a pre-existing symlink that escapes the base, a traversal path,
+  or a non-regular target is refused. The admin daemon always passes the fixed
+  `config/terminal_navigation.json` path and its directory — it never forwards a
+  `TERMINAL_NAV_CONFIG` override for writes.
+
+The daemon response is structured: `{written, valid, errors[], bytes, path,
+canonical, io_error}`. A validation failure comes back with `ok:true` /
+`written:false` so an editor can show the errors inline; only a real I/O failure
+is an `ok:false` error.
+
+There is no admin route, template, or JS for this yet — that is the editor's
+job. This is the write boundary it will call.

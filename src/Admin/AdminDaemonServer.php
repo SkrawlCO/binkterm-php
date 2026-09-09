@@ -26,6 +26,7 @@ use BinktermPHP\FileAreaManager;
 use BinktermPHP\Realtime\PostgresSseEventMaintenance;
 use BinktermPHP\Realtime\SseEventMaintenanceInterface;
 use BinktermPHP\Admin\DoorManifest\DoorManifestTypeRegistry;
+use BinktermPHP\Terminal\Navigation\NavigationConfigWriter;
 
 class AdminDaemonServer
 {
@@ -623,6 +624,34 @@ class AdminDaemonServer
                     }
                     $this->writeFileAreaRulesConfig($decoded);
                     $this->writeResponse($client, ['ok' => true, 'result' => $this->getFileAreaRulesConfig()]);
+                    break;
+                case 'get_terminal_navigation_config':
+                    $this->writeResponse($client, ['ok' => true, 'result' => $this->getTerminalNavigationConfig()]);
+                    break;
+                case 'save_terminal_navigation_config':
+                    $json = $data['json'] ?? null;
+                    if (!is_string($json) || trim($json) === '') {
+                        $this->writeResponse($client, ['ok' => false, 'error' => 'missing_json']);
+                        break;
+                    }
+                    $writeResult = NavigationConfigWriter::default()->write(
+                        $json,
+                        $this->getTerminalNavigationConfigPath(),
+                        dirname($this->getTerminalNavigationConfigPath())
+                    );
+                    if ($writeResult->ioError !== null) {
+                        // A genuine I/O / path failure — the previous config is intact.
+                        $this->writeResponse($client, [
+                            'ok'     => false,
+                            'error'  => 'write_failed',
+                            'detail' => $writeResult->errorSummary(),
+                            'result' => $writeResult->toArray(),
+                        ]);
+                        break;
+                    }
+                    // Validation outcome (written true/false + any errors) is in
+                    // the structured result so an editor can show it inline.
+                    $this->writeResponse($client, ['ok' => true, 'result' => $writeResult->toArray()]);
                     break;
                 case 'get_taglines':
                     $this->writeResponse($client, ['ok' => true, 'result' => $this->getTaglinesConfig()]);
@@ -1802,6 +1831,42 @@ class AdminDaemonServer
     private function getFileAreaRulesConfigPath(): string
     {
         return __DIR__ . '/../../config/filearea_rules.json';
+    }
+
+    private function getTerminalNavigationConfigPath(): string
+    {
+        // Fixed target — writes never honour a TERMINAL_NAV_CONFIG override.
+        return __DIR__ . '/../../config/terminal_navigation.json';
+    }
+
+    /**
+     * @return array{exists:bool,path:string,json:?string,valid:bool,errors:array<int,array<string,string>>}
+     */
+    private function getTerminalNavigationConfig(): array
+    {
+        $path = $this->getTerminalNavigationConfigPath();
+        $exists = is_file($path);
+        $json = $exists ? @file_get_contents($path) : null;
+
+        $valid = false;
+        $errors = [];
+        if (is_string($json) && trim($json) !== '') {
+            $load = (new \BinktermPHP\Terminal\Navigation\NavigationDefinitionLoader(
+                \BinktermPHP\Terminal\Navigation\TerminalActionCatalog::defaultRegistry()
+            ))->fromJson($json, basename($path));
+            $valid = $load->isOk();
+            foreach ($load->errors() as $e) {
+                $errors[] = ['code' => $e->code, 'message' => $e->message, 'path' => $e->path];
+            }
+        }
+
+        return [
+            'exists' => $exists,
+            'path'   => $path,
+            'json'   => is_string($json) ? $json : null,
+            'valid'  => $valid,
+            'errors' => $errors,
+        ];
     }
 
     private function getFileAreaRulesExamplePath(): string

@@ -810,6 +810,7 @@ guide and schema.
 | Runtime | `NavigationRuntime` | The interactive loop, driven by injected callables (no telnet/SSH dependency): hotkeys + arrow/lightbar + nested Back/Home, action invocation, `quit`/`back_at_root`/`disconnect` exit reasons, rebuild-every-iteration for NAWS reflow. |
 | Preview | `NavigationPreviewService` / `NavigationPreviewProfile` | Deterministic off-session render at arbitrary geometry/charset/colour/access into a `BufferSink`. `standardProfiles()` = the R5I matrix. |
 | Bridge | `telnet/src/DeclarativeMenuBridge` | The only glue into `BbsSession`: builds the registry + bindings from the live handlers, the `AccessContext` from `$state`, and runs `NavigationRuntime`. Any error falls back to the legacy menu. |
+| Write boundary | `NavigationConfigWriter` / `NavigationWriteResult` + admin-daemon `save_terminal_navigation_config` | Validated, path-constrained, atomic (temp + fsync + rename) write of a definition. The future editor's save path; no route/UI yet. See [TerminalNavigationFramework.md](TerminalNavigationFramework.md#saving-a-definition-backend). |
 
 The one-renderer invariant holds: `NavigationScreenRenderer` reuses
 `TerminalRenderContext` (glyphs, charset, colour) and shares no parallel layout
