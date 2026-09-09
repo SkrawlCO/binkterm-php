@@ -7309,6 +7309,40 @@ class MessageHandler
     }
 
     /**
+     * Parse the first valid `\x01REPLYTO` kludge in an arbitrary block of text.
+     *
+     * This is the canonical implementation shared by the REST message-detail
+     * routes (through the {@see \parseReplyToKludge()} global, which now
+     * delegates here) and the terminal message viewers, so every caller agrees
+     * on REPLYTO handling. Behaviourally identical to the historical global:
+     * split on any line ending, take the first `\x01REPLYTO <address> [name]`
+     * whose address is a valid FidoNet address.
+     *
+     * @return array{address:string,name:?string}|null
+     */
+    public static function parseReplyToKludgeText(?string $text): ?array
+    {
+        if ($text === null || $text === '') {
+            return null;
+        }
+
+        foreach (preg_split('/\r\n|\r|\n/', $text) as $line) {
+            if (!preg_match('/^\x01REPLYTO\s+(.+)$/i', trim($line), $m)) {
+                continue;
+            }
+            if (!preg_match('/^(\S+)(?:\s+(.+))?$/', trim($m[1]), $a)) {
+                continue;
+            }
+            $address = trim($a[1]);
+            if (preg_match('/^\d+:\d+\/\d+(?:\.\d+)?(?:@\w+)?$/', $address)) {
+                return ['address' => $address, 'name' => isset($a[2]) ? trim($a[2]) : null];
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * Parse REPLYTO kludge line to extract address and name
      * Format: "REPLYTO 2:460/256 8421559770" -> ['address' => '2:460/256', 'name' => '8421559770']
      * Only returns data if the address is a valid FidoNet address

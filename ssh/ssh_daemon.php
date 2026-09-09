@@ -25,6 +25,7 @@ require_once __DIR__ . '/../telnet/src/DeclarativeMenuBridge.php';
 require_once __DIR__ . '/../telnet/src/TerminalSplitScreen.php';
 require_once __DIR__ . '/../telnet/src/ChatHandler.php';
 require_once __DIR__ . '/../telnet/src/MailUtils.php';
+require_once __DIR__ . '/../telnet/src/TerminalMessageService.php';
 require_once __DIR__ . '/../telnet/src/NetmailHandler.php';
 require_once __DIR__ . '/../telnet/src/EchomailHandler.php';
 require_once __DIR__ . '/../telnet/src/ShoutboxHandler.php';

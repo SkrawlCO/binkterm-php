@@ -15,6 +15,7 @@ require_once __DIR__ . '/../../telnet/src/BbsSession.php';
 require_once __DIR__ . '/../../telnet/src/TerminalLineEditor.php';
 require_once __DIR__ . '/../../telnet/src/TerminalLineHistory.php';
 require_once __DIR__ . '/../../telnet/src/MailUtils.php';
+require_once __DIR__ . '/../../telnet/src/TerminalMessageService.php';
 require_once __DIR__ . '/../../telnet/src/NetmailHandler.php';
 require_once __DIR__ . '/../../telnet/src/EchomailHandler.php';
 
@@ -26,23 +27,27 @@ use BinktermPHP\TelnetServer\BufferSink;
 use BinktermPHP\TelnetServer\EchomailHandler;
 use BinktermPHP\TelnetServer\NetmailHandler;
 use BinktermPHP\TelnetServer\TerminalCapabilities;
+use BinktermPHP\TelnetServer\TerminalMessageService;
 use BinktermPHP\TelnetServer\TerminalRenderContext;
 use PHPUnit\Framework\TestCase;
 
 /**
  * Semantic-equivalence cover for the Terminal API latency corridor: the telnet
- * message-list read path stopped making a serial localhost HTTP round trip per
- * navigation keystroke and now calls the same canonical {@see MessageHandler}
- * service the matching REST route delegates to.
+ * message list AND message-detail read paths stopped making a serial localhost
+ * HTTP round trip (out to Cloudflare) per navigation and now call the same
+ * canonical {@see MessageHandler} the matching REST routes delegate to.
  *
- * These tests pin that the network-free path returns exactly what the route
- * would have returned — same messages, same order, same page count, same
- * per-page slice, same folder/filter and sort mapping — against the live
- * database, and that the echoarea-view activity side effect is still recorded.
+ * These tests pin that the network-free paths return exactly what the routes
+ * would have returned — same messages, order, page count, per-page slice,
+ * folder/filter and sort mapping for lists; same core fields, REPLYTO
+ * enrichment, 404 semantics and response envelope for detail — against the live
+ * database.
  *
- * The tests are read-only against message data. The activity-log write is
- * intercepted through the {@see EchomailHandler::trackAreaView()} seam so no row
- * is inserted.
+ * The tests are read-only against message data: they only use messages the test
+ * user has already read (so `getMessage()`'s mark-read is a no-op), and the
+ * activity-log writes are intercepted through the
+ * {@see EchomailHandler::trackAreaView()} / {@see RecordingMessageService}
+ * seams so no rows are inserted.
  */
 final class TerminalMessageListDirectFetchTest extends TestCase
 {
@@ -274,6 +279,265 @@ final class TerminalMessageListDirectFetchTest extends TestCase
         self::assertSame([], $messages);
         self::assertIsInt($pages);
     }
+
+    // ---- message DETAIL (TerminalMessageService) -----------------------
+    //
+    // getMessage() marks a message read as a side effect (so does the route it
+    // mirrors). To keep these equivalence tests side-effect-free they only use
+    // messages the test user has ALREADY read.
+
+    /**
+     * @return array{0:int,1:string,2:string}|null  [id, tag, domain] of an
+     *         already-read echomail that `getMessage()` still resolves (passes
+     *         the ignore / moderation / sysop-only filters).
+     */
+    private function readEchomail(bool $withReplyTo = false): ?array
+    {
+        $extra = $withReplyTo ? "AND em.kludge_lines ILIKE '%REPLYTO%'" : '';
+        $rows = self::$db->query("
+            SELECT em.id, ea.tag, ea.domain
+            FROM echomail em
+            JOIN echoareas ea ON ea.id = em.echoarea_id
+            JOIN message_read_status mrs
+              ON mrs.message_id = em.id AND mrs.message_type = 'echomail'
+             AND mrs.user_id = " . self::UID . " AND mrs.read_at IS NOT NULL
+            WHERE 1=1 {$extra}
+            ORDER BY em.id DESC LIMIT 30
+        ")->fetchAll(\PDO::FETCH_ASSOC);
+
+        $mh = new MessageHandler();
+        foreach ($rows as $row) {
+            if ($mh->getMessage((int) $row['id'], 'echomail', self::UID)) {
+                return [(int) $row['id'], (string) $row['tag'], (string) ($row['domain'] ?? '')];
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * An already-read netmail as `[userId, messageId]` that `getMessage()` still
+     * resolves for that user (so its mark-read is a no-op). The test user has no
+     * currently-visible netmail, so this scans whichever account does.
+     *
+     * @return array{0:int,1:int}|null
+     */
+    private function readNetmailPair(): ?array
+    {
+        $rows = self::$db->query("
+            SELECT mrs.user_id, mrs.message_id FROM message_read_status mrs
+            WHERE mrs.message_type = 'netmail' AND mrs.read_at IS NOT NULL
+            ORDER BY mrs.message_id DESC LIMIT 60
+        ")->fetchAll(\PDO::FETCH_ASSOC);
+
+        $mh = new MessageHandler();
+        foreach ($rows as $row) {
+            if ($mh->getMessage((int) $row['message_id'], 'netmail', (int) $row['user_id'])) {
+                return [(int) $row['user_id'], (int) $row['message_id']];
+            }
+        }
+
+        return null;
+    }
+
+    /** The core fields the terminal viewers actually read from the detail payload. */
+    private const DETAIL_FIELDS = [
+        'id', 'message_text', 'subject', 'from_name', 'from_address', 'to_name',
+        'message_charset', 'markup_format', 'art_format', 'kludge_lines', 'bottom_kludges',
+    ];
+
+    private static function pick(array $m, array $keys): array
+    {
+        $out = [];
+        foreach ($keys as $k) {
+            $out[$k] = $m[$k] ?? null;
+        }
+
+        return $out;
+    }
+
+    public function testEchomailDetailMatchesGetMessageAndTheRouteEnvelope(): void
+    {
+        $target = $this->readEchomail();
+        if ($target === null) {
+            self::markTestSkipped('no already-read echomail for the test user');
+        }
+        [$id, $tag, $domain] = $target;
+        $area = $domain !== '' ? $tag . '@' . $domain : $tag;
+
+        $detail = (new TerminalMessageService())->echomailDetail($area, $id, self::UID);
+        $svc    = (new MessageHandler())->getMessage($id, 'echomail', self::UID);
+
+        self::assertSame(200, $detail['status']);
+        self::assertNull($detail['error']);
+        self::assertSame(self::pick($svc, self::DETAIL_FIELDS), self::pick($detail['data'], self::DETAIL_FIELDS));
+        self::assertArrayNotHasKey('area_allow_media', $detail['data'], 'internal column dropped, like the route');
+    }
+
+    public function testEchomailDetailReplyToMatchesTheRouteAlgorithmExactly(): void
+    {
+        $target = $this->readEchomail(withReplyTo: true) ?? $this->readEchomail();
+        if ($target === null) {
+            self::markTestSkipped('no already-read echomail for the test user');
+        }
+        [$id, $tag, $domain] = $target;
+        $area = $domain !== '' ? $tag . '@' . $domain : $tag;
+
+        $detail = (new TerminalMessageService())->echomailDetail($area, $id, self::UID);
+
+        // Reproduce the route's exact 2-step enrichment on the same getMessage() output.
+        $m = (new MessageHandler())->getMessage($id, 'echomail', self::UID);
+        $expectedAddr = $m['replyto_address'] ?? null;
+        $expectedName = $m['replyto_name'] ?? null;
+        $first = MessageHandler::parseReplyToKludgeText((string) ($m['message_text'] ?? ''));
+        if ($first) {
+            $expectedAddr = $first['address'];
+            $expectedName = $first['name'];
+        }
+        if (isset($m['kludge_lines'])) {
+            $second = MessageHandler::parseReplyToKludgeText((string) $m['kludge_lines']);
+            if ($second) {
+                $expectedAddr = $second['address'];
+                $expectedName = $second['name'];
+            }
+        }
+
+        self::assertSame($expectedAddr, $detail['data']['replyto_address'] ?? null);
+        self::assertSame($expectedName, $detail['data']['replyto_name'] ?? null);
+    }
+
+    public function testEchomailDetailWrongAreaIsNotFound(): void
+    {
+        $target = $this->readEchomail();
+        if ($target === null) {
+            self::markTestSkipped('no already-read echomail for the test user');
+        }
+        [$id] = $target;
+
+        $detail = (new TerminalMessageService())->echomailDetail('WRONG_AREA@nowhere', $id, self::UID);
+        self::assertSame(404, $detail['status']);
+        self::assertSame([], $detail['data']);
+    }
+
+    public function testEchomailDetailUnknownIdIsNotFound(): void
+    {
+        $detail = (new TerminalMessageService())->echomailDetail('WHATEVER@x', 2000000000, self::UID);
+        self::assertSame(404, $detail['status']);
+        self::assertSame([], $detail['data']);
+    }
+
+    public function testNetmailDetailMatchesGetMessageAndCarriesAttachments(): void
+    {
+        $pair = $this->readNetmailPair();
+        if ($pair === null) {
+            self::markTestSkipped('no resolvable already-read netmail on any account');
+        }
+        [$uid, $id] = $pair;
+
+        $detail = (new RecordingMessageService())->netmailDetail($id, $uid);
+        $svc    = (new MessageHandler())->getMessage($id, 'netmail', $uid);
+
+        self::assertSame(200, $detail['status']);
+        self::assertSame(self::pick($svc, self::DETAIL_FIELDS), self::pick($detail['data'], self::DETAIL_FIELDS));
+        self::assertArrayHasKey('attachments', $detail['data']);
+        self::assertIsArray($detail['data']['attachments']);
+    }
+
+    public function testNetmailDetailReplyToMatchesTheRouteAlgorithm(): void
+    {
+        $pair = $this->readNetmailPair();
+        if ($pair === null) {
+            self::markTestSkipped('no resolvable already-read netmail on any account');
+        }
+        [$uid, $id] = $pair;
+
+        $detail = (new RecordingMessageService())->netmailDetail($id, $uid);
+
+        $m = (new MessageHandler())->getMessage($id, 'netmail', $uid);
+        $expectedAddr = null;
+        $expectedName = null;
+        $first = MessageHandler::parseReplyToKludgeText((string) ($m['message_text'] ?? ''));
+        if ($first) {
+            $expectedAddr = $first['address'];
+            $expectedName = $first['name'];
+        }
+        if (isset($m['kludge_lines'])) {
+            $second = MessageHandler::parseReplyToKludgeText((string) $m['kludge_lines']);
+            if ($second) {
+                $expectedAddr = $second['address'];
+                $expectedName = $second['name'];
+            }
+        }
+
+        self::assertSame($expectedAddr, $detail['data']['replyto_address'] ?? null);
+        self::assertSame($expectedName, $detail['data']['replyto_name'] ?? null);
+    }
+
+    public function testNetmailDetailUnknownIdIsNotFound(): void
+    {
+        $detail = (new RecordingMessageService())->netmailDetail(2000000000, self::UID);
+        self::assertSame(404, $detail['status']);
+        self::assertSame([], $detail['data']);
+    }
+
+    public function testTerminalHandlersNoLongerHttpFetchMessageDetail(): void
+    {
+        $echo = file_get_contents(__DIR__ . '/../../telnet/src/EchomailHandler.php');
+        $net  = file_get_contents(__DIR__ . '/../../telnet/src/NetmailHandler.php');
+
+        self::assertStringContainsString('detailService()->echomailDetail(', $echo);
+        self::assertStringContainsString('detailService()->netmailDetail(', $net);
+
+        // The exact bare single-message GETs that were swapped.
+        self::assertStringNotContainsString("'/api/messages/echomail/' . urlencode(\$area) . '/' . \$id", $echo);
+        self::assertStringNotContainsString("'/api/messages/echomail/' . urlencode(\$area) . '/' . \$reply['id']", $echo);
+        self::assertStringNotContainsString("'/api/messages/netmail/' . \$id, null", $net);
+        self::assertStringNotContainsString("'/api/messages/netmail/' . \$reply['id']", $net);
+
+        // The file-serving download GET is a different concern and stays HTTP.
+        self::assertStringContainsString("/download'", $net);
+    }
+
+    // ---- parseReplyToKludgeText (canonical parser) --------------------
+
+    public function testParseReplyToKludgeTextContract(): void
+    {
+        self::assertNull(MessageHandler::parseReplyToKludgeText(null));
+        self::assertNull(MessageHandler::parseReplyToKludgeText(''));
+        self::assertNull(MessageHandler::parseReplyToKludgeText("just a body\nno kludges here"));
+
+        self::assertSame(
+            ['address' => '2:460/256', 'name' => 'Sysop Name'],
+            MessageHandler::parseReplyToKludgeText("\x01MSGID: x\n\x01REPLYTO 2:460/256 Sysop Name\nbody")
+        );
+        self::assertSame(
+            ['address' => '1:234/56', 'name' => null],
+            MessageHandler::parseReplyToKludgeText("\x01REPLYTO 1:234/56")
+        );
+        // Non-FidoNet address is skipped; a later valid line still wins.
+        self::assertSame(
+            ['address' => '3:1/0', 'name' => null],
+            MessageHandler::parseReplyToKludgeText("\x01REPLYTO not-an-address\n\x01REPLYTO 3:1/0")
+        );
+        // First valid match wins (documents the "first REPLYTO" rule).
+        self::assertSame(
+            ['address' => '1:1/1', 'name' => 'first'],
+            MessageHandler::parseReplyToKludgeText("\x01REPLYTO 1:1/1 first\n\x01REPLYTO 2:2/2 second")
+        );
+    }
+
+    public function testParseReplyToKludgeTextIsWhatTheGlobalDelegatesTo(): void
+    {
+        if (!function_exists('parseReplyToKludge')) {
+            require_once __DIR__ . '/../../src/functions.php';
+        }
+        $text = "\x01REPLYTO 2:460/256 Someone\nbody text";
+        self::assertSame(
+            MessageHandler::parseReplyToKludgeText($text),
+            \parseReplyToKludge($text),
+            'the parseReplyToKludge() global is a thin delegator'
+        );
+    }
 }
 
 final class EchoFetchProbe extends EchomailHandler
@@ -297,5 +561,17 @@ final class NetFetchProbe extends NetmailHandler
     public function fetch(int $page, int $perPage, string $folder, string $sort, int $userId): array
     {
         return $this->fetchMessagesPage('', $page, $perPage, $folder, $sort, $userId);
+    }
+}
+
+/** {@see TerminalMessageService} with the activity-log write stubbed out. */
+final class RecordingMessageService extends TerminalMessageService
+{
+    /** @var list<array{0:?int,1:int}> */
+    public array $reads = [];
+
+    protected function trackNetmailRead(?int $userId, int $id): void
+    {
+        $this->reads[] = [$userId, $id];
     }
 }

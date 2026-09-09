@@ -894,6 +894,19 @@ Do not bypass important business rules. If validation, permissions, side effects
 
 Terminal code must not depend on web controllers, route handlers, Twig/view helpers, form handlers, middleware, or any code that assumes a browser-driven HTTP request lifecycle.
 
+> **Note on `apiRequest()` and latency.** The daemon's API base is the site's
+> public URL, so every `apiRequest()` is a full round trip out to the edge
+> (Cloudflare) and back, with a fresh TLS handshake — measured floor ~230 ms,
+> tail > 1 s. Where a route is a thin adapter over a canonical `src/` service
+> (`MessageHandler::getEchomail()` / `getNetmail()` / `getMessage()`), the
+> terminal calls the service directly instead: the message list pages
+> (`EchomailHandler`/`NetmailHandler::fetchMessagesPage()`) and message detail
+> (`TerminalMessageService::echomailDetail()` / `netmailDetail()`, which
+> reproduce the routes' REPLYTO enrichment, activity tracking and 404 envelope
+> exactly). `apiRequest()` stays the path for routes that carry real
+> controller-side validation not yet factored into a service
+> (`/api/user/terminal-mail-state`, `/api/echoareas`) and for mutations.
+
 ### `TelnetUtils::apiRequest()` — Response Structure
 
 Always returns:

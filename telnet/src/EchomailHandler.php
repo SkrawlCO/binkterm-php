@@ -22,12 +22,15 @@ class EchomailHandler
     private string $apiBase;
 
     /**
-     * Canonical message service, lazily constructed. Used for high-frequency
-     * read paths (message list pages) that would otherwise make a serial
-     * localhost HTTP round trip per navigation keystroke. Same service the
-     * matching `/api/messages/echomail/...` routes call.
+     * Canonical message service, lazily constructed. Used for read paths
+     * (message-list pages and message detail) that would otherwise make a
+     * serial localhost HTTP round trip per navigation keystroke. Same service
+     * the matching `/api/messages/echomail/...` routes call.
      */
     private ?\BinktermPHP\MessageHandler $messageService = null;
+
+    /** Network-free equivalent of the `GET /api/messages/echomail/{area}/{id}` fetch. */
+    private ?TerminalMessageService $detailService = null;
 
     /**
      * Create a new EchomailHandler instance
@@ -44,6 +47,11 @@ class EchomailHandler
     private function messageService(): \BinktermPHP\MessageHandler
     {
         return $this->messageService ??= new \BinktermPHP\MessageHandler();
+    }
+
+    protected function detailService(): TerminalMessageService
+    {
+        return $this->detailService ??= new TerminalMessageService($this->messageService());
     }
 
     /**
@@ -613,7 +621,7 @@ class EchomailHandler
 
             $this->server->logAction($state['username'] ?? 'unknown', "Echomail {$context}: read message #{$id} in {$area}");
 
-            $detail       = TelnetUtils::apiRequest($this->apiBase, 'GET', '/api/messages/echomail/' . urlencode($area) . '/' . $id, null, $session);
+            $detail       = $this->detailService()->echomailDetail($area, (int) $id, ((int) ($state['user_id'] ?? 0)) ?: null);
             if ($context === 'newscan') {
                 // The newscan queue supplies only {id, echoarea, echoarea_domain};
                 // fill the header fields the viewer needs from the fetched message.
@@ -1465,13 +1473,7 @@ class EchomailHandler
         TelnetUtils::writeLine($conn, '');
 
         if ($isReply && !empty($reply['id'])) {
-            $detail = TelnetUtils::apiRequest(
-                $this->apiBase,
-                'GET',
-                '/api/messages/echomail/' . urlencode($area) . '/' . $reply['id'],
-                null,
-                $session
-            );
+            $detail = $this->detailService()->echomailDetail($area, (int) $reply['id'], ((int) ($state['user_id'] ?? 0)) ?: null);
             if (($detail['status'] ?? 0) === 200 && !empty($detail['data']['message_text'])) {
                 $reply['message_text'] = $detail['data']['message_text'];
             }
@@ -1764,7 +1766,7 @@ class EchomailHandler
             }
 
             $this->server->logAction($state['username'] ?? 'unknown', "Echomail: read message #{$id} in {$area}");
-            $detail       = TelnetUtils::apiRequest($this->apiBase, 'GET', '/api/messages/echomail/' . urlencode($area) . '/' . $id, null, $session);
+            $detail       = $this->detailService()->echomailDetail($area, (int) $id, ((int) ($state['user_id'] ?? 0)) ?: null);
             $body         = $detail['data']['message_text'] ?? '';
             $markupFormat = $detail['data']['markup_format'] ?? null;
             $artFormat    = \BinktermPHP\ArtFormatDetector::detectArtFormat(

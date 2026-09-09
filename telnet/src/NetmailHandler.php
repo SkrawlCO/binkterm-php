@@ -22,12 +22,15 @@ class NetmailHandler
     private string $apiBase;
 
     /**
-     * Canonical message service, lazily constructed. Used for the high-frequency
-     * message-list read path that would otherwise make a serial localhost HTTP
-     * round trip per navigation keystroke. Same service GET /api/messages/netmail
-     * calls.
+     * Canonical message service, lazily constructed. Used for read paths
+     * (message-list pages and message detail) that would otherwise make a
+     * serial localhost HTTP round trip per navigation keystroke. Same service
+     * the `GET /api/messages/netmail...` routes call.
      */
     private ?\BinktermPHP\MessageHandler $messageService = null;
+
+    /** Network-free equivalent of the `GET /api/messages/netmail/{id}` fetch. */
+    private ?TerminalMessageService $detailService = null;
 
     /**
      * Create a new NetmailHandler instance
@@ -44,6 +47,11 @@ class NetmailHandler
     protected function messageService(): \BinktermPHP\MessageHandler
     {
         return $this->messageService ??= new \BinktermPHP\MessageHandler();
+    }
+
+    protected function detailService(): TerminalMessageService
+    {
+        return $this->detailService ??= new TerminalMessageService($this->messageService());
     }
 
     /**
@@ -335,13 +343,7 @@ class NetmailHandler
         $draftToken = bin2hex(random_bytes(8));
 
         if (($isReply || $isForward) && !empty($reply['id'])) {
-            $detail = TelnetUtils::apiRequest(
-                $this->apiBase,
-                'GET',
-                '/api/messages/netmail/' . $reply['id'],
-                null,
-                $session
-            );
+            $detail = $this->detailService()->netmailDetail((int) $reply['id'], ((int) ($state['user_id'] ?? 0)) ?: null);
             if (($detail['status'] ?? 0) === 200 && !empty($detail['data']['message_text'])) {
                 $reply['message_text'] = $detail['data']['message_text'];
             }
@@ -733,7 +735,7 @@ class NetmailHandler
             $id = (int)($msg['id'] ?? 0);
 
             $this->server->logAction($state['username'] ?? 'unknown', "Netmail {$context}: read message #{$id}");
-            $detail       = TelnetUtils::apiRequest($this->apiBase, 'GET', '/api/messages/netmail/' . $id, null, $session);
+            $detail       = $this->detailService()->netmailDetail((int) $id, ((int) ($state['user_id'] ?? 0)) ?: null);
             if ($context === 'newscan') {
                 // The newscan queue supplies only {id}; fill the header fields
                 // the viewer needs from the fetched message.

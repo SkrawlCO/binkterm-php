@@ -307,39 +307,14 @@ function isValidFidonetAddress($address) {
  * Parse REPLYTO kludge line to extract address and name
  * Format: "REPLYTO 2:460/256 8421559770" -> ['address' => '2:460/256', 'name' => '8421559770']
  * Only returns data if the address is a valid FidoNet address
+ *
+ * Thin delegator to the canonical {@see \BinktermPHP\MessageHandler::parseReplyToKludgeText()}
+ * so the web routes and the terminal message viewers share one implementation.
  */
 function parseReplyToKludge($messageText) {
-    if (empty($messageText)) {
-        return null;
-    }
-
-    // Normalize line endings and split into lines
-    $lines = preg_split('/\r\n|\r|\n/', $messageText);
-
-    foreach ($lines as $line) {
-        $trimmed = trim($line);
-
-        // Look for REPLYTO kludge line (must have \x01 prefix)
-        if (preg_match('/^\x01REPLYTO\s+(.+)$/i', $trimmed, $matches)) {
-            $replyToData = trim($matches[1]);
-
-            // Parse "address name" or just "address"
-            if (preg_match('/^(\S+)(?:\s+(.+))?$/', $replyToData, $addressMatches)) {
-                $address = trim($addressMatches[1]);
-                $name = isset($addressMatches[2]) ? trim($addressMatches[2]) : null;
-
-                // Only return if it's a valid FidoNet address
-                if (isValidFidonetAddress($address)) {
-                    return [
-                        'address' => $address,
-                        'name' => $name
-                    ];
-                }
-            }
-        }
-    }
-
-    return null;
+    return \BinktermPHP\MessageHandler::parseReplyToKludgeText(
+        $messageText === null ? null : (string) $messageText
+    );
 }
 
 // Helper function to check admin access for BinkP functionality
