@@ -171,19 +171,25 @@ final class NavigationScreenRenderer implements NavigationRenderer
         ];
     }
 
+    /** Themed directory row — where the description column starts (0-based). */
+    private const DIR_DESC_COL = 19;
+
+    /** Themed directory row — width reserved for a right-aligned live badge. */
+    private const DIR_BADGE_W = 10;
+
     /**
      * Compose the MENU and FOOTER blocks for a themed layout.
      *
-     * Unlike {@see composeLines()} this returns two fixed-size blocks — exactly
-     * `$menuHeight` lines of `$menuWidth` visible cells, and `$footerHeight`
-     * lines of `$footerWidth` — every cell painted (space-padded), each line
-     * prefixed with a reset so it does not inherit SGR from the template
-     * underneath. The caller ({@see ThemedNavigationRenderer}) positions each
-     * block absolutely; there is no top margin and no left pad.
+     * The themed layout is a *directory*, not a vertical application menu: each
+     * destination is one full-width row — hotkey, an uppercase name, its
+     * purpose in a description column, and any live badge right-aligned — under
+     * a short section sign. The selected row is a full-width bar. Identity and
+     * the "place" framing come from the template around it, so this drops the
+     * flowing renderer's title band and roaming status line.
      *
-     * All the composition logic — header band, grouping, lightbar, inline vs
-     * roaming descriptions, "… more" clipping — is the same as the flowing
-     * renderer; only the framing differs.
+     * Returns two fixed-size blocks — exactly `$menuHeight` x `$menuWidth` and
+     * `$footerHeight` x `$footerWidth` visible cells, every cell painted, each
+     * line reset-prefixed so it does not inherit SGR from the template beneath.
      *
      * @param array<string,mixed> $opts 'show_hotkeys' (bool), 'cursor' (int|null)
      * @return array{menu:array<int,string>,footer:array<int,string>}
@@ -206,68 +212,208 @@ final class NavigationScreenRenderer implements NavigationRenderer
         $footerHeight = max(1, $footerHeight);
 
         $glyphs = $ctx->lineDrawingChars();
-        $hglyph = $glyphs['h'] ?? '-';
-        $utf8   = $ctx->effectiveCharset() === 'utf8';
 
-        $contentWidth = min($menuWidth, self::CONTENT_MAX);
-
-        // --- MENU block -------------------------------------------------------
-        $header  = $this->headerBlock($ctx, $screen, $contentWidth, '', $hglyph);
-        $hasDesc = $this->anyItemHasDescription($screen);
-
-        $rich = $this->bodyBlock($ctx, $screen, $contentWidth, '', $showHotkeys, $cursor, true);
-        $useRich = $hasDesc && (count($header) + count($rich)) <= $menuHeight;
-
-        $status = '';
-        if ($useRich) {
-            $body = $rich;
-        } else {
-            $body = $this->bodyBlock($ctx, $screen, $contentWidth, '', $showHotkeys, $cursor, false);
-            if ($hasDesc) {
-                $status = $this->statusLine($screen, $contentWidth - 4, $cursor);
-            }
-        }
-
-        $reserve = ($status !== '') ? 1 : 0;
-        $limit   = max(1, $menuHeight - $reserve);
-
-        $lines = [...$header, ...$body];
-        if (count($lines) > $limit) {
-            $lines   = array_slice($lines, 0, max(1, $limit - 1));
-            $lines[] = '  ' . $ctx->colorize(
-                $ctx->encodeForTerminal($this->moreMarker($glyphs)),
+        // --- MENU block: crumb (submenus only) + directory --------------------
+        $lines = [];
+        if (!$screen->path->isRoot()) {
+            $lines[] = $ctx->colorize(
+                $ctx->encodeForTerminal($screen->path->crumb(' ' . ($ctx->effectiveCharset() === 'utf8' ? "\u{203A}" : '>') . ' ')),
                 self::EMPHASIS_COLOR['muted']
             );
+            $lines[] = '';
         }
-        if ($reserve === 1) {
-            while (count($lines) < $limit) {
-                $lines[] = '';
-            }
-            $marker  = ($utf8 ? "\u{25B8}" : '>') . ' ';
-            $lines[] = '  ' . $ctx->colorize(
-                $ctx->encodeForTerminal($marker . $status),
+        foreach ($this->directoryBlock($ctx, $screen, $menuWidth, $showHotkeys, $cursor) as $line) {
+            $lines[] = $line;
+        }
+
+        if (count($lines) > $menuHeight) {
+            $lines   = array_slice($lines, 0, max(1, $menuHeight - 1));
+            $lines[] = $ctx->colorize(
+                $ctx->encodeForTerminal($this->moreMarker($glyphs)),
                 self::EMPHASIS_COLOR['muted']
             );
         }
 
         $menu = $this->fitBlock($lines, $menuWidth, $menuHeight);
 
-        // --- FOOTER block ----------------------------------------------------
-        $footerLines = [
-            $ctx->colorize(
-                $ctx->encodeForTerminal(str_repeat($hglyph, min($footerWidth, $contentWidth))),
-                self::EMPHASIS_COLOR['muted']
-            ),
-            $ctx->colorize($ctx->encodeForTerminal($this->footerHints($screen)), self::EMPHASIS_COLOR['muted']),
-        ];
-        // A one-row FOOTER keeps only the hints.
-        if ($footerHeight === 1) {
-            $footerLines = [$footerLines[1]];
+        // --- FOOTER block: an ambient activity line (only when there is live
+        // activity to show — assembled from badge annotations already on the
+        // model, no queries) above the key hints; intentional blank otherwise.
+        $hints   = $ctx->colorize($ctx->encodeForTerminal($this->footerHints($screen)), self::EMPHASIS_COLOR['muted']);
+        $ambient = $this->ambientActivityLine($screen);
+
+        if ($footerHeight >= 2) {
+            $footerLines = [
+                $ambient !== ''
+                    ? $ctx->colorize($ctx->encodeForTerminal($ambient), self::EMPHASIS_COLOR['muted'])
+                    : '',
+                $hints,
+            ];
+        } else {
+            $footerLines = [$hints];
         }
 
         $footer = $this->fitBlock($footerLines, $footerWidth, $footerHeight);
 
         return ['menu' => $menu, 'footer' => $footer];
+    }
+
+    /**
+     * The themed directory: sectioned, one row per destination.
+     *
+     * @return array<int,string>
+     */
+    private function directoryBlock(
+        TerminalRenderContext $ctx,
+        NavigationScreenModel $screen,
+        int $width,
+        bool $showHotkeys,
+        ?int $cursor
+    ): array {
+        $utf8   = $ctx->effectiveCharset() === 'utf8';
+        $subGlyph = $utf8 ? "\u{203A}" : '>';
+
+        $selectableIndex = [];
+        foreach ($screen->selectableItems() as $i => $it) {
+            $selectableIndex[$it->id] = $i;
+        }
+
+        // Group order (first-seen); ungrouped items fall to a trailing block.
+        $groups = [];
+        foreach ($screen->items as $it) {
+            $g = ($it->group !== null && trim($it->group) !== '') ? $it->group : '';
+            if (!in_array($g, $groups, true)) {
+                $groups[] = $g;
+            }
+        }
+
+        $descCol = min(self::DIR_DESC_COL, max(10, $width - 24));
+        $badgeW  = self::DIR_BADGE_W;
+        $descW   = max(6, $width - $descCol - $badgeW - 1);
+
+        $out   = [];
+        $first = true;
+        foreach ($groups as $group) {
+            $members = array_values(array_filter(
+                $screen->items,
+                static fn (NavigationScreenItem $it) => (($it->group !== null && trim($it->group) !== '') ? $it->group : '') === $group
+            ));
+            if ($members === []) {
+                continue;
+            }
+
+            if (!$first) {
+                $out[] = '';
+            }
+            $first = false;
+
+            if ($group !== '') {
+                $out[] = $ctx->colorize($ctx->encodeForTerminal(mb_strtoupper($group)), self::SECTION_HEADING)
+                    . ' ' . $ctx->colorize($ctx->encodeForTerminal(str_repeat($utf8 ? "\u{2500}" : '-', 6)), self::EMPHASIS_COLOR['muted']);
+            }
+
+            foreach ($members as $it) {
+                $out[] = $this->directoryRow(
+                    $ctx,
+                    $it,
+                    $width,
+                    $descCol,
+                    $descW,
+                    $badgeW,
+                    $showHotkeys,
+                    $subGlyph,
+                    $cursor !== null && isset($selectableIndex[$it->id]) && $selectableIndex[$it->id] === $cursor
+                );
+            }
+        }
+
+        return $out;
+    }
+
+    private function directoryRow(
+        TerminalRenderContext $ctx,
+        NavigationScreenItem $it,
+        int $width,
+        int $descCol,
+        int $descW,
+        int $badgeW,
+        bool $showHotkeys,
+        string $subGlyph,
+        bool $isCursor
+    ): string {
+        $key = '';
+        if ($showHotkeys && $it->hotkey !== null) {
+            $key = '[' . mb_strtoupper($it->hotkey) . '] ';
+        } elseif ($showHotkeys) {
+            $key = '    ';
+        }
+
+        $name = mb_strtoupper($it->label);
+        if ($it->isSubmenu()) {
+            $name .= ' ' . $subGlyph;
+        }
+        if (!$it->isSelectable()) {
+            $name .= ' (' . ($it->disabledReason ?? 'unavailable') . ')';
+        }
+
+        // Name segment: exactly $descCol visible cells.
+        $nameSeg = $this->padVisible('  ' . $key . $name, $descCol);
+
+        // Tail segment: description + gap + right-aligned badge, exactly
+        // ($width - $descCol) visible cells.
+        $desc  = $this->clipVisible($it->description !== null ? trim($it->description) : '', $descW);
+        $badge = ($it->isSelectable() && $it->annotation !== null && trim($it->annotation) !== '')
+            ? $this->clipVisible(trim($it->annotation), $badgeW)
+            : '';
+        $badgePad = str_repeat(' ', max(0, $badgeW - mb_strlen($badge, 'UTF-8')));
+        $tailSeg  = $this->padVisible($desc, $descW) . ' ' . $badgePad . $badge;
+        $tailSeg  = $this->padVisible($tailSeg, $width - $descCol);
+
+        if ($isCursor) {
+            return $ctx->colorize($ctx->encodeForTerminal($nameSeg . $tailSeg), "\033[7m");
+        }
+
+        $emph = self::EMPHASIS_COLOR[$it->isSelectable() ? $it->emphasis : 'muted'] ?? '';
+        $encName = $ctx->encodeForTerminal($nameSeg);
+
+        return ($emph !== '' ? $ctx->colorize($encName, $emph) : $encName)
+            . $ctx->colorize($ctx->encodeForTerminal($tailSeg), self::EMPHASIS_COLOR['muted']);
+    }
+
+    /**
+     * "3 people online · 2 in experiences" — assembled only from badge
+     * annotations already on the screen model, so it costs nothing. Empty when
+     * the front door is quiet.
+     */
+    private function ambientActivityLine(NavigationScreenModel $screen): string
+    {
+        $parts = [];
+        foreach ($screen->items as $it) {
+            if ($it->annotation !== null && trim($it->annotation) !== '') {
+                $parts[] = trim($it->label) . ' ' . trim($it->annotation);
+            }
+        }
+        if ($parts === []) {
+            return '';
+        }
+
+        return '  ' . implode('   ' . "\u{00B7}" . '   ', $parts);
+    }
+
+    private function clipVisible(string $s, int $width): string
+    {
+        if (mb_strlen($s, 'UTF-8') <= $width) {
+            return $s;
+        }
+
+        return rtrim(mb_substr($s, 0, max(0, $width - 1), 'UTF-8')) . ($width > 0 ? "\u{2026}" : '');
+    }
+
+    private function padVisible(string $s, int $width): string
+    {
+        $len = mb_strlen($s, 'UTF-8');
+
+        return $len >= $width ? $s : $s . str_repeat(' ', $width - $len);
     }
 
     /**

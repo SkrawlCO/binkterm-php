@@ -258,14 +258,14 @@ Schema 1 themes exactly **one** geometry, `80x24`, with exactly two regions,
 ```json
 {
   "schema": 1,
-  "id": "l33test.crossroads",
+  "id": "l33test.frontdoor",
   "enabled": true,
   "geometries": {
     "80x24": {
-      "template": "nav-crossroads",
+      "template": "nav-frontdoor",
       "regions": {
-        "MENU":   { "row": 3,  "col": 5, "width": 70, "height": 18 },
-        "FOOTER": { "row": 22, "col": 5, "width": 70, "height": 1 }
+        "MENU":   { "row": 6,  "col": 5, "width": 72, "height": 12 },
+        "FOOTER": { "row": 19, "col": 5, "width": 72, "height": 2 }
       }
     }
   }
@@ -300,6 +300,16 @@ space-filled to the rectangle — and positions them with `ESC [ r;c H`. The who
 frame is one coalesced write. It never touches the screen model, so hotkeys,
 actions, ACS and item order are exactly what the flowing renderer would show.
 `NavigationRendererFactory::create()` chooses the renderer for a session.
+
+`composeRegions()` renders the MENU as a **directory**, not a vertical menu:
+each destination is one full-width row — hotkey, an uppercase name, its purpose
+in a description column, and any live badge (`3 playing`, `2 online`) right-
+aligned — under a short section sign; the selected row is a full-width bar. The
+FOOTER's first line is an ambient activity summary assembled from the badge
+annotations already on the screen model (empty when the board is quiet); its
+last line is the key hints. Identity and the "place" framing come from the
+template around it, so the themed layout drops the flowing renderer's title band
+and roaming status line. `composeLines()` — the flowing renderer — is unchanged.
 
 ---
 

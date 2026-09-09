@@ -42,7 +42,13 @@ final class DeclarativeMenuBridgeTest extends TestCase
             $this->envBackup[$k] = $_ENV[$k] ?? null;
             $_ENV[$k] = '';
         }
+        // Isolate from a deployed live presentation theme — the bridge picks the
+        // renderer via NavigationRendererFactory, and these tests assert on the
+        // flowing renderer's output.
+        $this->envBackup['TERMINAL_NAV_THEME_CONFIG'] = $_ENV['TERMINAL_NAV_THEME_CONFIG'] ?? null;
+        $_ENV['TERMINAL_NAV_THEME_CONFIG'] = sys_get_temp_dir() . '/nav-theme-none-' . uniqid() . '.json';
         NavigationConfig::reset();
+        \BinktermPHP\Terminal\Navigation\NavigationThemeConfig::reset();
     }
 
     protected function tearDown(): void
@@ -51,6 +57,7 @@ final class DeclarativeMenuBridgeTest extends TestCase
             $v === null ? $this->clearEnv($k) : $_ENV[$k] = $v;
         }
         NavigationConfig::reset();
+        \BinktermPHP\Terminal\Navigation\NavigationThemeConfig::reset();
     }
 
     private function clearEnv(string $k): void

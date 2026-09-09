@@ -55,7 +55,7 @@ final class NavigationThemeTest extends TestCase
         return new NavigationThemeLoader();
     }
 
-    private function validThemeJson(string $template = 'nav-crossroads'): string
+    private function validThemeJson(string $template = 'nav-frontdoor'): string
     {
         return json_encode([
             'schema' => 1,
@@ -65,8 +65,8 @@ final class NavigationThemeTest extends TestCase
                 '80x24' => [
                     'template' => $template,
                     'regions'  => [
-                        'MENU'   => ['row' => 3, 'col' => 5, 'width' => 70, 'height' => 18],
-                        'FOOTER' => ['row' => 22, 'col' => 5, 'width' => 70, 'height' => 1],
+                        'MENU'   => ['row' => 6, 'col' => 5, 'width' => 72, 'height' => 12],
+                        'FOOTER' => ['row' => 19, 'col' => 5, 'width' => 72, 'height' => 2],
                     ],
                 ],
             ],
@@ -142,9 +142,10 @@ final class NavigationThemeTest extends TestCase
 
         $geo = $theme->forGeometry(80, 24);
         self::assertNotNull($geo);
-        self::assertSame('nav-crossroads', $geo->templateToken);
-        self::assertSame(3, $geo->menu()->row);
-        self::assertSame(70, $geo->menu()->width);
+        self::assertSame('nav-frontdoor', $geo->templateToken);
+        self::assertSame(6, $geo->menu()->row);
+        self::assertSame(12, $geo->menu()->height);
+        self::assertSame(72, $geo->menu()->width);
         self::assertNull($theme->forGeometry(132, 36), '132x36 is not themed');
     }
 
@@ -154,9 +155,9 @@ final class NavigationThemeTest extends TestCase
         self::assertIsString($json);
         $res = $this->loader()->fromJson($json);
         self::assertTrue($res->isOk(), 'example theme must validate: ' . $res->errorSummary());
-        self::assertSame('nav-crossroads', $res->theme()->forGeometry(80, 24)->templateToken);
+        self::assertSame('nav-frontdoor', $res->theme()->forGeometry(80, 24)->templateToken);
         self::assertFileExists(
-            $this->repo . '/telnet/screens/nav-crossroads.ans',
+            $this->repo . '/telnet/screens/nav-frontdoor.ans',
             'the example theme references a template that must exist'
         );
     }
@@ -263,7 +264,7 @@ final class NavigationThemeTest extends TestCase
 
     public function testShippedTemplateSanitisesToPositioningFreeArt(): void
     {
-        $raw = file_get_contents($this->repo . '/telnet/screens/nav-crossroads.ans');
+        $raw = file_get_contents($this->repo . '/telnet/screens/nav-frontdoor.ans');
         self::assertIsString($raw);
 
         foreach (['utf8', 'cp437'] as $charset) {
@@ -310,15 +311,16 @@ final class NavigationThemeTest extends TestCase
         $grid = (new AnsiScreenBuffer(80, 24))->write($harness->bytes())->toLines();
         $plain = array_map(static fn ($l) => preg_replace('/\x1b\[[0-9;]*m/', '', $l), $grid);
 
-        // Template identity is on screen.
-        self::assertStringContainsString('L33TEST', $plain[0]);
-        // MENU content landed inside the MENU rectangle (rows 3-20).
-        $menuText = implode("\n", array_slice($plain, 2, 18));
-        self::assertStringContainsString('Crossroads', $menuText);
+        // Template identity is on screen (masthead row).
+        self::assertStringContainsString('L33TEST', $plain[1]);
+        // MENU content landed inside the MENU rectangle (rows 6-20). The themed
+        // directory renders destination names in uppercase.
+        $menuText = implode("\n", array_slice($plain, 5, 12));
+        self::assertMatchesRegularExpression('/CROSSROADS/', $menuText);
         self::assertStringContainsString('[C]', $menuText);
         self::assertStringContainsString('[Q]', $menuText);
-        // FOOTER hints landed on the FOOTER row (22).
-        self::assertStringContainsString('Select an option', $plain[21]);
+        // FOOTER hints landed on the FOOTER (rows 22-23).
+        self::assertStringContainsString('Select an option', implode("\n", array_slice($plain, 18, 2)));
         // Nothing painted past the geometry.
         self::assertCount(24, $grid);
     }
@@ -342,7 +344,7 @@ final class NavigationThemeTest extends TestCase
 
         // Rows above (4) and below (9+) the 4-row MENU must not carry menu text.
         for ($r = 8; $r <= 12; $r++) {          // rows 9..13 (0-based 8..12)
-            self::assertStringNotContainsString('Crossroads', $plain[$r] ?? '', "row " . ($r + 1) . " outside MENU");
+            self::assertStringNotContainsString('CROSSROADS', $plain[$r] ?? '', "row " . ($r + 1) . " outside MENU");
         }
         // The clipped MENU shows a "more" marker.
         $menuText = implode("\n", array_slice($plain, 4, 4));
@@ -400,7 +402,11 @@ final class NavigationThemeTest extends TestCase
 
     public function testFactoryReturnsPlainRendererWhenNoThemeConfigured(): void
     {
-        putenv('TERMINAL_NAV_THEME_CONFIG=/definitely/not/a/file.json');
+        // Point at a guaranteed-absent path so a deployed live theme file cannot
+        // leak into this "zero config" case (Config::env reads $_ENV).
+        $absent = sys_get_temp_dir() . '/navtheme-absent-' . uniqid() . '.json';
+        putenv('TERMINAL_NAV_THEME_CONFIG=' . $absent);
+        $_ENV['TERMINAL_NAV_THEME_CONFIG'] = $absent;
         NavigationThemeConfig::reset();
 
         $renderer = NavigationRendererFactory::create();
@@ -452,10 +458,19 @@ final class NavigationThemeTest extends TestCase
         $themedGrid = implode("\n", (new AnsiScreenBuffer(80, 24))->write($harnessThemed->bytes())->toLines());
         $themedGrid = preg_replace('/\x1b\[[0-9;]*m/', '', $themedGrid);
 
-        // Same items, same hotkeys, same order — the theme only reframes them.
+        // Same items, same hotkeys, same order — the theme only reframes them
+        // (the themed directory renders names in uppercase; hotkeys unchanged).
+        $plainText = preg_replace('/\x1b\[[0-9;]*m/', '', $plainBytes);
         foreach (['Crossroads', 'Messages', 'Log Off', '[C]', '[M]', '[Q]'] as $needle) {
-            self::assertStringContainsString($needle, preg_replace('/\x1b\[[0-9;]*m/', '', $plainBytes), "plain: {$needle}");
+            self::assertStringContainsString($needle, $plainText, "plain: {$needle}");
+        }
+        foreach (['CROSSROADS', 'MESSAGES', 'LOG OFF', '[C]', '[M]', '[Q]'] as $needle) {
             self::assertStringContainsString($needle, $themedGrid, "themed: {$needle}");
+        }
+        // Order preserved: C before M before Q in both.
+        foreach ([$plainText, $themedGrid] as $rendered) {
+            self::assertLessThan(mb_stripos($rendered, '[M]'), mb_stripos($rendered, '[C]'));
+            self::assertLessThan(mb_stripos($rendered, '[Q]'), mb_stripos($rendered, '[M]'));
         }
 
         // The screen model the renderer received is identical — the themed
