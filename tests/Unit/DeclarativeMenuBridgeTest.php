@@ -12,6 +12,8 @@ require_once __DIR__ . '/../../telnet/src/TelnetUtils.php';
 require_once __DIR__ . '/../../telnet/src/TerminalBoxRenderer.php';
 require_once __DIR__ . '/../../telnet/src/BbsSession.php';
 require_once __DIR__ . '/../../telnet/src/DeclarativeMenuBridge.php';
+require_once __DIR__ . '/../../telnet/src/MailUtils.php';
+require_once __DIR__ . '/../../telnet/src/EchomailHandler.php';
 
 use BinktermPHP\I18n\Translator;
 use BinktermPHP\TelnetServer\BbsSession;
@@ -229,6 +231,100 @@ final class DeclarativeMenuBridgeTest extends TestCase
 
         self::assertSame(['netmail'], $seen, 'the delegated action ran exactly once');
         self::assertSame('', $state['pushback'], 'the stray input was discarded at the action boundary');
+    }
+
+    public function testEchomailActionIsBoundViaAClosureToShowEchoareas(): void
+    {
+        // EchomailHandler's menu entrypoint is showEchoareas(), not show(), so
+        // BbsSession maps 'echomail' to a closure. Without it the bridge's
+        // method_exists($h,'show') check leaves the action unbound and its menu
+        // item silently does nothing (the live bug).
+        $def = [
+            'schema' => 1, 'id' => 'echo.test', 'root' => 'main',
+            'nodes' => [['id' => 'main', 'label_fallback' => 'Main', 'items' => [
+                ['id' => 'e', 'label_fallback' => 'Echomail', 'hotkey' => 'e', 'action' => 'echomail'],
+                ['id' => 'q', 'label_fallback' => 'Quit', 'hotkey' => 'q', 'action' => 'quit'],
+            ]]],
+        ];
+        $path = sys_get_temp_dir() . '/navbridge_echo_' . bin2hex(random_bytes(5)) . '.json';
+        file_put_contents($path, json_encode($def));
+        register_shutdown_function(static fn () => @unlink($path));
+
+        $_ENV['TERMINAL_NAV_RUNTIME'] = 'on';
+        $_ENV['TERMINAL_NAV_CONFIG']  = $path;
+        NavigationConfig::reset();
+
+        $session = $this->session();
+        $bridge  = new DeclarativeMenuBridge($session);
+
+        $conn = fopen('php://temp', 'r+');
+        fwrite($conn, 'e'); // select Echomail
+        rewind($conn);
+        $state = ['username' => 'alice', 'is_admin' => false, 'locale' => 'en', 'cols' => 80, 'rows' => 24, 'pushback' => '', 'last_activity' => time(), 'idle_warned' => false, 'idle_warning_timeout' => 300, 'idle_disconnect_timeout' => 420];
+
+        // Spy standing in for EchomailHandler: only showEchoareas(), no show().
+        $spy = new class {
+            public array $calls = [];
+            public function showEchoareas($conn, array &$state, string $session): void
+            {
+                $this->calls[] = ['session' => $session, 'cols' => $state['cols']];
+            }
+        };
+
+        $bridge->run($conn, $state, 'sess', [
+            'echomail' => fn () => $spy->showEchoareas($conn, $state, 'sess'),
+        ]);
+
+        self::assertCount(1, $spy->calls, 'the Echomail action launched showEchoareas() exactly once');
+        self::assertSame('sess', $spy->calls[0]['session']);
+    }
+
+    public function testAMappedHandlerWithNoShowMethodLeavesTheActionInert(): void
+    {
+        // The pre-fix shape: a bare object with no show() -> not bound ->
+        // selecting the item does nothing (no crash, no launch).
+        $def = [
+            'schema' => 1, 'id' => 'inert.test', 'root' => 'main',
+            'nodes' => [['id' => 'main', 'label_fallback' => 'Main', 'items' => [
+                ['id' => 'e', 'label_fallback' => 'Echomail', 'hotkey' => 'e', 'action' => 'echomail'],
+                ['id' => 'q', 'label_fallback' => 'Quit', 'hotkey' => 'q', 'action' => 'quit'],
+            ]]],
+        ];
+        $path = sys_get_temp_dir() . '/navbridge_inert_' . bin2hex(random_bytes(5)) . '.json';
+        file_put_contents($path, json_encode($def));
+        register_shutdown_function(static fn () => @unlink($path));
+
+        $_ENV['TERMINAL_NAV_RUNTIME'] = 'on';
+        $_ENV['TERMINAL_NAV_CONFIG']  = $path;
+        NavigationConfig::reset();
+
+        $session = $this->session();
+        $conn = fopen('php://temp', 'r+');
+        fwrite($conn, 'e');
+        rewind($conn);
+        $state = ['username' => 'alice', 'is_admin' => false, 'locale' => 'en', 'cols' => 80, 'rows' => 24, 'pushback' => '', 'last_activity' => time(), 'idle_warned' => false, 'idle_warning_timeout' => 300, 'idle_disconnect_timeout' => 420];
+
+        $spy = new class {
+            public bool $touched = false;
+            public function showEchoareas(): void { $this->touched = true; }
+        };
+
+        // handled without error; the inert item just re-renders the screen.
+        $handled = (new DeclarativeMenuBridge($session))->run($conn, $state, 'sess', ['echomail' => $spy]);
+
+        self::assertTrue($handled);
+        self::assertFalse($spy->touched, 'a handler with no show() is not invoked (documents why the closure is required)');
+    }
+
+    public function testEchomailHandlerStillHasNoShowMethodSoTheClosureIsRequired(): void
+    {
+        // Guard: if EchomailHandler ever gains show(), revisit the BbsSession
+        // handler map (the closure could then be a plain object again).
+        self::assertFalse(
+            method_exists(\BinktermPHP\TelnetServer\EchomailHandler::class, 'show'),
+            'EchomailHandler gained show() — the BbsSession echomail closure can be simplified'
+        );
+        self::assertTrue(method_exists(\BinktermPHP\TelnetServer\EchomailHandler::class, 'showEchoareas'));
     }
 
     public function testStandaloneEscTakesTheRuntimeBackFromASubmenu(): void

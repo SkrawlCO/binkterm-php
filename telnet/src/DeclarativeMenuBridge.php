@@ -148,7 +148,16 @@ final class DeclarativeMenuBridge
                 $registry->bind($actionId, function () use ($handler, $conn, &$state, $session): void {
                     $handler->show($conn, $state, $session);
                 });
+                continue;
             }
+            // The caller mapped this action to something the bridge cannot bind
+            // (an object with no show() entrypoint, most likely). Make it loud
+            // rather than a menu item that silently does nothing.
+            $this->server->logInfo(sprintf(
+                'Declarative navigation: action "%s" could not be bound (%s) — its menu item will be inert',
+                $actionId,
+                is_object($handler) ? get_class($handler) . ' has no show()' : gettype($handler)
+            ));
         }
         // 'quit' terminates the runtime directly — it needs no binding.
     }

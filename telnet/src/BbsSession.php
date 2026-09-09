@@ -859,7 +859,10 @@ class BbsSession
         if (\BinktermPHP\Terminal\Navigation\NavigationConfig::isFlagEnabled()) {
             $navHandled = (new DeclarativeMenuBridge($this))->run($conn, $state, $session, [
                 'netmail'      => $netmailHandler,
-                'echomail'     => $echomailHandler,
+                // EchomailHandler's menu entrypoint is showEchoareas(), not
+                // show() — pass a closure (as whosonline does) so the bridge
+                // can bind it.
+                'echomail'     => fn () => $echomailHandler->showEchoareas($conn, $state, $session),
                 'shoutbox'     => $shoutboxHandler,
                 'bulletins'    => $bulletinsHandler,
                 'polls'        => $pollsHandler,
