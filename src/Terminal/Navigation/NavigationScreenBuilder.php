@@ -107,6 +107,7 @@ final class NavigationScreenBuilder
             targetNodeId: $target,
             action: $action,
             glyph: $item->presentation->glyph,
+            group: $item->presentation->group,
         );
     }
 

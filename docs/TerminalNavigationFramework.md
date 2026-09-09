@@ -184,6 +184,32 @@ Intent, never coordinates or raw ANSI:
 The renderer decides the actual layout for the caller's geometry, charset, and
 colour capability.
 
+### How the renderer composes a screen
+
+`NavigationScreenRenderer` turns those hints into a composed screen rather than a
+bare list:
+
+- **Bounded column.** Content is drawn in a column of at most `CONTENT_MAX` (78)
+  columns with a left margin capped at 8, so a 132-column terminal gets a
+  designed column instead of edge-to-edge text or a tiny block adrift in the
+  middle.
+- **Header band + tagline.** A `── Title ─────` band, an orientation crumb on
+  submenus, then the node `description` as a dim tagline.
+- **Sections.** When a screen carries **two or more** distinct `group` values the
+  items are drawn under bold uppercase section headings, in first-seen group
+  order (items with no group fall to an unlabelled block at the end). A single
+  group value is ignored — one heading is noise, not composition.
+- **Descriptions, adaptively.** When the terminal is tall enough for the whole
+  block, each item's `description` is rendered inline on a dim line beneath it.
+  When it is not, the descriptions collapse to a single roaming status line above
+  the footer hints that shows the highlighted item's `label: description`.
+- **Positioned, not centred.** The block is placed in the upper-middle with an
+  adaptive top margin (capped), and the footer rule + hints follow the content
+  instead of being pinned to the last row.
+- **Highlight by identity.** The lightbar highlight is resolved by item id
+  against `selectableItems()` (definition order), so it stays correct even when
+  grouping reorders items for display.
+
 ---
 
 ## Behaviour at runtime
@@ -195,8 +221,8 @@ colour capability.
 - **Orientation**: submenu screens show a `Main > Messages` context line and the
   available Back / Home hints.
 - **Resize**: a NAWS change reflows on the next redraw, like the built-in menu.
-- **Short terminals**: the title and orientation line are always kept; the item
-  list is clipped from the bottom with a "more" indicator.
+- **Short terminals**: the title, orientation line, status line and footer are
+  always kept; the item list is clipped from the bottom with a "more" indicator.
 - **Line shell**: low-capability sessions get a plain numbered list; unavailable
   options are simply omitted.
 - Access-hidden and disabled items never leave a dangling hotkey.

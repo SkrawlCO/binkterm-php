@@ -14,12 +14,39 @@ use BinktermPHP\TelnetServer\TerminalRenderContext;
  * handling, and colour application are identical because they all come from the
  * context.
  *
- * The screen is drawn top-anchored and clipped from the bottom so the title and
- * orientation line are never scrolled away on a short terminal; a footer status
- * line is always anchored to the last usable row.
+ * Composition:
+ *   - the content is a bounded column (max {@see CONTENT_MAX} cols) with a
+ *     capped left margin, so wide terminals get a designed column rather than
+ *     edge-to-edge text or a tiny block lost mid-screen;
+ *   - a header band ("── Title ─────") plus an optional tagline (the node
+ *     description);
+ *   - items, grouped into bold uppercase sections when the screen carries >= 2
+ *     distinct `presentation.group` hints, otherwise a flat list;
+ *   - item descriptions: rendered inline under each item when the terminal is
+ *     tall enough for the whole block, otherwise collapsed to a single roaming
+ *     status line above the footer hints that tracks the highlighted item;
+ *   - a footer rule + truthful key hints that follows the content (with an
+ *     adaptive top margin positioning the block in the upper-middle) rather
+ *     than being pinned to the last row.
+ *
+ * On a terminal too short for the whole block the top margin collapses and the
+ * item list is clipped from the bottom (header, status line and footer stay
+ * visible), with a "… more" marker.
  */
 final class NavigationScreenRenderer
 {
+    /** Widest the content column is ever drawn, regardless of terminal width. */
+    public const CONTENT_MAX = 78;
+
+    /** Never indent the content column further than this from the left edge. */
+    private const MAX_LEFT_PAD = 8;
+
+    /** Cap on the adaptive top margin so a tall terminal is not mostly blank. */
+    private const MAX_TOP_MARGIN = 8;
+
+    /** Section headings: bold, no colour (renders as plain text when colour is off). */
+    private const SECTION_HEADING = "\033[1m";
+
     private const EMPHASIS_COLOR = [
         'primary' => "\033[36m\033[1m", // cyan bold
         'muted'   => "\033[2m",         // dim
@@ -42,14 +69,9 @@ final class NavigationScreenRenderer
         $cols = max(20, $ctx->cols());
         $rows = max(6, $ctx->selectorRows());
 
-        if ($clear) {
-            $ctx->write("\033[2J\033[H");
-        } else {
-            $ctx->write("\033[H");
-        }
+        $ctx->write($clear ? "\033[2J\033[H" : "\033[H");
 
-        $lines = $this->composeLines($ctx, $screen, $cols, $rows, $showHotkeys, $cursor);
-        foreach ($lines as $line) {
+        foreach ($this->composeLines($ctx, $screen, $cols, $rows, $showHotkeys, $cursor) as $line) {
             $ctx->writeLine($this->clip($line, $cols));
         }
     }
@@ -69,120 +91,273 @@ final class NavigationScreenRenderer
         ?int $cursor = null
     ): array {
         $glyphs = $ctx->lineDrawingChars();
-        $rule   = str_repeat($glyphs['h'] ?? '-', $cols);
+        $hglyph = $glyphs['h'] ?? '-';
+        $utf8   = $ctx->effectiveCharset() === 'utf8';
 
-        $header = [];
-        $header[] = $ctx->colorize($this->center($screen->title, $cols), self::EMPHASIS_COLOR['primary']);
-        $header[] = $ctx->encodeForTerminal($rule);
-        $orientation = $this->orientationLine($screen);
-        if ($orientation !== '') {
-            $header[] = $ctx->colorize($orientation, self::EMPHASIS_COLOR['muted']);
-        }
-        if ($screen->description !== null && $screen->description !== '') {
-            $header[] = $screen->description;
-        }
-        $header[] = '';
+        $contentWidth = min(max(20, $cols - 4), self::CONTENT_MAX);
+        $pad          = str_repeat(' ', min(self::MAX_LEFT_PAD, max(0, intdiv($cols - $contentWidth, 2))));
 
+        $header = $this->headerBlock($ctx, $screen, $contentWidth, $pad, $hglyph);
         $footer = [
-            $ctx->encodeForTerminal($rule),
-            $ctx->colorize($this->footerHints($screen), self::EMPHASIS_COLOR['muted']),
+            $pad . $ctx->colorize(
+                $ctx->encodeForTerminal(str_repeat($hglyph, $contentWidth)),
+                self::EMPHASIS_COLOR['muted']
+            ),
+            $pad . $ctx->colorize($ctx->encodeForTerminal($this->footerHints($screen)), self::EMPHASIS_COLOR['muted']),
         ];
 
-        $bodyBudget = max(1, $rows - count($header) - count($footer));
-        $body       = $this->itemLines($ctx, $screen, $showHotkeys, $cursor);
+        $hasDescriptions = $this->anyItemHasDescription($screen);
 
-        $clippedFromBottom = false;
-        if (count($body) > $bodyBudget) {
-            $body = array_slice($body, 0, $bodyBudget - 1);
-            $clippedFromBottom = true;
-        }
-        if ($clippedFromBottom) {
-            $body[] = $ctx->colorize('  ' . $this->moreMarker($glyphs), self::EMPHASIS_COLOR['muted']);
-        }
-        while (count($body) < $bodyBudget) {
-            $body[] = '';
+        // Prefer the richer layout — every item annotated inline — and fall back
+        // to a compact list plus one roaming status line when the rich block
+        // would not fit the terminal height.
+        $richBody = $this->bodyBlock($ctx, $screen, $contentWidth, $pad, $showHotkeys, $cursor, true);
+        $useRich  = $hasDescriptions
+            && (count($header) + count($richBody) + count($footer) + 1) <= $rows;
+
+        if ($useRich) {
+            $body       = $richBody;
+            $footerZone = $footer;
+        } else {
+            $body       = $this->bodyBlock($ctx, $screen, $contentWidth, $pad, $showHotkeys, $cursor, false);
+            $footerZone = $footer;
+            if ($hasDescriptions) {
+                $statusText = $this->statusLine($screen, $contentWidth - 4, $cursor);
+                if ($statusText !== '') {
+                    $marker     = ($utf8 ? "\u{25B8}" : '>') . ' ';
+                    $status     = $pad . '  ' . $ctx->encodeForTerminal($marker . $statusText);
+                    $footerZone = [$footer[0], $status, $footer[1]];
+                }
+            }
         }
 
-        return [...$header, ...$body, ...$footer];
+        $fixed       = count($header) + count($footerZone);
+        $blockHeight = $fixed + count($body);
+
+        if ($blockHeight >= $rows) {
+            // Not enough room — collapse the margin, clip the list from the bottom.
+            $maxBody = max(1, $rows - $fixed - 1);
+            if (count($body) > $maxBody) {
+                $body   = array_slice($body, 0, $maxBody);
+                $body[] = $pad . '  ' . $ctx->colorize(
+                    $ctx->encodeForTerminal($this->moreMarker($glyphs)),
+                    self::EMPHASIS_COLOR['muted']
+                );
+            }
+            $topMargin = 0;
+        } else {
+            // Position the block in the upper-middle; clean space below.
+            $topMargin = max(1, min(self::MAX_TOP_MARGIN, intdiv($rows - $blockHeight, 3)));
+        }
+
+        return [
+            ...array_fill(0, $topMargin, ''),
+            ...$header,
+            ...$body,
+            ...$footerZone,
+        ];
     }
 
     /**
      * @return array<int,string>
      */
-    private function itemLines(
+    private function headerBlock(
         TerminalRenderContext $ctx,
         NavigationScreenModel $screen,
-        bool $showHotkeys,
-        ?int $cursor
+        int $width,
+        string $pad,
+        string $hglyph
     ): array {
-        $out           = [];
-        $selectableSeen = 0;
-        foreach ($screen->items as $item) {
-            $isCursor = false;
-            if ($item->isSelectable()) {
-                $isCursor = $cursor !== null && $selectableSeen === $cursor;
-                $selectableSeen++;
-            }
+        $out = [];
 
-            $prefix = '';
-            if ($showHotkeys && $item->hotkey !== null) {
-                $prefix = '[' . mb_strtoupper($item->hotkey) . '] ';
+        // Header band: "── Title ─────────────────"
+        $title = ' ' . trim($screen->title) . ' ';
+        $lead  = str_repeat($hglyph, 2);
+        $tail  = str_repeat($hglyph, max(0, $width - mb_strlen($lead) - mb_strlen($title)));
+        $out[] = $pad
+            . $ctx->colorize($ctx->encodeForTerminal($lead), self::EMPHASIS_COLOR['muted'])
+            . $ctx->colorize($ctx->encodeForTerminal($title), self::EMPHASIS_COLOR['primary'])
+            . $ctx->colorize($ctx->encodeForTerminal($tail), self::EMPHASIS_COLOR['muted']);
+
+        // Orientation crumb (submenus only).
+        if (!$screen->path->isRoot()) {
+            $out[] = $pad . $ctx->colorize(
+                $ctx->encodeForTerminal($screen->path->crumb(' > ')),
+                self::EMPHASIS_COLOR['muted']
+            );
+        }
+
+        // Tagline (node description).
+        if ($screen->description !== null && trim($screen->description) !== '') {
+            foreach ($this->wrap(trim($screen->description), $width) as $line) {
+                $out[] = $pad . $ctx->colorize($ctx->encodeForTerminal($line), self::EMPHASIS_COLOR['muted']);
+            }
+        }
+
+        $out[] = '';
+
+        return $out;
+    }
+
+    /**
+     * @param bool $inlineDescriptions render each item's description on its own
+     *                                 dim line directly below the item
+     * @return array<int,string>
+     */
+    private function bodyBlock(
+        TerminalRenderContext $ctx,
+        NavigationScreenModel $screen,
+        int $width,
+        string $pad,
+        bool $showHotkeys,
+        ?int $cursor,
+        bool $inlineDescriptions
+    ): array {
+        $utf8  = $ctx->effectiveCharset() === 'utf8';
+        $items = $screen->items;
+
+        // Selectable index by item identity. NavigationRuntime's cursor indexes
+        // selectableItems() in definition order; grouping can reorder items for
+        // display, so the highlight must be resolved by id, not by draw order.
+        $selectableIndex = [];
+        foreach ($screen->selectableItems() as $i => $it) {
+            $selectableIndex[$it->id] = $i;
+        }
+
+        $groups = [];
+        foreach ($items as $it) {
+            if ($it->group !== null && $it->group !== '' && !in_array($it->group, $groups, true)) {
+                $groups[] = $it->group;
+            }
+        }
+        $useSections = count($groups) >= 2;
+
+        $out  = [];
+        $emit = function (NavigationScreenItem $it, bool $indent) use (
+            &$out, $ctx, $pad, $width, $showHotkeys, $cursor, $utf8, $selectableIndex, $inlineDescriptions
+        ): void {
+            $isCursor = $cursor !== null
+                && isset($selectableIndex[$it->id])
+                && $selectableIndex[$it->id] === $cursor;
+
+            $key = '';
+            if ($showHotkeys && $it->hotkey !== null) {
+                $key = '[' . mb_strtoupper($it->hotkey) . '] ';
             } elseif ($showHotkeys) {
-                $prefix = '    ';
+                $key = '    ';
             }
 
-            $label = $item->label;
-            if ($item->isSubmenu()) {
-                $label .= ' ' . ($ctx->lineDrawingChars()['r_tee'] ?? '>');
+            $label = $it->label;
+            if ($it->isSubmenu()) {
+                $label .= ' ' . ($utf8 ? "\u{203A}" : '>');
             }
-            if (!$item->isSelectable()) {
-                $label .= '  (' . ($item->disabledReason ?? 'unavailable') . ')';
+            if (!$it->isSelectable()) {
+                $label .= '  (' . ($it->disabledReason ?? 'unavailable') . ')';
             }
 
-            $marker = $isCursor ? '> ' : '  ';
-            $text   = $ctx->encodeForTerminal($marker . $prefix . $label);
+            $indentSp = $indent ? '  ' : '';
+            $line     = ($isCursor ? '> ' : '  ') . $indentSp . $key . $label;
+            $text     = $ctx->encodeForTerminal($line);
 
             if ($isCursor) {
-                $out[] = $ctx->colorize($text, "\033[7m"); // reverse video lightbar
-                continue;
+                $out[] = $pad . $ctx->colorize($text, "\033[7m"); // reverse-video lightbar
+            } else {
+                $colour = self::EMPHASIS_COLOR[$it->isSelectable() ? $it->emphasis : 'muted'] ?? '';
+                $out[]  = $pad . ($colour !== '' ? $ctx->colorize($text, $colour) : $text);
             }
-            $color = self::EMPHASIS_COLOR[$item->isSelectable() ? $item->emphasis : 'muted'] ?? '';
-            $out[] = $color !== '' ? $ctx->colorize($text, $color) : $text;
+
+            if ($inlineDescriptions && $it->description !== null && trim($it->description) !== '') {
+                $descIndent = '  ' . $indentSp . '    ';
+                $descLine   = $this->wrap(trim($it->description), max(8, $width - mb_strlen($descIndent)))[0] ?? '';
+                if ($descLine !== '') {
+                    $out[] = $pad . $descIndent . $ctx->colorize(
+                        $ctx->encodeForTerminal($descLine),
+                        self::EMPHASIS_COLOR['muted']
+                    );
+                }
+            }
+        };
+
+        if (!$useSections) {
+            foreach ($items as $it) {
+                $emit($it, false);
+            }
+
+            return $out;
+        }
+
+        $firstSection = true;
+        foreach ($groups as $group) {
+            if (!$firstSection) {
+                $out[] = '';
+            }
+            $firstSection = false;
+            $out[] = $pad . '  ' . $ctx->colorize(
+                $ctx->encodeForTerminal(mb_strtoupper($group)),
+                self::SECTION_HEADING
+            );
+            foreach ($items as $it) {
+                if ($it->group === $group) {
+                    $emit($it, true);
+                }
+            }
+        }
+
+        $ungrouped = array_values(array_filter(
+            $items,
+            static fn (NavigationScreenItem $it) => $it->group === null || $it->group === ''
+        ));
+        if ($ungrouped !== []) {
+            $out[] = '';
+            foreach ($ungrouped as $it) {
+                $emit($it, true);
+            }
         }
 
         return $out;
     }
 
-    private function orientationLine(NavigationScreenModel $screen): string
+    private function anyItemHasDescription(NavigationScreenModel $screen): bool
     {
-        if ($screen->path->isRoot()) {
+        foreach ($screen->items as $it) {
+            if ($it->description !== null && trim($it->description) !== '') {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * One-line "you are pointing at" text for the compact layout: the
+     * highlighted item's label and description, clipped to the content width.
+     */
+    private function statusLine(NavigationScreenModel $screen, int $width, ?int $cursor): string
+    {
+        $selectable = $screen->selectableItems();
+        $item       = $selectable[$cursor ?? 0] ?? ($selectable[0] ?? null);
+        if ($item === null) {
             return '';
         }
 
-        return $screen->path->crumb(' > ');
+        $desc = $item->description !== null ? trim($item->description) : '';
+        $text = $desc !== '' ? trim($item->label) . ': ' . $desc : trim($item->label);
+
+        return $this->wrap($text, max(8, $width))[0] ?? '';
     }
 
     private function footerHints(NavigationScreenModel $screen): string
     {
         $parts = [];
-        $selectable = $screen->selectableItems();
-        if ($selectable !== []) {
+        if ($screen->selectableItems() !== []) {
             $parts[] = 'Select an option';
         }
         if ($screen->backAvailable) {
-            // "B" is only a Back affordance when the screen does not bind it to
-            // an item; otherwise advertise the non-conflicting Back keys only.
             $parts[] = ($screen->bindsHotkey('b') ? 'Left/Esc' : 'B/Left') . ' Back';
         }
-        // "H Home" only when the screen does not bind H to an item. When it does,
-        // the Home affordance is left to the terminal's Home key (unconditional
-        // in the runtime) rather than a conflicting shortcut.
         if ($screen->homeAvailable && !$screen->bindsHotkey('h')) {
             $parts[] = 'H Home';
         }
-        // "Q" is only a hint when THIS screen actually binds it (an explicit
-        // quit / log-off item). It is not a universal key, so screens without a
-        // 'q' item never advertise one.
         $quitItem = $screen->itemForHotkey('q');
         if ($quitItem !== null) {
             $parts[] = 'Q ' . $quitItem->label;
@@ -196,15 +371,24 @@ final class NavigationScreenRenderer
         return trim(str_repeat($glyphs['h'] ?? '.', 3)) . ' more';
     }
 
-    private function center(string $text, int $width): string
+    /**
+     * Word-wrap plain text to a column width (never splits a word unless it is
+     * itself wider than the column).
+     *
+     * @return array<int,string>
+     */
+    private function wrap(string $text, int $width): array
     {
-        $len = mb_strlen($text);
-        if ($len >= $width) {
-            return $text;
+        $width = max(8, $width);
+        $lines = [];
+        foreach (preg_split('/\R/', $text) ?: [$text] as $paragraph) {
+            $wrapped = wordwrap($paragraph, $width, "\n", true);
+            foreach (explode("\n", $wrapped) as $line) {
+                $lines[] = $line;
+            }
         }
-        $pad = intdiv($width - $len, 2);
 
-        return str_repeat(' ', $pad) . $text;
+        return $lines;
     }
 
     /** ANSI-aware, multibyte-aware clip to a visible column width. */
@@ -215,8 +399,7 @@ final class NavigationScreenRenderer
             return $line;
         }
 
-        // Walk the string, counting visible characters and passing SGR through.
-        $tokens = preg_split('/(\033\[[0-9;]*m)/', $line, -1, PREG_SPLIT_DELIM_CAPTURE) ?: [];
+        $tokens    = preg_split('/(\033\[[0-9;]*m)/', $line, -1, PREG_SPLIT_DELIM_CAPTURE) ?: [];
         $out       = '';
         $visible   = 0;
         $hadColour = false;
