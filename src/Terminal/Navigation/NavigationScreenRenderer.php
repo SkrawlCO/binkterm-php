@@ -175,7 +175,13 @@ final class NavigationScreenRenderer
         if ($screen->homeAvailable) {
             $parts[] = 'H Home';
         }
-        $parts[] = 'Q Quit';
+        // "Q" is only a hint when THIS screen actually binds it (an explicit
+        // quit / log-off item). It is not a universal key, so screens without a
+        // 'q' item never advertise one.
+        $quitItem = $screen->itemForHotkey('q');
+        if ($quitItem !== null) {
+            $parts[] = 'Q ' . $quitItem->label;
+        }
 
         return ' ' . implode('   ', $parts);
     }

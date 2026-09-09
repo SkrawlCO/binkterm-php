@@ -36,6 +36,13 @@ final class NavigationRuntime
      *        'UP', 'DOWN', 'ENTER', 'LEFT', 'ESC', 'PGUP', 'PGDN', '' (timeout).
      * @param callable(NavigationScreenModel):void|null $onRender optional hook
      *        after each render (e.g. flush).
+     * @param callable():void|null $onActionBoundary invoked once immediately
+     *        after control returns from a delegated action, BEFORE the runtime
+     *        redraws. Input ownership: while a delegated action owns the screen,
+     *        its key readers own the input stream — anything they left buffered
+     *        (e.g. a look-ahead byte) belongs to that screen, not to the R5
+     *        screen the runtime is about to draw. The caller uses this hook to
+     *        discard that transient input state so it cannot leak into R5.
      * @return string one of the EXIT_* constants
      */
     public function run(
@@ -45,6 +52,7 @@ final class NavigationRuntime
         mixed $invokeContext,
         string $locale = 'en',
         ?callable $onRender = null,
+        ?callable $onActionBoundary = null,
         int $maxIterations = 100000
     ): string {
         $rootLabel = $this->resolveNodeLabel($this->definition->rootId, $locale);
@@ -102,6 +110,11 @@ final class NavigationRuntime
                     }
                     if ($this->registry->isBound($actionId)) {
                         $this->registry->invoke($actionId, $invokeContext, $item->action->params);
+                        // The delegated screen owned the input stream; drop
+                        // anything it left buffered before the runtime resumes.
+                        if ($onActionBoundary !== null) {
+                            $onActionBoundary();
+                        }
                     }
                     // fall through to re-render the current screen
                     break;
@@ -145,18 +158,23 @@ final class NavigationRuntime
 
         if (str_starts_with($token, 'CHAR:')) {
             $ch = mb_strtolower(substr($token, 5));
-            if ($ch === 'q') {
-                return ['do' => 'quit', 'cursor' => $cursor];
-            }
-            if ($ch === 'b' && $screen->itemForHotkey('b') === null) {
-                return ['do' => 'back', 'cursor' => $cursor];
-            }
-            if ($ch === 'h' && $screen->homeAvailable && $screen->itemForHotkey('h') === null) {
-                return ['do' => 'home', 'cursor' => $cursor];
-            }
+
+            // A hotkey the current screen actually defines always wins — this is
+            // how an explicit "[Q] Log Off" item (or any other letter) works.
             $item = $screen->itemForHotkey($ch);
             if ($item !== null) {
                 return ['do' => 'select', 'cursor' => $cursor, 'item' => $item];
+            }
+
+            // R5's own fallback navigation letters, only when the screen does not
+            // bind them: B = Back, H = Home. Q is deliberately NOT a global key —
+            // it terminates only via a screen's own quit-action item, so a stray
+            // 'q' (e.g. leaked from a delegated legacy screen) does nothing here.
+            if ($ch === 'b') {
+                return ['do' => 'back', 'cursor' => $cursor];
+            }
+            if ($ch === 'h' && $screen->homeAvailable) {
+                return ['do' => 'home', 'cursor' => $cursor];
             }
         }
 

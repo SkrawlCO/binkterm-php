@@ -180,6 +180,53 @@ final class DeclarativeMenuBridgeTest extends TestCase
         self::assertStringContainsString('Netmail', preg_replace('/\033\[[0-9;?]*[A-Za-z]/', '', $bytes));
     }
 
+    public function testInputLeftByADelegatedActionIsDiscardedNotFedToR5(): void
+    {
+        // Live bug: a delegated legacy screen's key reader leaves a look-ahead
+        // byte in $state['pushback']; when it returns, R5 read that stray byte
+        // as one of its own keystrokes and (a stray 'q') logged the caller off.
+        $def = [
+            'schema' => 1, 'id' => 'boundary.test', 'root' => 'main',
+            'nodes' => [['id' => 'main', 'label_fallback' => 'Main', 'items' => [
+                ['id' => 'n', 'label_fallback' => 'Netmail', 'hotkey' => 'n', 'action' => 'netmail'],
+                ['id' => 'q', 'label_fallback' => 'Log Off', 'hotkey' => 'q', 'action' => 'quit'],
+            ]]],
+        ];
+        $path = sys_get_temp_dir() . '/navbridge_boundary_' . bin2hex(random_bytes(5)) . '.json';
+        file_put_contents($path, json_encode($def));
+        register_shutdown_function(static fn () => @unlink($path));
+
+        $_ENV['TERMINAL_NAV_RUNTIME'] = 'on';
+        $_ENV['TERMINAL_NAV_CONFIG']  = $path;
+        NavigationConfig::reset();
+
+        $session = $this->session();
+        $bridge  = new DeclarativeMenuBridge($session);
+
+        $conn = fopen('php://temp', 'r+');
+        fwrite($conn, 'n');   // select Netmail
+        rewind($conn);
+        $state = ['username' => 'alice', 'is_admin' => false, 'locale' => 'en', 'cols' => 80, 'rows' => 24, 'pushback' => '', 'last_activity' => time(), 'idle_warned' => false, 'idle_warning_timeout' => 300, 'idle_disconnect_timeout' => 420];
+
+        $seen = [];
+        $handlers = [
+            // Handler behaves like a legacy screen whose reader left a stray 'q'.
+            'netmail' => new class($seen) {
+                public function __construct(public array &$seen) {}
+                public function show($c, array &$s, $sess): void
+                {
+                    $this->seen[] = 'netmail';
+                    $s['pushback'] = 'q'; // simulate the look-ahead leak
+                }
+            },
+        ];
+
+        $bridge->run($conn, $state, 'sess', $handlers);
+
+        self::assertSame(['netmail'], $seen, 'the delegated action ran exactly once');
+        self::assertSame('', $state['pushback'], 'the stray input was discarded at the action boundary');
+    }
+
     public function testInvalidDefinitionFileFallsBackToLegacy(): void
     {
         $path = sys_get_temp_dir() . '/navbridge_bad_' . bin2hex(random_bytes(5)) . '.json';

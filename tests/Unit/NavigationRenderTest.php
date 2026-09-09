@@ -124,6 +124,31 @@ final class NavigationRenderTest extends TestCase
         self::assertSame('Main > Sub > Sub Two', $deep->path->crumb(' > '));
     }
 
+    public function testFooterAdvertisesQuitOnlyWhenTheScreenBindsAQItem(): void
+    {
+        $def = NavigationDefinition::fromArray([
+            'schema' => 1, 'id' => 'x', 'root' => 'main',
+            'nodes' => [
+                ['id' => 'main', 'label_fallback' => 'Main', 'items' => [
+                    ['id' => 'sub', 'label_fallback' => 'Section', 'hotkey' => 's', 'submenu' => 'sub'],
+                    ['id' => 'off', 'label_fallback' => 'Log Off', 'hotkey' => 'q', 'action' => 'quit'],
+                ]],
+                ['id' => 'sub', 'label_fallback' => 'Section', 'items' => [
+                    ['id' => 'n', 'label_fallback' => 'Netmail', 'hotkey' => 'n', 'action' => 'netmail'],
+                ]],
+            ],
+        ]);
+        $svc = new NavigationPreviewService();
+        $strip = static fn (string $b): string => preg_replace('/\033\[[0-9;?]*[A-Za-z]/', '', $b);
+
+        $rootFooter = $strip($svc->render($def, new NavigationPreviewProfile(), 'main'));
+        self::assertStringContainsString('Q Log Off', $rootFooter, 'root binds [Q] Log Off');
+
+        $subFooter = $strip($svc->render($def, new NavigationPreviewProfile(), 'sub'));
+        self::assertStringNotContainsString(' Q ', $subFooter, 'submenu does not bind Q, so it is not advertised');
+        self::assertStringContainsString('Back', $subFooter, 'submenu still shows Back');
+    }
+
     // ===== deterministic rendering (R5I) =====
 
     /** @dataProvider profileProvider */

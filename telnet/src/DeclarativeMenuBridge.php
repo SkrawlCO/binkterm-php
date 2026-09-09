@@ -97,8 +97,19 @@ final class DeclarativeMenuBridge
                 return [$key, $timedOut, $disconnect];
             };
 
+            // Input ownership: a delegated legacy handler owns the input stream
+            // while it runs. Its key readers can leave a look-ahead byte in the
+            // shared pushback buffer (see BbsSession::readTelnetKeyWithTimeout);
+            // once the handler returns, that byte belonged to its screen, not to
+            // the R5 screen we are about to redraw. Drop it so it cannot be read
+            // as an R5 keystroke (the reported "Q on a child screen logs you
+            // off" bug).
+            $onActionBoundary = function () use (&$state): void {
+                $state['pushback'] = '';
+            };
+
             $this->server->logInfo('Declarative navigation runtime: definition "' . $definition->id . '"');
-            $runtime->run($readToken, $ctx, $access, null, $locale);
+            $runtime->run($readToken, $ctx, $access, null, $locale, null, $onActionBoundary);
 
             return true;
         } catch (\Throwable $e) {

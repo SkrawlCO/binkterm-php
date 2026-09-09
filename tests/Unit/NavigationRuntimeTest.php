@@ -173,7 +173,8 @@ final class NavigationRuntimeTest extends TestCase
             'ENTER',      // messages (cursor 0)
             'DOWN',       // echomail
             'ENTER',      // invoke echomail
-            'CHAR:q',
+            'LEFT',       // back to Main (Q is not a submenu quit key)
+            'CHAR:q',     // Main's [Q] Quit item -> terminate
         ]);
 
         self::assertSame(NavigationRuntime::EXIT_QUIT, $exit);
@@ -229,5 +230,144 @@ final class NavigationRuntimeTest extends TestCase
         $exit = $this->drive($this->nestedDefinition(), ['CHAR:z', 'CHAR:9', 'TAB', 'CHAR:q']);
         self::assertSame(NavigationRuntime::EXIT_QUIT, $exit);
         self::assertSame([], $this->invoked);
+    }
+
+    // ===== Q-ownership regression (live-acceptance bug) =====================
+    //
+    // Live SyncTerm test: R5 root -> Games & Experiences -> Crossroads child
+    // screen; pressing Q on a child screen (where Q is that screen's own Back)
+    // logged the caller off the BBS. Two causes:
+    //   1. a delegated legacy screen's key reader leaves a look-ahead byte in
+    //      the shared input buffer; when it returns, R5 consumed that stray
+    //      byte as one of its own keystrokes;
+    //   2. R5 treated Q as a global quit on every screen, including submenus.
+
+    /**
+     * Full-control harness: a token queue R5 reads from, plus per-action
+     * closures that can push "leaked" tokens back onto the queue (simulating a
+     * delegated screen's key-reader look-ahead), plus the same $onActionBoundary
+     * discard hook the real bridge installs.
+     *
+     * @param array<int,string>                    $tokens
+     * @param array<string,callable(array):void>   $actionBehaviour  id => fn(&$queue)
+     */
+    private function driveWithDelegation(
+        NavigationDefinition $def,
+        array $tokens,
+        array $actionBehaviour = [],
+        bool $installBoundaryHook = true
+    ): string {
+        $this->invoked = [];
+        $this->rendered = [];
+
+        $queue = $tokens;
+        $registry = TerminalActionCatalog::defaultRegistry();
+        foreach ($registry->ids() as $id) {
+            $behaviour = $actionBehaviour[$id] ?? null;
+            $registry->bind($id, function () use ($id, $behaviour, &$queue) {
+                $this->invoked[] = $id;
+                if ($behaviour !== null) {
+                    $behaviour($queue);
+                }
+            });
+        }
+
+        $builder = new NavigationScreenBuilder($registry, fn (?string $k, string $f, string $l) => $f);
+        $ctx = $this->context(80, 24);
+        $access = new AccessContext(true, false, false, fn () => true, fn () => true, ['color' => true]);
+
+        $readToken = function () use (&$queue): array {
+            return $queue === [] ? [null, false, true] : [array_shift($queue), false, false];
+        };
+        // Real bridge behaviour: discard input the delegated screen left behind.
+        $onActionBoundary = $installBoundaryHook
+            ? function () use (&$queue): void { $queue = []; }
+            : null;
+
+        $runtime = new NavigationRuntime($def, $registry, $builder, new NavigationScreenRenderer());
+
+        return $runtime->run(
+            $readToken,
+            $ctx,
+            $access,
+            null,
+            'en',
+            function (NavigationScreenModel $s) { $this->rendered[] = $s->title; },
+            $onActionBoundary,
+        );
+    }
+
+    public function testStrayInputLeftByADelegatedActionDoesNotLeakIntoR5(): void
+    {
+        // main: [c] chat (delegated), [q] Log Off (quit). The delegated action
+        // "leaks" a Q (as the real showScrollablePanel look-ahead would), then a
+        // legitimate DOWN follows.
+        $exit = $this->driveWithDelegation(
+            $this->nestedDefinition(),
+            ['CHAR:c'],
+            ['localchat' => function (array &$queue): void {
+                array_unshift($queue, 'CHAR:q', 'DOWN'); // stray Q, then a real key
+            }],
+        );
+
+        // The stray Q was discarded at the action boundary; the session is alive
+        // and eventually ends only because the scripted queue drained.
+        self::assertSame(NavigationRuntime::EXIT_DISCONNECT, $exit);
+        self::assertSame(['localchat'], $this->invoked);
+        // Redrew the R5 screen after the action returned (resume).
+        self::assertContains('Main', $this->rendered);
+    }
+
+    public function testWithoutTheBoundaryHookTheStrayQWouldHaveQuit(): void
+    {
+        // Same scenario, boundary hook NOT installed -> the leaked Q reaches the
+        // root, which has an explicit Log Off item, and terminates the session.
+        // This documents exactly what the hook prevents.
+        $exit = $this->driveWithDelegation(
+            $this->nestedDefinition(),
+            ['CHAR:c'],
+            ['localchat' => function (array &$queue): void {
+                array_unshift($queue, 'CHAR:q');
+            }],
+            installBoundaryHook: false,
+        );
+
+        self::assertSame(NavigationRuntime::EXIT_QUIT, $exit);
+    }
+
+    public function testQIsNotAGlobalQuitKeyOnAnR5Submenu(): void
+    {
+        // main -> [m] messages submenu (no 'q' item). Press Q there: must be a
+        // no-op, NOT a session quit. Then Left backs out, then Q on root quits.
+        $exit = $this->drive($this->nestedDefinition(), [
+            'CHAR:m',   // into Messages
+            'CHAR:q',   // Q on a submenu with no q item -> no-op
+            'CHAR:q',   // still a no-op
+            'LEFT',     // back to Main
+            'CHAR:q',   // Main has [Q] Quit -> terminates
+        ]);
+
+        self::assertSame(NavigationRuntime::EXIT_QUIT, $exit);
+        self::assertSame([], $this->invoked, 'Q on the submenu did nothing');
+        // We rendered Messages, went back to Main, and only then quit.
+        self::assertContains('Messages', $this->rendered);
+        self::assertSame('Main', $this->rendered[count($this->rendered) - 1]);
+    }
+
+    public function testQOnTheRootStillTriggersAnExplicitLogOffItem(): void
+    {
+        $exit = $this->drive($this->nestedDefinition(), ['CHAR:q']);
+        self::assertSame(NavigationRuntime::EXIT_QUIT, $exit);
+    }
+
+    public function testSubmenuBackViaLeftEscAndBWhenNoItemBindsThem(): void
+    {
+        foreach (['LEFT', 'ESC', 'CHAR:b'] as $backKey) {
+            $exit = $this->drive($this->nestedDefinition(), ['CHAR:m', $backKey, 'CHAR:q']);
+            self::assertSame(NavigationRuntime::EXIT_QUIT, $exit, "back key {$backKey}");
+            // Rendered Messages then Main again.
+            self::assertSame('Messages', $this->rendered[1] ?? null, "back key {$backKey}: entered submenu");
+            self::assertSame('Main', $this->rendered[count($this->rendered) - 1], "back key {$backKey}: returned to root");
+        }
     }
 }
