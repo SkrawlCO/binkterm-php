@@ -33,6 +33,8 @@ Terminal-side bulletin rendering in `telnet/src/BulletinsHandler.php` follows th
 | `telnet/src/TerminalCapabilities.php` | Immutable value object — negotiated facts about the caller's client (type, charset support, colour support, sixel) |
 | `telnet/src/TerminalRenderContext.php` | Per-session mutable holder of render inputs (geometry, effective charset/colour, style profile, locale, glyphs) + the `OutputSink` |
 | `telnet/src/GlyphPolicy.php` | Pure box-drawing glyph resolution for a charset + border style |
+| `telnet/src/TerminalEventPoller.php` | Generic history-skipping / throttled read seam over the BinkStream `sse_events` bus for terminal sessions (F3H) — not yet wired into `BbsSession` |
+| `telnet/src/TerminalEventHandlerInterface.php` | Consumer contract for `TerminalEventPoller` |
 | `tests/Unit/Support/ScriptedTelnetSession.php` | F4 scripted session harness — drives the real Telnet engine over an in-memory socket pair |
 
 Both daemon entry points manually `require_once` every `telnet/src/` class they use. New classes added under `telnet/src/` must be registered in both `telnet/telnet_daemon.php` and `ssh/ssh_daemon.php` — they are not Composer-autoloaded. See also `telnet/CLAUDE.md` for the include-list rule.
@@ -438,10 +440,34 @@ self::assertSame([132, 50], $s->geometry());
 (negotiation → TTYPE cycling → NAWS → keystrokes → mid-session resize →
 malformed bytes → EOF).
 
+### Terminal event substrate (F3H)
+
+`telnet/src/TerminalEventPoller.php` + `TerminalEventHandlerInterface` are a
+generic read seam over the existing BinkStream bus (`StreamService` /
+`sse_events`) so a future terminal feature can react to realtime events without
+each feature reinventing polling. It is history-skipping (`start()` anchors at
+the current max id), throttled (`minIntervalSeconds`), forward-only, and has no
+side effects — no writes, no pruning (the hourly `sse_events` maintenance owns
+that), no activity/idle interaction.
+
+```php
+$poller = new TerminalEventPoller(new StreamService($db), ['user_id' => $uid, 'is_admin' => $isAdmin]);
+$poller->start();
+// ... in the input loop, between keystrokes:
+$poller->poll(function (string $type, array $payload, int $id) {
+    // cheap, non-blocking; defer any redraw to the session's normal path
+});
+```
+
+It is **not** wired into `BbsSession` yet: the wiring point is where a
+session-monitor / kick / page / MRC UI would attach, and that UI is out of
+scope.
+
 ### Not yet wired (later stages)
 
 - `TerminalRenderContext.t()` is param-driven for parity; it does not yet
   substitute the stored locale when a caller omits one.
+- `TerminalEventPoller` has no `BbsSession` call site (see above).
 - The dead `probeAnsiSupport()` / `probeSixelSupport()` methods remain — for
   Telnet, `$sixelSupported` is only set from the SSH `pty-req` path today; the
   capability seam propagates whatever value is set. Re-enabling an active Telnet

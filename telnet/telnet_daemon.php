@@ -10,6 +10,8 @@ require_once __DIR__ . '/src/BufferSink.php';
 require_once __DIR__ . '/src/GlyphPolicy.php';
 require_once __DIR__ . '/src/TerminalCapabilities.php';
 require_once __DIR__ . '/src/TerminalRenderContext.php';
+require_once __DIR__ . '/src/TerminalEventHandlerInterface.php';
+require_once __DIR__ . '/src/TerminalEventPoller.php';
 require_once __DIR__ . '/src/BbsSession.php';
 require_once __DIR__ . '/src/TelnetUtils.php';
 require_once __DIR__ . '/src/TerminalMarkupRenderer.php';
