@@ -608,6 +608,10 @@ class EchomailHandler
             }
             $body         = $detail['data']['message_text'] ?? '';
             $markupFormat = $detail['data']['markup_format'] ?? null;
+            $artFormat    = \BinktermPHP\ArtFormatDetector::detectArtFormat(
+                TerminalMarkupRenderer::stripNonDisplayAnsi($body),
+                $detail['data']['message_charset'] ?? null
+            );
             $rawKludges   = ($detail['data']['kludge_lines'] ?? '') . "\n" . ($detail['data']['bottom_kludges'] ?? '');
             $kludgeLines  = TerminalMarkupRenderer::extractKludgeLines($rawKludges);
             $kludgeLines  = array_map(fn(string $line): string => $this->server->encodeForTerminal($line), $kludgeLines);
@@ -621,7 +625,7 @@ class EchomailHandler
             $keyColor    = $sbProfile['key']   ?? TelnetUtils::ANSI_RED;
             $lblColor    = $sbProfile['label'] ?? TelnetUtils::ANSI_BLUE;
 
-            $buildView = function (array $s) use ($msg, $body, $markupFormat, $area, $fromName, $fromAddress, $imageRefs, $searchTerm, $keyColor, $lblColor): array {
+            $buildView = function (array $s) use ($msg, $body, $markupFormat, $artFormat, $area, $fromName, $fromAddress, $imageRefs, $searchTerm, $keyColor, $lblColor): array {
                 $cols     = $s['cols'] ?? 80;
                 $width    = max(10, $cols - 2);
                 $charset  = $this->server->getTerminalCharset();
@@ -642,9 +646,16 @@ class EchomailHandler
                     ['text' => ' Quit',        'color' => $lblColor],
                 ];
 
-                $wrappedLines = $markupFormat !== null
-                    ? TerminalMarkupRenderer::render($markupFormat, $body, $width)
-                    : TelnetUtils::wrapTextLines(TerminalMarkupRenderer::stripNonDisplayAnsi($body), $width);
+                $safeBody = TerminalMarkupRenderer::stripNonDisplayAnsi($body);
+                if ($markupFormat !== null) {
+                    $wrappedLines = TerminalMarkupRenderer::render($markupFormat, $body, $width);
+                } elseif ($artFormat !== null) {
+                    // ANSI artwork: keep authored rows, clip (never reflow) to the
+                    // full terminal width less one guard column.
+                    $wrappedLines = TelnetUtils::clipArtLines($safeBody, max(10, $cols - 1));
+                } else {
+                    $wrappedLines = TelnetUtils::wrapTextLines($safeBody, $width);
+                }
                 $wrappedLines = array_map(fn(string $line): string => $this->server->encodeForTerminal($line), $wrappedLines);
                 if ($searchTerm !== '') {
                     $wrappedLines = $this->highlightSearchTerm($wrappedLines, $searchTerm);
@@ -1743,6 +1754,10 @@ class EchomailHandler
             $detail       = TelnetUtils::apiRequest($this->apiBase, 'GET', '/api/messages/echomail/' . urlencode($area) . '/' . $id, null, $session);
             $body         = $detail['data']['message_text'] ?? '';
             $markupFormat = $detail['data']['markup_format'] ?? null;
+            $artFormat    = \BinktermPHP\ArtFormatDetector::detectArtFormat(
+                TerminalMarkupRenderer::stripNonDisplayAnsi($body),
+                $detail['data']['message_charset'] ?? null
+            );
             $rawKludges   = ($detail['data']['kludge_lines'] ?? '') . "\n" . ($detail['data']['bottom_kludges'] ?? '');
             $kludgeLines  = TerminalMarkupRenderer::extractKludgeLines($rawKludges);
             $kludgeLines  = array_map(fn(string $line): string => $this->server->encodeForTerminal($line), $kludgeLines);
@@ -1758,7 +1773,7 @@ class EchomailHandler
 
             // Closure that rebuilds all layout-dependent view components from current $state.
             // Called once on open and again whenever the terminal is resized.
-            $buildView = function(array $s) use ($msg, $body, $markupFormat, $area, $fromName, $fromAddress, $imageRefs, $keyColor, $lblColor): array {
+            $buildView = function(array $s) use ($msg, $body, $markupFormat, $artFormat, $area, $fromName, $fromAddress, $imageRefs, $keyColor, $lblColor): array {
                 $cols     = $s['cols'] ?? 80;
                 $width    = max(10, $cols - 2);
                 $charset  = $this->server->getTerminalCharset();
@@ -1779,9 +1794,16 @@ class EchomailHandler
                     ['text' => ' Quit',        'color' => $lblColor],
                 ];
 
-                $wrappedLines = $markupFormat !== null
-                    ? TerminalMarkupRenderer::render($markupFormat, $body, $width)
-                    : TelnetUtils::wrapTextLines(TerminalMarkupRenderer::stripNonDisplayAnsi($body), $width);
+                $safeBody = TerminalMarkupRenderer::stripNonDisplayAnsi($body);
+                if ($markupFormat !== null) {
+                    $wrappedLines = TerminalMarkupRenderer::render($markupFormat, $body, $width);
+                } elseif ($artFormat !== null) {
+                    // ANSI artwork: keep authored rows, clip (never reflow) to the
+                    // full terminal width less one guard column.
+                    $wrappedLines = TelnetUtils::clipArtLines($safeBody, max(10, $cols - 1));
+                } else {
+                    $wrappedLines = TelnetUtils::wrapTextLines($safeBody, $width);
+                }
                 $wrappedLines = array_map(fn(string $line): string => $this->server->encodeForTerminal($line), $wrappedLines);
 
                 return [

@@ -699,7 +699,8 @@ $statusLine = TelnetUtils::buildStatusBar($segments, $width);
 | Centered "please wait" overlay | `TelnetUtils::showWorkingOverlay()` / `$shell->showWorkingOverlay()` |
 | Checkbox picker dialog | `TelnetUtils::showCheckboxListDialog()` / `$shell->showCheckboxListDialog()` |
 | Selectable item dialog | `TelnetUtils::showSelectableDialog()` / `$shell->showSelectableDialog()` |
-| ANSI-wrapped text lines | `TelnetUtils::wrapTextLines()` |
+| ANSI-wrapped text lines (prose) | `TelnetUtils::wrapTextLines()` |
+| ANSI-art body lines (authored rows, clip not reflow) | `TelnetUtils::clipArtLines()` |
 | Address book / nodelist picker | `TelnetUtils::runAddressPicker()` / `$shell->showAddressPicker()` |
 | Public profile viewer | `TelnetUtils::showPublicProfileViewer()` / `$shell->showPublicProfileViewer()` |
 

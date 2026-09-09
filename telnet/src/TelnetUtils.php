@@ -38,6 +38,7 @@ namespace BinktermPHP\TelnetServer;
  *   - {@see buildMessageHeaderBox}  — renders a framed header box with box-drawing characters
  *   - {@see renderFullScreen}       — clears the screen and draws header + body + status bar
  *   - {@see wrapTextLines}          — word-wraps a string into an array of display lines
+ *   - {@see clipArtLines}           — lays out an ANSI-art body preserving authored rows (no reflow)
  *   - {@see colorize}               — applies ANSI SGR codes respecting the global color toggle
  *   - {@see setCursorVisible}       — sends DECTCEM show/hide cursor escape
  *
@@ -877,6 +878,66 @@ class TelnetUtils
         }
 
         return $out;
+    }
+
+    /**
+     * Lay out an ANSI-art message body for the fixed-width terminal viewer.
+     *
+     * Unlike {@see wrapTextLines()}, this keeps the artwork's authored physical
+     * line structure: every source line maps to exactly one output row. A row is
+     * never soft-wrapped into extra screen rows — that is what inserts a
+     * near-empty row and shears a block-graphic logo apart (the "black band").
+     * A row wider than $width visible columns is clipped on atom boundaries; a
+     * UTF-8 codepoint and an ANSI escape sequence are each indivisible. Trailing
+     * spaces / colour-filled cells are kept exactly as authored. When a row is
+     * actually clipped, a trailing reset is appended so an open background fill
+     * cannot bleed past the clip into the rest of the screen.
+     *
+     * Cursor/erase/scroll/OSC/DCS controls must already have been removed by
+     * {@see TerminalMarkupRenderer::stripNonDisplayAnsi()} (which also drops bare
+     * C0 bytes); the only escape sequences expected here are SGR.
+     *
+     * @param string $text  ANSI-art body; may contain \r\n or \n line endings.
+     * @param int    $width Visible columns available for artwork (clamped to >= 10).
+     * @return string[] One element per source line, never empty.
+     */
+    public static function clipArtLines(string $text, int $width): array
+    {
+        $clipWidth = max(10, $width);
+        $out       = [];
+
+        foreach (preg_split("/\\r?\\n/", $text) as $line) {
+            if ($line === '') {
+                $out[] = '';
+                continue;
+            }
+
+            preg_match_all('/\033\[[0-9;?]*[ -\/]*[@-~]|\033[@-Z\\\\-_]|\X/u', $line, $m);
+            $atoms = $m[0];
+            if ($atoms === [] && $line !== '') {
+                $atoms = str_split($line); // non-UTF-8 fallback: one byte = one unit
+            }
+
+            $emitted = '';
+            $vis     = 0;
+            $clipped = false;
+            foreach ($atoms as $a) {
+                if (isset($a[0]) && $a[0] === "\033") {
+                    $emitted .= $a;      // zero-width SGR — always keep
+                    continue;
+                }
+                if ($vis >= $clipWidth) {
+                    $clipped = true;     // stop before the first overflowing cell
+                    break;
+                }
+                $emitted .= $a;
+                $vis++;
+            }
+
+            $out[] = $clipped ? $emitted . "\033[0m" : $emitted;
+        }
+
+        return $out === [] ? [''] : $out;
     }
 
     /**

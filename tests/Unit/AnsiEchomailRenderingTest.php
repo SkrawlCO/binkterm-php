@@ -178,4 +178,156 @@ final class AnsiEchomailRenderingTest extends TestCase
         // colour rendering path — the key point is it does not crash / lose text.
         self::assertTrue(mb_check_encoding($out, 'UTF-8'));
     }
+
+    // ===== clipArtLines — ANSI-art rows must not be reflowed =====
+
+    /** Visible cell count of a rendered line (SGR counts zero). */
+    private static function visibleWidth(string $line): int
+    {
+        return mb_strlen(preg_replace('/\033\[[0-9;?]*[ -\/]*[@-~]/', '', $line));
+    }
+
+    /** One physical art row: leading SGR then $cells block glyphs, no spaces. */
+    private function artRow(int $cells): string
+    {
+        return "\033[0;33m" . str_repeat(self::BLK, $cells);
+    }
+
+    public function testClipArtDoesNotSplitA79CellRowAt80ColumnGeometry(): void
+    {
+        // Live case: 80-col terminal -> handler passes max(10, cols - 1) = 79.
+        $rows = TelnetUtils::clipArtLines($this->artRow(79), 79);
+
+        self::assertCount(1, $rows, 'a 79-cell art row stays a single terminal row');
+        self::assertSame(79, self::visibleWidth($rows[0]), 'all 79 cells retained');
+    }
+
+    public function testClipArtPreservesEveryAuthoredLineBoundaryOneToOne(): void
+    {
+        $src = implode("\n", [
+            $this->artRow(79),
+            $this->artRow(70),
+            '',
+            $this->artRow(79),
+            '  1 game   18 other   35 third',
+        ]);
+
+        $rows = TelnetUtils::clipArtLines($src, 79);
+
+        self::assertCount(5, $rows, 'one output row per source line — no reflow, no inserted rows');
+        self::assertSame('', $rows[2], 'a blank source line stays blank');
+    }
+
+    public function testClipArtNeverInsertsANearEmptyRow(): void
+    {
+        // The old wordwrap path turned a 79-cell row into [tiny remnant, rest],
+        // and the tiny remnant rendered as the black band. clipArtLines must not.
+        foreach (TelnetUtils::clipArtLines($this->artRow(79) . "\n" . $this->artRow(79), 78) as $row) {
+            self::assertGreaterThan(1, self::visibleWidth($row), 'no near-empty remnant row');
+        }
+    }
+
+    public function testClipArtClipsAnOverWideRowInsteadOfWrappingIt(): void
+    {
+        $rows = TelnetUtils::clipArtLines($this->artLine(80), 79); // 160 visible cells
+
+        self::assertCount(1, $rows, 'an over-wide row is clipped to one row, never wrapped');
+        self::assertLessThanOrEqual(79, self::visibleWidth($rows[0]), 'clipped to the display width');
+    }
+
+    public function testClipArtKeepsTrailingBackgroundFilledCells(): void
+    {
+        // Trailing spaces under an active background are real artwork, not slack.
+        $row  = "\033[43mLABEL     "; // 10 visible cells, 5 trailing spaces
+        $rows = TelnetUtils::clipArtLines($row, 79);
+
+        self::assertSame($row, $rows[0], 'no rtrim of colour-filled trailing cells within width');
+    }
+
+    public function testClipArtPreservesSafeSgrAndClosesAnOpenFillOnClip(): void
+    {
+        $unclipped = TelnetUtils::clipArtLines($this->artLine(20), 79)[0]; // fits
+        self::assertSame(
+            preg_match_all('/\033\[[0-9;]*m/', $this->artLine(20)),
+            preg_match_all('/\033\[[0-9;]*m/', $unclipped),
+            'every SGR sequence survives when the row is not clipped'
+        );
+
+        $clipped = TelnetUtils::clipArtLines("\033[1;43m" . str_repeat(self::BLK, 200), 40)[0];
+        self::assertStringEndsWith("\033[0m", $clipped, 'an open background fill is reset at the clip point');
+    }
+
+    public function testClipArtRowsStayValidUtf8AndWithinWidth(): void
+    {
+        foreach (TelnetUtils::clipArtLines($this->artLine(60), 40) as $i => $row) {
+            self::assertTrue(mb_check_encoding($row, 'UTF-8'), "row {$i} valid UTF-8");
+            self::assertDoesNotMatchRegularExpression('/\033\[[0-9;]*$/', $row, "row {$i} has no truncated CSI");
+            self::assertLessThanOrEqual(40, self::visibleWidth($row), "row {$i} within width");
+        }
+    }
+
+    public function testClipArtOutputStillConvertsCleanlyToCp437(): void
+    {
+        $bbs  = $this->session('cp437');
+        $rows = TelnetUtils::clipArtLines($this->artRow(79), 79);
+        $out  = $bbs->encodeForTerminal($rows[0]);
+
+        self::assertStringContainsString("\033[0;33m", $out, 'SGR kept through CP437 conversion');
+        self::assertStringContainsString("\xdc", $out, 'U+2584 became the CP437 lower-half-block byte 0xDC');
+        self::assertStringNotContainsString('[0;33m ', $out, 'no literal-parameter leakage');
+    }
+
+    // ===== the generic ANSI-art gate =====
+
+    public function testArtGateDetectsSgrOnlyBodyAsAnsiAndLeavesProseAlone(): void
+    {
+        self::assertSame(
+            'ansi',
+            \BinktermPHP\ArtFormatDetector::detectArtFormat($this->artLine(10), 'CP437')
+        );
+        self::assertNull(
+            \BinktermPHP\ArtFormatDetector::detectArtFormat(
+                "Just ordinary prose, long enough to wrap on any sensible terminal width, with no escape sequences at all.",
+                'CP437'
+            ),
+            'prose without ANSI escapes is not treated as art (still word-wrapped)'
+        );
+    }
+
+    public function testEchomailAndNetmailViewersBothRouteArtThroughClipArtLines(): void
+    {
+        foreach (['EchomailHandler.php', 'NetmailHandler.php'] as $file) {
+            $src = file_get_contents(__DIR__ . '/../../telnet/src/' . $file);
+            self::assertStringContainsString('ArtFormatDetector::detectArtFormat', $src, "{$file} gates on the generic detector");
+            self::assertStringContainsString('TelnetUtils::clipArtLines', $src, "{$file} renders detected art without reflow");
+        }
+    }
+
+    // ===== C0 control-byte sanitation (stored 0x02 must not become a glyph) =====
+
+    public function testStripNonDisplayAnsiRemovesRawC0ControlBytes(): void
+    {
+        // 0x02 is the specimen's decorative bullet before each game name; on a
+        // CP437 terminal a raw 0x02 renders as a smiley face.
+        self::assertSame('AB', TerminalMarkupRenderer::stripNonDisplayAnsi("A\x02B"));
+
+        $withControls = "X\x01\x02\x03\x04\x05\x06\x07\x08\x0B\x0C\x0E\x0F\x1F" . "Y";
+        self::assertSame('XY', TerminalMarkupRenderer::stripNonDisplayAnsi($withControls));
+    }
+
+    public function testStripNonDisplayAnsiKeepsTabCrLfAndSgrEsc(): void
+    {
+        self::assertSame(
+            "a\tb\r\nc\033[33md\033[0m",
+            TerminalMarkupRenderer::stripNonDisplayAnsi("a\tb\r\nc\033[33md\033[0m")
+        );
+    }
+
+    public function testStripNonDisplayAnsiStillRemovesCursorAndEraseAfterC0Tightening(): void
+    {
+        $safe = TerminalMarkupRenderer::stripNonDisplayAnsi(
+            "\033[2J\033[10;5H\033[K\x02\033[0;33mKEEP\033[0m\033[6n"
+        );
+        self::assertSame("\033[0;33mKEEP\033[0m", $safe);
+    }
 }

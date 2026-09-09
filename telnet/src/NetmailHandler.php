@@ -728,6 +728,10 @@ class NetmailHandler
             }
             $body         = $detail['data']['message_text'] ?? '';
             $markupFormat = $detail['data']['markup_format'] ?? null;
+            $artFormat    = \BinktermPHP\ArtFormatDetector::detectArtFormat(
+                TerminalMarkupRenderer::stripNonDisplayAnsi($body),
+                $detail['data']['message_charset'] ?? null
+            );
             $attachments  = $detail['data']['attachments'] ?? [];
             $rawKludges   = ($detail['data']['kludge_lines'] ?? '') . "\n" . ($detail['data']['bottom_kludges'] ?? '');
             $kludgeLines  = TerminalMarkupRenderer::extractKludgeLines($rawKludges);
@@ -747,7 +751,7 @@ class NetmailHandler
 
             // Closure that rebuilds all layout-dependent view components from current $state.
             // Called once on open and again whenever the terminal is resized.
-            $buildView = function(array $s) use ($msg, $body, $markupFormat, $hasAttachments, $imageRefs, $isSentFolder, &$isSaved, $keyColor, $lblColor): array {
+            $buildView = function(array $s) use ($msg, $body, $markupFormat, $artFormat, $hasAttachments, $imageRefs, $isSentFolder, &$isSaved, $keyColor, $lblColor): array {
                 $cols    = $s['cols'] ?? 80;
                 $width   = max(10, $cols - 2);
                 $charset = $this->server->getTerminalCharset();
@@ -778,9 +782,16 @@ class NetmailHandler
                 $segments[] = ['text' => 'Q', 'color' => $keyColor];
                 $segments[] = ['text' => ' Quit', 'color' => $lblColor];
 
-                $wrappedLines = $markupFormat !== null
-                    ? TerminalMarkupRenderer::render($markupFormat, $body, $width)
-                    : TelnetUtils::wrapTextLines(TerminalMarkupRenderer::stripNonDisplayAnsi($body), $width);
+                $safeBody = TerminalMarkupRenderer::stripNonDisplayAnsi($body);
+                if ($markupFormat !== null) {
+                    $wrappedLines = TerminalMarkupRenderer::render($markupFormat, $body, $width);
+                } elseif ($artFormat !== null) {
+                    // ANSI artwork: keep authored rows, clip (never reflow) to the
+                    // full terminal width less one guard column.
+                    $wrappedLines = TelnetUtils::clipArtLines($safeBody, max(10, $cols - 1));
+                } else {
+                    $wrappedLines = TelnetUtils::wrapTextLines($safeBody, $width);
+                }
                 $wrappedLines = array_map(fn(string $line): string => $this->server->encodeForTerminal($line), $wrappedLines);
 
                 return [

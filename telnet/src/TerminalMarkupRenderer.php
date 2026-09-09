@@ -120,10 +120,10 @@ class TerminalMarkupRenderer
      * Reduce ANSI in an untrusted message body to a safe display subset:
      * SGR colour/style ({@code ESC[…m}) is kept; cursor movement, erase, scroll,
      * OSC (window title, clipboard), DCS/APC/PM device strings and every other
-     * ESC-introduced control are removed. Message bodies from the network are
-     * untrusted input — a boxed or scrolling viewer must not let them drive the
-     * terminal. Mirrors {@see \BinktermPHP\TelnetServer\BulletinsHandler}'s
-     * bulletin renderer.
+     * ESC-introduced control are removed, as are bare C0 control bytes. Message
+     * bodies from the network are untrusted input — a boxed or scrolling viewer
+     * must not let them drive the terminal. Mirrors
+     * {@see \BinktermPHP\TelnetServer\BulletinsHandler}'s bulletin renderer.
      */
     public static function stripNonDisplayAnsi(string $text): string
     {
@@ -134,7 +134,13 @@ class TerminalMarkupRenderer
         // CSI that is not SGR: cursor moves, erase, scroll, private modes, DA/DSR …
         $text = preg_replace('/\033\[[0-9;?]*[ -\/]*[@-ln-~]/', '', $text) ?? $text;
         // Any remaining lone ESC + single byte (SS2/SS3, charset designators, RIS …).
-        return preg_replace('/\033[^\[]/', '', $text) ?? $text;
+        $text = preg_replace('/\033[^\[]/', '', $text) ?? $text;
+        // Bare C0 control bytes — range excludes TAB (09), LF (0A), CR (0D) and
+        // ESC (1B), which the surviving SGR sequences still need. A raw byte such
+        // as 0x02 would otherwise reach a CP437 terminal as a glyph (☻ beside
+        // game names in ANSI door ads); the web viewer likewise drops every
+        // sub-0x20 control that is not a cursor/line control.
+        return preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1A\x1C-\x1F]/', '', $text) ?? $text;
     }
 
     /**

@@ -98,6 +98,7 @@ Pipe-code rendering for plain bulletins and other ANSI/pipe text shared with the
 - View message details with headers
 - Thread awareness and proper message display
 - ANSI color support for enhanced readability
+- Echomail/netmail bodies that are ANSI artwork (SGR colour + CP437 block glyphs, as sent by many door ads) are shown with their authored line structure intact: rows are kept one-to-one and clipped at the right edge on narrow terminals rather than reflowed like prose, so logos and boxed art are not sheared apart. Cursor-addressed ANSI art is still reduced to its colour/text layer for safety — the web viewer remains the place for pixel-exact art.
 - **Unread messages are displayed in bold** in both the echomail and netmail message lists. Once a message is opened and marked read, it renders at normal weight the next time the list is shown.
 - Netmail reader supports **Inbox** and **Sent** folder views — press `S` from the message list to toggle. The active folder is persisted per user across sessions. In Sent view, the message header shows the recipient (`To:`) instead of the sender, and replying pre-fills the original recipient's address.
 - Press `B` in the netmail viewer to bookmark (save) a message for later. Pressing `B` again unsaves it. The status bar label toggles between **Bookmark** and **Unsave** to reflect the current state.
