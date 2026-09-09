@@ -62,6 +62,7 @@ Two concrete shells implement the interface:
 | Intent | Shell method |
 |--------|-------------|
 | Select from a list | `chooseFromList()` |
+| L33TEST-owned directory / junction screen (masthead + grouped destinations) | `showDirectory()` |
 | Free-text input | `promptText()` |
 | Single-key choice (modal) | `promptKey()` |
 | Display read-only text | `showText()` |

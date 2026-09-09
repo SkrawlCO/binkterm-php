@@ -26,6 +26,37 @@ interface TerminalShellInterface
     public function chooseFromList($conn, array &$state, string $title, array $items, array $options = []): ?int;
 
     /**
+     * Present an L33TEST-owned directory/junction screen — a location masthead,
+     * a tagline, an optional ambient context block and grouped destination
+     * sections — and return the selection.
+     *
+     * This is the shared "Terminal Experience Unification" primitive. It reuses
+     * the same list navigation/render/resize behaviour as {@see chooseFromList()};
+     * the added value is the coherent presentation composed by
+     * {@see \BinktermPHP\Terminal\Presentation\DirectoryView} and the payload-
+     * based return so callers never track flat indices.
+     *
+     * @param resource $conn
+     * @param array $state
+     * @param array{
+     *   selected_index?:int,
+     *   prompt?:string,
+     *   empty_message?:string,
+     *   status_bar?:array<int,array{text:string,color:string}>
+     * } $options
+     * @return array{action:string, value:mixed, index:int}
+     *   action: 'select' | 'back'
+     *   value:  the chosen DirectoryRow's opaque value ('back' => null)
+     *   index:  flat 0-based index across all section rows ('back' => -1)
+     */
+    public function showDirectory(
+        $conn,
+        array &$state,
+        \BinktermPHP\Terminal\Presentation\Directory $directory,
+        array $options = []
+    ): array;
+
+    /**
      * Prompt for free-form text input.
      *
      * @param resource $conn

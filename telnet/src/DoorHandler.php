@@ -3,10 +3,14 @@
 namespace BinktermPHP\TelnetServer;
 
 use BinktermPHP\Config;
+use BinktermPHP\CrossroadsShelves;
 use BinktermPHP\ExperienceActivity;
 use BinktermPHP\ExperienceParticipation;
 use BinktermPHP\ExperiencePresentation;
 use BinktermPHP\ExperienceState;
+use BinktermPHP\Terminal\Presentation\Directory;
+use BinktermPHP\Terminal\Presentation\DirectoryRow;
+use BinktermPHP\Terminal\Presentation\DirectorySection;
 
 /**
  * DoorHandler - DOS door game access via telnet
@@ -97,6 +101,17 @@ class DoorHandler
                 return;
             }
 
+            // Order the authorized catalog into the canonical Crossroads shelves
+            // (Curated -> Game Hall -> Utilities -> Gateways) using the SAME
+            // classifier the web Crossroads uses (CrossroadsShelves). This only
+            // reads existing normalized metadata (category, curation.curated,
+            // curation.order); it changes no product model, curation flag, or
+            // classification. $doorList is reordered to match the shelf order so
+            // the Live Now (0) / Your Places (1) / Experience ($selected - 2)
+            // dispatch contract still holds against it.
+            $shelved = self::buildDestinationShelves($doorList, $t);
+            $doorList = $shelved['doorList'];
+
             $liveNow = self::composeLiveNow(
                 $experienceStates,
                 (int)$modelUser['user_id'],
@@ -107,51 +122,70 @@ class DoorHandler
                 (int)$modelUser['user_id'],
                 $t
             );
-            $items = [
-                self::buildLiveNowArrivalItem($liveNow, $t),
-                self::buildYourPlacesArrivalItem($yourPlaces, $t),
+
+            // Section 0 (no heading): the two arrival views. Their flat indices
+            // stay 0 and 1.
+            $liveNowItem = self::buildLiveNowArrivalItem($liveNow, $t);
+            $yourPlacesItem = self::buildYourPlacesArrivalItem($yourPlaces, $t);
+            $sections = [
+                new DirectorySection('', [
+                    new DirectoryRow(
+                        $liveNowItem['label'],
+                        ($liveNowItem['detail'] ?? '') !== '' ? $liveNowItem['detail'] : null,
+                        null,
+                        'live_now'
+                    ),
+                    new DirectoryRow(
+                        $yourPlacesItem['label'],
+                        ($yourPlacesItem['detail'] ?? '') !== '' ? $yourPlacesItem['detail'] : null,
+                        null,
+                        'your_places'
+                    ),
+                ]),
             ];
-            $firstExperienceIndex = count($items);
-            foreach ($doorList as $catalogIndex => $entry) {
-                $items[] = self::buildExperienceListItem(
-                    $entry['id'],
-                    $entry['data'],
-                    $t,
-                    $catalogIndex === 0
-                );
+            foreach ($shelved['sections'] as $shelfSection) {
+                $sections[] = $shelfSection;
             }
 
             // Recently in the Crossroads: one bounded read of the SAME shared
             // read model the web arrival uses, scoped to this viewer's
             // authorized terminal catalog ($doorList — no second discovery, no
-            // per-Experience query). Rendered as a non-selectable block before
-            // the first Experience item, so it never consumes a menu number and
-            // does not shift the Live Now (0) / Your Places (1) / Experience
-            // ($selected - 2) contract. Omitted entirely when there is nothing.
-            if (isset($items[$firstExperienceIndex])) {
-                $recentFootprints = self::composeRecentFootprints(
-                    (new ExperienceActivity())->recentAcrossCatalog(
-                        array_column($doorList, 'data'),
-                        5
-                    ),
-                    $t
-                );
-                if ($recentFootprints['count'] > 0) {
-                    $items[$firstExperienceIndex]['section_before_lines'] =
-                        $recentFootprints['lines'];
+            // per-Experience query). Carried as the directory's ambient context
+            // block, rendered above the first destination shelf; it never
+            // consumes a menu number. Omitted entirely when there is nothing.
+            $contextLines = [];
+            $recentFootprints = self::composeRecentFootprints(
+                (new ExperienceActivity())->recentAcrossCatalog(
+                    array_column($doorList, 'data'),
+                    5
+                ),
+                $t
+            );
+            if ($recentFootprints['count'] > 0) {
+                $contextLines = $recentFootprints['lines'];
+                if (end($contextLines) === '') {
+                    array_pop($contextLines);
                 }
+                reset($contextLines);
             }
 
-            $selected = $shell->chooseFromList(
+            $directory = new Directory(
+                $t('ui.terminalserver.doors.title', [], 'Crossroads'),
+                $t('ui.terminalserver.doors.tagline', [], 'Where people, games, and worlds meet.'),
+                $sections,
+                $contextLines
+            );
+
+            $result = $shell->showDirectory(
                 $conn,
                 $state,
-                $this->server->t('ui.terminalserver.doors.title', 'Crossroads', [], $state['locale']),
-                $items,
+                $directory,
                 [
                     'prompt' => $this->server->t('ui.terminalserver.doors.enter_choice', 'Select an experience or Q to return: ', [], $state['locale']),
                     'empty_message' => $this->server->t('ui.terminalserver.doors.no_doors', 'No games or experiences are currently available.', [], $state['locale']),
                 ]
             );
+            $selected = ($result['action'] ?? '') === 'select' ? (int)$result['index'] : null;
             if ($selected === null) {
                 return;
             }
@@ -1616,56 +1650,113 @@ class DoorHandler
     }
 
     /**
-     * Build a terminal chooser item from the normalized Experience contract.
+     * Order the authorized terminal catalog into the canonical Crossroads
+     * shelves and build the matching {@see DirectorySection} list.
      *
+     * Classification is delegated wholesale to {@see CrossroadsShelves} — the
+     * same helper the web Crossroads uses — reading only existing normalized
+     * metadata (`category`, `curation.curated`, `curation.order`). No product
+     * model, curation flag, or classification is written here; standing product
+     * decisions (Galactic Bloodshed / SyncDOOM in the Game Hall, gateways
+     * distinct from Experiences, Curated primary) are the classifier's.
+     *
+     * The returned `doorList` is the input list reordered to match the shelf /
+     * section row order exactly, so a caller can keep indexing it by
+     * `$selected - 2`.
+     *
+     * @param array<int,array{id:string,data:array<string,mixed>}> $doorList
+     * @param callable(string,array<string,mixed>,string):string $t
+     * @return array{doorList:array<int,array{id:string,data:array<string,mixed>}>,sections:list<DirectorySection>}
+     */
+    private static function buildDestinationShelves(array $doorList, callable $t): array
+    {
+        $byId = [];
+        $classifyInput = [];
+        foreach ($doorList as $entry) {
+            $id = (string)($entry['id'] ?? '');
+            if ($id === '') {
+                continue;
+            }
+            $byId[$id] = $entry;
+            $facet = is_array($entry['data'] ?? null) ? $entry['data'] : [];
+            $classifyInput[] = ['id' => $id] + $facet;
+        }
+
+        $grouped = CrossroadsShelves::group($classifyInput);
+
+        $shelfTitles = [
+            CrossroadsShelves::CURATED   => $t('ui.terminalserver.doors.shelf_curated', [], 'Curated Experiences'),
+            CrossroadsShelves::GAME_HALL => $t('ui.terminalserver.doors.shelf_game_hall', [], 'Game Hall'),
+            CrossroadsShelves::UTILITY   => $t('ui.terminalserver.doors.shelf_utility', [], 'Utilities'),
+            CrossroadsShelves::GATEWAY   => $t('ui.terminalserver.doors.shelf_gateway', [], 'Gateways'),
+        ];
+
+        $orderedDoorList = [];
+        $sections = [];
+        foreach ([
+            CrossroadsShelves::CURATED,
+            CrossroadsShelves::GAME_HALL,
+            CrossroadsShelves::UTILITY,
+            CrossroadsShelves::GATEWAY,
+        ] as $shelfKey) {
+            $rows = [];
+            foreach ($grouped[$shelfKey] as $facet) {
+                $id = (string)($facet['id'] ?? '');
+                if (!isset($byId[$id])) {
+                    continue;
+                }
+                $entry = $byId[$id];
+                $orderedDoorList[] = $entry;
+                $rows[] = self::buildExperienceDirectoryRow($id, $entry['data'], $t);
+            }
+            if ($rows !== []) {
+                $sections[] = new DirectorySection($shelfTitles[$shelfKey], $rows);
+            }
+        }
+
+        return ['doorList' => $orderedDoorList, 'sections' => $sections];
+    }
+
+    /**
+     * Build one directory row from the normalized Experience contract.
+     *
+     * The player-mode / gateway signal that the previous flat list carried as a
+     * "- Multiplayer" / "- Gateway" label suffix is now a compact badge; a
+     * single-player Game needs no tag (the description carries the context).
      * Genre is intentionally omitted until GameCatalog defines a normalized
      * genre or tags field.
      *
      * @param string $experienceId Canonical Experience identifier
      * @param array<string, mixed> $experience Normalized catalog entry
      * @param callable(string,array<string,mixed>,string):string|null $t
-     * @return array{label:string,detail:string,section_before?:string}
      */
-    public static function buildExperienceListItem(
+    public static function buildExperienceDirectoryRow(
         string $experienceId,
         array $experience,
-        ?callable $t = null,
-        bool $startsCatalog = false
-    ): array {
+        ?callable $t = null
+    ): DirectoryRow {
         $t ??= static fn(string $key, array $params = [], string $fallback = ''): string => $fallback;
         $presentation = ExperiencePresentation::build(
             ['id' => $experienceId] + $experience,
             'telnet'
         );
-        $name = $presentation['name'];
         $category = strtolower($presentation['category']);
 
-        $categoryLabel = match ($category) {
-            'gateway' => $t('ui.terminalserver.doors.catalog_gateway', [], 'Gateway'),
-            'game' => $t('ui.terminalserver.doors.catalog_game', [], 'Game'),
-            default => ucfirst($category),
-        };
-
-        $metadata = [$categoryLabel];
-        if ($category === 'game' && $presentation['capabilities']['multiplayer']) {
-            $metadata = [$t('ui.terminalserver.doors.catalog_multiplayer', [], 'Multiplayer')];
+        $badge = null;
+        if ($category === 'gateway') {
+            $badge = $t('ui.terminalserver.doors.catalog_gateway', [], 'Gateway');
+        } elseif ($category === 'game' && !empty($presentation['capabilities']['multiplayer'])) {
+            $badge = $t('ui.terminalserver.doors.catalog_multiplayer', [], 'Multiplayer');
         }
 
-        $label = $name . ' - ' . implode(' / ', $metadata);
+        $description = trim((string)($presentation['description'] ?? ''));
 
-        $item = [
-            'label' => $label,
-            'detail' => '',
-        ];
-        if ($startsCatalog) {
-            $item['section_before'] = $t(
-                'ui.terminalserver.doors.catalog_section',
-                [],
-                'Experiences'
-            );
-        }
-
-        return $item;
+        return new DirectoryRow(
+            (string)$presentation['name'],
+            $description !== '' ? $description : null,
+            $badge,
+            $experienceId
+        );
     }
 
     /**

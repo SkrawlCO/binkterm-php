@@ -143,27 +143,43 @@ is informational only: no avatars, icons, badges, scores, pagination, refresh,
 or actions.
 
 `DoorHandler::composeRecentFootprints()` is a pure formatter over the read-model
-rows and applies no second dedupe. The lines are attached as
-`section_before_lines` on the first Experience chooser item, so — like the
-`section_before` **Experiences** heading — they render as non-selectable text
-above that row and never enter the item array. Selection indices and the shared
-`chooseFromList()` contract (Live Now `0`, Your Places `1`, Experience
-`$selected - 2`) are therefore unchanged. When there are no qualifying
-footprints the block is omitted entirely; there is no empty-state line.
+rows and applies no second dedupe. The lines are carried as the `Directory`
+ambient **context block** (see below), rendered above the first destination
+shelf as non-selectable text; they never enter the row array. Selection indices
+and the Live Now `0` / Your Places `1` / Experience `$selected - 2` contract are
+therefore unchanged. When there are no qualifying footprints the block is
+omitted entirely; there is no empty-state line.
 
-### Crossroads arrival presentation
+### Crossroads arrival presentation (shared directory primitive)
 
-The top-level selector uses the localized **Crossroads** title. Its first two
-rows remain the Live Now and Your Places summaries. `buildExperienceListItem()`
-then emits compact, empty-detail rows for the authorized catalog. The first row
-carries optional `section_before` presentation metadata (and, when there is
-recent activity, `section_before_lines`), which both shell renderers draw as
-separate, non-selectable lines before the numbered row — the Recently block
-first, then the **Experiences** heading. Every selectable row keeps only the
-normalized name and a localized Gateway, Multiplayer, or Game cue. Because
-neither `section_before` nor `section_before_lines` enters the item array,
-selection indices and the shared `chooseFromList()` contract remain unchanged.
-Full descriptions stay exclusively in Experience detail.
+The top-level selector is composed as a `BinktermPHP\Terminal\Presentation\Directory`
+and rendered through `TerminalShellInterface::showDirectory()` — the shared
+"Terminal Experience Unification" primitive (see **Shared directory presentation
+primitive** below). The `Directory` carries:
+
+- **location** `Crossroads` and a one-line **tagline**
+  (`ui.terminalserver.doors.tagline`), drawn as a masthead band;
+- an untitled leading section holding the **Live Now** and **Your Places**
+  rows (flat indices `0` and `1`, unchanged);
+- one titled section per non-empty **Crossroads shelf**, in canonical order.
+
+Shelf grouping is delegated wholesale to `BinktermPHP\CrossroadsShelves` — the
+exact classifier the web Crossroads uses. `DoorHandler::buildDestinationShelves()`
+passes each authorized catalog entry (`category`, `curation.curated`,
+`curation.order` — existing normalized metadata only) through
+`CrossroadsShelves::group()`, then rebuilds `$doorList` in the resulting shelf
+order so `$doorList[$selected - 2]` still lines up with the flattened rows. No
+product model, curation flag, or classification is written here; standing
+product decisions (Galactic Bloodshed / SyncDOOM in the Game Hall, gateways
+distinct from Experiences) belong to the classifier. Terminal section titles:
+`ui.terminalserver.doors.shelf_curated` / `shelf_game_hall` / `shelf_utility` /
+`shelf_gateway`.
+
+`DoorHandler::buildExperienceDirectoryRow()` emits one `DirectoryRow` per
+Experience: normalized name as the label, the catalog description as the row's
+secondary context line, and a compact badge (`Multiplayer` for a multiplayer
+Game, `Gateway` for a gateway; a single-player Game gets none). Full detail
+still lives only in Experience detail.
 
 ### Experience detail screen (telnet Crossroads slice 1)
 
@@ -550,6 +566,7 @@ All shells implement the same five intent methods:
 | Method | Intent |
 |--------|--------|
 | `chooseFromList($conn, &$state, $title, $items, $options)` | Present a selectable list; returns selected index or null (cancel/quit) |
+| `showDirectory($conn, &$state, Directory $directory, $options)` | Present an L33TEST-owned directory / junction screen; returns `['action' => 'select'\|'back', 'value' => mixed, 'index' => int]` |
 | `promptText($conn, &$state, $title, $prompt, $options)` | Free-form text input; returns string or null (cancel) |
 | `promptKey($conn, &$state, $title, $prompt, $allowedKeys, $options)` | Single-key action prompt; returns lowercase key string or null |
 | `showText($conn, &$state, $title, $lines, $options)` | Display read-only text; returns when user dismisses |
@@ -602,6 +619,35 @@ if ($confirmed !== 'y') {
 - `showMessageViewer`, `showPagedBox`, and `showPublicProfileViewer` render wrapped text readers with typed navigation commands instead of full-screen framed widgets
 - `showConfirmDialog` and `showSelectableDialog` render plain text prompts instead of centered overlays
 - `showAlert` prints a plain text notice
+
+### Shared directory presentation primitive
+
+`BinktermPHP\Terminal\Presentation` is the transport-neutral vocabulary for an
+L33TEST-owned **directory / junction** screen — a place the caller has arrived
+at, with grouped destinations. It exists so those screens can share the
+declarative front door's presentation language (a location masthead, a tagline,
+uppercase section headings, per-row secondary context, an ambient activity
+block) *without* being pushed into a `NavigationScreenModel` and *without* a new
+key loop.
+
+| Class | Role |
+|-------|------|
+| `Directory` | resolved model: `location`, `tagline`, `sections[]`, `contextLines[]` |
+| `DirectorySection` | a titled group of rows (`''` title = unheaded leading block) |
+| `DirectoryRow` | `label`, `description`, `badge`, and an opaque `value` payload returned on selection |
+| `DirectoryView::compose()` | composes a `Directory` + `TerminalRenderContext` into the structured selectable-list contract (`['title', 'items', 'values']`) that `chooseFromList()` already consumes |
+| `TextBlock` | pure `padRight()` / `ellipsize()` text-geometry helpers, shared with `NavigationScreenRenderer` (extracted verbatim; the front door delegates to them) |
+
+`TuiShell::showDirectory()` and `LineShell::showDirectory()` call
+`DirectoryView::compose()` then delegate to their own `chooseFromList()` — so
+list navigation, resize, disconnect handling and the help overlay are the
+existing proven behaviour; only the composition and the payload-based return are
+new. `DirectoryView` performs no I/O: `contextLines` must be pre-resolved plain
+text.
+
+First consumer: the Crossroads arrival (`DoorHandler::show()`). The
+`NavigationScreenRenderer` themed/flowing path is a separate renderer and is not
+routed through `DirectoryView` in this milestone.
 
 ### Adding a New Shell
 

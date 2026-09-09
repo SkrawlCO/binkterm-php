@@ -290,42 +290,41 @@ final class DoorHandlerRecentFootprintsTest extends TestCase
         self::assertNotFalse($showEnd);
         $show = substr($source, $showStart, $showEnd - $showStart);
 
-        // The arrival composes from the single pre-chooser collection snapshot;
+        // The arrival composes from the single pre-selection collection snapshot;
         // the recent-activity read joins that one boundary.
         $preChooser = substr(
             $show,
             (int)strpos($show, 'while (true) {'),
-            (int)strpos($show, '$selected = $shell->chooseFromList(') - (int)strpos($show, 'while (true) {')
+            (int)strpos($show, '$result = $shell->showDirectory(') - (int)strpos($show, 'while (true) {')
         );
 
         // Exactly one bounded recent-activity read, from the already-authorized
         // terminal catalog ($doorList) — no second GameCatalog discovery, no
         // per-Experience activity query, no extra collection-state read.
         self::assertSame(1, substr_count($show, 'recentAcrossCatalog('));
-        self::assertStringContainsString("recentAcrossCatalog(\n                        array_column(\$doorList, 'data'),\n                        5\n                    )", $show);
+        self::assertStringContainsString("recentAcrossCatalog(\n                    array_column(\$doorList, 'data'),\n                    5\n                )", $show);
         self::assertStringNotContainsString('getEnabledGames(', $show);
         self::assertSame(1, substr_count($preChooser, 'getExperienceStates('));
 
-        // The footprints are attached as a non-selectable block on the first
-        // Experience item — NOT pushed as their own $items entry — so the
-        // Live Now (0) / Your Places (1) / Experience ($selected - 2) contract
-        // is unchanged.
-        self::assertStringContainsString("\$items[\$firstExperienceIndex]['section_before_lines'] =", $show);
-        self::assertStringContainsString('$firstExperienceIndex = count($items);', $show);
+        // The footprints are carried as the Directory's ambient context block —
+        // NOT a selectable row — so the Live Now (0) / Your Places (1) /
+        // Experience ($selected - 2) contract is unchanged.
+        self::assertStringContainsString('$contextLines = $recentFootprints[\'lines\'];', $show);
         self::assertStringContainsString("if (\$recentFootprints['count'] > 0)", $show);
-        self::assertStringContainsString('isset($items[$firstExperienceIndex])', $show);
+        self::assertStringContainsString('$sections,', $show);
+        self::assertStringContainsString('$contextLines', $show);
         self::assertStringContainsString('$entry = $doorList[$selected - 2]', $show);
         self::assertStringContainsString('if ($selected === 0)', $show);
         self::assertStringContainsString('if ($selected === 1)', $show);
 
-        // composeRecentFootprints is invoked after the Experiences items are
+        // composeRecentFootprints is invoked after the destination shelves are
         // built, so the block always renders after Live Now / Your Places.
         self::assertGreaterThan(
             strpos($show, 'buildYourPlacesArrivalItem'),
             strpos($show, 'composeRecentFootprints(')
         );
         self::assertGreaterThan(
-            strpos($show, 'self::buildExperienceListItem('),
+            strpos($show, 'self::buildDestinationShelves('),
             strpos($show, 'composeRecentFootprints(')
         );
     }

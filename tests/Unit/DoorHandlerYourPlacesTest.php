@@ -230,7 +230,7 @@ final class DoorHandlerYourPlacesTest extends TestCase
     {
         $source = (string)file_get_contents(__DIR__ . '/../../telnet/src/DoorHandler.php');
         $show = $this->between($source, 'public function show(', 'public static function composeLiveNow(');
-        $beforeChooser = $this->between($show, 'while (true) {', '$selected = $shell->chooseFromList(');
+        $beforeChooser = $this->between($show, 'while (true) {', '$result = $shell->showDirectory(');
 
         self::assertSame(1, substr_count($beforeChooser, 'getExperienceStates('));
         self::assertStringContainsString("composeLiveNow(\n                \$experienceStates", $beforeChooser);

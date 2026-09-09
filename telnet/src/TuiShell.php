@@ -2,6 +2,9 @@
 
 namespace BinktermPHP\TelnetServer;
 
+use BinktermPHP\Terminal\Presentation\Directory;
+use BinktermPHP\Terminal\Presentation\DirectoryView;
+
 /**
  * Full-screen widget-backed terminal shell implementation.
  */
@@ -84,6 +87,51 @@ class TuiShell implements TerminalShellInterface
                 return null;
             }
         }
+    }
+
+    public function showDirectory($conn, array &$state, Directory $directory, array $options = []): array
+    {
+        $back = ['action' => 'back', 'value' => null, 'index' => -1];
+
+        $ctx = $this->server->getRenderContext();
+        if ($ctx === null) {
+            return $back;
+        }
+
+        $composed = DirectoryView::compose($directory, $ctx, $options);
+        if ($composed['items'] === []) {
+            $this->showAlert(
+                $conn,
+                $state,
+                $directory->location,
+                (string)($options['empty_message'] ?? ''),
+                'info'
+            );
+
+            return $back;
+        }
+
+        $chooseOptions = ['selected_index' => max(0, (int)($options['selected_index'] ?? 0))];
+        if (isset($options['prompt'])) {
+            $chooseOptions['prompt'] = (string)$options['prompt'];
+        }
+        if (isset($options['empty_message'])) {
+            $chooseOptions['empty_message'] = (string)$options['empty_message'];
+        }
+        if (isset($options['status_bar'])) {
+            $chooseOptions['status_bar'] = $options['status_bar'];
+        }
+
+        $selected = $this->chooseFromList($conn, $state, $composed['title'], $composed['items'], $chooseOptions);
+        if ($selected === null) {
+            return $back;
+        }
+
+        return [
+            'action' => 'select',
+            'value'  => $composed['values'][$selected] ?? null,
+            'index'  => $selected,
+        ];
     }
 
     public function promptText($conn, array &$state, string $title, string $prompt, array $options = []): ?string

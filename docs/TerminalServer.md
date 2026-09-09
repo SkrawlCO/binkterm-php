@@ -217,11 +217,20 @@ Stats are refreshed from the API after returning from netmail, echomail, or bull
 
 ### User Experience
 
-- The **Games & Experiences** menu uses shared catalog metadata for door names,
-  descriptions, categories, multiplayer status, and credit costs. Native
-  experiences configured for raw terminal handling preserve modern terminal
-  input, ANSI output, and resize behavior; traditional doors continue to use
-  Doorway-compatible handling.
+- The **Crossroads** screen is presented as a directory of a place: a titled
+  masthead and one-line tagline, the Live Now / Your Places arrival rows, then
+  the catalog grouped into the same shelves the web Crossroads uses — **Curated
+  Experiences**, **Game Hall**, **Utilities**, **Gateways** — each destination
+  showing its description. Grouping is derived entirely from existing catalog
+  metadata (curation state and category); sysops change what appears where by
+  curating Experiences in the admin UI, exactly as for the web, not by any
+  terminal-specific setting. The shelf labels are localised
+  (`ui.terminalserver.doors.shelf_*`). Navigation is unchanged: arrow keys or a
+  row number to select, Q to go back.
+- The catalog uses shared metadata for door names, descriptions, categories,
+  multiplayer status, and credit costs. Native experiences configured for raw
+  terminal handling preserve modern terminal input, ANSI output, and resize
+  behavior; traditional doors continue to use Doorway-compatible handling.
 - The first catalog entry is **Live Now**, with a compact arrival summary of
   how many distinct callers are gathering across active Experiences. Opening it
   lists currently occupied terminal Experiences with caller count, session

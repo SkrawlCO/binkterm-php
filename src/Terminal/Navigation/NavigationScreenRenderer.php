@@ -402,18 +402,14 @@ final class NavigationScreenRenderer implements NavigationRenderer
 
     private function clipVisible(string $s, int $width): string
     {
-        if (mb_strlen($s, 'UTF-8') <= $width) {
-            return $s;
-        }
-
-        return rtrim(mb_substr($s, 0, max(0, $width - 1), 'UTF-8')) . ($width > 0 ? "\u{2026}" : '');
+        // Extracted verbatim to Terminal\Presentation\TextBlock so this renderer
+        // and DirectoryView truncate identically. Output is unchanged.
+        return \BinktermPHP\Terminal\Presentation\TextBlock::ellipsize($s, $width);
     }
 
     private function padVisible(string $s, int $width): string
     {
-        $len = mb_strlen($s, 'UTF-8');
-
-        return $len >= $width ? $s : $s . str_repeat(' ', $width - $len);
+        return \BinktermPHP\Terminal\Presentation\TextBlock::padRight($s, $width);
     }
 
     /**

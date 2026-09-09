@@ -13,9 +13,9 @@ require_once __DIR__ . '/../../telnet/src/LineShell.php';
 
 final class DoorHandlerCatalogContractTest extends TestCase
 {
-    public function testChooserItemConsumesCanonicalCatalogMetadata(): void
+    public function testDirectoryRowConsumesCanonicalCatalogMetadata(): void
     {
-        $item = DoorHandler::buildExperienceListItem('doorparty', [
+        $row = DoorHandler::buildExperienceDirectoryRow('doorparty', [
             'name' => 'DoorParty',
             'description' => 'A remote door gateway.',
             'category' => 'gateway',
@@ -23,15 +23,19 @@ final class DoorHandlerCatalogContractTest extends TestCase
             'policy' => ['credit_cost' => 7],
         ]);
 
-        self::assertSame('DoorParty - Gateway', $item['label']);
-        self::assertSame('', $item['detail']);
-        self::assertStringNotContainsString('A remote door gateway.', $item['label']);
-        self::assertStringNotContainsString('credits', $item['label']);
+        // Name is the label; the gateway signal is a compact badge; the catalog
+        // description becomes the row's secondary context (never in the label).
+        self::assertSame('DoorParty', $row->label);
+        self::assertSame('Gateway', $row->badge);
+        self::assertSame('A remote door gateway.', $row->description);
+        self::assertSame('doorparty', $row->value);
+        self::assertStringNotContainsString('A remote door gateway.', $row->label);
+        self::assertStringNotContainsString('credits', $row->label);
     }
 
-    public function testChooserItemShowsCanonicalMultiplayerCapabilityForGames(): void
+    public function testDirectoryRowShowsCanonicalMultiplayerCapabilityForGames(): void
     {
-        $item = DoorHandler::buildExperienceListItem('lord', [
+        $row = DoorHandler::buildExperienceDirectoryRow('lord', [
             'name' => 'Legend of the Red Dragon',
             'description' => 'Fantasy RPG.',
             'category' => 'game',
@@ -39,29 +43,65 @@ final class DoorHandlerCatalogContractTest extends TestCase
             'policy' => ['credit_cost' => 0],
         ]);
 
-        self::assertSame('Legend of the Red Dragon - Multiplayer', $item['label']);
-        self::assertSame('', $item['detail']);
-        self::assertStringNotContainsString('Fantasy RPG.', $item['label']);
+        self::assertSame('Legend of the Red Dragon', $row->label);
+        self::assertSame('Multiplayer', $row->badge);
+        self::assertSame('Fantasy RPG.', $row->description);
     }
 
-    public function testChooserItemFallsBackWhenOptionalMetadataIsAbsent(): void
+    public function testDirectoryRowHasNoBadgeForASinglePlayerGame(): void
     {
-        $item = DoorHandler::buildExperienceListItem('minimal-door', []);
+        $row = DoorHandler::buildExperienceDirectoryRow('nethack', [
+            'name' => 'NetHack',
+            'description' => 'Dungeon crawl.',
+            'category' => 'game',
+            'capabilities' => ['multiplayer' => false],
+        ]);
 
-        self::assertSame('minimal-door - Game', $item['label']);
-        self::assertSame('', $item['detail']);
+        self::assertSame('NetHack', $row->label);
+        self::assertNull($row->badge);
+        self::assertSame('Dungeon crawl.', $row->description);
     }
 
-    public function testFirstCatalogItemCarriesLightweightExperiencesSectionCue(): void
+    public function testDirectoryRowFallsBackWhenOptionalMetadataIsAbsent(): void
     {
-        $item = DoorHandler::buildExperienceListItem('doorparty', [
-            'name' => 'DoorParty',
-            'category' => 'gateway',
-        ], null, true);
+        $row = DoorHandler::buildExperienceDirectoryRow('minimal-door', []);
 
-        self::assertSame('Experiences', $item['section_before']);
-        self::assertSame('DoorParty - Gateway', $item['label']);
-        self::assertSame('', $item['detail']);
+        self::assertSame('minimal-door', $row->label);
+        self::assertNull($row->badge);
+        self::assertNull($row->description);
+        self::assertSame('minimal-door', $row->value);
+    }
+
+    public function testCatalogIsGroupedIntoCanonicalCrossroadsShelves(): void
+    {
+        $method = new ReflectionMethod(DoorHandler::class, 'buildDestinationShelves');
+        $method->setAccessible(true);
+
+        $doorList = [
+            ['id' => 'lord', 'data' => ['name' => 'LORD', 'category' => 'game', 'capabilities' => ['multiplayer' => true]]],
+            ['id' => 'gb', 'data' => ['name' => 'Galactic Bloodshed', 'category' => 'game']],
+            ['id' => 'doorparty', 'data' => ['name' => 'DoorParty', 'category' => 'gateway']],
+            ['id' => 'ascii-royale', 'data' => ['name' => 'ascii-royale', 'category' => 'game', 'curation' => ['curated' => true, 'order' => 1]]],
+        ];
+
+        $t = static fn (string $key, array $params = [], string $fallback = ''): string => $fallback;
+        $result = $method->invoke(null, $doorList, $t);
+
+        $titles = array_map(static fn ($s) => $s->title, $result['sections']);
+        self::assertSame(['Curated Experiences', 'Game Hall', 'Gateways'], $titles);
+
+        // Curated shelf first, gateways last; the reordered doorList lines up
+        // with the flattened section rows for the $selected - 2 contract.
+        $ids = array_map(static fn ($e) => $e['id'], $result['doorList']);
+        self::assertSame(['ascii-royale', 'lord', 'gb', 'doorparty'], $ids);
+
+        $flatRowValues = [];
+        foreach ($result['sections'] as $section) {
+            foreach ($section->rows as $row) {
+                $flatRowValues[] = $row->value;
+            }
+        }
+        self::assertSame($ids, $flatRowValues);
     }
 
     public function testLineShellNormalizesSectionSeparatelyFromSelectableLabel(): void
@@ -106,16 +146,20 @@ final class DoorHandlerCatalogContractTest extends TestCase
         self::assertNotFalse($showEnd);
         $show = substr($source, $showStart, $showEnd - $showStart);
 
-        self::assertStringContainsString("doors.title', 'Crossroads'", $show);
+        self::assertStringContainsString("'ui.terminalserver.doors.title', [], 'Crossroads'", $show);
         $live = strpos($show, 'buildLiveNowArrivalItem');
         $places = strpos($show, 'buildYourPlacesArrivalItem');
-        $catalog = strpos($show, 'buildExperienceListItem');
+        $shelves = strpos($show, 'buildDestinationShelves(');
         self::assertNotFalse($live);
         self::assertNotFalse($places);
-        self::assertNotFalse($catalog);
+        self::assertNotFalse($shelves);
+        // Shelf ordering happens before the arrival rows are composed; the two
+        // arrival rows still precede the destination sections.
         self::assertLessThan($places, $live);
-        self::assertLessThan($catalog, $places);
-        self::assertStringContainsString('$catalogIndex === 0', $show);
+        // The Live Now (0) / Your Places (1) / Experience ($selected - 2)
+        // dispatch contract is unchanged; selection now comes from showDirectory.
+        self::assertStringContainsString('$result = $shell->showDirectory(', $show);
+        self::assertStringContainsString("(\$result['action'] ?? '') === 'select' ? (int)\$result['index'] : null", $show);
         self::assertStringContainsString('if ($selected === 0)', $show);
         self::assertStringContainsString('if ($selected === 1)', $show);
         self::assertStringContainsString('$entry = $doorList[$selected - 2]', $show);
