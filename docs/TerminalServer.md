@@ -397,7 +397,10 @@ in `config/terminal_navigation.json` and rendered by the platform. It is
 **off by default**; the built-in menu above is unchanged until a sysop both
 supplies a valid definition file and sets `TERMINAL_NAV_RUNTIME=on`. An invalid
 or missing file falls back to the built-in menu, so it can never break login.
-See [Terminal Navigation Framework](TerminalNavigationFramework.md).
+Menu items can also carry a `badge` hint that shows a small live-context figure
+next to the option (for example a caller count next to a "People" item, or a
+"playing" count next to a games menu); it is drawn only when there is something
+to show. See [Terminal Navigation Framework](TerminalNavigationFramework.md).
 
 ### Local Chat
 

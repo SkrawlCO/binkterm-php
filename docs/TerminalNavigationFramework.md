@@ -180,9 +180,28 @@ Intent, never coordinates or raw ANSI:
 | `glyph` | Semantic glyph name |
 | `description_mode` | `compact`, `full` |
 | `art` | Art asset reference |
+| `badge` | Name of a live-context signal to show next to the item (see below) |
 
 The renderer decides the actual layout for the caller's geometry, charset, and
 colour capability.
+
+### Live-context badges
+
+An item may name a `badge` signal. When the caller supplies a badge resolver
+(`NavigationScreenBuilder`'s third constructor argument — a
+`callable(string): ?string`), the builder calls it for every item that has a
+`badge` hint **and** has already passed every access / availability gate, and
+attaches the returned short string as the item's annotation. The renderer draws
+it as a dim ` · <text>` suffix after the label (it rides the reverse-video row
+under the lightbar). A `null`/empty result draws nothing, so a zero-state signal
+simply leaves the item as it was.
+
+The signal vocabulary is the resolver's own; the navigation classes only pass the
+name through. The resolver is never handed an item the caller cannot see, so it
+cannot be used to probe hidden options. Off-session callers (preview, tests) pass
+no resolver and get no badges. Resolving live data on a cadence that does not
+run per-keystroke is the resolver's responsibility — the built-in terminal
+integration snapshots presence once and caches it for a few seconds.
 
 ### How the renderer composes a screen
 

@@ -16,10 +16,16 @@ final class NavigationScreenBuilder
 {
     /**
      * @param callable(?string,string,string):string $translate (key, fallback, locale) -> text
+     * @param (callable(string):?string)|null $badgeResolver resolves a `presentation.badge`
+     *        signal name to a short live-status string (e.g. "3 online"), or null when the
+     *        signal is unknown / has nothing worth showing. Only ever called for items that
+     *        have already passed every access and availability gate, so it can never be used
+     *        to probe a hidden item. Off-session callers (preview, tests) pass null.
      */
     public function __construct(
         private readonly ActionRegistry $actions,
         private readonly mixed $translate,
+        private readonly mixed $badgeResolver = null,
     ) {
     }
 
@@ -108,7 +114,26 @@ final class NavigationScreenBuilder
             action: $action,
             glyph: $item->presentation->glyph,
             group: $item->presentation->group,
+            annotation: $this->resolveBadge($item->presentation->badge, $enabled),
         );
+    }
+
+    /**
+     * Resolve a `presentation.badge` signal to its live-status string. Only
+     * reached for an item that has already passed every access / availability
+     * gate. A disabled-but-visible item keeps its badge suppressed — a live
+     * count next to an option the caller cannot take just adds noise.
+     */
+    private function resolveBadge(?string $signal, bool $enabled): ?string
+    {
+        if ($signal === null || $signal === '' || !$enabled || !is_callable($this->badgeResolver)) {
+            return null;
+        }
+
+        $text = ($this->badgeResolver)($signal);
+        $text = is_string($text) ? trim($text) : '';
+
+        return $text !== '' ? $text : null;
     }
 
     /** Resolve a label the same way item/node titles are resolved. */

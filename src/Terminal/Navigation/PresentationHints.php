@@ -22,12 +22,13 @@ final class PresentationHints
         public readonly ?string $glyph,
         public readonly ?string $descriptionMode,
         public readonly ?string $art,
+        public readonly ?string $badge = null,
     ) {
     }
 
     public static function none(): self
     {
-        return new self('normal', null, null, null, null);
+        return new self('normal', null, null, null, null, null);
     }
 
     /**
@@ -51,7 +52,7 @@ final class PresentationHints
             throw new NavigationSchemaException('presentation hints must be an object', $path);
         }
 
-        $allowed = ['emphasis', 'group', 'glyph', 'description_mode', 'art'];
+        $allowed = ['emphasis', 'group', 'glyph', 'description_mode', 'art', 'badge'];
         foreach (array_keys($raw) as $key) {
             if (!in_array($key, $allowed, true)) {
                 throw new NavigationSchemaException("unknown presentation hint \"{$key}\"", $path);
@@ -74,7 +75,7 @@ final class PresentationHints
             );
         }
 
-        foreach (['group', 'glyph', 'art'] as $strKey) {
+        foreach (['group', 'glyph', 'art', 'badge'] as $strKey) {
             if (isset($raw[$strKey]) && !is_string($raw[$strKey])) {
                 throw new NavigationSchemaException("\"{$strKey}\" must be a string", "{$path}.{$strKey}");
             }
@@ -86,6 +87,7 @@ final class PresentationHints
             isset($raw['glyph']) ? (string) $raw['glyph'] : null,
             $descMode !== null ? (string) $descMode : null,
             isset($raw['art']) ? (string) $raw['art'] : null,
+            isset($raw['badge']) ? (string) $raw['badge'] : null,
         );
     }
 }

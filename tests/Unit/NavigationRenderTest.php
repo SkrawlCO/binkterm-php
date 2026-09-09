@@ -529,4 +529,166 @@ final class NavigationRenderTest extends TestCase
             self::assertSame(bin2hex($bytes), bin2hex($svc->render($def, $profile, 'main')), "{$name}: deterministic");
         }
     }
+
+    // ===== live-context badges (R5 live-context pass) =====
+
+    /**
+     * @param callable(string):?string $resolver
+     * @param array<string,mixed> $access feature list for fullAccess(), or [] for all
+     */
+    private function badgeScreen(callable $resolver, array $features = [], bool $admin = false): NavigationScreenModel
+    {
+        $def = NavigationDefinition::fromArray([
+            'schema' => 1, 'id' => 'x', 'root' => 'main',
+            'nodes' => [['id' => 'main', 'label_fallback' => 'Hub', 'items' => [
+                ['id' => 'people', 'label_fallback' => 'People', 'hotkey' => 'p', 'action' => 'whosonline',
+                 'presentation' => ['badge' => 'callers_online']],
+                ['id' => 'plain', 'label_fallback' => 'Plain', 'hotkey' => 'l', 'action' => 'netmail'],
+                ['id' => 'off', 'label_fallback' => 'Disabled', 'hotkey' => 'd', 'action' => 'bulletins',
+                 'enabled' => false, 'presentation' => ['badge' => 'callers_online']],
+                ['id' => 'secret', 'label_fallback' => 'Sysop', 'hotkey' => 'y', 'action' => 'settings',
+                 'access' => 'admin', 'presentation' => ['badge' => 'callers_online']],
+            ]]],
+        ]);
+        $builder = new NavigationScreenBuilder(
+            TerminalActionCatalog::defaultRegistry(),
+            fn (?string $key, string $fallback, string $locale) => $fallback,
+            $resolver,
+        );
+        $ctx = new AccessContext(
+            true,
+            $admin,
+            false,
+            fn (string $f) => $features === [] ? true : in_array($f, $features, true),
+            fn () => true,
+            ['color' => true, 'utf8' => true],
+        );
+
+        return $builder->build($def, $ctx, NavigationPath::root('main', 'Hub'));
+    }
+
+    public function testBadgeSignalIsResolvedOnlyForGatedInEnabledItems(): void
+    {
+        $calls = [];
+        $screen = $this->badgeScreen(function (string $signal) use (&$calls) {
+            $calls[] = $signal;
+            return '3 online';
+        });
+
+        // 'secret' is access-hidden (non-admin) -> absent entirely, resolver never asked.
+        self::assertNull($screen->itemById('secret'));
+        // 'people' is the only gated-in, enabled item carrying a badge.
+        self::assertSame(['callers_online'], $calls, 'resolver is called once, for the visible enabled badged item only');
+
+        self::assertSame('3 online', $screen->itemById('people')->annotation);
+        self::assertNull($screen->itemById('plain')->annotation, 'an item with no badge hint gets no annotation');
+        self::assertNull($screen->itemById('off')->annotation, 'a disabled item suppresses its badge');
+    }
+
+    public function testEmptyOrNullBadgeResultLeavesItemUnannotated(): void
+    {
+        foreach (['', '   ', null] as $result) {
+            $screen = $this->badgeScreen(static fn (string $s) => $result);
+            self::assertNull($screen->itemById('people')->annotation, 'zero-state badge is dropped');
+        }
+    }
+
+    public function testBadgeRendersAsADimSuffixAndTracksTheLightbar(): void
+    {
+        $screen = $this->badgeScreen(static fn (string $s) => '3 online');
+        $ctx    = TerminalRenderHarness::at(80, 24)->context();
+        $r      = new NavigationScreenRenderer();
+
+        $plain = self::plainLines($r->composeLines($ctx, $screen, 80, 40, true, null));
+        self::assertMatchesRegularExpression('/\[P\] People\s+\x{00B7} 3 online/u', $plain);
+        self::assertStringNotContainsString('Plain ·', $plain);
+
+        // Under the lightbar the whole row (badge included) is one reverse-video span.
+        $lines     = $r->composeLines($ctx, $screen, 80, 40, true, 0); // cursor 0 = People
+        $highlight = array_values(array_filter($lines, static fn ($l) => str_contains($l, "\033[7m")));
+        self::assertCount(1, $highlight);
+        self::assertStringContainsString('People', $highlight[0]);
+        self::assertStringContainsString('3 online', $highlight[0]);
+        self::assertStringNotContainsString("\033[2m", $highlight[0], 'no separate dim span inside the lightbar row');
+    }
+
+    public function testBadgeDegradesAcrossCharsetsAndNeverOverflowsWidth(): void
+    {
+        $long   = 'lots and lots and lots of online callers right now indeed';
+        $screen = $this->badgeScreen(static fn (string $s) => $long);
+        $r      = new NavigationScreenRenderer();
+
+        foreach (['utf8', 'cp437', 'ascii'] as $cs) {
+            $ctx   = TerminalRenderHarness::at(80, 24)->charset($cs)->color($cs !== 'ascii')->context();
+            $bytes = implode("\n", $r->composeLines($ctx, $screen, 80, 40, true, null));
+
+            $plainLines = preg_split('/\n/', preg_replace('/\033\[[0-9;]*m/', '', $bytes) ?? '') ?: [];
+            foreach ($plainLines as $line) {
+                self::assertLessThanOrEqual(80, mb_strlen($line, 'UTF-8'), "{$cs}: badge line within width");
+            }
+            if ($cs === 'utf8') {
+                self::assertStringContainsString("\u{00B7}", $bytes);
+            } else {
+                self::assertSame(0, preg_match('/\xC2\xB7/', $bytes), "{$cs}: no raw U+00B7 middot bytes");
+            }
+            if ($cs === 'ascii') {
+                self::assertSame(0, preg_match('/[\x80-\xff]/', $bytes), "{$cs}: 7-bit clean");
+                self::assertMatchesRegularExpression('/People\s+- /', preg_replace('/\033\[[0-9;]*m/', '', $bytes) ?? '');
+            }
+        }
+    }
+
+    public function testBadgeIsDeterministicAndSurvivesTheStandardProfileMatrix(): void
+    {
+        $def = NavigationDefinition::fromArray([
+            'schema' => 1, 'id' => 'x', 'root' => 'main',
+            'nodes' => [['id' => 'main', 'label_fallback' => 'Hub', 'description_fallback' => 'Pick.', 'items' => [
+                ['id' => 'a', 'label_fallback' => 'People', 'hotkey' => 'p', 'action' => 'whosonline',
+                 'description' => 'Who is around.', 'presentation' => ['group' => 'Connect', 'badge' => 'callers_online']],
+                ['id' => 'b', 'label_fallback' => 'Crossroads', 'hotkey' => 'c', 'action' => 'doors',
+                 'description' => 'Games.', 'presentation' => ['group' => 'Places', 'badge' => 'experiences_active']],
+            ]]],
+        ]);
+        $resolver = static fn (string $s) => $s === 'callers_online' ? '4 online' : '2 playing';
+        $builder  = new NavigationScreenBuilder(
+            TerminalActionCatalog::defaultRegistry(),
+            fn (?string $k, string $f, string $l) => $f,
+            $resolver,
+        );
+        $ctx = new AccessContext(true, false, false, fn () => true, fn () => true, ['color' => true, 'utf8' => true]);
+        $screen = $builder->build($def, $ctx, NavigationPath::root('main', 'Hub'));
+        $r = new NavigationScreenRenderer();
+
+        foreach (TerminalRenderHarness::standardMatrix() as $name => $harness) {
+            $rc     = $harness->context();
+            $lines  = $r->composeLines($rc, $screen, $rc->cols(), $rc->selectorRows(), true, null);
+            $bytes  = implode("\r\n", $lines);
+            $plain  = preg_replace('/\033\[[0-9;?]*[A-Za-z]/', '', $bytes) ?? '';
+
+            foreach (explode("\r\n", $plain) as $line) {
+                self::assertLessThanOrEqual($rc->cols(), mb_strlen($line, 'UTF-8'), "{$name}: within width");
+            }
+            self::assertStringContainsString('online', $plain, "{$name}: badge text present");
+            self::assertSame(
+                $bytes,
+                implode("\r\n", $r->composeLines($harness->context(), $screen, $rc->cols(), $rc->selectorRows(), true, null)),
+                "{$name}: deterministic"
+            );
+        }
+    }
+
+    public function testPresentationHintsParsesBadgeAndStillRejectsBadInput(): void
+    {
+        self::assertSame('callers_online', \BinktermPHP\Terminal\Navigation\PresentationHints::fromConfig(['badge' => 'callers_online'])->badge);
+        self::assertNull(\BinktermPHP\Terminal\Navigation\PresentationHints::fromConfig(['group' => 'x'])->badge);
+
+        $this->expectException(\BinktermPHP\Terminal\Navigation\NavigationSchemaException::class);
+        \BinktermPHP\Terminal\Navigation\PresentationHints::fromConfig(['badge' => 123]);
+    }
+
+    public function testUnknownPresentationHintIsStillRejected(): void
+    {
+        $this->expectException(\BinktermPHP\Terminal\Navigation\NavigationSchemaException::class);
+        \BinktermPHP\Terminal\Navigation\PresentationHints::fromConfig(['bling' => 'x']);
+    }
 }

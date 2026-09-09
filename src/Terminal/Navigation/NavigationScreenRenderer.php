@@ -255,15 +255,26 @@ final class NavigationScreenRenderer
                 $label .= '  (' . ($it->disabledReason ?? 'unavailable') . ')';
             }
 
+            // Live-context badge: a short dim suffix ("· 3 online") on a
+            // selectable item. Under the lightbar it rides the reverse-video
+            // row; otherwise it is dimmed apart from the label.
+            $badge = ($it->isSelectable() && $it->annotation !== null && trim($it->annotation) !== '')
+                ? '  ' . ($utf8 ? "\u{00B7}" : '-') . ' ' . trim($it->annotation)
+                : '';
+
             $indentSp = $indent ? '  ' : '';
-            $line     = ($isCursor ? '> ' : '  ') . $indentSp . $key . $label;
-            $text     = $ctx->encodeForTerminal($line);
+            $prefix   = ($isCursor ? '> ' : '  ') . $indentSp . $key;
 
             if ($isCursor) {
-                $out[] = $pad . $ctx->colorize($text, "\033[7m"); // reverse-video lightbar
+                $out[] = $pad . $ctx->colorize($ctx->encodeForTerminal($prefix . $label . $badge), "\033[7m");
             } else {
                 $colour = self::EMPHASIS_COLOR[$it->isSelectable() ? $it->emphasis : 'muted'] ?? '';
-                $out[]  = $pad . ($colour !== '' ? $ctx->colorize($text, $colour) : $text);
+                $main   = $ctx->encodeForTerminal($prefix . $label);
+                $row    = $pad . ($colour !== '' ? $ctx->colorize($main, $colour) : $main);
+                if ($badge !== '') {
+                    $row .= $ctx->colorize($ctx->encodeForTerminal($badge), self::EMPHASIS_COLOR['muted']);
+                }
+                $out[] = $row;
             }
 
             if ($inlineDescriptions && $it->description !== null && trim($it->description) !== '') {

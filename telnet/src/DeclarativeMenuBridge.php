@@ -2,6 +2,7 @@
 
 namespace BinktermPHP\TelnetServer;
 
+use BinktermPHP\Auth;
 use BinktermPHP\BbsConfig;
 use BinktermPHP\Config;
 use BinktermPHP\Terminal\Navigation\AccessContext;
@@ -85,6 +86,7 @@ final class DeclarativeMenuBridge
                 fn (?string $key, string $fallback, string $loc) => $key === null || $key === ''
                     ? $fallback
                     : $this->server->t($key, $fallback, [], $loc),
+                $this->liveBadgeResolver($state),
             );
 
             $runtime = new NavigationRuntime($definition, $registry, $builder, new NavigationScreenRenderer());
@@ -178,6 +180,78 @@ final class DeclarativeMenuBridge
                 default      => BbsConfig::isFeatureEnabled($feature),
             };
         };
+    }
+
+    /**
+     * Resolver for `presentation.badge` live-context signals on the front door.
+     *
+     * It maps a small, board-agnostic vocabulary of platform signals to a short
+     * status string, from BinktermPHP's canonical presence store (user_sessions,
+     * via {@see Auth::getOnlineSessions()} — the same source as Who's Online). One
+     * snapshot is shared by every signal and cached for a few seconds, so paging
+     * the lightbar around the menu never touches the database and the counts
+     * only move between navigation steps, not while the caller sits still.
+     *
+     * Recognised signals:
+     *   - `callers_online`     other distinct callers active in the last 15 min
+     *   - `experiences_active` other callers currently in a Crossroads Experience
+     *
+     * Any failure (DB down, unexpected shape) yields null for every signal, so
+     * the menu simply renders without badges.
+     *
+     * @return callable(string):?string
+     */
+    private function liveBadgeResolver(array $state): callable
+    {
+        $selfId  = (int) ($state['user_id'] ?? 0);
+        $snapshot = null;
+        $takenAt  = 0;
+        $ttl      = 8;
+
+        return function (string $signal) use (&$snapshot, &$takenAt, $ttl, $selfId): ?string {
+            $now = time();
+            if ($snapshot === null || ($now - $takenAt) >= $ttl) {
+                $snapshot = $this->presenceSnapshot($selfId);
+                $takenAt  = $now;
+            }
+
+            return $snapshot[$signal] ?? null;
+        };
+    }
+
+    /**
+     * @return array{callers_online:?string,experiences_active:?string}
+     */
+    private function presenceSnapshot(int $selfId): array
+    {
+        $empty = ['callers_online' => null, 'experiences_active' => null];
+
+        try {
+            $rows = (new Auth())->getOnlineSessions(15);
+        } catch (\Throwable $e) {
+            return $empty;
+        }
+
+        $others  = [];
+        $playing = [];
+        foreach ($rows as $row) {
+            $uid = (int) ($row['user_id'] ?? 0);
+            if ($uid <= 0 || $uid === $selfId) {
+                continue;
+            }
+            $others[$uid] = true;
+            if (str_starts_with((string) ($row['public_activity'] ?? ''), 'Playing ')) {
+                $playing[$uid] = true;
+            }
+        }
+
+        $onlineCount  = count($others);
+        $playingCount = count($playing);
+
+        return [
+            'callers_online'     => $onlineCount > 0 ? $onlineCount . ' online' : null,
+            'experiences_active' => $playingCount > 0 ? $playingCount . ' playing' : null,
+        ];
     }
 
     private function capabilities(TerminalRenderContext $ctx): array

@@ -25,6 +25,7 @@ final class NavigationScreenItem
         public readonly ?ActionReference $action,
         public readonly ?string $glyph = null,
         public readonly ?string $group = null,
+        public readonly ?string $annotation = null,
     ) {
     }
 
