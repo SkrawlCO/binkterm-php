@@ -824,4 +824,5 @@ return [
     'errors.admin.hub_nodes.invalid_owner_user' => 'El usuario seleccionado no existe.',
     'errors.admin.users.autocomplete_failed' => 'No se pudo buscar usuarios.',
     'errors.admin.bbs_settings.invalid_screening_config' => 'Configuración de detección de registros no válida',
+    'errors.admin.terminal_navigation.preview_failed' => 'Preview render failed',
 ];

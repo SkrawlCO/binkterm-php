@@ -5822,4 +5822,10 @@ return [
     'ui.admin_users.risk_not_screened' => 'не проверено',
     'ui.admin_users.risk_not_screened_help' => 'Эта регистрация выполнена до включения проверки регистраций, либо проверка была отключена в тот момент.',
     'ui.admin_users.risk_clean' => 'чисто',
+    'ui.admin.terminal_navigation.preview' => 'Preview',
+    'ui.admin.terminal_navigation.preview_heading' => 'Preview (rendered off-session)',
+    'ui.admin.terminal_navigation.preview_note' => 'Rendered through the same declarative renderer the live terminal uses, with every feature enabled. Colours are approximate; this is a layout preview, not a terminal.',
+    'ui.admin.terminal_navigation.preview_invalid' => 'Fix the definition errors to preview.',
+    'ui.admin.terminal_navigation.status_previewed' => 'Preview rendered at',
+    'ui.admin.terminal_navigation.status_preview_failed' => 'Preview request failed',
 ];

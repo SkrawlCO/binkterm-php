@@ -4521,6 +4521,57 @@ SimpleRouter::group(['prefix' => '/admin'], function() {
             ]);
         });
 
+        // Render the CANDIDATE definition off-session through the same
+        // NavigationScreenRenderer the live terminal uses — no file write, no
+        // runtime mutation, no socket. Invalid JSON comes back as errors[]
+        // instead of a render.
+        SimpleRouter::post('/terminal-navigation/preview', function() {
+            $user = RouteHelper::requireAdmin();
+            header('Content-Type: application/json');
+
+            $payload  = json_decode(file_get_contents('php://input'), true);
+            $json     = is_array($payload) && is_string($payload['json'] ?? null) ? $payload['json'] : '';
+            $geometry = is_array($payload) && is_string($payload['geometry'] ?? null) ? $payload['geometry'] : '80x24';
+            $nodeId   = is_array($payload) && is_string($payload['node'] ?? null) && $payload['node'] !== '' ? $payload['node'] : null;
+            if (!array_key_exists($geometry, \BinktermPHP\Terminal\Navigation\NavigationPreviewProfile::GEOMETRIES)) {
+                $geometry = '80x24';
+            }
+
+            $registry = \BinktermPHP\Terminal\Navigation\TerminalActionCatalog::defaultRegistry();
+            $load = (new \BinktermPHP\Terminal\Navigation\NavigationDefinitionLoader($registry))
+                ->fromJson($json, 'terminal_navigation.json');
+            if (!$load->isOk()) {
+                echo json_encode([
+                    'success' => true,
+                    'valid'   => false,
+                    'errors'  => array_map(
+                        static fn($e) => ['code' => $e->code, 'message' => $e->message, 'path' => $e->path],
+                        $load->errors()
+                    ),
+                ]);
+                return;
+            }
+
+            $profile = \BinktermPHP\Terminal\Navigation\NavigationPreviewProfile::geometry($geometry)
+                ->withAllFeaturesEnabled($registry);
+
+            try {
+                $ansi = (new \BinktermPHP\Terminal\Navigation\NavigationPreviewService($registry))
+                    ->render($load->definition(), $profile, $nodeId);
+            } catch (\Throwable $e) {
+                http_response_code(500);
+                apiError('errors.admin.terminal_navigation.preview_failed', apiLocalizedText('errors.admin.terminal_navigation.preview_failed', 'Preview render failed'), 500);
+                return;
+            }
+
+            echo json_encode([
+                'success'  => true,
+                'valid'    => true,
+                'geometry' => $geometry,
+                'ansi'     => $ansi,
+            ]);
+        });
+
         // RLogin Doors API endpoints — DB-backed CRUD (no manifest files: rlogin
         // doors have no filesystem footprint, so there is no directory-scanning
         // "discover doors" flow and no generic manifest editor for this type).

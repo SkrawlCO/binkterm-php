@@ -28,13 +28,14 @@ final class TerminalNavigationEditorTest extends TestCase
 
     // ---- routes ---------------------------------------------------------
 
-    public function testAllFourRoutesExistAndRequireAdmin(): void
+    public function testAllRoutesExistAndRequireAdmin(): void
     {
         foreach ([
             "SimpleRouter::get('/terminal-navigation', function()",
             "SimpleRouter::get('/terminal-navigation/config', function()",
             "SimpleRouter::post('/terminal-navigation/validate', function()",
             "SimpleRouter::post('/terminal-navigation/config', function()",
+            "SimpleRouter::post('/terminal-navigation/preview', function()",
         ] as $sig) {
             self::assertStringContainsString($sig, $this->adminRoutes, $sig);
         }
@@ -45,10 +46,61 @@ final class TerminalNavigationEditorTest extends TestCase
             $this->adminRoutes,
             $m
         );
-        self::assertGreaterThanOrEqual(4, count($m[1]), 'matched all four route bodies');
+        self::assertGreaterThanOrEqual(5, count($m[1]), 'matched all route bodies');
         foreach ($m[1] as $body) {
             self::assertStringContainsString('RouteHelper::requireAdmin()', $body);
         }
+    }
+
+    public function testPreviewRouteRendersOffSessionAndNeverMutates(): void
+    {
+        $body = $this->routeBody("SimpleRouter::post('/terminal-navigation/preview'");
+        self::assertStringContainsString('NavigationPreviewService', $body);
+        self::assertStringContainsString('->render(', $body);
+        self::assertStringContainsString('NavigationPreviewProfile::geometry(', $body);
+        // Invalid JSON returns errors[] instead of a render; never writes.
+        self::assertStringContainsString('$load->isOk()', $body);
+        self::assertStringNotContainsString('NavigationConfigWriter', $body);
+        self::assertStringNotContainsString('saveTerminalNavigationConfig', $body);
+        self::assertStringNotContainsString('file_put_contents', $body);
+        // Only the three supported geometries are honoured.
+        self::assertStringContainsString('NavigationPreviewProfile::GEOMETRIES', $body);
+    }
+
+    public function testPreviewGeometriesAreThe80And132Set(): void
+    {
+        self::assertSame(
+            ['80x24', '132x36', '132x51'],
+            array_keys(\BinktermPHP\Terminal\Navigation\NavigationPreviewProfile::GEOMETRIES)
+        );
+    }
+
+    public function testPreviewServiceRendersACandidateDefinitionToAnsi(): void
+    {
+        $json = json_encode([
+            'schema' => 1, 'id' => 't', 'root' => 'main',
+            'nodes' => [[
+                'id' => 'main', 'label_fallback' => 'Main Menu',
+                'items' => [
+                    ['id' => 'n', 'label_fallback' => 'Netmail', 'hotkey' => 'n', 'action' => 'netmail'],
+                    ['id' => 'q', 'label_fallback' => 'Log Off', 'hotkey' => 'q', 'action' => 'quit'],
+                ],
+            ]],
+        ]);
+
+        $registry = TerminalActionCatalog::defaultRegistry();
+        $def = $this->loader()->fromJson($json, 'f');
+        self::assertTrue($def->isOk());
+
+        $profile = \BinktermPHP\Terminal\Navigation\NavigationPreviewProfile::geometry('132x36')
+            ->withAllFeaturesEnabled($registry);
+        $bytes = (new \BinktermPHP\Terminal\Navigation\NavigationPreviewService($registry))
+            ->render($def->definition(), $profile);
+
+        self::assertIsString($bytes);
+        self::assertStringContainsString('Main Menu', $bytes);
+        self::assertStringContainsString('Netmail', $bytes);
+        self::assertStringContainsString("\033[", $bytes, 'carries ANSI');
     }
 
     public function testLoadRouteGoesThroughTheAdminDaemonAndExposesTheActionCatalog(): void
@@ -108,6 +160,9 @@ final class TerminalNavigationEditorTest extends TestCase
         self::assertStringContainsString("onclick=\"saveConfig()\"", $this->template);
         self::assertStringContainsString('/admin/api/terminal-navigation/validate', $this->template);
         self::assertStringContainsString('/admin/api/terminal-navigation/config', $this->template);
+        self::assertStringContainsString('/admin/api/terminal-navigation/preview', $this->template);
+        self::assertStringContainsString('data-geo="80x24"', $this->template);
+        self::assertStringContainsString('data-geo="132x51"', $this->template);
         // States the apply / no-restart / flag-unchanged facts.
         self::assertStringContainsString('ui.admin.terminal_navigation.apply_note', $this->template);
         // No form builder, no drag-reorder in M1.

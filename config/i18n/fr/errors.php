@@ -779,5 +779,6 @@ return [
     'errors.admin.hub_nodes.invalid_owner_user' => 'L\'utilisateur selectionne n\'existe pas.',
     'errors.admin.users.autocomplete_failed' => 'Echec de la recherche d\'utilisateurs.',
     'errors.admin.bbs_settings.invalid_screening_config' => 'Configuration du filtrage des inscriptions invalide',
+    'errors.admin.terminal_navigation.preview_failed' => 'Preview render failed',
 ];
 

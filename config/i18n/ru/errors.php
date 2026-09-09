@@ -827,4 +827,5 @@ return [
     'errors.admin.hub_nodes.invalid_owner_user' => 'Выбранный пользователь не существует.',
     'errors.admin.users.autocomplete_failed' => 'Не удалось выполнить поиск пользователей.',
     'errors.admin.bbs_settings.invalid_screening_config' => 'Неверная конфигурация проверки регистраций',
+    'errors.admin.terminal_navigation.preview_failed' => 'Preview render failed',
 ];

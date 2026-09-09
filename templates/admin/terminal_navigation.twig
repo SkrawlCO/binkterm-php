@@ -27,6 +27,9 @@
                         <button class="btn btn-sm btn-outline-secondary" onclick="validateConfig()" id="validateBtn">
                             <i class="fas fa-check-double"></i> {{ t('ui.admin.terminal_navigation.validate', {}, locale, ['common']) }}
                         </button>
+                        <button class="btn btn-sm btn-outline-secondary" onclick="previewConfig()" id="previewBtn">
+                            <i class="fas fa-eye"></i> {{ t('ui.admin.terminal_navigation.preview', {}, locale, ['common']) }}
+                        </button>
                         <button class="btn btn-sm btn-outline-primary" onclick="saveConfig()" id="saveBtn">
                             <i class="fas fa-save"></i> {{ t('ui.common.save', {}, locale, ['common']) }}
                         </button>
@@ -40,6 +43,21 @@
                         <small class="text-muted">{{ t('ui.admin.terminal_navigation.validated_before_save', {}, locale, ['common']) }}</small>
                     </div>
                     <div id="errorList" class="mt-2"></div>
+                </div>
+            </div>
+
+            <div class="card shadow mt-3" id="previewCard" style="display:none;">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0">{{ t('ui.admin.terminal_navigation.preview_heading', {}, locale, ['common']) }}</h6>
+                    <div class="btn-group btn-group-sm" role="group" id="geometryTabs">
+                        <button type="button" class="btn btn-outline-secondary active" data-geo="80x24" onclick="setGeometry('80x24')">80&times;24</button>
+                        <button type="button" class="btn btn-outline-secondary" data-geo="132x36" onclick="setGeometry('132x36')">132&times;36</button>
+                        <button type="button" class="btn btn-outline-secondary" data-geo="132x51" onclick="setGeometry('132x51')">132&times;51</button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <pre id="previewPane" class="mb-0 p-2 rounded" style="background:#000;color:#bbb;overflow:auto;line-height:1.15;font-size:12px;"></pre>
+                    <small class="text-muted d-block mt-1">{{ t('ui.admin.terminal_navigation.preview_note', {}, locale, ['common']) }}</small>
                 </div>
             </div>
 
@@ -168,6 +186,82 @@ function saveConfig() {
             }
         })
         .catch(() => setStatus(uiT('ui.admin.terminal_navigation.status_save_failed', 'Save failed'), 'danger'))
+        .finally(() => { btn.disabled = false; });
+}
+
+let previewGeometry = '80x24';
+
+// Minimal SGR-only ANSI -> HTML (16 colours). Cursor/clear/erase are stripped;
+// this is a layout preview, not a terminal emulator.
+const ANSI_FG = ['#000','#a00','#0a0','#a50','#00a','#a0a','#0aa','#aaa'];
+const ANSI_BG = ANSI_FG;
+function ansiToHtml(s) {
+    s = s.replace(/\x1b\[[0-9;?]*[A-DHJKfsu]/g, '').replace(/\x1b\[\?[0-9]+[hl]/g, '').replace(/\r/g, '');
+    let out = '', open = false, fg = null, bg = null, bold = false;
+    const flush = () => { if (open) { out += '</span>'; open = false; } };
+    const span = () => {
+        flush();
+        const styles = [];
+        if (fg !== null) styles.push('color:' + (bold && fg < 8 ? ANSI_FG[fg] : ANSI_FG[fg]));
+        if (bg !== null) styles.push('background:' + ANSI_BG[bg]);
+        if (bold) styles.push('font-weight:bold');
+        if (styles.length) { out += '<span style="' + styles.join(';') + '">'; open = true; }
+    };
+    let i = 0;
+    while (i < s.length) {
+        const m = /^\x1b\[([0-9;]*)m/.exec(s.slice(i));
+        if (m) {
+            (m[1] || '0').split(';').forEach(p => {
+                const n = parseInt(p || '0', 10);
+                if (n === 0) { fg = bg = null; bold = false; }
+                else if (n === 1) bold = true;
+                else if (n === 22) bold = false;
+                else if (n >= 30 && n <= 37) fg = n - 30;
+                else if (n === 39) fg = null;
+                else if (n >= 40 && n <= 47) bg = n - 40;
+                else if (n === 49) bg = null;
+                else if (n >= 90 && n <= 97) { fg = n - 90; bold = true; }
+            });
+            span();
+            i += m[0].length;
+            continue;
+        }
+        const ch = s[i++];
+        out += ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[ch]) || ch;
+    }
+    flush();
+    return out;
+}
+
+function setGeometry(geo) {
+    previewGeometry = geo;
+    document.querySelectorAll('#geometryTabs button').forEach(b => b.classList.toggle('active', b.dataset.geo === geo));
+    previewConfig();
+}
+
+function previewConfig() {
+    const btn = document.getElementById('previewBtn');
+    btn.disabled = true;
+    fetch('/admin/api/terminal-navigation/preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ json: document.getElementById('configEditor').value, geometry: previewGeometry })
+    })
+        .then(r => r.json())
+        .then(data => {
+            document.getElementById('previewCard').style.display = '';
+            if (!data.valid) {
+                renderErrors(data.errors);
+                document.getElementById('previewPane').textContent =
+                    uiT('ui.admin.terminal_navigation.preview_invalid', 'Fix the definition errors to preview.');
+                setStatus(uiT('ui.admin.terminal_navigation.status_has_errors', 'Definition has errors'), 'danger');
+                return;
+            }
+            renderErrors([]);
+            document.getElementById('previewPane').innerHTML = ansiToHtml(data.ansi || '');
+            setStatus(uiT('ui.admin.terminal_navigation.status_previewed', 'Preview rendered at') + ' ' + data.geometry, 'muted');
+        })
+        .catch(() => setStatus(uiT('ui.admin.terminal_navigation.status_preview_failed', 'Preview request failed'), 'danger'))
         .finally(() => { btn.disabled = false; });
 }
 

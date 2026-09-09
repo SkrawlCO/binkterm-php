@@ -5695,4 +5695,10 @@ Vous pouvez envoyer des rappels individuels en utilisant les boutons « Rappeler
     'ui.admin_users.risk_not_screened' => 'non filtrée',
     'ui.admin_users.risk_not_screened_help' => 'Cette inscription est antérieure à l\'activation du filtrage des inscriptions, ou le filtrage était désactivé à ce moment-là.',
     'ui.admin_users.risk_clean' => 'sans risque',
+    'ui.admin.terminal_navigation.preview' => 'Preview',
+    'ui.admin.terminal_navigation.preview_heading' => 'Preview (rendered off-session)',
+    'ui.admin.terminal_navigation.preview_note' => 'Rendered through the same declarative renderer the live terminal uses, with every feature enabled. Colours are approximate; this is a layout preview, not a terminal.',
+    'ui.admin.terminal_navigation.preview_invalid' => 'Fix the definition errors to preview.',
+    'ui.admin.terminal_navigation.status_previewed' => 'Preview rendered at',
+    'ui.admin.terminal_navigation.status_preview_failed' => 'Preview request failed',
 ];
