@@ -3302,8 +3302,22 @@ class TelnetUtils
         $lastRows = $state['rows'] ?? 24;
         $lastCols = $state['cols'] ?? 80;
 
+        // Shared UTF-8-safe editing contract (append + backspace + delete;
+        // mid-line cursor left off here so the boxed field's redraw stays
+        // unchanged). Sensitive callers opt out of history by passing no key.
+        $editor   = new \BinktermPHP\TelnetServer\TerminalLineEditor($value, max(1, $maxLength), false);
+        $histKey  = trim((string)($options['history_key'] ?? ''));
+        $histIdx  = 0;
+        $drain    = static function () use ($server, $conn, &$state): void {
+            if (method_exists($server, 'drainPendingInput')) {
+                $server->drainPendingInput($conn, $state);
+            }
+        };
+
         while (true) {
-            $key = $server->readKeyWithIdleCheck($conn, $state);
+            $key = method_exists($server, 'readLineKeyWithIdleCheck')
+                ? $server->readLineKeyWithIdleCheck($conn, $state)
+                : $server->readKeyWithIdleCheck($conn, $state);
 
             $newRows = $state['rows'] ?? $lastRows;
             $newCols = $state['cols'] ?? $lastCols;
@@ -3319,36 +3333,41 @@ class TelnetUtils
             }
 
             if ($key === null) {
+                $drain();
                 return null;
             }
 
-            if ($key === 'ENTER') {
+            if ($histKey !== '' && ($key === 'UP' || $key === 'DOWN')) {
+                [$histIdx, $recalled] = \BinktermPHP\TelnetServer\TerminalLineHistory::step(
+                    $state,
+                    $histKey,
+                    $histIdx,
+                    $key === 'UP' ? 1 : -1
+                );
+                $editor->setValue($recalled ?? '');
+                $value = $editor->value();
+                $render();
+                continue;
+            }
+
+            $result = $editor->apply($key);
+            $value  = $editor->value();
+
+            if ($result === \BinktermPHP\TelnetServer\TerminalLineEditor::RESULT_SUBMIT) {
                 self::safeWrite($conn, "\033[?25l");
+                $drain();
+                if ($histKey !== '') {
+                    \BinktermPHP\TelnetServer\TerminalLineHistory::push($state, $histKey, $value);
+                }
                 return $value;
             }
-
-            // ESC (bare) returns '' — treat as cancel, along with Ctrl+C
-            if ($key === '' || $key === 'CTRL_C') {
+            if ($result === \BinktermPHP\TelnetServer\TerminalLineEditor::RESULT_CANCEL) {
                 self::safeWrite($conn, "\033[?25l");
+                $drain();
                 return null;
             }
 
-            if ($key === 'BACKSPACE' || $key === 'DELETE') {
-                if ($value !== '') {
-                    $value = mb_substr($value, 0, mb_strlen($value) - 1);
-                    $render();
-                }
-                continue;
-            }
-
-            if (str_starts_with($key, 'CHAR:')) {
-                $char = substr($key, 5);
-                if (mb_strlen($value) < $maxLength && $char !== '') {
-                    $value .= $char;
-                    $render();
-                }
-                continue;
-            }
+            $render();
         }
     }
 

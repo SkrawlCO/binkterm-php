@@ -1,0 +1,234 @@
+<?php
+
+declare(strict_types=1);
+
+require_once __DIR__ . '/../../telnet/src/OutputSink.php';
+require_once __DIR__ . '/../../telnet/src/SocketSink.php';
+require_once __DIR__ . '/../../telnet/src/BufferSink.php';
+require_once __DIR__ . '/../../telnet/src/GlyphPolicy.php';
+require_once __DIR__ . '/../../telnet/src/TerminalCapabilities.php';
+require_once __DIR__ . '/../../telnet/src/TerminalRenderContext.php';
+require_once __DIR__ . '/../../telnet/src/TelnetUtils.php';
+require_once __DIR__ . '/../../telnet/src/TerminalBoxRenderer.php';
+require_once __DIR__ . '/../../telnet/src/BbsSession.php';
+require_once __DIR__ . '/../../telnet/src/TerminalLineEditor.php';
+require_once __DIR__ . '/../../telnet/src/TerminalLineHistory.php';
+require_once __DIR__ . '/../../telnet/src/TerminalShellInterface.php';
+require_once __DIR__ . '/../../telnet/src/TuiShell.php';
+require_once __DIR__ . '/../../telnet/src/LineShell.php';
+require_once __DIR__ . '/../../telnet/src/TerminalShellFactory.php';
+
+use BinktermPHP\I18n\Translator;
+use BinktermPHP\TelnetServer\BbsSession;
+use BinktermPHP\TelnetServer\LineShell;
+use BinktermPHP\TelnetServer\SocketSink;
+use BinktermPHP\TelnetServer\TerminalCapabilities;
+use BinktermPHP\TelnetServer\TerminalRenderContext;
+use PHPUnit\Framework\TestCase;
+
+/**
+ * End-to-end input-pipeline behaviour: real {@see BbsSession} readers driven over
+ * a socket pair. Covers the burst / paste / CR-LF / UTF-8 / drain-on-submit
+ * correctness the shared line editor and {@see BbsSession::drainPendingInput()}
+ * are there to guarantee.
+ */
+final class TerminalLineInputPipelineTest extends TestCase
+{
+    /** @var resource */
+    private $srv;
+    /** @var resource */
+    private $cli;
+    private BbsSession $bbs;
+    private array $state;
+
+    protected function setUp(): void
+    {
+        [$this->srv, $this->cli] = stream_socket_pair(STREAM_PF_UNIX, STREAM_SOCK_STREAM, 0);
+        stream_set_blocking($this->srv, false);
+        stream_set_blocking($this->cli, false);
+
+        $this->bbs = new BbsSession($this->srv, 'http://127.0.0.1', false, false, false, false);
+        $caps = TerminalCapabilities::unknown()->withCharsetSupport(TerminalCapabilities::CHARSET_UTF8);
+        $ctx  = new TerminalRenderContext(new SocketSink($this->srv), $caps, 80, 24, 'utf8', true, false, [], 'en', new Translator());
+        foreach (['renderContext' => $ctx, 'capabilities' => $caps] as $p => $v) {
+            $r = new \ReflectionProperty($this->bbs, $p);
+            $r->setAccessible(true);
+            $r->setValue($this->bbs, $v);
+        }
+        $this->state = [
+            'input_echo' => true, 'cols' => 80, 'rows' => 24, 'locale' => 'en', 'pushback' => '',
+            'last_activity' => time(), 'idle_warned' => false,
+            'idle_warning_timeout' => 300, 'idle_disconnect_timeout' => 420,
+            'term_shell_mode' => 'line',
+        ];
+    }
+
+    protected function tearDown(): void
+    {
+        @fclose($this->srv);
+        @fclose($this->cli);
+    }
+
+    private function client(string $bytes): void
+    {
+        fwrite($this->cli, $bytes);
+        fflush($this->cli);
+    }
+
+    /** Bytes still queued on the server side right now. */
+    private function pendingServerBytes(): string
+    {
+        $out = '';
+        while (($chunk = @fread($this->srv, 4096)) !== false && $chunk !== '') {
+            $out .= $chunk;
+        }
+
+        return $out;
+    }
+
+    // ===== BbsSession::readTelnetLine (legacy prompt path: login, registration) =====
+
+    public function testPlainLineReadsUntilTheTerminator(): void
+    {
+        $this->client("hello\r\n");
+        self::assertSame('hello', $this->bbs->readLineWithIdleCheck($this->srv, $this->state));
+    }
+
+    public function testUtf8LineIsPreservedNotDropped(): void
+    {
+        $this->client("caf\u{00E9} \u{4E2D}\u{6587}\r\n");
+        self::assertSame("caf\u{00E9} \u{4E2D}\u{6587}", $this->bbs->readLineWithIdleCheck($this->srv, $this->state));
+    }
+
+    public function testMultilinePasteDoesNotLeakPastTheFirstLine(): void
+    {
+        // A paste of three lines into a single prompt: the reader returns the
+        // first line and drains the rest so it cannot run against the next
+        // screen / prompt / password field.
+        $this->client("line one\r\nrm -rf everything\r\nsecretpw\r\n");
+
+        self::assertSame('line one', $this->bbs->readLineWithIdleCheck($this->srv, $this->state));
+        self::assertSame('', $this->state['pushback'], 'pushback cleared');
+        self::assertSame('', $this->pendingServerBytes(), 'nothing left queued on the socket');
+    }
+
+    public function testCrLfDoesNotProduceAPhantomEmptySecondLine(): void
+    {
+        $this->client("value\r\n");
+        self::assertSame('value', $this->bbs->readLineWithIdleCheck($this->srv, $this->state));
+
+        // A second prompt immediately after must block for real input, not eat a
+        // stray LF as an empty submit.
+        $this->client("second\r\n");
+        self::assertSame('second', $this->bbs->readLineWithIdleCheck($this->srv, $this->state));
+    }
+
+    public function testBackspaceIsUtf8SafeInTheLegacyReader(): void
+    {
+        // c-a-f-e-acute, then one backspace, then x, then Enter => cafx
+        $this->client("caf\u{00E9}\x7fx\r\n");
+        self::assertSame('cafx', $this->bbs->readLineWithIdleCheck($this->srv, $this->state));
+    }
+
+    public function testCtrlCDrainsAndReturnsNull(): void
+    {
+        $this->client("junk\x03more junk queued\r\n");
+        self::assertNull($this->bbs->readLineWithIdleCheck($this->srv, $this->state));
+        self::assertSame('', $this->pendingServerBytes());
+    }
+
+    // ===== readRawChar UTF-8 reassembly =====
+
+    public function testReadRawCharReassemblesAUtf8Codepoint(): void
+    {
+        $this->client("\u{00E9}");
+        $c = $this->bbs->readRawChar($this->srv, $this->state);
+        self::assertSame("\u{00E9}", $c);
+        self::assertSame(2, strlen((string) $c), 'two bytes, one character');
+    }
+
+    public function testReadKeyWithTimeoutEmitsAUtf8CharToken(): void
+    {
+        $this->client("\u{4E2D}");
+        [$key, $timedOut, $disc] = $this->bbs->readKeyWithTimeout($this->srv, $this->state, 50);
+        self::assertFalse($timedOut);
+        self::assertFalse($disc);
+        self::assertSame("CHAR:\u{4E2D}", $key);
+    }
+
+    public function testTruncatedUtf8LeadByteDoesNotHang(): void
+    {
+        // Lead byte with no continuation: return the lead byte alone, fast.
+        $this->client("\xC3");
+        $t0 = microtime(true);
+        $c  = $this->bbs->readRawChar($this->srv, $this->state);
+        self::assertLessThan(0.5, microtime(true) - $t0, 'bounded by the 50ms continuation peek');
+        self::assertSame("\xC3", $c);
+    }
+
+    // ===== drainPendingInput =====
+
+    public function testDrainPendingInputIsNonBlockingAndClearsQueuedBytes(): void
+    {
+        $this->client(str_repeat("xyz\r\n", 200));
+        $t0 = microtime(true);
+        $this->bbs->drainPendingInput($this->srv, $this->state);
+        self::assertLessThan(1.0, microtime(true) - $t0);
+        self::assertSame('', $this->state['pushback']);
+        self::assertSame('', $this->pendingServerBytes());
+    }
+
+    public function testDrainDoesNotWaitForInputThatHasNotArrivedYet(): void
+    {
+        $t0 = microtime(true);
+        $this->bbs->drainPendingInput($this->srv, $this->state); // nothing queued
+        self::assertLessThan(0.2, microtime(true) - $t0);
+    }
+
+    // ===== LineShell::readPromptLine (modern line prompt) =====
+
+    private function lineShell(): LineShell
+    {
+        return new LineShell($this->bbs);
+    }
+
+    private function invokePromptLine(string $prompt, bool $echo): ?string
+    {
+        $m = new \ReflectionMethod(LineShell::class, 'readPromptLine');
+        $m->setAccessible(true);
+        $shell = $this->lineShell();
+        $srv   = $this->srv;
+        $args  = [$srv, &$this->state, $prompt, $echo, null];
+
+        return $m->invokeArgs($shell, $args);
+    }
+
+    public function testLineShellPromptIsUtf8SafeAndCrLfClean(): void
+    {
+        $this->client("caf\u{00E9}\r\n");
+        self::assertSame("caf\u{00E9}", $this->invokePromptLine('> ', true));
+
+        $this->client("again\r\n");
+        self::assertSame('again', $this->invokePromptLine('> ', true), 'no phantom empty line from the earlier CRLF');
+    }
+
+    public function testLineShellPromptDrainsAMultilinePaste(): void
+    {
+        $this->client("first\nSECOND SHOULD NOT RUN\n");
+        self::assertSame('first', $this->invokePromptLine('cmd> ', true));
+        self::assertSame('', $this->pendingServerBytes());
+        self::assertSame('', $this->state['pushback']);
+    }
+
+    public function testLineShellPasswordPromptMasksAndKeepsNoHistory(): void
+    {
+        $this->state['line_prompt_history_key'] = 'should_be_ignored_when_sensitive';
+        $this->client("hunter2\r\n");
+        self::assertSame('hunter2', $this->invokePromptLine('Password: ', false));
+        self::assertArrayNotHasKey('line_history', $this->state, 'a masked prompt never records history');
+
+        // Echo must not contain the cleartext password.
+        $echo = $this->pendingServerBytes(); // whatever is left (should be nothing)
+        self::assertStringNotContainsString('hunter2', $echo);
+    }
+}
