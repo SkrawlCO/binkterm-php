@@ -27,7 +27,7 @@ use BinktermPHP\Newscan\UnifiedNewscanService;
  */
 final class NewscanHandler
 {
-    private UnifiedNewscanService $service;
+    private ?UnifiedNewscanService $service;
 
     public function __construct(
         private readonly BbsSession $server,
@@ -37,7 +37,15 @@ final class NewscanHandler
         private readonly BulletinsHandler $bulletins,
         ?UnifiedNewscanService $service = null,
     ) {
-        $this->service = $service ?? new UnifiedNewscanService();
+        // Lazy: this handler is constructed for every terminal session, but the
+        // service opens a database connection and builds a MessageHandler, so it
+        // is only created when the caller actually opens the scan.
+        $this->service = $service;
+    }
+
+    private function service(): UnifiedNewscanService
+    {
+        return $this->service ??= new UnifiedNewscanService();
     }
 
     public function show($conn, array &$state, string $session): void
@@ -48,7 +56,7 @@ final class NewscanHandler
             'is_admin' => !empty($state['is_admin']),
         ];
 
-        $plan = $this->service->plan($user);
+        $plan = $this->service()->plan($user);
         $this->server->logAction($state['username'] ?? 'unknown', sprintf(
             'Newscan: %d netmail, %d echomail across %d area(s), %d bulletin(s)%s',
             $plan->netmailCount(),
@@ -116,7 +124,7 @@ final class NewscanHandler
 
             if ($choice === 'b') {
                 $this->bulletins->showUnread($conn, $state, $session);
-                $plan = $this->service->plan($user);
+                $plan = $this->service()->plan($user);
                 if ($plan->isEmpty()) {
                     return;
                 }
@@ -125,7 +133,7 @@ final class NewscanHandler
 
             // 'r' — traverse the message queue.
             $outcome = $this->traverse($conn, $state, $session, $plan, $locale);
-            $plan = $this->service->plan($user);
+            $plan = $this->service()->plan($user);
 
             if ($outcome === 'quit' || $plan->isEmpty()) {
                 if ($plan->isEmpty()) {

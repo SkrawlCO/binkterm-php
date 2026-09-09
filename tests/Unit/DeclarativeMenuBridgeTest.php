@@ -279,16 +279,27 @@ final class DeclarativeMenuBridgeTest extends TestCase
         self::assertSame('sess', $spy->calls[0]['session']);
     }
 
-    public function testNewscanActionIsBoundViaAClosure(): void
+    public function testNewscanActionDispatchesFromASubmenuThroughTheRealRuntime(): void
     {
-        // BbsSession maps 'newscan' to a closure (NewscanHandler::show), like
-        // echomail — the bridge must invoke it when the item is selected.
+        // Mirrors the LIVE l33test.frontdoor shape: `newscan` is NOT a root item,
+        // it is the first item of the `messages` submenu, reached by navigating
+        // root -> [M]essages -> [A] What's New. BbsSession maps 'newscan' to a
+        // closure (NewscanHandler::show), exactly as it maps 'echomail'. The
+        // earlier version of this test put newscan at the root and so never
+        // exercised the submenu -> action -> invoke path that failed live.
         $def = [
-            'schema' => 1, 'id' => 'newscan.test', 'root' => 'main',
-            'nodes' => [['id' => 'main', 'label_fallback' => 'Main', 'items' => [
-                ['id' => 'a', 'label_fallback' => "What's New", 'hotkey' => 'a', 'action' => 'newscan'],
-                ['id' => 'q', 'label_fallback' => 'Quit', 'hotkey' => 'q', 'action' => 'quit'],
-            ]]],
+            'schema' => 1, 'id' => 'newscan.submenu.test', 'root' => 'root',
+            'nodes' => [
+                ['id' => 'root', 'label_fallback' => 'Main', 'items' => [
+                    ['id' => 'messages', 'label_fallback' => 'Messages', 'hotkey' => 'm', 'submenu' => 'messages'],
+                    ['id' => 'q', 'label_fallback' => 'Quit', 'hotkey' => 'q', 'action' => 'quit'],
+                ]],
+                ['id' => 'messages', 'label_fallback' => 'Messages', 'items' => [
+                    ['id' => 'whatsnew', 'label_fallback' => "What's New", 'hotkey' => 'a', 'action' => 'newscan',
+                     'description_fallback' => 'Everything new since your last visit.'],
+                    ['id' => 'netmail', 'label_fallback' => 'Netmail', 'hotkey' => 'n', 'action' => 'netmail'],
+                ]],
+            ],
         ];
         $path = sys_get_temp_dir() . '/navbridge_newscan_' . bin2hex(random_bytes(5)) . '.json';
         file_put_contents($path, json_encode($def));
@@ -302,23 +313,45 @@ final class DeclarativeMenuBridgeTest extends TestCase
         $bridge  = new DeclarativeMenuBridge($session);
 
         $conn = fopen('php://temp', 'r+');
-        fwrite($conn, 'a'); // select What's New
+        fwrite($conn, 'ma'); // [M]essages then [A] What's New
         rewind($conn);
         $state = ['username' => 'alice', 'is_admin' => false, 'locale' => 'en', 'cols' => 80, 'rows' => 24, 'pushback' => '', 'last_activity' => time(), 'idle_warned' => false, 'idle_warning_timeout' => 300, 'idle_disconnect_timeout' => 420];
 
         $spy = new class {
             public int $calls = 0;
+            public array $args = [];
             public function show($conn, array &$state, string $session): void
             {
                 $this->calls++;
+                $this->args[] = $session;
             }
         };
 
-        $bridge->run($conn, $state, 'sess', [
+        // The handler map is built EXACTLY as BbsSession::handle() builds it:
+        // 'newscan' => fn () => $newscanHandler->show($conn, $state, $session)
+        $handled = $bridge->run($conn, $state, 'sess', [
             'newscan' => fn () => $spy->show($conn, $state, 'sess'),
+            'netmail' => fn () => null,
         ]);
 
-        self::assertSame(1, $spy->calls, 'the newscan action launched exactly once');
+        self::assertTrue($handled, 'the declarative runtime ran');
+        self::assertSame(1, $spy->calls, 'newscan dispatched once from inside the Messages submenu');
+        self::assertSame(['sess'], $spy->args);
+    }
+
+    public function testNewscanIsARegisteredAvailableActionInAFreshRuntimeRegistry(): void
+    {
+        // The live-failure candidate "action registered but unavailable / not in
+        // the registry the runtime uses". The bridge builds its registry from
+        // TerminalActionCatalog::defaultRegistry() on every run.
+        $registry = \BinktermPHP\Terminal\Navigation\TerminalActionCatalog::defaultRegistry();
+        self::assertTrue($registry->has('newscan'), 'newscan is in the default action registry');
+        self::assertFalse($registry->get('newscan')->terminates);
+
+        $authed = new \BinktermPHP\Terminal\Navigation\AccessContext(
+            true, false, false, static fn () => false, static fn () => false, []
+        );
+        self::assertTrue($registry->isAvailable('newscan', $authed), 'newscan is available to any authenticated caller');
     }
 
     public function testAMappedHandlerWithNoShowMethodLeavesTheActionInert(): void
