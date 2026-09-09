@@ -22,6 +22,14 @@ class NetmailHandler
     private string $apiBase;
 
     /**
+     * Canonical message service, lazily constructed. Used for the high-frequency
+     * message-list read path that would otherwise make a serial localhost HTTP
+     * round trip per navigation keystroke. Same service GET /api/messages/netmail
+     * calls.
+     */
+    private ?\BinktermPHP\MessageHandler $messageService = null;
+
+    /**
      * Create a new NetmailHandler instance
      *
      * @param BbsSession $server The telnet server instance for I/O operations
@@ -31,6 +39,11 @@ class NetmailHandler
     {
         $this->server = $server;
         $this->apiBase = $apiBase;
+    }
+
+    protected function messageService(): \BinktermPHP\MessageHandler
+    {
+        return $this->messageService ??= new \BinktermPHP\MessageHandler();
     }
 
     /**
@@ -77,7 +90,7 @@ class NetmailHandler
         $selectedMessageIds = [];
 
         while (true) {
-            [$messages, $totalPages] = $this->fetchMessagesPage($session, $page, $perPage, $folder, $sort);
+            [$messages, $totalPages] = $this->fetchMessagesPage($session, $page, $perPage, $folder, $sort, (int)($state['user_id'] ?? 0));
 
             if (!$messages) {
                 if ($page > 1 && $totalPages > 0) {
@@ -660,7 +673,7 @@ class NetmailHandler
     private function displayMessage($conn, array &$state, string $session, int $page, int $perPage, int $totalPages, int $index, string $folder = 'inbox', string $sort = 'date_desc'): array
     {
         while (true) {
-            [$messages, $totalPages] = $this->fetchMessagesPage($session, $page, $perPage, $folder, $sort);
+            [$messages, $totalPages] = $this->fetchMessagesPage($session, $page, $perPage, $folder, $sort, (int)($state['user_id'] ?? 0));
             $msg = $messages[$index] ?? null;
             if (!$msg) {
                 return [$page, 0];
@@ -935,21 +948,27 @@ class NetmailHandler
      * @param string $folder 'inbox' or 'sent'
      * @return array [messages, totalPages]
      */
-    protected function fetchMessagesPage(string $session, int $page, int $perPage, string $folder = 'inbox', string $sort = 'date_desc'): array
+    protected function fetchMessagesPage(string $session, int $page, int $perPage, string $folder = 'inbox', string $sort = 'date_desc', int $userId = 0): array
     {
         $filter = $folder === 'sent' ? 'sent' : 'all';
         $sort = $this->normalizeSort($sort);
-        $response = TelnetUtils::apiRequest(
-            $this->apiBase,
-            'GET',
-            '/api/messages/netmail?page=' . $page . '&per_page=' . $perPage . '&filter=' . $filter . '&sort=' . urlencode($sort),
+
+        // Same work GET /api/messages/netmail performs: the canonical
+        // MessageHandler service with the per-user page size (limit=null), then
+        // the terminal's own per_page slice. Direct call removes a localhost
+        // HTTP round trip per list/reader navigation.
+        $result = $this->messageService()->getNetmail(
+            $userId > 0 ? $userId : null,
+            max(1, $page),
             null,
-            $session
+            $filter,
+            false,
+            $sort
         );
-        $allMessages = $response['data']['messages'] ?? [];
-        $pagination = $response['data']['pagination'] ?? [];
-        $totalPages = $pagination['pages'] ?? 1;
-        $messages = array_slice($allMessages, 0, $perPage);
+
+        $allMessages = $result['messages'] ?? [];
+        $totalPages  = $result['pagination']['pages'] ?? 1;
+        $messages    = array_slice($allMessages, 0, $perPage);
 
         return [$messages, (int)$totalPages];
     }

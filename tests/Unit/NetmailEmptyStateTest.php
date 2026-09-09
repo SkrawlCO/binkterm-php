@@ -247,7 +247,7 @@ final class RecordingNetmailHandler extends NetmailHandler
         parent::__construct($server, $apiBase);
     }
 
-    protected function fetchMessagesPage(string $session, int $page, int $perPage, string $folder = 'inbox', string $sort = 'date_desc'): array
+    protected function fetchMessagesPage(string $session, int $page, int $perPage, string $folder = 'inbox', string $sort = 'date_desc', int $userId = 0): array
     {
         $this->fetchFolders[] = $folder;
 

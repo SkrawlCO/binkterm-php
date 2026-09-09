@@ -22,6 +22,14 @@ class EchomailHandler
     private string $apiBase;
 
     /**
+     * Canonical message service, lazily constructed. Used for high-frequency
+     * read paths (message list pages) that would otherwise make a serial
+     * localhost HTTP round trip per navigation keystroke. Same service the
+     * matching `/api/messages/echomail/...` routes call.
+     */
+    private ?\BinktermPHP\MessageHandler $messageService = null;
+
+    /**
      * Create a new EchomailHandler instance
      *
      * @param BbsSession $server The telnet server instance for I/O operations
@@ -31,6 +39,11 @@ class EchomailHandler
     {
         $this->server = $server;
         $this->apiBase = $apiBase;
+    }
+
+    private function messageService(): \BinktermPHP\MessageHandler
+    {
+        return $this->messageService ??= new \BinktermPHP\MessageHandler();
     }
 
     /**
@@ -1176,7 +1189,7 @@ class EchomailHandler
         $selectedMessageIds = [];
 
         while (true) {
-            [$messages, $totalPages] = $this->fetchMessagesPage($session, $area, $page, $perPage, $sort);
+            [$messages, $totalPages] = $this->fetchMessagesPage($session, $area, $page, $perPage, $sort, (int)($state['user_id'] ?? 0));
 
             if (!$messages) {
                 if ($page > 1 && $totalPages > 0) {
@@ -1740,7 +1753,7 @@ class EchomailHandler
     {
         $shell = TerminalShellFactory::create($this->server, $state);
         while (true) {
-            [$messages, $totalPages] = $this->fetchMessagesPage($session, $area, $page, $perPage, $sort);
+            [$messages, $totalPages] = $this->fetchMessagesPage($session, $area, $page, $perPage, $sort, (int)($state['user_id'] ?? 0));
             $msg = $messages[$index] ?? null;
             if (!$msg) {
                 return [$page, 0];
@@ -2436,22 +2449,49 @@ class EchomailHandler
      *
      * @return array [messages, totalPages]
      */
-    private function fetchMessagesPage(string $session, string $area, int $page, int $perPage, string $sort): array
+    protected function fetchMessagesPage(string $session, string $area, int $page, int $perPage, string $sort, int $userId): array
     {
         $sort = $this->normalizeSort($sort);
-        $response = TelnetUtils::apiRequest(
-            $this->apiBase,
-            'GET',
-            '/api/messages/echomail/' . urlencode($area) . '?page=' . $page . '&per_page=' . $perPage . '&sort=' . urlencode($sort),
+        [$tag, $domain] = array_pad(explode('@', $area, 2), 2, '');
+
+        // Same work GET /api/messages/echomail/{echoarea} performs: the canonical
+        // MessageHandler service (subscription check disabled, per-user page size
+        // via limit=null), the terminal's own per_page slice, and the area-view
+        // activity record the route writes. Calling it directly removes one
+        // localhost HTTP round trip per list/reader navigation.
+        $result = $this->messageService()->getEchomail(
+            $tag,
+            $domain,
+            max(1, $page),
             null,
-            $session
+            $userId > 0 ? $userId : null,
+            'all',
+            false,
+            false,
+            $sort
         );
-        $allMessages = $response['data']['messages'] ?? [];
-        $pagination = $response['data']['pagination'] ?? [];
-        $totalPages = $pagination['pages'] ?? 1;
-        $messages = array_slice($allMessages, 0, $perPage);
+        $this->trackAreaView($userId > 0 ? $userId : null, $tag);
+
+        $allMessages = $result['messages'] ?? [];
+        $totalPages  = $result['pagination']['pages'] ?? 1;
+        $messages    = array_slice($allMessages, 0, $perPage);
 
         return [$messages, (int)$totalPages];
+    }
+
+    /**
+     * Record an echoarea-view in the activity log, mirroring the side effect of
+     * the GET /api/messages/echomail/{echoarea} route. Isolated so the network-
+     * free read path can be exercised in tests without a DB write.
+     */
+    protected function trackAreaView(?int $userId, string $tag): void
+    {
+        \BinktermPHP\ActivityTracker::track(
+            $userId,
+            \BinktermPHP\ActivityTracker::TYPE_ECHOMAIL_AREA_VIEW,
+            null,
+            $tag
+        );
     }
 
     /**
