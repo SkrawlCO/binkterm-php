@@ -643,8 +643,7 @@ class ChatHandler
 
     private function restoreSavedTarget(array &$chat, string $session, array &$state): bool
     {
-        $response = $this->apiRequest('GET', '/api/user/terminal-mail-state', null, $session, $state);
-        $settings = $response['data']['settings'] ?? [];
+        $settings = (new \BinktermPHP\Terminal\TerminalMailState())->load((int)($state['user_id'] ?? 0));
         $rawTarget = $settings['terminal_chat_target'] ?? '';
         if (!is_string($rawTarget) || trim($rawTarget) === '') {
             return false;
@@ -697,13 +696,13 @@ class ChatHandler
             return;
         }
 
-        $this->apiRequest('POST', '/api/user/terminal-mail-state', [
+        (new \BinktermPHP\Terminal\TerminalMailState())->save((int)($state['user_id'] ?? 0), [
             'terminal_chat_target' => [
                 'type' => $type,
                 'id' => $id,
                 'label' => $label,
             ],
-        ], $session, $state);
+        ]);
     }
 
     private function loadConversation(array &$chat, string $session, array &$state, string $type, int $id, ?int $beforeId = null): void

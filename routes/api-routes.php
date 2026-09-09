@@ -10868,23 +10868,16 @@ SimpleRouter::group(['prefix' => '/api'], function() {
     });
 
     // Terminal mail state API endpoints
+    // Thin adapter over BinktermPHP\Terminal\TerminalMailState — the canonical
+    // owner of per-user terminal browser state and its validation. This
+    // endpoint has no web callers; the telnet/SSH daemons use it (and now also
+    // call the service directly to skip the HTTP round trip).
     SimpleRouter::get('/user/terminal-mail-state', function() {
         $user = RouteHelper::requireAuth();
         header('Content-Type: application/json');
 
-        $userId = $user['user_id'] ?? $user['id'] ?? null;
-        $meta = new \BinktermPHP\UserMeta();
-
-        $settings = [
-            'terminal_netmail_page' => $meta->getValue((int)$userId, 'terminal_netmail_page'),
-            'terminal_netmail_selected_message_id' => $meta->getValue((int)$userId, 'terminal_netmail_selected_message_id'),
-            'terminal_netmail_folder' => $meta->getValue((int)$userId, 'terminal_netmail_folder'),
-            'terminal_netmail_sort' => $meta->getValue((int)$userId, 'terminal_netmail_sort'),
-            'terminal_echomail_areas_page' => $meta->getValue((int)$userId, 'terminal_echomail_areas_page'),
-            'terminal_echomail_positions' => $meta->getValue((int)$userId, 'terminal_echomail_positions'),
-            'terminal_echomail_sort' => $meta->getValue((int)$userId, 'terminal_echomail_sort'),
-            'terminal_chat_target' => $meta->getValue((int)$userId, 'terminal_chat_target'),
-        ];
+        $userId = (int)($user['user_id'] ?? $user['id'] ?? 0);
+        $settings = (new \BinktermPHP\Terminal\TerminalMailState())->load($userId);
 
         echo json_encode(['success' => true, 'settings' => $settings]);
     });
@@ -10893,169 +10886,17 @@ SimpleRouter::group(['prefix' => '/api'], function() {
         $user = RouteHelper::requireAuth();
         header('Content-Type: application/json');
 
-        $userId = $user['user_id'] ?? $user['id'] ?? null;
+        $userId = (int)($user['user_id'] ?? $user['id'] ?? 0);
         $body = json_decode(file_get_contents('php://input'), true) ?? [];
         $settings = $body['settings'] ?? $body; // accept both wrapped and flat
-        $meta = new \BinktermPHP\UserMeta();
 
-        $intKeys = [
-            'terminal_netmail_page',
-            'terminal_netmail_selected_message_id',
-            'terminal_echomail_areas_page',
-        ];
+        $result = (new \BinktermPHP\Terminal\TerminalMailState())
+            ->save($userId, is_array($settings) ? $settings : []);
 
-        foreach ($intKeys as $key) {
-            if (!array_key_exists($key, $settings)) {
-                continue;
-            }
-
-            $value = $settings[$key];
-            if ($value === null || $value === '') {
-                $meta->setValue((int)$userId, $key, null);
-                continue;
-            }
-
-            if (!is_numeric($value) || (int)$value < 1) {
-                http_response_code(400);
-                echo json_encode(['success' => false, 'error' => "Invalid value for $key"]);
-                return;
-            }
-
-            $meta->setValue((int)$userId, $key, (string)((int)$value));
-        }
-
-        if (array_key_exists('terminal_echomail_positions', $settings)) {
-            $positions = $settings['terminal_echomail_positions'];
-            if (is_string($positions)) {
-                $decoded = json_decode($positions, true);
-                if (!is_array($decoded)) {
-                    http_response_code(400);
-                    echo json_encode(['success' => false, 'error' => 'Invalid value for terminal_echomail_positions']);
-                    return;
-                }
-                $positions = $decoded;
-            }
-
-            if (!is_array($positions)) {
-                http_response_code(400);
-                echo json_encode(['success' => false, 'error' => 'Invalid value for terminal_echomail_positions']);
-                return;
-            }
-
-            $clean = [];
-            foreach ($positions as $area => $entry) {
-                if (!is_string($area) || trim($area) === '' || strlen($area) > 128 || !is_array($entry)) {
-                    continue;
-                }
-                $page = (int)($entry['page'] ?? 1);
-                if ($page < 1) {
-                    $page = 1;
-                }
-                $selected = $entry['selected_message_id'] ?? null;
-                if ($selected !== null) {
-                    if (!is_numeric($selected) || (int)$selected < 1) {
-                        $selected = null;
-                    } else {
-                        $selected = (int)$selected;
-                    }
-                }
-                $clean[$area] = [
-                    'page' => $page,
-                    'selected_message_id' => $selected,
-                ];
-            }
-
-            $encoded = json_encode($clean);
-            if ($encoded === false || strlen($encoded) > 64000) {
-                http_response_code(400);
-                echo json_encode(['success' => false, 'error' => 'Invalid value for terminal_echomail_positions']);
-                return;
-            }
-            $meta->setValue((int)$userId, 'terminal_echomail_positions', $encoded);
-        }
-
-        if (array_key_exists('terminal_echomail_sort', $settings)) {
-            $sort = $settings['terminal_echomail_sort'];
-            if ($sort === null || $sort === '') {
-                $meta->setValue((int)$userId, 'terminal_echomail_sort', null);
-            } elseif (in_array($sort, ['date_desc', 'date_asc', 'subject', 'author'], true)) {
-                $meta->setValue((int)$userId, 'terminal_echomail_sort', $sort);
-            } else {
-                http_response_code(400);
-                echo json_encode(['success' => false, 'error' => 'Invalid value for terminal_echomail_sort']);
-                return;
-            }
-        }
-
-        if (array_key_exists('terminal_netmail_folder', $settings)) {
-            $folder = $settings['terminal_netmail_folder'];
-            if ($folder === null || $folder === '') {
-                $meta->setValue((int)$userId, 'terminal_netmail_folder', null);
-            } elseif (in_array($folder, ['inbox', 'sent'], true)) {
-                $meta->setValue((int)$userId, 'terminal_netmail_folder', $folder);
-            } else {
-                http_response_code(400);
-                echo json_encode(['success' => false, 'error' => 'Invalid value for terminal_netmail_folder']);
-                return;
-            }
-        }
-
-        if (array_key_exists('terminal_netmail_sort', $settings)) {
-            $sort = $settings['terminal_netmail_sort'];
-            if ($sort === null || $sort === '') {
-                $meta->setValue((int)$userId, 'terminal_netmail_sort', null);
-            } elseif (in_array($sort, ['date_desc', 'date_asc', 'subject', 'author'], true)) {
-                $meta->setValue((int)$userId, 'terminal_netmail_sort', $sort);
-            } else {
-                http_response_code(400);
-                echo json_encode(['success' => false, 'error' => 'Invalid value for terminal_netmail_sort']);
-                return;
-            }
-        }
-
-        if (array_key_exists('terminal_chat_target', $settings)) {
-            $target = $settings['terminal_chat_target'];
-            if ($target === null || $target === '') {
-                $meta->setValue((int)$userId, 'terminal_chat_target', null);
-            } elseif (is_string($target)) {
-                $decoded = json_decode($target, true);
-                if (!is_array($decoded)) {
-                    http_response_code(400);
-                    echo json_encode(['success' => false, 'error' => 'Invalid value for terminal_chat_target']);
-                    return;
-                }
-                $target = $decoded;
-            }
-
-            if ($target !== null && $target !== '') {
-                if (!is_array($target)) {
-                    http_response_code(400);
-                    echo json_encode(['success' => false, 'error' => 'Invalid value for terminal_chat_target']);
-                    return;
-                }
-
-                $type = (string)($target['type'] ?? '');
-                $id = (int)($target['id'] ?? 0);
-                $label = trim((string)($target['label'] ?? ''));
-                if (($type !== 'room' && $type !== 'dm') || $id < 1 || $label === '' || strlen($label) > 255) {
-                    http_response_code(400);
-                    echo json_encode(['success' => false, 'error' => 'Invalid value for terminal_chat_target']);
-                    return;
-                }
-
-                $encoded = json_encode([
-                    'type' => $type,
-                    'id' => $id,
-                    'label' => $label,
-                ]);
-                if ($encoded === false) {
-                    http_response_code(400);
-                    echo json_encode(['success' => false, 'error' => 'Invalid value for terminal_chat_target']);
-                    return;
-                }
-
-                $meta->setValue((int)$userId, 'terminal_chat_target', $encoded);
-            }
+        if (!$result['ok']) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'error' => $result['error']]);
+            return;
         }
 
         echo json_encode(['success' => true]);

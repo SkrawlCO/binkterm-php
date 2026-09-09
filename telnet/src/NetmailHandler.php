@@ -32,6 +32,9 @@ class NetmailHandler
     /** Network-free equivalent of the `GET /api/messages/netmail/{id}` fetch. */
     private ?TerminalMessageService $detailService = null;
 
+    /** Canonical owner of the per-user terminal browser state (page/folder/sort). */
+    private ?\BinktermPHP\Terminal\TerminalMailState $mailState = null;
+
     /**
      * Create a new NetmailHandler instance
      *
@@ -52,6 +55,11 @@ class NetmailHandler
     protected function detailService(): TerminalMessageService
     {
         return $this->detailService ??= new TerminalMessageService($this->messageService());
+    }
+
+    protected function mailState(): \BinktermPHP\Terminal\TerminalMailState
+    {
+        return $this->mailState ??= new \BinktermPHP\Terminal\TerminalMailState();
     }
 
     /**
@@ -86,7 +94,7 @@ class NetmailHandler
                 }
             }
         }
-        $savedState = $this->loadSavedListState($session);
+        $savedState = $this->loadSavedListState((int)($state['user_id'] ?? 0));
         $page          = $savedState['page'];
         $perPage       = MailUtils::getMessagesPerPage($state);
         $selectedIndex = 0;
@@ -124,7 +132,7 @@ class NetmailHandler
                     $folder = 'inbox';
                     $page   = 1;
                     $selectedIndex = 0;
-                    $this->saveListState($session, $page, null, $folder, $sort, $state['csrf_token'] ?? null);
+                    $this->saveListState((int)($state['user_id'] ?? 0), $page, null, $folder, $sort);
                     continue;
                 }
 
@@ -220,7 +228,7 @@ class NetmailHandler
             $result = $shell->showMessageList($conn, $state, $title, $displayMessages, $page, $totalPages, $selectedIndex, $extraKeys, $extraStatusSegments, $multiSelectOptions, $helpItems);
             $selectedIndex = $result['selectedIndex'];
             $currentSelectedId = isset($messages[$selectedIndex]['id']) ? (int)$messages[$selectedIndex]['id'] : null;
-            $this->saveListState($session, $page, $currentSelectedId, $folder, $sort, $state['csrf_token'] ?? null);
+            $this->saveListState((int)($state['user_id'] ?? 0), $page, $currentSelectedId, $folder, $sort);
 
             switch ($result['action']) {
                 case 'disconnect':
@@ -245,7 +253,7 @@ class NetmailHandler
                         $page = 1;
                         $selectedIndex = 0;
                         $selectedMessageId = null;
-                        $this->saveListState($session, $page, null, $folder, $sort, $state['csrf_token'] ?? null);
+                        $this->saveListState((int)($state['user_id'] ?? 0), $page, null, $folder, $sort);
                     }
                     break;
                 case 'toggle_folder':
@@ -253,7 +261,7 @@ class NetmailHandler
                     $page               = 1;
                     $selectedIndex      = 0;
                     $selectedMessageIds = [];
-                    $this->saveListState($session, $page, null, $folder, $sort, $state['csrf_token'] ?? null);
+                    $this->saveListState((int)($state['user_id'] ?? 0), $page, null, $folder, $sort);
                     break;
                 case 'toggle_select':
                     $messageId = isset($messages[$result['index']]['id']) ? (int)$messages[$result['index']]['id'] : 0;
@@ -980,17 +988,9 @@ class NetmailHandler
      *
      * @return array{page:int, selected_message_id:?int, folder:string, sort:string}
      */
-    protected function loadSavedListState(string $session): array
+    protected function loadSavedListState(int $userId): array
     {
-        $response = TelnetUtils::apiRequest(
-            $this->apiBase,
-            'GET',
-            '/api/user/terminal-mail-state',
-            null,
-            $session
-        );
-
-        $settings = $response['data']['settings'] ?? [];
+        $settings = $this->mailState()->load($userId);
         $page = (int)($settings['terminal_netmail_page'] ?? 1);
         $selectedId = (int)($settings['terminal_netmail_selected_message_id'] ?? 0);
         $savedFolder = (string)($settings['terminal_netmail_folder'] ?? 'inbox');
@@ -1008,24 +1008,14 @@ class NetmailHandler
     /**
      * Save netmail list state to user meta.
      */
-    protected function saveListState(string $session, int $page, ?int $selectedMessageId, string $folder = 'inbox', string $sort = 'date_desc', ?string $csrfToken = null): void
+    protected function saveListState(int $userId, int $page, ?int $selectedMessageId, string $folder = 'inbox', string $sort = 'date_desc'): void
     {
-        $payload = [
+        $this->mailState()->save($userId, [
             'terminal_netmail_page' => max(1, $page),
             'terminal_netmail_selected_message_id' => $selectedMessageId,
             'terminal_netmail_folder' => $folder,
             'terminal_netmail_sort' => $this->normalizeSort($sort),
-        ];
-
-        TelnetUtils::apiRequest(
-            $this->apiBase,
-            'POST',
-            '/api/user/terminal-mail-state',
-            $payload,
-            $session,
-            3,
-            $csrfToken
-        );
+        ]);
     }
 
     /**

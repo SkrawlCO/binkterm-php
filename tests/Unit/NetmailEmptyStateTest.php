@@ -254,12 +254,12 @@ final class RecordingNetmailHandler extends NetmailHandler
         return $this->pageResult;
     }
 
-    protected function loadSavedListState(string $session): array
+    protected function loadSavedListState(int $userId): array
     {
         return ['page' => 1, 'selected_message_id' => null, 'folder' => 'inbox', 'sort' => 'date_desc'];
     }
 
-    protected function saveListState(string $session, int $page, ?int $selectedMessageId, string $folder = 'inbox', string $sort = 'date_desc', ?string $csrfToken = null): void
+    protected function saveListState(int $userId, int $page, ?int $selectedMessageId, string $folder = 'inbox', string $sort = 'date_desc'): void
     {
         // no user-meta round-trip in tests
     }

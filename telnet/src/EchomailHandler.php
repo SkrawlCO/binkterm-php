@@ -32,6 +32,9 @@ class EchomailHandler
     /** Network-free equivalent of the `GET /api/messages/echomail/{area}/{id}` fetch. */
     private ?TerminalMessageService $detailService = null;
 
+    /** Canonical owner of the per-user terminal browser state (page positions, sort). */
+    private ?\BinktermPHP\Terminal\TerminalMailState $mailState = null;
+
     /**
      * Create a new EchomailHandler instance
      *
@@ -52,6 +55,11 @@ class EchomailHandler
     protected function detailService(): TerminalMessageService
     {
         return $this->detailService ??= new TerminalMessageService($this->messageService());
+    }
+
+    protected function mailState(): \BinktermPHP\Terminal\TerminalMailState
+    {
+        return $this->mailState ??= new \BinktermPHP\Terminal\TerminalMailState();
     }
 
     /**
@@ -82,7 +90,7 @@ class EchomailHandler
                 }
             }
         }
-        $savedState      = $this->loadSavedListState($session);
+        $savedState      = $this->loadSavedListState((int)($state['user_id'] ?? 0));
         $page            = $savedState['areas_page'];
         $perPage         = MailUtils::getMessagesPerPage($state);
         $showInterestKey = \BinktermPHP\Config::env('ENABLE_INTERESTS') === 'true';
@@ -148,7 +156,7 @@ class EchomailHandler
                 $this->server->t($headerKey, $headerFallback, [], $locale),
                 $showInterestKey,
                 function(int $newPage) use ($session, &$state) {
-                    $this->saveEchoareasPage($session, $newPage, $state['csrf_token'] ?? null);
+                    $this->saveEchoareasPage((int)($state['user_id'] ?? 0), $newPage);
                 },
                 $searchFilter,
                 $allAreasMode,
@@ -1181,7 +1189,7 @@ class EchomailHandler
     {
         $area          = $this->formatEchoareaIdentifier($tag, $domain);
         $this->server->logAction($state['username'] ?? 'unknown', "Echomail: read message list for {$area}");
-        $savedState    = $this->loadSavedListState($session);
+        $savedState    = $this->loadSavedListState((int)($state['user_id'] ?? 0));
         $positions     = $savedState['positions'];
         $sort          = $savedState['sort'];
         $areaPosition  = $positions[$area] ?? null;
@@ -1247,7 +1255,7 @@ class EchomailHandler
             );
             $selectedIndex = $result['selectedIndex'];
             $currentSelectedId = isset($messages[$selectedIndex]['id']) ? (int)$messages[$selectedIndex]['id'] : null;
-            $this->saveEchomailState($session, $positions, $area, $page, $currentSelectedId, $sort, $state['csrf_token'] ?? null);
+            $this->saveEchomailState((int)($state['user_id'] ?? 0), $positions, $area, $page, $currentSelectedId, $sort);
 
             switch ($result['action']) {
                 case 'disconnect':
@@ -1323,7 +1331,7 @@ class EchomailHandler
                     $newSort = $this->promptForSort($conn, $state, $sort, $title, $messages, $selectedIndex);
                     if ($newSort !== $sort) {
                         $sort = $newSort;
-                        $this->saveEchomailState($session, $positions, $area, $page, $currentSelectedId, $sort, $state['csrf_token'] ?? null);
+                        $this->saveEchomailState((int)($state['user_id'] ?? 0), $positions, $area, $page, $currentSelectedId, $sort);
                     }
                     break;
                 case 'search':
@@ -2573,17 +2581,9 @@ class EchomailHandler
      *
      * @return array{areas_page:int, positions:array<string,array{page:int,selected_message_id:?int}>, sort:string}
      */
-    private function loadSavedListState(string $session): array
+    private function loadSavedListState(int $userId): array
     {
-        $response = TelnetUtils::apiRequest(
-            $this->apiBase,
-            'GET',
-            '/api/user/terminal-mail-state',
-            null,
-            $session
-        );
-
-        $settings = $response['data']['settings'] ?? [];
+        $settings = $this->mailState()->load($userId);
         $areasPage = (int)($settings['terminal_echomail_areas_page'] ?? 1);
         $sort = $this->normalizeSort(is_string($settings['terminal_echomail_sort'] ?? null) ? $settings['terminal_echomail_sort'] : null);
         $positionsRaw = $settings['terminal_echomail_positions'] ?? '';
@@ -2622,13 +2622,12 @@ class EchomailHandler
      * Save echomail message-list state (per area).
      */
     private function saveEchomailState(
-        string $session,
+        int $userId,
         array &$positions,
         string $area,
         int $page,
         ?int $selectedMessageId,
-        string $sort,
-        ?string $csrfToken = null
+        string $sort
     ): void
     {
         $positions[$area] = [
@@ -2636,36 +2635,18 @@ class EchomailHandler
             'selected_message_id' => ($selectedMessageId !== null && $selectedMessageId > 0) ? $selectedMessageId : null,
         ];
 
-        $payload = [
+        $this->mailState()->save($userId, [
             'terminal_echomail_positions' => $positions,
             'terminal_echomail_sort' => $this->normalizeSort($sort),
-        ];
-
-        TelnetUtils::apiRequest(
-            $this->apiBase,
-            'POST',
-            '/api/user/terminal-mail-state',
-            $payload,
-            $session,
-            3,
-            $csrfToken
-        );
+        ]);
     }
 
     /**
      * Save current echoarea listing page.
      */
-    private function saveEchoareasPage(string $session, int $page, ?string $csrfToken = null): void
+    private function saveEchoareasPage(int $userId, int $page): void
     {
-        TelnetUtils::apiRequest(
-            $this->apiBase,
-            'POST',
-            '/api/user/terminal-mail-state',
-            ['terminal_echomail_areas_page' => max(1, $page)],
-            $session,
-            3,
-            $csrfToken
-        );
+        $this->mailState()->save($userId, ['terminal_echomail_areas_page' => max(1, $page)]);
     }
 
     /**
