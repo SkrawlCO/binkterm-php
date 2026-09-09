@@ -288,6 +288,11 @@ class LineShell implements TerminalShellInterface
                 return null;
             }
 
+            // Coalesce a paste / type-ahead burst — repaint once it drains.
+            if (method_exists($this->server, 'hasBufferedInput')
+                && $this->server->hasBufferedInput($conn, $state)) {
+                continue;
+            }
             $paintInput();
         }
     }

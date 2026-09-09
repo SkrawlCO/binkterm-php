@@ -166,6 +166,42 @@ final class TerminalLineInputPipelineTest extends TestCase
         self::assertSame("\xC3", $c);
     }
 
+    // ===== bracketed paste (SyncTerm) =====
+
+    public function testBracketedPasteMarkersAreFoldedAwayByReadRawChar(): void
+    {
+        $this->client("\033[200~");
+        self::assertSame("\x00", $this->bbs->readRawChar($this->srv, $this->state));
+
+        $this->client("\033[201~");
+        self::assertSame("\x00", $this->bbs->readRawChar($this->srv, $this->state));
+    }
+
+    public function testReadKeyWithTimeoutTreatsABracketedPasteMarkerAsChatterNotAKeypress(): void
+    {
+        $this->client("\033[200~");
+        [$key, $timedOut] = $this->bbs->readKeyWithTimeout($this->srv, $this->state, 50);
+        // Not an empty 'cancel' token surfaced to a text field — the caller's
+        // loop re-reads.
+        self::assertTrue($timedOut);
+        self::assertSame('', $key);
+    }
+
+    public function testReadTelnetLineAcceptsABracketedPaste(): void
+    {
+        // Exactly what SyncTerm sends on paste: ESC[200~ <text> ESC[201~, then CR.
+        $this->client("\033[200~HELLO PASTE\033[201~\r\n");
+        self::assertSame('HELLO PASTE', $this->bbs->readLineWithIdleCheck($this->srv, $this->state));
+        self::assertSame('', $this->pendingServerBytes());
+    }
+
+    public function testReadTelnetLineBracketedPasteFirstLineOnlyNoLeak(): void
+    {
+        $this->client("\033[200~first line\rSECOND MUST NOT RUN\r\033[201~\r\n");
+        self::assertSame('first line', $this->bbs->readLineWithIdleCheck($this->srv, $this->state));
+        self::assertSame('', $this->pendingServerBytes(), 'the rest of the paste, and the end marker, are drained');
+    }
+
     // ===== drainPendingInput =====
 
     public function testDrainPendingInputIsNonBlockingAndClearsQueuedBytes(): void
@@ -218,6 +254,43 @@ final class TerminalLineInputPipelineTest extends TestCase
         self::assertSame('first', $this->invokePromptLine('cmd> ', true));
         self::assertSame('', $this->pendingServerBytes());
         self::assertSame('', $this->state['pushback']);
+    }
+
+    public function testLineShellPromptAcceptsABracketedPaste(): void
+    {
+        $this->client("\033[200~HELLO PASTE\033[201~\r\n");
+        self::assertSame('HELLO PASTE', $this->invokePromptLine('> ', true));
+        self::assertSame('', $this->pendingServerBytes());
+    }
+
+    public function testShowInputDialogAcceptsABracketedPasteAndDoesNotCancel(): void
+    {
+        // The reported SyncTerm failure: ESC[200~ normalised to '' -> the editor
+        // treated it as cancel -> the whole paste vanished.
+        $this->client("\033[200~search terms here\033[201~\r\n");
+        $out = \BinktermPHP\TelnetServer\TelnetUtils::showInputDialog(
+            $this->srv,
+            $this->state,
+            $this->bbs,
+            'Search',
+            'Find:',
+            '',
+            60,
+            null,
+            [],
+            []
+        );
+        self::assertSame('search terms here', $out);
+    }
+
+    public function testShowInputDialogBracketedPasteWithEmbeddedNewlineKeepsFirstLineNoLeak(): void
+    {
+        $this->client("\033[200~line1\rDROP TABLE users\r\033[201~\r\n");
+        $out = \BinktermPHP\TelnetServer\TelnetUtils::showInputDialog(
+            $this->srv, $this->state, $this->bbs, 'T', 'P', '', 60, null, [], []
+        );
+        self::assertSame('line1', $out);
+        self::assertSame('', $this->pendingServerBytes());
     }
 
     public function testLineShellPasswordPromptMasksAndKeepsNoHistory(): void

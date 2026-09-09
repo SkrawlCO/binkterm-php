@@ -3314,6 +3314,13 @@ class TelnetUtils
             }
         };
 
+        $Editor  = \BinktermPHP\TelnetServer\TerminalLineEditor::class;
+        $History = \BinktermPHP\TelnetServer\TerminalLineHistory::class;
+        $moreBuffered = static function () use ($server, $conn, &$state): bool {
+            return method_exists($server, 'hasBufferedInput')
+                && $server->hasBufferedInput($conn, $state);
+        };
+
         while (true) {
             $key = method_exists($server, 'readLineKeyWithIdleCheck')
                 ? $server->readLineKeyWithIdleCheck($conn, $state)
@@ -3337,13 +3344,14 @@ class TelnetUtils
                 return null;
             }
 
+            // A stray empty token (protocol chatter that slipped through) is a
+            // no-op — never a cancel. Only an explicit Esc / Ctrl-C cancels.
+            if ($key === '') {
+                continue;
+            }
+
             if ($histKey !== '' && ($key === 'UP' || $key === 'DOWN')) {
-                [$histIdx, $recalled] = \BinktermPHP\TelnetServer\TerminalLineHistory::step(
-                    $state,
-                    $histKey,
-                    $histIdx,
-                    $key === 'UP' ? 1 : -1
-                );
+                [$histIdx, $recalled] = $History::step($state, $histKey, $histIdx, $key === 'UP' ? 1 : -1);
                 $editor->setValue($recalled ?? '');
                 $value = $editor->value();
                 $render();
@@ -3353,20 +3361,25 @@ class TelnetUtils
             $result = $editor->apply($key);
             $value  = $editor->value();
 
-            if ($result === \BinktermPHP\TelnetServer\TerminalLineEditor::RESULT_SUBMIT) {
+            if ($result === $Editor::RESULT_SUBMIT) {
                 self::safeWrite($conn, "\033[?25l");
                 $drain();
                 if ($histKey !== '') {
-                    \BinktermPHP\TelnetServer\TerminalLineHistory::push($state, $histKey, $value);
+                    $History::push($state, $histKey, $value);
                 }
                 return $value;
             }
-            if ($result === \BinktermPHP\TelnetServer\TerminalLineEditor::RESULT_CANCEL) {
+            if ($result === $Editor::RESULT_CANCEL) {
                 self::safeWrite($conn, "\033[?25l");
                 $drain();
                 return null;
             }
 
+            // Coalesce a paste / type-ahead burst: keep consuming queued keys
+            // and only redraw once the input has momentarily drained.
+            if ($moreBuffered()) {
+                continue;
+            }
             $render();
         }
     }

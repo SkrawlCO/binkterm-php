@@ -2136,6 +2136,13 @@ class BbsSession
         if ($char === null) {
             return [null, false, true];
         }
+        // Protocol chatter (negotiation, device reports, bracketed-paste
+        // markers) that readRawChar folded away. Not a keypress — let the
+        // caller's loop re-read rather than surfacing an empty token that a
+        // text field would mistake for Esc/cancel.
+        if ($char === "\x00") {
+            return ['', true, false];
+        }
 
         $state['last_activity'] = time();
         $state['idle_warned'] = false;
@@ -3339,6 +3346,9 @@ class BbsSession
 
         $char = $this->readRawChar($conn, $state);
         if ($char === null) { return [null, false, true]; }
+        // Protocol chatter folded away by readRawChar (negotiation, device
+        // reports, bracketed-paste markers) — not a keypress; re-read.
+        if ($char === "\x00") { return ['', true, false]; }
 
         $state['last_activity'] = time();
         $state['idle_warned']   = false;
@@ -4027,6 +4037,26 @@ class BbsSession
      * It never blocks and never waits for new bytes, so genuine typed-ahead
      * input that arrives *after* this call is unaffected.
      */
+    /**
+     * True when another input byte is available *right now* (pushback or the
+     * socket buffer), without blocking. A line-input widget uses this to
+     * coalesce a paste burst: process every queued key first, redraw once,
+     * instead of once per character (a per-char full-box redraw storm makes a
+     * paste look like it vanished on some clients).
+     */
+    public function hasBufferedInput($conn, array &$state): bool
+    {
+        if (($state['pushback'] ?? '') !== '') {
+            return true;
+        }
+        if (!is_resource($conn) || feof($conn)) {
+            return false;
+        }
+        $r = [$conn]; $w = $ex = null;
+
+        return @stream_select($r, $w, $ex, 0, 0) > 0;
+    }
+
     public function drainPendingInput($conn, array &$state): void
     {
         $state['skip_lf_once'] = false;
@@ -4203,6 +4233,14 @@ class BbsSession
                         }
 
                         if ($next === '~') {
+                            // Bracketed-paste markers (DECSET 2004): SyncTerm and
+                            // other modern clients emit ESC[200~ / ESC[201~ around
+                            // a paste even when the server has not enabled the
+                            // mode. Treat them as protocol chatter — the pasted
+                            // characters between them flow through normally.
+                            if ($seq === '200' || $seq === '201') {
+                                return "\x00";
+                            }
                             return chr(27) . '[' . $seq . '~';
                         }
 
