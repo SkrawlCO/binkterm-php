@@ -9,21 +9,35 @@ use BinktermPHP\Config;
  * definition and decides whether the runtime should use it.
  *
  * Zero-config behaviour is the existing menu: the declarative runtime is used
- * ONLY when a definition file exists AND it is explicitly switched on. Either
- * gate missing — or a definition that fails validation — leaves the terminal on
- * the legacy code path. A typo in the file can never break terminal login.
+ * ONLY when the enable flag is on AND a definition file validates clean. Either
+ * gate missing — a bad flag value, a missing/unreadable file, invalid JSON, an
+ * unsupported schema, or any semantic error — leaves the terminal on the legacy
+ * code path. Nothing here throws to its caller.
+ *
+ * Cache semantics: {@see load()} caches the parse result keyed by the file's
+ * path + size + mtime. The telnet/SSH daemons fork one process per connection,
+ * so in normal operation every session re-reads the file anyway; the mtime key
+ * additionally means a non-forking daemon (single-connection / debug mode) still
+ * picks up a replaced file on the next session without a restart. Editing the
+ * file in place while a daemon runs is still best followed by a daemon restart
+ * so all worker behaviour is consistent.
  */
 final class NavigationConfig
 {
     public const DEFAULT_FILENAME = 'terminal_navigation.json';
     public const ENABLE_ENV       = 'TERMINAL_NAV_RUNTIME';
+    public const PATH_ENV         = 'TERMINAL_NAV_CONFIG';
 
     private static ?NavigationLoadResult $cached = null;
-    private static bool $loaded = false;
+    private static ?string $cacheKey = null;
 
     public static function path(): string
     {
-        $configured = (string) Config::env('TERMINAL_NAV_CONFIG', '');
+        try {
+            $configured = (string) Config::env(self::PATH_ENV, '');
+        } catch (\Throwable) {
+            $configured = '';
+        }
         if ($configured !== '') {
             return $configured;
         }
@@ -31,51 +45,88 @@ final class NavigationConfig
         return dirname(__DIR__, 3) . '/config/' . self::DEFAULT_FILENAME;
     }
 
-    /** True only when the file exists and the enable flag is on. */
-    public static function isRuntimeEnabled(): bool
+    /**
+     * Whether the sysop has switched the declarative runtime on. Does not look
+     * at the file — {@see DeclarativeMenuBridge} owns the file diagnostics so a
+     * missing / invalid file is logged rather than silently ignored.
+     */
+    public static function isFlagEnabled(): bool
     {
-        $flag = strtolower(trim((string) Config::env(self::ENABLE_ENV, '')));
-        if (!in_array($flag, ['1', 'on', 'true', 'yes'], true)) {
+        try {
+            $flag = strtolower(trim((string) Config::env(self::ENABLE_ENV, '')));
+        } catch (\Throwable) {
             return false;
         }
 
-        return is_file(self::path());
+        return in_array($flag, ['1', 'on', 'true', 'yes'], true);
+    }
+
+    /** True only when the flag is on AND the file exists. Never throws. */
+    public static function isRuntimeEnabled(): bool
+    {
+        if (!self::isFlagEnabled()) {
+            return false;
+        }
+        try {
+            return is_file(self::path());
+        } catch (\Throwable) {
+            return false;
+        }
     }
 
     /**
-     * Load + validate the configured definition (cached per process). Returns
-     * the {@see NavigationLoadResult} so callers can log the validation errors.
+     * Load + validate the configured definition. Cached, keyed on the file's
+     * path/size/mtime so a replaced file is not served stale.
      */
     public static function load(): NavigationLoadResult
     {
-        if (self::$loaded) {
+        $path = self::path();
+        $key  = self::keyFor($path);
+
+        if (self::$cached !== null && self::$cacheKey === $key) {
             return self::$cached;
         }
-        self::$loaded = true;
-        self::$cached = (new NavigationDefinitionLoader(TerminalActionCatalog::defaultRegistry()))
-            ->fromFile(self::path());
+
+        self::$cacheKey = $key;
+        try {
+            self::$cached = (new NavigationDefinitionLoader(TerminalActionCatalog::defaultRegistry()))
+                ->fromFile($path);
+        } catch (\Throwable $e) {
+            self::$cached = NavigationLoadResult::failed([
+                new ValidationError('load', 'could not load ' . $path . ': ' . $e->getMessage()),
+            ]);
+        }
 
         return self::$cached;
     }
 
     /**
      * The definition to drive the runtime with, or null to stay on the legacy
-     * menu. Only ever non-null when {@see isRuntimeEnabled()} and the file
-     * validates clean.
+     * menu. Non-null only when the flag is on and the file validates clean.
      */
     public static function resolveDefinition(): ?NavigationDefinition
     {
-        if (!self::isRuntimeEnabled()) {
+        if (!self::isFlagEnabled()) {
             return null;
         }
 
         return self::load()->definition();
     }
 
+    private static function keyFor(string $path): string
+    {
+        $stat = @stat($path);
+        if ($stat === false) {
+            return $path . '|absent';
+        }
+
+        return $path . '|' . $stat['size'] . '|' . $stat['mtime'];
+    }
+
     /** Reset the process cache (tests only). */
     public static function reset(): void
     {
-        self::$cached = null;
-        self::$loaded = false;
+        self::$cached   = null;
+        self::$cacheKey = null;
     }
 }

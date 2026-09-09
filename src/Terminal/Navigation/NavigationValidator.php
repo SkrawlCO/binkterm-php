@@ -140,36 +140,62 @@ final class NavigationValidator
     }
 
     /**
+     * Iterative (explicit-stack) DFS cycle detection over submenu links, so a
+     * pathologically long chain in a sysop's file cannot overflow the PHP call
+     * stack.
+     *
      * @param array<int,ValidationError> $errors
      */
     private function checkCycles(NavigationDefinition $def, array &$errors): void
     {
-        $state = []; // id => 1 visiting, 2 done
+        $colour   = []; // id => 1 grey (on the current path), 2 black (done)
         $reported = [];
 
-        $visit = function (string $id, array $trail) use (&$visit, &$state, &$errors, &$reported, $def): void {
-            if (($state[$id] ?? 0) === 2) {
-                return;
+        // Each frame: [id, list<submenu target ids not yet descended>, trail].
+        $stack = [[$def->rootId, $this->submenuTargets($def, $def->rootId), [$def->rootId]]];
+        $colour[$def->rootId] = 1;
+
+        while ($stack !== []) {
+            $top   = count($stack) - 1;
+            [$id, $pending, $trail] = $stack[$top];
+
+            if ($pending === []) {
+                $colour[$id] = 2;
+                array_pop($stack);
+                continue;
             }
-            if (($state[$id] ?? 0) === 1) {
-                $loop = implode(' -> ', array_slice($trail, array_search($id, $trail, true))) . " -> {$id}";
+
+            $child = array_shift($pending);
+            $stack[$top][1] = $pending;
+
+            if (($colour[$child] ?? 0) === 1) {
+                $from = array_search($child, $trail, true);
+                $loop = implode(' -> ', array_slice($trail, $from === false ? 0 : $from)) . " -> {$child}";
                 if (!isset($reported[$loop])) {
                     $reported[$loop] = true;
-                    $errors[] = new ValidationError('cycle', "submenu cycle: {$loop}", "nodes[{$id}]");
+                    $errors[] = new ValidationError('cycle', "submenu cycle: {$loop}", "nodes[{$child}]");
                 }
-
-                return;
+                continue;
             }
-            $state[$id] = 1;
-            $trail[] = $id;
-            foreach ($def->node($id)->items as $item) {
-                if ($item->isSubmenu() && $def->hasNode($item->submenu)) {
-                    $visit($item->submenu, $trail);
-                }
+            if (($colour[$child] ?? 0) === 2) {
+                continue;
             }
-            $state[$id] = 2;
-        };
 
-        $visit($def->rootId, []);
+            $colour[$child] = 1;
+            $stack[] = [$child, $this->submenuTargets($def, $child), [...$trail, $child]];
+        }
+    }
+
+    /** @return array<int,string> */
+    private function submenuTargets(NavigationDefinition $def, string $nodeId): array
+    {
+        $targets = [];
+        foreach ($def->node($nodeId)->items as $item) {
+            if ($item->isSubmenu() && $def->hasNode($item->submenu)) {
+                $targets[] = $item->submenu;
+            }
+        }
+
+        return $targets;
     }
 }

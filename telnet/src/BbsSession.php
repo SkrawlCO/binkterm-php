@@ -848,12 +848,15 @@ class BbsSession
         };
 
         // ===== DECLARATIVE NAVIGATION (opt-in) =====
-        // When a sysop has supplied a valid config/terminal_navigation.json AND
-        // set TERMINAL_NAV_RUNTIME on, the generic declarative navigation runtime
-        // drives the session instead of the built-in menu loop below. Any problem
-        // (missing/invalid file, gate off, runtime error) falls through to the
-        // legacy loop, so terminal login is never at risk.
-        if (\BinktermPHP\Terminal\Navigation\NavigationConfig::isRuntimeEnabled()) {
+        // When a sysop has set TERMINAL_NAV_RUNTIME on AND supplied a valid
+        // config/terminal_navigation.json, the generic declarative navigation
+        // runtime drives the session instead of the built-in menu loop below.
+        // The bridge owns all failure diagnostics: a missing / unreadable /
+        // invalid file, or any runtime error, is logged and falls through to the
+        // legacy loop, so terminal login is never at risk. With the flag unset
+        // this block is skipped entirely and the built-in menu is byte-for-byte
+        // unchanged.
+        if (\BinktermPHP\Terminal\Navigation\NavigationConfig::isFlagEnabled()) {
             $navHandled = (new DeclarativeMenuBridge($this))->run($conn, $state, $session, [
                 'netmail'      => $netmailHandler,
                 'echomail'     => $echomailHandler,

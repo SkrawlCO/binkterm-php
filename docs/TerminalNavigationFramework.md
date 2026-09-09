@@ -26,11 +26,42 @@ Two gates, both required:
    `TERMINAL_NAV_CONFIG` in `.env` to use a different path.
 2. Set `TERMINAL_NAV_RUNTIME=on` in `.env`.
 
-If the file is missing, the flag is off, or the definition fails validation, the
-terminal server silently stays on the built-in menu — a bad definition can never
-break terminal login. Validation errors are written to the terminal server log.
+If the flag is off, the built-in menu is used and nothing about it changes. If
+the flag is **on** but the definition is missing, unreadable, malformed, an
+unsupported schema version, or fails semantic validation, the terminal server
+falls back to the built-in menu and writes one actionable line to the terminal
+server log naming the file and the reason — a bad definition can never break
+terminal login.
 
 Restart the terminal/SSH daemons after changing the file or the flag.
+
+### Failure handling
+
+| Situation | Log line names | Result |
+|-----------|----------------|--------|
+| File missing (or a directory, or a dangling symlink) | the path, with a hint | built-in menu |
+| File exists but not readable | the path + "check file permissions" | built-in menu |
+| Empty file / invalid JSON / not a JSON object | the path + the JSON error | built-in menu |
+| `schema` missing or unsupported version | the version | built-in menu |
+| Semantic errors (unknown action, hotkey clash, dangling submenu, cycle, unreachable node, missing fallback, …) | every error, each with its `nodes[…].items[…]` path | built-in menu |
+| Unknown access predicate | the predicate, at parse time (fail closed) | built-in menu |
+| An error *during* an active declarative session | the exception + the definition id | the session drops to the built-in menu for the rest of that connection |
+
+The runtime is never partially activated: it is only entered once a definition
+has passed every check.
+
+### Caching
+
+The parsed definition is cached per process, keyed on the file's path, size, and
+modification time — a replaced file is picked up on the next session without a
+stale copy surviving. The telnet/SSH daemons fork one process per connection, so
+in normal operation every session re-reads the file anyway. A daemon restart
+after editing is still recommended so all worker behaviour is consistent.
+
+The `TERMINAL_NAV_CONFIG` path override is used verbatim for reads. It is a
+sysop-controlled `.env` value and grants no access the sysop does not already
+have, so it is not sandboxed; a future config *writer* (for the planned editor)
+constrains its target separately.
 
 ---
 

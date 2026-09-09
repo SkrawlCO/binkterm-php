@@ -34,18 +34,27 @@ final class DeclarativeMenuBridge
     public function run($conn, array &$state, ?string $session, array $handlers): bool
     {
         try {
-            $definition = NavigationConfig::resolveDefinition();
-            if ($definition === null) {
-                $result = NavigationConfig::load();
-                if (NavigationConfig::isRuntimeEnabled() && !$result->isOk()) {
-                    $this->server->logInfo('Declarative navigation disabled — invalid definition: ' . $result->errorSummary());
-                }
-
+            if (!NavigationConfig::isFlagEnabled()) {
                 return false;
             }
 
+            $result = NavigationConfig::load();
+            if (!$result->isOk()) {
+                // The sysop asked for the declarative runtime; tell them exactly
+                // why it is not being used, then fall back safely.
+                $this->server->logInfo(
+                    'Declarative navigation NOT active (using built-in menu) — '
+                    . NavigationConfig::path() . ': ' . $result->errorSummary()
+                );
+
+                return false;
+            }
+            $definition = $result->definition();
+
             $ctx = $this->server->getRenderContext();
             if ($ctx === null) {
+                $this->server->logInfo('Declarative navigation NOT active — no render context on the session');
+
                 return false;
             }
 
@@ -93,7 +102,17 @@ final class DeclarativeMenuBridge
 
             return true;
         } catch (\Throwable $e) {
-            $this->server->logInfo('Declarative navigation failed, falling back to legacy menu: ' . $e->getMessage());
+            $definitionId = isset($definition) ? $definition->id : '(unresolved)';
+            $this->server->logInfo(sprintf(
+                'Declarative navigation runtime error (definition "%s"), falling back to built-in menu: %s: %s @ %s:%d',
+                $definitionId,
+                get_class($e),
+                $e->getMessage(),
+                basename($e->getFile()),
+                $e->getLine()
+            ));
+            // Reset a possibly half-drawn screen so the built-in menu redraws clean.
+            $this->server->getRenderContext()?->write("\033[0m\033[2J\033[H");
 
             return false;
         }

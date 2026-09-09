@@ -88,6 +88,58 @@ final class DeclarativeMenuBridgeTest extends TestCase
         self::assertFalse($handled, 'gate off -> legacy menu path');
     }
 
+    public function testBridgeFallsBackWhenFlagIsOnButFileIsMissing(): void
+    {
+        $_ENV['TERMINAL_NAV_RUNTIME'] = 'on';
+        $_ENV['TERMINAL_NAV_CONFIG']  = sys_get_temp_dir() . '/navbridge_absent_' . bin2hex(random_bytes(5)) . '.json';
+        NavigationConfig::reset();
+
+        $bridge = new DeclarativeMenuBridge($this->session());
+        $state  = ['username' => 'alice', 'is_admin' => false, 'locale' => 'en', 'cols' => 80, 'rows' => 24];
+
+        self::assertFalse(
+            $bridge->run(fopen('php://temp', 'r+'), $state, 'sess', []),
+            'flag on + no file -> bridge is entered, logs, and falls back to legacy'
+        );
+    }
+
+    public function testBridgeCatchesARuntimeExceptionAndFallsBack(): void
+    {
+        $def = [
+            'schema' => 1, 'id' => 'boom', 'root' => 'main',
+            'nodes' => [['id' => 'main', 'label_fallback' => 'Main', 'items' => [
+                ['id' => 'x', 'label_fallback' => 'Explode', 'hotkey' => 'x', 'action' => 'netmail'],
+            ]]],
+        ];
+        $path = sys_get_temp_dir() . '/navbridge_boom_' . bin2hex(random_bytes(5)) . '.json';
+        file_put_contents($path, json_encode($def));
+        register_shutdown_function(static fn () => @unlink($path));
+
+        $_ENV['TERMINAL_NAV_RUNTIME'] = 'on';
+        $_ENV['TERMINAL_NAV_CONFIG']  = $path;
+        NavigationConfig::reset();
+
+        $session = $this->session();
+        $bridge  = new DeclarativeMenuBridge($session);
+
+        // A conn that yields "x" then nothing -> selects the action, whose handler throws.
+        $conn = fopen('php://temp', 'r+');
+        fwrite($conn, 'x');
+        rewind($conn);
+        $state = ['username' => 'alice', 'is_admin' => false, 'locale' => 'en', 'cols' => 80, 'rows' => 24, 'pushback' => '', 'last_activity' => time(), 'idle_warned' => false, 'idle_warning_timeout' => 300, 'idle_disconnect_timeout' => 420];
+
+        $handlers = [
+            'netmail' => new class {
+                public function show($c, &$s, $sess): void { throw new \RuntimeException('handler blew up'); }
+            },
+        ];
+
+        // Must not propagate — the bridge catches and returns false.
+        self::assertFalse($bridge->run($conn, $state, 'sess', $handlers));
+        // Screen was reset for the legacy menu.
+        self::assertStringContainsString("\033[2J", $session->getRenderContext()->sink()->getBytes());
+    }
+
     public function testBridgeRunsTheRuntimeEndToEndWhenActivated(): void
     {
         $def = [
