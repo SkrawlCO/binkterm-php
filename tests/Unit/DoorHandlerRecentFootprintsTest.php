@@ -302,7 +302,9 @@ final class DoorHandlerRecentFootprintsTest extends TestCase
         // terminal catalog ($doorList) — no second GameCatalog discovery, no
         // per-Experience activity query, no extra collection-state read.
         self::assertSame(1, substr_count($show, 'recentAcrossCatalog('));
-        self::assertStringContainsString("recentAcrossCatalog(\n                    array_column(\$doorList, 'data'),\n                    5\n                )", $show);
+        self::assertStringContainsString("recentAcrossCatalog(\n                    array_column(\$doorList, 'data'),\n                    \$recentLimit\n                )", $show);
+        // The 80x24 sample is smaller than the taller-terminal sample.
+        self::assertStringContainsString('$recentLimit = (int)($state[\'rows\'] ?? 24) >= 30 ? 5 : 3;', $show);
         self::assertStringNotContainsString('getEnabledGames(', $show);
         self::assertSame(1, substr_count($preChooser, 'getExperienceStates('));
 

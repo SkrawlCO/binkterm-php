@@ -83,15 +83,30 @@ final class DirectoryView
         $firstRowOverall = true;
         $contextPending = $context;
 
+        // Detail column: one secondary line per destination, clipped so the
+        // structured renderer never wraps a description into prose. Compact
+        // sections fold the description onto the primary line instead.
+        $detailWidth = max(24, $cols - 10);
+        $inlineWidth = max(24, $cols - 8);
+
         foreach ($directory->sections as $section) {
             $sectionTitle = trim($section->title);
             $firstInSection = true;
 
             foreach ($section->rows as $row) {
-                $item = [
-                    'label' => self::rowLabel($row, $ctx),
-                    'detail' => $row->description !== null ? trim($row->description) : '',
-                ];
+                $desc = self::oneLine($row->description);
+
+                if ($section->compact) {
+                    $item = [
+                        'label' => self::rowLabel($row, $ctx, $desc, $inlineWidth),
+                        'detail' => '',
+                    ];
+                } else {
+                    $item = [
+                        'label' => self::rowLabel($row, $ctx, null, 0),
+                        'detail' => $desc === '' ? '' : $ctx->encodeForTerminal(self::clipDescription($desc, $detailWidth)),
+                    ];
+                }
 
                 $sectionBeforeLines = $firstRowOverall ? $preamble : [];
 
@@ -129,14 +144,64 @@ final class DirectoryView
         return ['title' => $title, 'items' => $items, 'values' => $values];
     }
 
-    private static function rowLabel(DirectoryRow $row, TerminalRenderContext $ctx): string
-    {
+    /**
+     * @param string|null $inlineDesc when non-empty, folded onto the label
+     *                                 ("Label  ·  desc") and clipped to $width
+     */
+    private static function rowLabel(
+        DirectoryRow $row,
+        TerminalRenderContext $ctx,
+        ?string $inlineDesc,
+        int $width
+    ): string {
+        $utf8 = $ctx->effectiveCharset() === 'utf8';
         $label = trim($row->label);
+
         if ($row->badge !== null && trim($row->badge) !== '') {
-            $sep = $ctx->effectiveCharset() === 'utf8' ? "  \u{00B7} " : '  - ';
-            $label .= $sep . trim($row->badge);
+            $label .= ($utf8 ? "  \u{00B7} " : '  - ') . trim($row->badge);
+        }
+
+        if ($inlineDesc !== null && $inlineDesc !== '') {
+            $joined = $label . ($utf8 ? "  \u{00B7} " : '  - ') . $inlineDesc;
+            $label = TextBlock::ellipsize($joined, $width);
         }
 
         return $ctx->encodeForTerminal($label);
+    }
+
+    /** Collapse a possibly multi-line description to a single trimmed line. */
+    private static function oneLine(?string $s): string
+    {
+        if ($s === null) {
+            return '';
+        }
+
+        return trim(preg_replace('/\s+/u', ' ', $s) ?? $s);
+    }
+
+    /**
+     * Compact a one-line description to at most $width visible cells for the
+     * directory's secondary row. Presentation only — the full text still lives
+     * on detail/web surfaces. Prefers, in order: the whole string if it fits;
+     * its first sentence if that fits; otherwise a word-boundary clip with an
+     * ellipsis (never mid-word, never a hard substring).
+     */
+    private static function clipDescription(string $s, int $width): string
+    {
+        if (mb_strlen($s, 'UTF-8') <= $width) {
+            return $s;
+        }
+
+        if (preg_match('/^(.{16,}?[.!?])(?:\s|$)/u', $s, $m) && mb_strlen($m[1], 'UTF-8') <= $width) {
+            return $m[1];
+        }
+
+        $cut = mb_substr($s, 0, $width - 1, 'UTF-8');
+        $lastSpace = mb_strrpos($cut, ' ', 0, 'UTF-8');
+        if ($lastSpace !== false && $lastSpace >= (int) ($width * 0.5)) {
+            $cut = mb_substr($cut, 0, $lastSpace, 'UTF-8');
+        }
+
+        return rtrim($cut) . "\u{2026}";
     }
 }

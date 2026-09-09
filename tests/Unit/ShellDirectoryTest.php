@@ -102,7 +102,7 @@ final class ShellDirectoryTest extends TestCase
                 new DirectorySection('', [
                     new DirectoryRow('Live Now', '2 callers in 1 Experience', null, 'live_now'),
                     new DirectoryRow('Your Places', 'You have no active places right now.', null, 'your_places'),
-                ]),
+                ], true),
                 new DirectorySection('Curated Experiences', [
                     new DirectoryRow('ascii-royale', 'Last player standing.', 'Multiplayer', 'ascii-royale'),
                 ]),

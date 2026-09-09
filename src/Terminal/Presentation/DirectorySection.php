@@ -13,12 +13,17 @@ namespace BinktermPHP\Terminal\Presentation;
 final class DirectorySection
 {
     /**
-     * @param string             $title heading text, or '' for an unheaded block
+     * @param string             $title   heading text, or '' for an unheaded block
      * @param list<DirectoryRow>  $rows
+     * @param bool                $compact fold each row's description onto its
+     *                                     primary line instead of a secondary
+     *                                     row (for navigational rows / quiet
+     *                                     states, not destinations)
      */
     public function __construct(
         public readonly string $title,
         public readonly array $rows,
+        public readonly bool $compact = false,
     ) {
     }
 }

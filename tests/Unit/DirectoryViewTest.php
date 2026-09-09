@@ -27,8 +27,14 @@ final class DirectoryViewTest extends TestCase
                 new DirectorySection('', [
                     new DirectoryRow('Live Now', '2 callers in 1 Experience', null, 'live_now'),
                     new DirectoryRow('Your Places', 'You have no active places right now.', null, 'your_places'),
-                ]),
+                ], true),
                 new DirectorySection('Curated Experiences', [
+                    new DirectoryRow(
+                        'MultiZork',
+                        "A shared, persistent Zork.\nExplore the Great Underground Empire together, leave notes for\nthe next caller, and race rival parties to the treasures.",
+                        'Multiplayer',
+                        'multizork'
+                    ),
                     new DirectoryRow('ascii-royale', 'Last player standing.', 'Multiplayer', 'ascii-royale'),
                 ]),
                 new DirectorySection('Game Hall', [
@@ -78,9 +84,9 @@ final class DirectoryViewTest extends TestCase
         self::assertStringContainsString('Bard played LORD - 47m ago', $ctxLines);
 
         // Later sections: heading only, no repeated context block.
-        self::assertSame('GAME HALL', self::plain($items[3]['section_before']));
-        self::assertArrayNotHasKey('section_before_lines', $items[3]);
-        self::assertSame('GATEWAYS', self::plain($items[5]['section_before']));
+        self::assertSame('GAME HALL', self::plain($items[4]['section_before']));
+        self::assertArrayNotHasKey('section_before_lines', $items[4]);
+        self::assertSame('GATEWAYS', self::plain($items[6]['section_before']));
     }
 
     public function testRowsCarryDescriptionAndBadgeAndParallelValues(): void
@@ -89,16 +95,67 @@ final class DirectoryViewTest extends TestCase
         $composed = DirectoryView::compose($this->sampleDirectory(), $ctx);
 
         self::assertSame(
-            ['live_now', 'your_places', 'ascii-royale', 'lord', 'nethack', 'doorparty'],
+            ['live_now', 'your_places', 'multizork', 'ascii-royale', 'lord', 'nethack', 'doorparty'],
             $composed['values']
         );
 
         // Badge is appended to the label with a middot; description is the
-        // detail column (never folded into the label).
-        self::assertStringContainsString("ascii-royale  \u{00B7} Multiplayer", $composed['items'][2]['label']);
-        self::assertSame('Last player standing.', $composed['items'][2]['detail']);
-        self::assertSame('NetHack', $composed['items'][4]['label'], 'no badge, no separator');
-        self::assertSame('Dungeon crawl.', $composed['items'][4]['detail']);
+        // detail column (never folded into a destination label).
+        self::assertStringContainsString("ascii-royale  \u{00B7} Multiplayer", $composed['items'][3]['label']);
+        self::assertSame('Last player standing.', $composed['items'][3]['detail']);
+        self::assertSame('NetHack', $composed['items'][5]['label'], 'no badge, no separator');
+        self::assertSame('Dungeon crawl.', $composed['items'][5]['detail']);
+    }
+
+    public function testDestinationDescriptionIsCompactedToASingleLine(): void
+    {
+        $ctx = TerminalRenderHarness::at(80, 24)->charset('utf8')->context();
+        $composed = DirectoryView::compose($this->sampleDirectory(), $ctx);
+
+        // MultiZork's multi-line prose becomes one line — no embedded newline,
+        // within the detail column. Its short first sentence is preferred whole.
+        $detail = $composed['items'][2]['detail'];
+        self::assertStringNotContainsString("\n", $detail);
+        self::assertLessThanOrEqual(70, mb_strlen(self::plain($detail), 'UTF-8'));
+        self::assertSame('A shared, persistent Zork.', $detail);
+    }
+
+    public function testALongFirstSentenceIsWordClippedNotCutMidWord(): void
+    {
+        $directory = new Directory('Crossroads', 't', [
+            new DirectorySection('Game Hall', [
+                new DirectoryRow(
+                    'Empire',
+                    'A sprawling multiplayer strategy simulation of interstellar diplomacy, '
+                    . 'trade routes, planetary economies and slow-burning galactic warfare between rival houses.',
+                    null,
+                    'empire'
+                ),
+            ]),
+        ]);
+
+        $ctx = TerminalRenderHarness::at(80, 24)->charset('utf8')->context();
+        $detail = self::plain(DirectoryView::compose($directory, $ctx)['items'][0]['detail']);
+
+        self::assertLessThanOrEqual(70, mb_strlen($detail, 'UTF-8'));
+        self::assertStringEndsWith("\u{2026}", $detail);
+        // The clip lands on a word boundary — the char before the ellipsis is
+        // the end of a whole word, not a bisected one.
+        self::assertMatchesRegularExpression('/\w\x{2026}$/u', $detail);
+        self::assertStringStartsWith('A sprawling multiplayer strategy simulation', $detail);
+    }
+
+    public function testCompactSectionFoldsSummariesOntoOneLine(): void
+    {
+        $ctx = TerminalRenderHarness::at(80, 24)->charset('utf8')->context();
+        $composed = DirectoryView::compose($this->sampleDirectory(), $ctx);
+
+        // Live Now / Your Places: label + summary on the primary line, no
+        // separate detail row.
+        self::assertSame('', $composed['items'][0]['detail']);
+        self::assertSame('', $composed['items'][1]['detail']);
+        self::assertStringContainsString("Live Now  \u{00B7} 2 callers in 1 Experience", $composed['items'][0]['label']);
+        self::assertStringContainsString("Your Places  \u{00B7} You have no active places", $composed['items'][1]['label']);
     }
 
     public function testMonochromeTerminalGetsPlainHeadingsWithNoSgr(): void
@@ -110,7 +167,7 @@ final class DirectoryViewTest extends TestCase
         self::assertSame(0, preg_match('/\033\[/', $blob), 'no escape sequences on a mono terminal');
         self::assertStringContainsString('-- Crossroads --', $composed['title']);
         self::assertStringContainsString('CURATED EXPERIENCES', $composed['items'][2]['section_before']);
-        self::assertStringContainsString('ascii-royale  - Multiplayer', $composed['items'][2]['label']);
+        self::assertStringContainsString('ascii-royale  - Multiplayer', $composed['items'][3]['label']);
     }
 
     public function testCp437TerminalEncodesTheRuleGlyph(): void

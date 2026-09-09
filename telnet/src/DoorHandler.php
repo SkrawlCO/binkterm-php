@@ -128,20 +128,26 @@ class DoorHandler
             $liveNowItem = self::buildLiveNowArrivalItem($liveNow, $t);
             $yourPlacesItem = self::buildYourPlacesArrivalItem($yourPlaces, $t);
             $sections = [
-                new DirectorySection('', [
-                    new DirectoryRow(
-                        $liveNowItem['label'],
-                        ($liveNowItem['detail'] ?? '') !== '' ? $liveNowItem['detail'] : null,
-                        null,
-                        'live_now'
-                    ),
-                    new DirectoryRow(
-                        $yourPlacesItem['label'],
-                        ($yourPlacesItem['detail'] ?? '') !== '' ? $yourPlacesItem['detail'] : null,
-                        null,
-                        'your_places'
-                    ),
-                ]),
+                new DirectorySection(
+                    '',
+                    [
+                        new DirectoryRow(
+                            $liveNowItem['label'],
+                            ($liveNowItem['detail'] ?? '') !== '' ? $liveNowItem['detail'] : null,
+                            null,
+                            'live_now'
+                        ),
+                        new DirectoryRow(
+                            $yourPlacesItem['label'],
+                            ($yourPlacesItem['detail'] ?? '') !== '' ? $yourPlacesItem['detail'] : null,
+                            null,
+                            'your_places'
+                        ),
+                    ],
+                    // Navigational rows and their quiet/live summaries fold onto
+                    // one line each — no separate explanatory row per zero state.
+                    true
+                ),
             ];
             foreach ($shelved['sections'] as $shelfSection) {
                 $sections[] = $shelfSection;
@@ -153,11 +159,14 @@ class DoorHandler
             // per-Experience query). Carried as the directory's ambient context
             // block, rendered above the first destination shelf; it never
             // consumes a menu number. Omitted entirely when there is nothing.
+            // At 80x24 a small sample (3) is enough to show people pass through
+            // without crowding out the destinations; a taller terminal shows 5.
+            $recentLimit = (int)($state['rows'] ?? 24) >= 30 ? 5 : 3;
             $contextLines = [];
             $recentFootprints = self::composeRecentFootprints(
                 (new ExperienceActivity())->recentAcrossCatalog(
                     array_column($doorList, 'data'),
-                    5
+                    $recentLimit
                 ),
                 $t
             );
