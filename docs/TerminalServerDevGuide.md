@@ -957,6 +957,13 @@ server still checks every request against the live token. Callers keep passing
 `$state['csrf_token'] ?? null`; the healed static takes precedence, so one heal
 fixes every subsequent call in the session.
 
+The browser has the same exposure — the `<meta name="csrf-token">` value is
+frozen at page render, so reconnecting a terminal (or a second browser login)
+invalidates an open web page's token. The global `fetch()` wrapper in
+`public_html/js/app.js` self-heals identically via `GET /api/auth/web-csrf`
+(read-only, session-gated rather than secret-gated, since the browser is the
+legitimate caller here).
+
 ### Daemon-Side Logging
 
 Self-contained daemon/runtime subsystems (e.g. ZMODEM under `telnet/src/`) may use targeted `error_log(..., 3, $file)` file logging. Web-side and shared application logging must use `BinktermPHP\Binkp\Logger` instead — never `error_log()` in route or controller code.

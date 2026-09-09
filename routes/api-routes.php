@@ -226,6 +226,36 @@ SimpleRouter::group(['prefix' => '/api'], function() {
         echo json_encode(['success' => true, 'csrf_token' => $token]);
     });
 
+    /**
+     * GET /api/auth/web-csrf
+     *
+     * The browser-side counterpart of GET /api/auth/csrf. Returns the current
+     * authenticated web session's per-user CSRF token so a long-lived page can
+     * re-sync its cached copy (the <meta name="csrf-token"> value, frozen at
+     * page render) after another login of the same user rotated the shared
+     * per-user token (Auth::createAuthenticatedSession) — e.g. reconnecting a
+     * Telnet/SSH session while an admin editor tab is open.
+     *
+     * Read-only: it never mints a session or rotates the token. It discloses
+     * nothing new — Template.php already exposes the same value as a Twig global
+     * on every authenticated page render, and a cross-origin site can neither
+     * read this JSON response (same-origin policy) nor forge the session cookie.
+     * It does not weaken validation: the server still checks every mutating
+     * request against the live token. The global fetch() wrapper in
+     * public_html/js/app.js calls this once to self-heal a 403
+     * errors.auth.invalid_csrf_token and retry the original request.
+     */
+    SimpleRouter::get('/auth/web-csrf', function() {
+        header('Content-Type: application/json');
+        header('Cache-Control: no-store');
+        $user = RouteHelper::requireAuth();
+
+        $userId = (int)($user['user_id'] ?? $user['id'] ?? 0);
+        $token  = (new UserMeta())->getValue($userId, 'csrf_token');
+
+        echo json_encode(['success' => true, 'csrf_token' => $token]);
+    });
+
     // Gateway token verification endpoint for external services (bbslinkgateway, etc.)
     SimpleRouter::post('/auth/verify-gateway-token', function() {
         header('Content-Type: application/json');

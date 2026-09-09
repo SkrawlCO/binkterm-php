@@ -557,6 +557,7 @@ Click recording confirmation with redirect URL
 | `POST` | [`/api/auth/login`](#post-apiauthlogin) | No | Authenticate user with username and password, returning session cookie and CSRF token. |
 | `POST` | [`/api/auth/logout`](#post-apiauthlogout) | No | Invalidate user session and clear authentication cookie. |
 | `GET` | [`/api/auth/csrf`](#get-apiauthcsrf) | Yes | Return the authenticated user's current CSRF token (terminal-daemon only; read-only). |
+| `GET` | [`/api/auth/web-csrf`](#get-apiauthweb-csrf) | Yes | Return the authenticated web session's current CSRF token so a stale page can re-sync (read-only). |
 | `POST` | [`/api/auth/verify-gateway-token`](#post-apiauthverify-gateway-token) | No | Verify gateway token for external service integration (requires API key). |
 | `POST` | [`/api/auth/gateway-token`](#post-apiauthgateway-token) | Yes | Generate a time-limited gateway token for authenticated user. |
 | `POST` | [`/api/auth/forgot-password`](#post-apiauthforgot-password) | No | Initiate password reset by username or email address. |
@@ -638,6 +639,35 @@ requests without it get `403 Forbidden`.
 |-------|------|-------------|
 | `success` | boolean | Always true on success |
 | `csrf_token` | string \| null | The user's current CSRF token |
+
+---
+
+#### `GET /api/auth/web-csrf`
+
+Authenticated
+
+The browser-side counterpart of `GET /api/auth/csrf`. Returns the current
+authenticated web session's per-user CSRF token so a long-lived page can
+re-sync its cached `<meta name="csrf-token">` value (frozen at page render)
+after another login of the same user rotated the shared per-user token — for
+example, reconnecting a Telnet/SSH session while an admin editor tab is open.
+The global `fetch()` wrapper in `public_html/js/app.js` calls this once after a
+mutating request is rejected with `errors.auth.invalid_csrf_token`, updates the
+meta tag, and retries the original request.
+
+This is read-only — it never mints a session or rotates the token — and does
+not weaken CSRF validation: the server still validates every mutating request
+against the live token, the value is already exposed to any authenticated web
+page as a Twig global, and a cross-origin site can neither read this response
+(same-origin policy) nor forge the session cookie. Gated on a valid session
+only (no terminal secret).
+
+**Response** _(JSON)_
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `success` | boolean | Always true on success |
+| `csrf_token` | string \| null | The web session's current CSRF token |
 
 ---
 

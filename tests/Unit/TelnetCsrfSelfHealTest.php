@@ -94,7 +94,9 @@ final class TelnetCsrfSelfHealTest extends TestCase
         // Locate the handler body and assert its properties in isolation.
         $start = strpos($routes, "SimpleRouter::get('/auth/csrf'");
         self::assertNotFalse($start);
-        $body = substr($routes, $start, 1400);
+        $end = strpos($routes, "\n    });", (int) $start);
+        self::assertNotFalse($end);
+        $body = substr($routes, (int) $start, (int) $end - (int) $start);
 
         self::assertStringContainsString('RouteHelper::requireAuth()', $body, 'requires a valid session');
         self::assertStringContainsString('HTTP_X_BINKTERM_CLIENT_TOKEN', $body, 'gated on the terminal secret header');
