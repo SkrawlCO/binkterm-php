@@ -153,6 +153,12 @@ Pipe-code rendering for plain bulletins and other ANSI/pipe text shared with the
 - **Process Cleanup**: Proper signal handling for SIGCHLD, SIGTERM, and SIGINT
 - **Connection Health**: Timeout on socket accept operations
 - **Zombie Prevention**: Automatic reaping of child processes
+- **Transport keepalive**: On an idle Telnet connection the server sends a
+  Telnet NOP every `TELNET_KEEPALIVE_SECONDS` (default `60`; set `0` to disable)
+  so connections dropped by a NAT or firewall are detected promptly instead of
+  lingering. This is a transport liveness probe only — it never counts as user
+  activity, so the idle-warning and idle-disconnect timers below are unaffected.
+  SSH sessions ignore this setting (SSH has its own keepalive).
 
 ### Sixel Image Rendering
 
@@ -456,6 +462,8 @@ New users who register while **Require approval for new users** is enabled in **
 On first login, if the user has no saved terminal settings, the server runs an auto-detection wizard that tests character set support and color capability, then saves the results. This wizard is skipped on subsequent sessions once settings are stored. Users can force it to run again at any time by choosing **T** at the login menu instead of **L**.
 
 The normal terminal settings screen is part of the shared tabbed settings UI, but the detection wizard itself intentionally remains a simple prompt-driven flow across all shells. This keeps first-run terminal detection working even when full shell rendering cannot yet be assumed to work correctly.
+
+The Telnet server also performs standards-based capability negotiation (RFC 1091 terminal-type cycling and RFC 2066 CHARSET) during the connection. This only informs the server's internal picture of what the client *can* render; it never overrides a saved charset preference or the wizard result, and the wizard is always available via **T**. A client that does not support these negotiations is unaffected.
 
 ### System News
 

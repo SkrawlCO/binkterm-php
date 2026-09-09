@@ -33,6 +33,7 @@ Terminal-side bulletin rendering in `telnet/src/BulletinsHandler.php` follows th
 | `telnet/src/TerminalCapabilities.php` | Immutable value object — negotiated facts about the caller's client (type, charset support, colour support, sixel) |
 | `telnet/src/TerminalRenderContext.php` | Per-session mutable holder of render inputs (geometry, effective charset/colour, style profile, locale, glyphs) + the `OutputSink` |
 | `telnet/src/GlyphPolicy.php` | Pure box-drawing glyph resolution for a charset + border style |
+| `tests/Unit/Support/ScriptedTelnetSession.php` | F4 scripted session harness — drives the real Telnet engine over an in-memory socket pair |
 
 Both daemon entry points manually `require_once` every `telnet/src/` class they use. New classes added under `telnet/src/` must be registered in both `telnet/telnet_daemon.php` and `ssh/ssh_daemon.php` — they are not Composer-autoloaded. See also `telnet/CLAUDE.md` for the include-list rule.
 
@@ -380,18 +381,71 @@ computation (SyncTERM reserves one bottom row); it agrees byte-for-byte with the
 legacy `TelnetUtils::getSelectorRows($state)`, whose call sites migrate
 opportunistically.
 
+### Capability resolution from negotiation (F3)
+
+`BbsSession::refreshCapabilities()` (called from every `syncRenderContext()`)
+now populates the capability value from real negotiation evidence:
+
+| Field | Source |
+|-------|--------|
+| `clientType` | TTYPE `IS` / SSH `pty-req`, with RFC 1091 **cycling** — the server keeps sending `TTYPE SEND` until the client repeats an entry or `MAX_TTYPE_REQUESTS` (4) is hit. The first reported type stays primary; a later generic entry never overwrites a SyncTERM identification, and a SyncTERM entry anywhere in the list still triggers the local-status-line fix. |
+| `colorSupport` | inferred from the reported type: bare `DUMB` / `UNKNOWN` / `NETWORK` → `none`, anything else → `ansi`, empty → `unknown`. **Inference only** — it does not change the effective `ansiColorEnabled` flag, which is still the user's saved preference. |
+| `charsetSupport` | RFC 2066 **CHARSET** exchange only. The server sends `WILL CHARSET`; a client that replies `DO CHARSET` gets `IAC SB CHARSET REQUEST ;UTF-8;CP437;US-ASCII IAC SE`; `ACCEPTED <name>` sets `utf8` / `ascii_only`, `REJECTED` leaves it `unknown`. **Never guessed from the terminal type.** The effective charset (saved preference / detection wizard) is untouched; a client `CHARSET REQUEST` is answered `REJECTED`. |
+| `sixelSupported` | the DA1 probe flag (`$sixelSupported`), carried through unchanged. |
+
+Geometry: NAWS updates now call `TerminalRenderContext::setGeometry()` directly
+from the `readRawChar()` subnegotiation branch, so a resize is visible on the
+next render without waiting for a `syncRenderContext()` boundary. `$state['cols'
+/'rows']` remains the single source of truth; the context mirrors it.
+
+Conservative option refusal: a DO/WILL for an option the server does not
+negotiate is answered once with WONT/DONT (`refuseUnsupportedTelnetOption()`);
+WONT/DONT are never answered; each `(cmd,opt)` is refused at most once per
+session so a misbehaving client cannot cause a storm.
+
+Transport keepalive: on an idle read the server sends `IAC NOP`
+(`maybeSendKeepalive()`), throttled to `TELNET_KEEPALIVE_SECONDS` (default 60,
+`0` disables, SSH exempt). This is a liveness probe — it does **not** touch
+`last_activity` / `idle_warned`, so the idle-warning and idle-disconnect timers
+are unchanged.
+
+One behaviour change in `readRawChar()`: after consuming a DO/DONT/WILL/WONT
+triple with nothing else buffered it now returns `"\x00"` (benign no-op),
+matching the existing SB branch, instead of `null` (which callers treat as a
+disconnect). A client that segments its negotiation is no longer at risk of
+being dropped.
+
+### Scripted session harness (F4)
+
+`tests/Unit/Support/ScriptedTelnetSession.php` drives the real `BbsSession`
+Telnet engine over an in-memory `stream_socket_pair()` — no network, no external
+BBS, no sleeps, and the real parser (never a copy). The script writes
+negotiation / keystroke bytes from "the client" end and reads the server's
+responses back; `pump()` feeds the wire through the real `readRawChar()`,
+`readKey()` calls the real timeout-bounded reader.
+
+```php
+$s = (new ScriptedTelnetSession())->negotiate();
+$s->sendWill(ScriptedTelnetSession::OPT_TTYPE)->pump();
+$s->sendTerminalTypeIs('SYNCTERM')->pump();
+$s->sendNaws(132, 50)->pump();
+self::assertTrue($s->capabilities()->isSyncTerm());
+self::assertSame([132, 50], $s->geometry());
+```
+
+`tests/Unit/TelnetNegotiationTest.php` covers the F3 byte exchanges;
+`tests/Unit/ScriptedTerminalSessionTest.php` covers full conversations
+(negotiation → TTYPE cycling → NAWS → keystrokes → mid-session resize →
+malformed bytes → EOF).
+
 ### Not yet wired (later stages)
 
-- `TerminalCapabilities.charsetSupport` / `.colorSupport` stay `unknown` — F1
-  only populates the client type and sixel flag as genuine facts; structured
-  charset/colour capability detection (and TTYPE cycling, CHARSET negotiation,
-  keepalive) is F3.
-- The context's geometry is synced from `$state` at render boundaries
-  (context build + main-menu-loop iteration), not directly on each NAWS event;
-  existing widgets still read `$state['rows'/'cols']`. Wiring geometry straight
-  from NAWS is F3.
 - `TerminalRenderContext.t()` is param-driven for parity; it does not yet
   substitute the stored locale when a caller omits one.
+- The dead `probeAnsiSupport()` / `probeSixelSupport()` methods remain — for
+  Telnet, `$sixelSupported` is only set from the SSH `pty-req` path today; the
+  capability seam propagates whatever value is set. Re-enabling an active Telnet
+  probe is out of scope.
 
 ---
 

@@ -33,11 +33,21 @@ class BbsSession
     private const WILL        = 251;
     private const SB          = 250;
     private const SE          = 240;
+    private const NOP         = 241;
     private const OPT_ECHO    = 1;
     private const OPT_SUPPRESS_GA = 3;
     private const OPT_NAWS    = 31;
     private const OPT_LINEMODE = 34;
     private const OPT_TTYPE   = 24;
+    private const OPT_CHARSET = 42;
+    // RFC 2066 CHARSET sub-commands.
+    private const CHARSET_REQUEST  = 1;
+    private const CHARSET_ACCEPTED = 2;
+    private const CHARSET_REJECTED = 3;
+    // RFC 1091 TTYPE cycling: how many SEND requests to make before giving up
+    // on a client that never repeats an entry (a stable answer or the client's
+    // full list is normally reached well within this).
+    private const MAX_TTYPE_REQUESTS = 4;
 
     // ===== KEY SEQUENCE CONSTANTS =====
     private const KEY_UP     = "\033[A";
@@ -87,6 +97,30 @@ class BbsSession
     private bool $ansiColorEnabled = true;
     /** @var bool Whether the terminal supports Sixel graphics (Primary DA attribute 4) */
     private bool $sixelSupported = false;
+    /**
+     * RFC 1091 terminal-type cycling state. {@see $seenTerminalTypes} records
+     * every distinct TTYPE `IS` value received so a repeat (list exhausted) stops
+     * the cycle; {@see $ttypeRequestCount} caps how many `SEND` subnegotiations
+     * are issued for a client that never repeats.
+     *
+     * @var array<string,bool>
+     */
+    private array $seenTerminalTypes = [];
+    private int $ttypeRequestCount = 0;
+    /**
+     * RFC 854 conservative option refusal: options already refused this session,
+     * keyed "<cmd>:<opt>", so a misbehaving client cannot induce a refusal storm.
+     *
+     * @var array<string,bool>
+     */
+    private array $refusedTelnetOptions = [];
+    /**
+     * RFC 2066 CHARSET negotiation state. True once the client has agreed to
+     * CHARSET (DO CHARSET) so a REQUEST is only sent when it will be understood.
+     */
+    private bool $charsetNegotiationEnabled = false;
+    /** Monotonic timestamp of the last transport keepalive (F3G). 0 = never. */
+    private int $lastKeepaliveAt = 0;
     /**
      * F1 render seam. Built once in run() and kept in sync with the terminal
      * state properties above. The render-accessor methods delegate here; new
@@ -1849,10 +1883,18 @@ class BbsSession
     }
 
     /**
-     * Rebuild the immutable capabilities value from currently-known facts.
-     * F1 populates only genuine negotiated facts: the reported client type and
-     * sixel support. Structured charset/colour capability detection is a later
-     * stage (F3); those fields remain 'unknown' until then.
+     * Rebuild the immutable capabilities value from currently-known facts:
+     *
+     *   - {@see TerminalCapabilities::clientType} — the reported TTYPE / pty-req;
+     *   - {@see TerminalCapabilities::colorSupport} — inferred from the reported
+     *     client type(s) (F3C): a bare "DUMB"/"UNKNOWN"/"NETWORK" terminal is
+     *     treated as non-colour, anything else as ANSI. This is capability
+     *     inference only and does NOT change the effective `ansiColorEnabled`
+     *     flag, which is still driven by the user's saved preference;
+     *   - {@see TerminalCapabilities::charsetSupport} — populated only from a
+     *     real RFC 2066 CHARSET exchange (F3B), via {@see applyCharsetSupport()};
+     *     never guessed from the terminal type here;
+     *   - {@see TerminalCapabilities::sixelSupported} — from the DA1 probe.
      */
     private function refreshCapabilities(array $state): void
     {
@@ -1862,8 +1904,47 @@ class BbsSession
         $ttype = (string)($state['terminal_type'] ?? '');
         $this->capabilities = $this->capabilities
             ->withClientType($ttype !== '' ? $ttype : null)
+            ->withColorSupport($this->inferColorSupport($ttype))
             ->withSixel($this->sixelSupported);
         $this->renderContext->setCapabilities($this->capabilities);
+    }
+
+    /**
+     * Infer ANSI-colour capability from a reported terminal type. Mirrors the
+     * historical "any recognised type except DUMB/empty is colour-capable"
+     * heuristic. An empty type stays UNKNOWN (assume-capable).
+     */
+    private function inferColorSupport(string $ttype): string
+    {
+        $t = strtoupper(trim($ttype));
+        if ($t === '') {
+            return TerminalCapabilities::COLOR_UNKNOWN;
+        }
+        if ($t === 'DUMB' || $t === 'UNKNOWN' || $t === 'NETWORK' || str_contains($t, 'DUMB')) {
+            return TerminalCapabilities::COLOR_NONE;
+        }
+
+        return TerminalCapabilities::COLOR_ANSI;
+    }
+
+    /**
+     * Record the outcome of an RFC 2066 CHARSET exchange (F3B) on the capability
+     * value. This is evidence of what the client *can render*, not a change to
+     * the effective charset — the user's saved charset preference and the
+     * detection wizard remain authoritative for what the server actually emits.
+     */
+    private function applyCharsetSupport(string $acceptedCharset): void
+    {
+        if ($this->capabilities === null) {
+            return;
+        }
+        $name = strtoupper(trim($acceptedCharset));
+        $support = (str_contains($name, 'UTF-8') || str_contains($name, 'UTF8'))
+            ? TerminalCapabilities::CHARSET_UTF8
+            : TerminalCapabilities::CHARSET_ASCII_ONLY;
+        $this->capabilities = $this->capabilities->withCharsetSupport($support);
+        $this->renderContext?->setCapabilities($this->capabilities);
+        $this->log("CHARSET negotiated: {$name} (support={$support})");
     }
 
     /**
@@ -1972,6 +2053,7 @@ class BbsSession
             if ((time() - ($state['last_activity'] ?? time())) >= $disconnAt) {
                 return [null, true, true];
             }
+            $this->maybeSendKeepalive($conn);
             return ['', true, false];
         }
 
@@ -2047,6 +2129,26 @@ class BbsSession
         $this->sendTelnetCommand($conn, self::TELNET_DO, self::OPT_NAWS);
         $this->sendTelnetCommand($conn, self::WILL,      self::OPT_SUPPRESS_GA);
         $this->sendTelnetCommand($conn, self::TELNET_DO, self::OPT_TTYPE);
+        // RFC 2066 CHARSET: offer to negotiate. A client that agrees (DO CHARSET)
+        // gets a REQUEST listing the charsets the server can emit; the result is
+        // recorded as client *capability* only — it never overrides the user's
+        // saved charset preference or the detection wizard. A client that does
+        // not understand CHARSET replies DONT (or ignores it) and the session
+        // keeps its historical behaviour.
+        $this->sendTelnetCommand($conn, self::WILL,      self::OPT_CHARSET);
+    }
+
+    /**
+     * Send an RFC 2066 "CHARSET REQUEST" listing the character sets the server
+     * can produce, most-preferred first. The separator (first byte after
+     * REQUEST) is ";". Only sent after the client has agreed to CHARSET.
+     */
+    private function sendCharsetRequest($conn): void
+    {
+        $payload = chr(self::IAC) . chr(self::SB) . chr(self::OPT_CHARSET)
+            . chr(self::CHARSET_REQUEST) . ';UTF-8;CP437;US-ASCII'
+            . chr(self::IAC) . chr(self::SE);
+        $this->safeWrite($conn, $payload);
     }
 
     /**
@@ -2058,10 +2160,121 @@ class BbsSession
     }
 
     /**
+     * RFC 854 conservative refusal of a Telnet option the server does not
+     * implement. Called for every DO/DONT/WILL/WONT that the caller did not
+     * handle specifically.
+     *
+     *   - WILL <opt>  → DONT <opt>   (we will not enable it on our side)
+     *   - DO   <opt>  → WONT <opt>   (we will not perform it)
+     *   - WONT / DONT <opt> → no reply (agreeing to "off" is silent; replying is
+     *     exactly what produces negotiation loops)
+     *
+     * Options the server itself negotiates are never refused. Each (cmd,opt) is
+     * refused at most once per session, so a client that keeps re-offering an
+     * option cannot induce a refusal storm.
+     */
+    private function refuseUnsupportedTelnetOption($conn, int $cmd, int $opt): void
+    {
+        static $negotiated = [
+            self::OPT_ECHO,
+            self::OPT_SUPPRESS_GA,
+            self::OPT_NAWS,
+            self::OPT_TTYPE,
+            self::OPT_CHARSET,
+        ];
+        if (in_array($opt, $negotiated, true)) {
+            return;
+        }
+
+        if ($cmd === self::WILL) {
+            $reply = self::DONT;
+        } elseif ($cmd === self::TELNET_DO) {
+            $reply = self::WONT;
+        } else {
+            return; // WONT / DONT — no response
+        }
+
+        $key = $cmd . ':' . $opt;
+        if (isset($this->refusedTelnetOptions[$key])) {
+            return;
+        }
+        $this->refusedTelnetOptions[$key] = true;
+        $this->sendTelnetCommand($conn, $reply, $opt);
+        if ($this->debug) {
+            $this->log(sprintf('Refused unsupported Telnet option cmd=%d opt=%d (reply=%d)', $cmd, $opt, $reply));
+        }
+    }
+
+    /**
+     * Handle an RFC 2066 CHARSET subnegotiation payload (the bytes between
+     * `IAC SB CHARSET` and `IAC SE`). Only REQUEST / ACCEPTED / REJECTED are
+     * meaningful here:
+     *
+     *   - the client should not send REQUEST (the server offered WILL, so the
+     *     client is the requester's peer) — if it does, respond REJECTED rather
+     *     than switch the server's output charset;
+     *   - ACCEPTED <name> records the client's rendering capability (F3B) — it
+     *     does NOT change the effective charset;
+     *   - REJECTED leaves capability unknown and the session unchanged.
+     */
+    private function handleCharsetSubnegotiation($conn, string $sbData): void
+    {
+        $sub = ord($sbData[0]);
+        $rest = substr($sbData, 1);
+
+        if ($sub === self::CHARSET_ACCEPTED) {
+            $this->applyCharsetSupport(trim($rest));
+            return;
+        }
+        if ($sub === self::CHARSET_REJECTED) {
+            if ($this->debug) { $this->log('CHARSET REQUEST rejected by client'); }
+            return;
+        }
+        if ($sub === self::CHARSET_REQUEST) {
+            // The server does not change its output charset on a client REQUEST
+            // (that is the wizard's / saved preference's job). Politely decline.
+            $this->safeWrite(
+                $conn,
+                chr(self::IAC) . chr(self::SB) . chr(self::OPT_CHARSET)
+                . chr(self::CHARSET_REJECTED) . chr(self::IAC) . chr(self::SE)
+            );
+        }
+    }
+
+    /**
+     * Transport-level keepalive (F3G). Called on an idle read (the select window
+     * elapsed with no user input). Sends a Telnet NOP so a connection dropped by
+     * a NAT / stateful firewall is detected promptly rather than lingering until
+     * the OS TCP timeout.
+     *
+     * This is a liveness probe, NOT user activity: it deliberately does not touch
+     * `last_activity` or `idle_warned`, so the idle-warning and idle-disconnect
+     * timers are unaffected. Disabled for SSH (that transport has its own
+     * keepalive). Interval: TELNET_KEEPALIVE_SECONDS (default 60); 0 disables.
+     */
+    private function maybeSendKeepalive($conn): void
+    {
+        if ($this->isSsh || !is_resource($conn)) {
+            return;
+        }
+        $interval = (int) Config::env('TELNET_KEEPALIVE_SECONDS', '60');
+        if ($interval <= 0) {
+            return;
+        }
+        $now = time();
+        if ($this->lastKeepaliveAt !== 0 && ($now - $this->lastKeepaliveAt) < $interval) {
+            return;
+        }
+        $this->lastKeepaliveAt = $now;
+        $this->safeWrite($conn, chr(self::IAC) . chr(self::NOP));
+    }
+
+    /**
      * Send "TERMINAL-TYPE SEND" subnegotiation request.
      */
     private function requestTerminalType($conn): void
     {
+        $this->ttypeRequestCount++;
         $this->safeWrite($conn, chr(self::IAC) . chr(self::SB) . chr(self::OPT_TTYPE) . chr(1) . chr(self::IAC) . chr(self::SE));
     }
 
@@ -2996,7 +3209,7 @@ class BbsSession
         $read = [$conn]; $write = $except = null;
         $hasData = @stream_select($read, $write, $except, (int)$timeout, 0);
         if ($hasData === false) { return [null, false, true]; }
-        if ($hasData === 0)     { return ['', true, false]; }
+        if ($hasData === 0)     { $this->maybeSendKeepalive($conn); return ['', true, false]; }
 
         $line = $this->readTelnetLine($conn, $state);
         if ($line !== null) {
@@ -3037,7 +3250,7 @@ class BbsSession
         $read = [$conn]; $write = $except = null;
         $hasData = @stream_select($read, $write, $except, (int)$timeout, 0);
         if ($hasData === false) { return [null, false, true]; }
-        if ($hasData === 0)     { return ['', true, false]; }
+        if ($hasData === 0)     { $this->maybeSendKeepalive($conn); return ['', true, false]; }
 
         $char = $this->readRawChar($conn, $state);
         if ($char === null) { return [null, false, true]; }
@@ -3728,8 +3941,28 @@ class BbsSession
             if ($cmdByte === self::IAC) { return chr(self::IAC); }
             if (in_array($cmdByte, [self::TELNET_DO, self::DONT, self::WILL, self::WONT], true)) {
                 $opt = $this->nextByte($conn, $state); // consume option byte
-                if ($opt !== null && $cmdByte === self::WILL && ord($opt) === self::OPT_TTYPE) {
-                    $this->requestTerminalType($conn);
+                if ($opt !== null) {
+                    $optByte = ord($opt);
+                    if ($cmdByte === self::WILL && $optByte === self::OPT_TTYPE) {
+                        $this->requestTerminalType($conn);
+                    } elseif ($cmdByte === self::TELNET_DO && $optByte === self::OPT_CHARSET) {
+                        // Client agreed to RFC 2066 CHARSET — send the REQUEST once.
+                        if (!$this->charsetNegotiationEnabled) {
+                            $this->charsetNegotiationEnabled = true;
+                            $this->sendCharsetRequest($conn);
+                        }
+                    } else {
+                        $this->refuseUnsupportedTelnetOption($conn, $cmdByte, $optByte);
+                    }
+                }
+                // Mirror the SB branch: if nothing else is waiting, return a
+                // benign no-op rather than blocking on the next byte (or, on a
+                // client that sent only negotiation, reporting a disconnect).
+                if (($state['pushback'] ?? '') === '') {
+                    $rr = [$conn]; $rw = $rex = null;
+                    if (@stream_select($rr, $rw, $rex, 0, 0) < 1) {
+                        return "\x00";
+                    }
                 }
                 return $this->readRawChar($conn, $state); // skip negotiation; return next real char
             }
@@ -3758,10 +3991,21 @@ class BbsSession
                     if ($w > 0) { $state['cols'] = $w; }
                     if ($h > 0) { $state['rows'] = $h; }
                     if ($this->debug) { $this->log("NAWS (rawchar): {$w}x{$h}"); }
+                    // F3E: push the live size straight into the render context so a
+                    // resize is reflected on the very next render without waiting
+                    // for the next syncRenderContext() boundary. $state stays the
+                    // single source of truth; this only mirrors it.
+                    $this->renderContext?->setGeometry(
+                        (int)($state['cols'] ?? 80),
+                        (int)($state['rows'] ?? 24)
+                    );
                 }
                 if ($sbOpt === self::OPT_TTYPE && strlen($sbData) >= 2 && ord($sbData[0]) === 0) {
                     $ttype = trim(substr($sbData, 1));
                     $this->recordTerminalType($conn, $state, $ttype);
+                }
+                if ($sbOpt === self::OPT_CHARSET && $sbData !== '') {
+                    $this->handleCharsetSubnegotiation($conn, $sbData);
                 }
                 // If no more data is waiting right now, return immediately rather than
                 // blocking on the next fread. Key-wait loops that check for state changes
@@ -4014,7 +4258,21 @@ class BbsSession
     }
 
     /**
-     * Store and log the detected TELNET terminal type.
+     * Store and log the detected TELNET terminal type, and drive RFC 1091
+     * terminal-type cycling.
+     *
+     * Cycling: each distinct `IS` value seen for the first time triggers one
+     * more `SEND` request (up to {@see MAX_TTYPE_REQUESTS}) so a client that
+     * offers a list — e.g. SyncTERM's "SYNCTERM" followed by generic fallbacks —
+     * is fully enumerated. The cycle stops naturally when the client repeats an
+     * entry (list exhausted) or the request cap is hit. It is nonblocking: the
+     * extra `IS` replies arrive through the normal input path.
+     *
+     * Primary-type selection stays close to the historical "latest distinct
+     * value wins", with one guard: once an entry has identified the client as
+     * SyncTERM, a later generic entry does not overwrite that identification
+     * (the SyncTERM compatibility paths key on it).
+     *
      * Logs once per distinct value per session.
      */
     private function recordTerminalType($conn, array &$state, string $ttype): void
@@ -4023,7 +4281,26 @@ class BbsSession
         if ($normalized === '') {
             return;
         }
+
+        if (!isset($this->seenTerminalTypes[$normalized])) {
+            $this->seenTerminalTypes[$normalized] = true;
+            // A SyncTERM identity anywhere in the client's type list still
+            // triggers the local-status-line fix, even if this entry is not
+            // adopted as the primary type.
+            $this->applyTerminalQuirks($conn, $normalized);
+            if ($this->ttypeRequestCount < self::MAX_TTYPE_REQUESTS) {
+                $this->requestTerminalType($conn);
+            }
+        }
+
         if (($state['terminal_type'] ?? '') === $normalized) {
+            return;
+        }
+        if (str_contains((string)($state['terminal_type'] ?? ''), 'SYNCTERM')
+            && !str_contains($normalized, 'SYNCTERM')) {
+            // Keep the established SyncTERM identification; still refresh
+            // capability inference from what is now known.
+            $this->refreshCapabilities($state);
             return;
         }
         $state['terminal_type'] = $normalized;
