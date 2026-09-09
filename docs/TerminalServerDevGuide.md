@@ -712,7 +712,11 @@ machine, `TerminalLineEditor` (`telnet/src/TerminalLineEditor.php`) — never a
 per-handler key switch. It is pure (no socket) and handles append, backspace,
 forward-delete, Left/Right/Home/End (+ Ctrl-A/E), a max length, and
 submit/cancel. `TelnetUtils::showInputDialog()` and `LineShell::readPromptLine()`
-are its adapters.
+are its adapters; both honour mid-line editing and place the visible terminal
+cursor at the editor's logical insertion point (`TerminalLineEditor::cursor()`),
+not always at end-of-text. `showInputDialog()`'s boxed field scrolls
+horizontally to keep the insertion point in view when the value is longer than
+the field.
 
 - Read keys for a text field with `BbsSession::readLineKeyWithIdleCheck()`, **not**
   `readKeyWithIdleCheck()` — the latter applies a menu-style "swallow a queued

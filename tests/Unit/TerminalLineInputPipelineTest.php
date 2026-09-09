@@ -86,6 +86,25 @@ final class TerminalLineInputPipelineTest extends TestCase
         return $out;
     }
 
+    /** Everything the server has written to the client so far. */
+    private function serverOutput(): string
+    {
+        $out = '';
+        while (($chunk = @fread($this->cli, 8192)) !== false && $chunk !== '') {
+            $out .= $chunk;
+        }
+
+        return $out;
+    }
+
+    /** Columns of every "position cursor then show it" escape, in emission order. */
+    private function cursorColumns(string $bytes): array
+    {
+        preg_match_all("/\033\\[\\d+;(\\d+)H\033\\[\\?25h/", $bytes, $m);
+
+        return array_map('intval', $m[1]);
+    }
+
     // ===== BbsSession::readTelnetLine (legacy prompt path: login, registration) =====
 
     public function testPlainLineReadsUntilTheTerminator(): void
@@ -291,6 +310,64 @@ final class TerminalLineInputPipelineTest extends TestCase
         );
         self::assertSame('line1', $out);
         self::assertSame('', $this->pendingServerBytes());
+    }
+
+    public function testShowInputDialogLeftArrowInsertsMidLineThroughTheRealParser(): void
+    {
+        // The exact human assay: type abcdef, Left x3, type x, Enter.
+        // Real BbsSession parser: SyncTerm Left = ESC [ D.
+        $this->client("abcdef\033[D\033[D\033[Dx\r\n");
+        $out = \BinktermPHP\TelnetServer\TelnetUtils::showInputDialog(
+            $this->srv, $this->state, $this->bbs, 'Search', 'Find:', '', 60, null, [], []
+        );
+
+        self::assertSame('abcxdef', $out, 'Left moved the insertion point; x was inserted mid-line');
+    }
+
+    public function testShowInputDialogRendersTheCursorAtTheInsertionPointNotAtEnd(): void
+    {
+        // Same edit, but no submit: the last redraw before the idle disconnect
+        // must park the terminal cursor at the logical column (4 chars in),
+        // not at end-of-text (7 chars in). 80x24 layout: box left col 9, input
+        // row 12, so "space + 4 chars" -> col 15; end-of-text would be col 18.
+        $this->state['last_activity']          = time();
+        $this->state['idle_warning_timeout']   = 1;
+        $this->state['idle_disconnect_timeout'] = 2;
+
+        $this->client("abcdef\033[D\033[D\033[Dx");
+        $out = \BinktermPHP\TelnetServer\TelnetUtils::showInputDialog(
+            $this->srv, $this->state, $this->bbs, 'Search', 'Find:', '', 60, null, [], []
+        );
+        self::assertNull($out, 'idle disconnect returned null (no Enter was sent)');
+
+        $cols = $this->cursorColumns($this->serverOutput());
+        self::assertNotEmpty($cols);
+        self::assertSame(15, end($cols), 'final cursor column is the insertion point (abcx|def)');
+        self::assertNotContains(18, $cols, 'the cursor is never parked at end-of-text after Left');
+    }
+
+    public function testShowInputDialogCursorMotionKeysEditMidLine(): void
+    {
+        // Home to start, Right twice, Delete the 3rd char, End, append '!'.
+        // abcdef -> (Home)(Right)(Right) abcdef, (Delete) abdef, (End)(!) abdef!
+        $this->client("abcdef\033[H\033[C\033[C\033[3~\033[F!\r\n");
+        $out = \BinktermPHP\TelnetServer\TelnetUtils::showInputDialog(
+            $this->srv, $this->state, $this->bbs, 'T', 'P', '', 60, null, [], []
+        );
+
+        self::assertSame('abdef!', $out);
+        self::assertSame('', $this->pendingServerBytes(), 'no input left queued');
+    }
+
+    public function testShowInputDialogUtf8MidLineEditIsCodepointSafe(): void
+    {
+        // caf<e-acute>  ->  Left once (before the accent)  ->  insert 'X'  ->  cafX<e-acute>
+        $this->client("caf\u{00E9}\033[DX\r\n");
+        $out = \BinktermPHP\TelnetServer\TelnetUtils::showInputDialog(
+            $this->srv, $this->state, $this->bbs, 'T', 'P', '', 60, null, [], []
+        );
+
+        self::assertSame("cafX\u{00E9}", $out);
     }
 
     public function testLineShellPasswordPromptMasksAndKeepsNoHistory(): void

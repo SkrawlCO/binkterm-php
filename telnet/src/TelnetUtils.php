@@ -3179,6 +3179,10 @@ class TelnetUtils
         $hint  = (string)($scheme['hint'] ?? self::ANSI_YELLOW);
 
         $value = $prefill;
+        // Insertion point as a codepoint offset from the start of the value.
+        // Kept in step with the shared TerminalLineEditor below so the boxed
+        // field can show mid-line editing and a truthful cursor position.
+        $cursorPos = mb_strlen($value);
         $inlinePrompt = !empty($options['inline_prompt']);
 
         // Returns [startRow, startCol, innerWidth, inputRow] for the current terminal size.
@@ -3197,7 +3201,7 @@ class TelnetUtils
         };
 
         $render = function() use (
-            $conn, &$state, &$value,
+            $conn, &$state, &$value, &$cursorPos,
             $title, $prompt,
             $tl, $tr, $bl, $br, $hz, $vt,
             $ansi, $frame, $body, $hint, $rst,
@@ -3226,9 +3230,15 @@ class TelnetUtils
             $fieldWidth  = $inlinePrompt && $hasPrompt
                 ? max(10, $innerWidth - 3 - $promptWidth)
                 : $innerWidth - 2;
-            $displayVal  = mb_substr($value, max(0, mb_strlen($value) - $fieldWidth));
+            // Horizontal scroll window: keep the insertion point visible while
+            // preferring to anchor at the start of the value.
+            $valLen = mb_strlen($value);
+            $cur    = max(0, min($cursorPos, $valLen));
+            $scroll = $cur > $fieldWidth ? $cur - $fieldWidth : 0;
+            $scroll = min($scroll, max(0, $valLen - $fieldWidth));
+            $displayVal  = mb_substr($value, $scroll, $fieldWidth);
             $inputContent = $displayVal . str_repeat(' ', max(0, $fieldWidth - mb_strlen($displayVal)));
-            $cursorOffset = mb_strlen($displayVal);
+            $cursorOffset = max(0, min($fieldWidth, $cur - $scroll));
 
             $draw = static function(int $r, string $line) use ($conn, $startCol): void {
                 self::safeWrite($conn, "\033[{$r};{$startCol}H{$line}");
@@ -3290,7 +3300,7 @@ class TelnetUtils
                 $draw($r,   $btmBorder);
             }
 
-            // Place cursor at end of input field and show it
+            // Place the terminal cursor at the logical insertion point and show it
             $cursorCol = $startCol + 1 + (($inlinePrompt && $hasPrompt) ? ($promptWidth + 1) : 0) + $cursorOffset + 1; // box left + vt + space + chars
             self::safeWrite($conn, "\033[{$inputRow};{$cursorCol}H\033[?25h");
 
@@ -3302,10 +3312,12 @@ class TelnetUtils
         $lastRows = $state['rows'] ?? 24;
         $lastCols = $state['cols'] ?? 80;
 
-        // Shared UTF-8-safe editing contract (append + backspace + delete;
-        // mid-line cursor left off here so the boxed field's redraw stays
-        // unchanged). Sensitive callers opt out of history by passing no key.
-        $editor   = new \BinktermPHP\TelnetServer\TerminalLineEditor($value, max(1, $maxLength), false);
+        // Shared UTF-8-safe editing contract: append + backspace + delete +
+        // mid-line cursor motion (Left/Right/Home/End/Ctrl-A/Ctrl-E). The boxed
+        // field scrolls horizontally to keep the insertion point visible.
+        // Sensitive callers opt out of history by passing no key.
+        $editor   = new \BinktermPHP\TelnetServer\TerminalLineEditor($value, max(1, $maxLength), true);
+        $cursorPos = $editor->cursor();
         $histKey  = trim((string)($options['history_key'] ?? ''));
         $histIdx  = 0;
         $drain    = static function () use ($server, $conn, &$state): void {
@@ -3354,12 +3366,14 @@ class TelnetUtils
                 [$histIdx, $recalled] = $History::step($state, $histKey, $histIdx, $key === 'UP' ? 1 : -1);
                 $editor->setValue($recalled ?? '');
                 $value = $editor->value();
+                $cursorPos = $editor->cursor();
                 $render();
                 continue;
             }
 
             $result = $editor->apply($key);
             $value  = $editor->value();
+            $cursorPos = $editor->cursor();
 
             if ($result === $Editor::RESULT_SUBMIT) {
                 self::safeWrite($conn, "\033[?25l");

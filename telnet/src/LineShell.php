@@ -209,7 +209,7 @@ class LineShell implements TerminalShellInterface
     {
         // Shared, UTF-8-safe editing. `$echo === false` is the sensitive path
         // (passwords) — masked, and never offered history.
-        $editor   = new TerminalLineEditor('', 255, false);
+        $editor   = new TerminalLineEditor('', 255, true);
         $histKey  = $echo ? trim((string)($state['line_prompt_history_key'] ?? '')) : '';
         $histIdx  = 0;
         $lastRows = (int)($state['rows'] ?? 24);
@@ -232,6 +232,11 @@ class LineShell implements TerminalShellInterface
                 . ($prompt !== '' ? TelnetUtils::colorize($prompt, TelnetUtils::ANSI_CYAN) : '')
                 . $shown
             );
+            // Park the terminal cursor at the logical insertion point.
+            $back = $editor->length() - $editor->cursor();
+            if ($back > 0) {
+                TelnetUtils::safeWrite($conn, "\033[{$back}D");
+            }
         };
         $drain = function () use ($conn, &$state): void {
             if (method_exists($this->server, 'drainPendingInput')) {
