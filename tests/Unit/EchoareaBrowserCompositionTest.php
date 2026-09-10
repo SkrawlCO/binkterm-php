@@ -45,13 +45,17 @@ final class EchoareaBrowserCompositionTest extends TestCase
     }
 
     /** 31 followed areas; `$newByIndex` maps a 0-based row to its canonical NEW count. */
-    private function areaList(int $count = 31, array $newByIndex = [], string $label = 'new'): DenseList
+    private function areaList(int $count = 31, array $newByIndex = [], string $label = 'new', ?string $desc = null): DenseList
     {
         $rows = [];
         for ($i = 0; $i < $count; $i++) {
             $new = (int) ($newByIndex[$i] ?? 0);
             $rows[] = new DenseListRow(
-                ['tag' => sprintf('AREA.%02d', $i + 1), 'net' => $i % 2 ? 'fidonet' : 'agoranet', 'desc' => "Discussion area number " . ($i + 1)],
+                [
+                    'tag'  => sprintf('AREA.%02d', $i + 1),
+                    'net'  => $i % 2 ? 'fidonet' : 'agoranet',
+                    'desc' => $desc ?? ('Discussion area number ' . ($i + 1)),
+                ],
                 ['id' => $i + 1, 'tag' => sprintf('AREA.%02d', $i + 1)],
                 null,
                 null,
@@ -166,6 +170,47 @@ final class EchoareaBrowserCompositionTest extends TestCase
             self::assertStringContainsString('L33TEST', implode("\n", $grid));
             self::assertStringContainsString('ECHOMAIL AREAS', implode("\n", $grid));
         }
+    }
+
+    /**
+     * Regression: on CP437 a description long enough to be ellipsized used to
+     * push every MENU row from 72 to 74 cells — TextBlock::ellipsize appends
+     * U+2026, which encodeForTerminal() transliterates to "..." (3 cells) — so
+     * fitSemanticBlock(mustFit) threw and the whole authored frame dropped to
+     * the plain dense list in real SyncTerm sessions.
+     */
+    public function testLongDescriptionStaysThemedInCp437(): void
+    {
+        $long = 'A fairly long real-world description of the area that will certainly be truncated to fit';
+
+        foreach (['utf8', 'cp437'] as $charset) {
+            $list = $this->areaList(31, [2 => 42, 6 => 31, 11 => 18], 'new', $long);
+            $view = new ThemedDenseListView($list, $this->theme(), ['Areas you follow - 31']);
+            $h = TerminalRenderHarness::at(80, 24)->charset($charset);
+            $ok = $view->tryRender($h->context(), 3, [['text' => 'U/D Move  L/R Page  Enter Select  Q Quit  Ctrl-K Help']]);
+
+            self::assertTrue($ok, $charset . ': ' . ($view->lastReport()['reason'] ?? ''));
+            self::assertSame('themed', $view->lastReport()['mode'], $charset);
+
+            // Every rendered line — including the MENU grid rows — fits 80.
+            foreach ($this->grid($h->bytes(), $charset) as $line) {
+                self::assertLessThanOrEqual(80, mb_strlen($line), $charset . ' line width');
+            }
+        }
+    }
+
+    public function testEllipsisTerminatorIsCharsetSafe(): void
+    {
+        $long = str_repeat('long ', 30);
+
+        $utf8 = implode("\n", $this->render($this->areaList(20, [], 'new', $long), 0, ['ctx'], 'utf8'));
+        $cp437 = implode("\n", $this->render($this->areaList(20, [], 'new', $long), 0, ['ctx'], 'cp437'));
+
+        // UTF-8 keeps the single-glyph ellipsis; CP437 spells it out as "..."
+        // and is charged its real width (no U+2026 anywhere).
+        self::assertStringContainsString("\u{2026}", $utf8);
+        self::assertStringNotContainsString("\u{2026}", $cp437);
+        self::assertStringContainsString('...', $cp437);
     }
 
     public function testSelectionFollowsAcrossThePageWindow(): void

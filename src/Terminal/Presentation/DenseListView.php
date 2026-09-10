@@ -173,6 +173,38 @@ final class DenseListView
         return max(0, min($selectedIndex - intdiv($height - 1, 2), $total - $height));
     }
 
+    /**
+     * Ellipsize to at most `$width` cells *as emitted to this terminal*.
+     *
+     * {@see TextBlock::ellipsize()} appends the single glyph U+2026, which
+     * {@see TerminalRenderContext::encodeForTerminal()} transliterates to "..."
+     * on CP437 (and ASCII) — three cells, not one. A row fitted in UTF-8 then
+     * encoded to CP437 therefore overruns its region and
+     * {@see NavigationScreenRenderer::fitSemanticBlock()} (mustFit) throws,
+     * dropping the authored frame to fallback. On those charsets the terminator
+     * is spelled out and charged its real width here.
+     *
+     * A value that already fits is returned untouched — no ellipsis, no
+     * expansion — so on UTF-8 this is byte-identical to {@see TextBlock::ellipsize()}.
+     */
+    private static function ellipsizeForTerminal(string $s, int $width, TerminalRenderContext $ctx): string
+    {
+        if ($width <= 0) {
+            return '';
+        }
+        if (mb_strlen($s, 'UTF-8') <= $width) {
+            return $s;
+        }
+        if ($ctx->effectiveCharset() === 'utf8') {
+            return TextBlock::ellipsize($s, $width);
+        }
+        if ($width <= 3) {
+            return mb_substr($s, 0, $width, 'UTF-8');
+        }
+
+        return rtrim(mb_substr($s, 0, $width - 3, 'UTF-8')) . '...';
+    }
+
     /** Widest trailing annotation across the page (+1 gap), or 0 when none. */
     private static function trailingWidth(DenseList $list): int
     {
@@ -225,7 +257,7 @@ final class DenseListView
         $cells = [];
         foreach ($list->columns as $ci => $col) {
             $w = $widths[$ci] ?? $col->minWidth;
-            $text = TextBlock::ellipsize((string) ($row->cells[$col->key] ?? ''), $w);
+            $text = self::ellipsizeForTerminal((string) ($row->cells[$col->key] ?? ''), $w, $ctx);
             if (!$col->isFlexible()) {
                 $text = $col->align === DenseListColumn::ALIGN_RIGHT
                     ? self::padLeft($text, $w)
@@ -247,7 +279,7 @@ final class DenseListView
             $left .= str_repeat(' ', $pad) . $trail;
         }
         if ($fitWidth !== null) {
-            $left = TextBlock::padRight(TextBlock::ellipsize($left, $fitWidth), $fitWidth);
+            $left = TextBlock::padRight(self::ellipsizeForTerminal($left, $fitWidth, $ctx), $fitWidth);
         }
 
         if ($selected) {

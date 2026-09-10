@@ -51,8 +51,19 @@ final class EchoareaDenseListTest extends TestCase
     private BbsSession $bbs;
     private EchomailHandler $handler;
 
+    private mixed $themeEnvBackup = null;
+
     protected function setUp(): void
     {
+        // These pin the *non-themed* dense-list presentation. Point the theme
+        // loader at an empty temp dir so a deployed echoareas surface
+        // (config/terminal_theme_echoareas.json) does not swap in the authored
+        // M2 frame under the tests (that path is covered by
+        // EchoareaBrowserCompositionTest).
+        $this->themeEnvBackup = $_ENV['TERMINAL_NAV_THEME_CONFIG'] ?? null;
+        $_ENV['TERMINAL_NAV_THEME_CONFIG'] = sys_get_temp_dir() . '/echoarea-densetest-none-' . uniqid('', true) . '.json';
+        \BinktermPHP\Terminal\Navigation\NavigationThemeConfig::reset();
+
         [$this->srv, $this->cli] = stream_socket_pair(STREAM_PF_UNIX, STREAM_SOCK_STREAM, 0);
         stream_set_blocking($this->srv, false);
         stream_set_blocking($this->cli, false);
@@ -77,6 +88,13 @@ final class EchoareaDenseListTest extends TestCase
     {
         @fclose($this->srv);
         @fclose($this->cli);
+
+        if ($this->themeEnvBackup === null) {
+            unset($_ENV['TERMINAL_NAV_THEME_CONFIG']);
+        } else {
+            $_ENV['TERMINAL_NAV_THEME_CONFIG'] = $this->themeEnvBackup;
+        }
+        \BinktermPHP\Terminal\Navigation\NavigationThemeConfig::reset();
     }
 
     private function state(): array
