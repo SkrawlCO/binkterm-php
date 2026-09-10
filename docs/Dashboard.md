@@ -15,23 +15,19 @@ The dashboard is the first page users see after logging in. It provides a summar
 
 The dashboard is composed of cards. Which cards appear depends on which features are enabled and whether the user is an admin.
 
-### What's New *(main column)*
+### Mail & Areas *(always visible)*
 
-A compact arrival card for every authenticated caller: unread netmail, new echomail with an area count, and unread bulletins. The links open the existing Netmail and Echomail landing pages and the unread Bulletins page. It shows counts only, without message bodies, subjects, traversal IDs or area identities. The default position is before Mail & Areas; normal dashboard customization can move or hide it.
+A compact arrival summary for every authenticated caller: unread netmail, new echomail with an area count, and unread bulletins. The links open the existing Netmail page, the caller's preferred Echomail landing page, and the unread Bulletins page. It shows counts only, without message bodies, subjects, traversal IDs or area identities. This is part of the existing required Mail & Areas card; there is no separate What's New card.
 
 The card consumes the same `UnifiedNewscanService::plan()` as terminal Newscan. Netmail uses the canonical recipient/unread predicate. Echomail uses subscribed, accessible active areas, their last-read high-watermarks, individual read state, and existing ignore/moderation/future-date filters. This is Newscan's definition even when a caller chooses a different badge mode elsewhere. Bulletins use `BulletinManager` unread state. Notification acknowledgment state is not a source.
 
-Planning and presentation do not mark anything read or advance any high-watermark. The summary is server-rendered on dashboard navigation/reload, with no new API or polling. A hidden card is not scanned. Normal reading in the existing readers remains responsible for read-state changes.
+Planning and presentation do not mark anything read, advance any high-watermark, or acknowledge notification snapshots. The summary is server-rendered on dashboard navigation/reload, with no new API or polling. Normal reading in the existing readers remains responsible for read-state changes.
 
 An empty complete scan says “You're caught up.” The unchanged terminal caps (300 netmails, 60 candidate areas, 300 messages per area) bound the scan. When the plan signals truncation, a limit notice explains that more may be available; even an empty truncated scan does not claim that the caller is caught up. A failed scan shows a restrained unavailable message rather than false zero counts.
 
-### Mail & Areas *(always visible)*
-
-Shows the count of unread netmail and new (or unread) echomail in subscribed areas. Click either counter to go directly to your inbox or echo area list.
-
 Below the counters, the **New Echo Areas** section lists areas added in the past 30 days (up to 8), with their tag, network, and date. The section can be collapsed; the count is still shown when collapsed. Buttons at the bottom link to subscription management and, if enabled, the Interests page.
 
-The dashboard stats refresh automatically every 30 seconds.
+Area discovery stats refresh automatically every 30 seconds; they do not overwrite the canonical mail summary.
 
 ### System News
 
@@ -81,7 +77,7 @@ Shows the user's personal referral link with a one-click copy button, plus stats
 
 ## Echomail Badge Mode
 
-The echomail counter on the Mail & Areas card can operate in two modes, selectable in **Account Settings**:
+Notification badges elsewhere can operate in two modes, selectable in **Account Settings**. These settings do not change the canonical Newscan summary in Mail & Areas:
 
 - **New since last visit** (default) — counts messages that arrived after you last opened the echo area list. Fast query; resets automatically when you visit `/echomail`.
 - **Unread** — counts messages in your subscribed areas that you have never opened, using the full read-tracking table. More accurate but a heavier database query on large installs.

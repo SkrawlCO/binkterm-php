@@ -14,14 +14,22 @@ use Twig\TwigFunction;
 
 final class WebNewscanSummaryTest extends TestCase
 {
-    private function render(?array $summary): string
+    private function render(?array $summary, bool $wholeCard = false, string $echoList = 'echomail'): string
     {
         $twig = new Environment(new FilesystemLoader(dirname(__DIR__, 2) . '/templates'));
         $translator = new Translator();
         $twig->addFunction(new TwigFunction('t', fn($key, $params = []) => $translator->translate($key, $params, 'en', ['common'])));
-        return $twig->render('partials/dashboard_newscan.twig', [
+        $context = [
             'newscan_summary' => $summary, 'locale' => 'en', 'current_user' => ['is_admin' => false],
-        ]);
+            'default_echo_list' => $echoList, 'interests_enabled' => true,
+        ];
+        if ($wholeCard) {
+            $dashboard = file_get_contents(dirname(__DIR__, 2) . '/templates/dashboard.twig');
+            preg_match('/<div class="dash-card-wrapper" data-card-id="unread">.*?\{# \/dash-card-wrapper unread #\}/s', $dashboard, $match);
+            self::assertNotEmpty($match[0]);
+            return $twig->createTemplate($match[0])->render($context);
+        }
+        return $twig->render('partials/dashboard_newscan.twig', $context);
     }
 
     public function testProjectionUsesOnlyCanonicalPlanCountsAndStates(): void
@@ -43,10 +51,11 @@ final class WebNewscanSummaryTest extends TestCase
     public function testOrdinaryCallerGetsCompactCardWithExistingDestinations(): void
     {
         $cards = DashboardCardRegistry::getAvailableCards(['is_admin' => false]);
-        self::assertArrayHasKey('newscan', $cards);
-        self::assertFalse($cards['newscan']['required']);
-        $layout = DashboardCardRegistry::mergeLayout(['main'=>['unread'], 'sidebar'=>[], 'hidden'=>[]], $cards);
-        self::assertLessThan(array_search('unread', $layout['main'], true), array_search('newscan', $layout['main'], true));
+        self::assertArrayNotHasKey('newscan', DashboardCardRegistry::getAllCards());
+        self::assertTrue($cards['unread']['required']);
+        $layout = DashboardCardRegistry::mergeLayout(['main'=>['unread'], 'sidebar'=>[], 'hidden'=>['newscan']], $cards);
+        self::assertContains('unread', $layout['main']);
+        foreach ($layout as $zone) self::assertNotContains('newscan', $zone);
         $plan = new NewscanPlan([1, 2, 3], [new NewscanArea(8, 'TEST', '', '', [4, 5])], 1);
         $html = $this->render(WebNewscanSummary::fromPlan($plan));
         foreach (['/netmail', '/echomail', '/bulletins?unread=1'] as $url) {
@@ -71,6 +80,31 @@ final class WebNewscanSummaryTest extends TestCase
         self::assertStringNotContainsString('caught up', $failed);
     }
 
+    public function testMailAndAreasOwnsCanonicalCountsAndPreservesDiscoveryEvenWhenCaughtUp(): void
+    {
+        $plan = new NewscanPlan([1], [new NewscanArea(1, 'A', '', '', range(1, 45)), new NewscanArea(2, 'B', '', '', range(46, 90))], 1);
+        foreach ([$plan, NewscanPlan::empty()] as $state) {
+            $html = $this->render(WebNewscanSummary::fromPlan($state), true, 'echolist');
+            self::assertSame(1, substr_count($html, 'data-card-id="unread"'));
+            self::assertStringNotContainsString('data-card-id="newscan"', $html);
+            foreach (['newEchoareaList', 'toggleNewEchoareas', 'newEchoareasLoadMore', 'href="/subscriptions"', 'href="/interests"'] as $control) {
+                self::assertStringContainsString($control, $html);
+            }
+            if ($state->isEmpty()) {
+                self::assertStringContainsString("You're caught up.", html_entity_decode($html));
+            } else {
+                self::assertStringContainsString('<strong>90</strong>', $html);
+                self::assertStringContainsString('Areas: 2', $html);
+                self::assertStringContainsString('href="/echolist"', $html);
+            }
+        }
+        $dashboard = file_get_contents(dirname(__DIR__, 2) . '/templates/dashboard.twig');
+        self::assertSame(1, substr_count($dashboard, "include 'partials/dashboard_newscan.twig'"));
+        foreach (['data.total_netmail', 'data.new_echomail', '/api/notify/seen', 'data-card-id="newscan"'] as $legacy) {
+            self::assertStringNotContainsString($legacy, $dashboard);
+        }
+    }
+
     public function testTruncatedCountsNeverClaimCaughtUpEvenWithNoVisibleMessages(): void
     {
         foreach ([new NewscanPlan(range(1, 300), [], 0, true), new NewscanPlan([], [], 0, true)] as $plan) {
@@ -89,7 +123,7 @@ final class WebNewscanSummaryTest extends TestCase
         self::assertLessThan(strpos($route, 'UnifiedNewscanService'), strpos($route, 'if (!$user)'));
         self::assertStringContainsString('UnifiedNewscanService())->plan($user)', $route);
         self::assertStringContainsString('WebNewscanSummary::fromPlan($newscanPlan)', $route);
-        self::assertStringContainsString("!in_array('newscan', \$dashboardLayout['hidden'] ?? [], true)", $route);
+        self::assertStringNotContainsString("\$availableCards['newscan']", $route);
         preg_match('/\$newscanSummary = null;(.*?)\/\/ Compose the Crossroads/s', $route, $match);
         self::assertNotEmpty($match[1]);
         foreach (['markRead', 'last_read_id', 'message_read_status', 'notify_state', 'user_activity_log', 'is_admin'] as $forbidden) {

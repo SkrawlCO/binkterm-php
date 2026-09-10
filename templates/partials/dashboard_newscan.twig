@@ -1,7 +1,3 @@
-<div class="dash-card-wrapper" data-card-id="newscan">
-    <div class="card">
-        <div class="card-header"><h6 class="mb-0">{{ t('ui.dashboard.newscan.title', {}, locale, ['common']) }}</h6></div>
-        <div class="card-body">
             {% if newscan_summary is null %}
                 <p class="text-muted small mb-0">{{ t('ui.dashboard.newscan.unavailable', {}, locale, ['common']) }}</p>
             {% elseif newscan_summary.empty and not newscan_summary.truncated %}
@@ -15,7 +11,7 @@
                         </a>
                     </div>
                     <div class="col-sm-4">
-                        <a href="/echomail" class="d-flex justify-content-between gap-2 text-decoration-none">
+                        <a href="{{ default_echo_list == 'echolist' ? '/echolist' : '/echomail' }}" class="d-flex justify-content-between gap-2 text-decoration-none">
                             <span>{{ t('ui.dashboard.newscan.echomail', {}, locale, ['common']) }}</span>
                             <strong>{{ newscan_summary.echomail }}</strong>
                         </a>
@@ -32,6 +28,3 @@
                     <p class="text-muted small mt-3 mb-0">{{ t('ui.dashboard.newscan.capped', {}, locale, ['common']) }}</p>
                 {% endif %}
             {% endif %}
-        </div>
-    </div>
-</div>

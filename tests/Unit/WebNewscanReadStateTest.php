@@ -13,7 +13,7 @@ final class WebNewscanReadStateTest extends TestCase
 {
     private PDO $db;
     private UnifiedNewscanService $service;
-    private const TABLES = ['users','netmail','files','saved_messages','message_read_status','echoareas','echomail','user_echoarea_subscriptions','user_echomail_ignore_rules','bulletins','bulletin_reads'];
+    private const TABLES = ['users','users_meta','netmail','files','saved_messages','message_read_status','echoareas','echomail','user_echoarea_subscriptions','user_echomail_ignore_rules','bulletins','bulletin_reads'];
 
     protected function setUp(): void
     {
@@ -26,6 +26,9 @@ final class WebNewscanReadStateTest extends TestCase
             foreach ($columns as $column) $this->db->exec("ALTER TABLE pg_temp.$table ALTER COLUMN \"$column\" SET DEFAULT 0");
         }
         $this->db->exec("INSERT INTO users (id,username,real_name,password_hash,is_active,is_admin) VALUES (7,'newscan_fixture','Newscan Fixture','unused',TRUE,FALSE)");
+        // The global visit snapshot acknowledges every fixture message, but none
+        // of the canonical per-area unread state should be consumed by it.
+        $this->db->exec("INSERT INTO users_meta (user_id,keyname,valname) VALUES (7,'last_visit_echomail_max_id','99999999')");
         $this->db->exec("INSERT INTO netmail (id,user_id,from_address,to_address,from_name,to_name,subject) VALUES
             (1,7,'999:999/998','999:999/999','Sender','newscan_fixture','Unread'),
             (2,7,'999:999/998','999:999/999','Sender','newscan_fixture','Read'),
@@ -72,7 +75,7 @@ final class WebNewscanReadStateTest extends TestCase
     private function fingerprint(): array
     {
         $state = [];
-        foreach (['message_read_status','user_echoarea_subscriptions','bulletin_reads'] as $table) {
+        foreach (['message_read_status','user_echoarea_subscriptions','bulletin_reads','users_meta'] as $table) {
             $state[$table] = $this->db->query("SELECT row_to_json(t)::text FROM $table t ORDER BY row_to_json(t)::text")->fetchAll(PDO::FETCH_COLUMN);
         }
         return $state;

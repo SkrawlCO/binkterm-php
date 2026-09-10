@@ -22,7 +22,6 @@ class DashboardCardRegistry
     public static function getAllCards(): array
     {
         return [
-            'newscan'        => ['label_key' => 'ui.dashboard.newscan.title', 'default_zone' => 'main', 'required' => false],
             'unread'         => ['label_key' => 'ui.dashboard.card.unread',         'default_zone' => 'main',    'required' => true],
             'system_news'    => ['label_key' => 'ui.dashboard.card.system_news',    'default_zone' => 'main',    'required' => false],
             'crossroads'     => ['label_key' => 'ui.dashboard.card.crossroads',     'default_zone' => 'main',    'required' => false, 'conditional' => 'crossroads_available'],
