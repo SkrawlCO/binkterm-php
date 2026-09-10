@@ -93,6 +93,47 @@ final class MultiZorkAccessRateLimitTest extends TestCase
         $this->assertTrue($limiter->check($this->otherUserId, $this->expeditionId));
     }
 
+    public function testSuccessLeavesNoResidualRow(): void
+    {
+        $limiter = new MultiZorkAccessRateLimit($this->db);
+
+        $limiter->recordFailure($this->userId, $this->expeditionId);
+        $limiter->recordFailure($this->userId, $this->expeditionId);
+        $limiter->recordSuccess($this->userId, $this->expeditionId);
+
+        // recordSuccess clears the failure rows and must not insert a
+        // success marker — the table would otherwise grow one permanent row
+        // per game entry with nothing ever removing it.
+        $count = $this->db->prepare(
+            'SELECT COUNT(*) FROM multizork_access_attempts WHERE expedition_id = ?'
+        );
+        $count->execute([$this->expeditionId]);
+        $this->assertSame(0, (int) $count->fetchColumn());
+    }
+
+    public function testOpportunisticCleanupRemovesAgedRows(): void
+    {
+        $limiter = new MultiZorkAccessRateLimit($this->db);
+        $limiter->recordFailure($this->userId, $this->expeditionId);
+
+        // Age the row past the 1h cleanup horizon.
+        $this->db->prepare(
+            "UPDATE multizork_access_attempts
+             SET attempted_at = NOW() - INTERVAL '2 hours'
+             WHERE expedition_id = ?"
+        )->execute([$this->expeditionId]);
+
+        // A later record call cleans it opportunistically.
+        $limiter->recordFailure($this->otherUserId, $this->expeditionId);
+
+        $rows = $this->db->prepare(
+            'SELECT user_id FROM multizork_access_attempts WHERE expedition_id = ?'
+        );
+        $rows->execute([$this->expeditionId]);
+        $remaining = $rows->fetchAll(PDO::FETCH_COLUMN);
+        $this->assertSame([$this->otherUserId], array_map('intval', $remaining));
+    }
+
     public function testAccessCodeIsNeverPersistedInTheAttemptsTable(): void
     {
         $columns = $this->db->query(

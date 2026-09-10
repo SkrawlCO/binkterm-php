@@ -59,27 +59,34 @@ final class MultiZorkAccessRateLimit
         $this->db->prepare(
             'INSERT INTO multizork_access_attempts (user_id, expedition_id, success) VALUES (?, ?, FALSE)'
         )->execute([$userId, $expeditionId]);
+        $this->cleanOld();
     }
 
     /**
-     * Record a successful access-code submission and clear prior failures
-     * for this user + expedition.
+     * Record a successful access-code submission: clear this user's prior
+     * failures for this expedition. No row is inserted — {@see check()} only
+     * counts `success = FALSE` rows, so a success marker would be dead weight
+     * that never ages out (this is a rate limit, not an audit log).
      */
     public function recordSuccess(int $userId, string $expeditionId): void
     {
         $this->db->prepare(
-            'INSERT INTO multizork_access_attempts (user_id, expedition_id, success) VALUES (?, ?, TRUE)'
-        )->execute([$userId, $expeditionId]);
-        $this->db->prepare(
             'DELETE FROM multizork_access_attempts WHERE user_id = ? AND expedition_id = ? AND success = FALSE'
         )->execute([$userId, $expeditionId]);
+        $this->cleanOld();
     }
 
     /**
-     * Delete attempt rows older than one hour (call opportunistically).
+     * Delete attempt rows older than one hour. Called opportunistically from
+     * {@see recordFailure()} / {@see recordSuccess()}; best-effort, so a
+     * cleanup failure never breaks the submission path it rides along with.
      */
     public function cleanOld(): void
     {
-        $this->db->exec("DELETE FROM multizork_access_attempts WHERE attempted_at < NOW() - INTERVAL '1 hour'");
+        try {
+            $this->db->exec("DELETE FROM multizork_access_attempts WHERE attempted_at < NOW() - INTERVAL '1 hour'");
+        } catch (\Throwable $e) {
+            // best-effort
+        }
     }
 }
