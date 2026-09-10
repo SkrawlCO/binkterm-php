@@ -28,10 +28,13 @@ use BinktermPHP\Realtime\StreamService;
  *     idle state. A pruned gap simply means some ids are skipped — the cursor
  *     only moves forward.
  *
- * This class is intentionally *not* wired into {@see BbsSession} yet: the wiring
- * point is where session-monitor / kick / page / MRC UI would attach, and that
- * UI is out of scope. See docs/TerminalServerDevGuide.md → "Terminal event
- * substrate" for the integration example.
+ * Its first consumer is the session revocation / kick watch:
+ * {@see BbsSession::beginSessionKickWatch()} builds a poller anchored
+ * post-login and {@see BbsSession::pumpRealtimeAndCheckSession()} polls it with
+ * a {@see SessionKickHandler} at the head of every idle-aware read primitive.
+ * Further consumers (a sysop broadcast display, page notifications, MRC) attach
+ * the same way with their own {@see TerminalEventHandlerInterface}; that UI is
+ * out of scope. See docs/TerminalServerDevGuide.md → "Terminal event substrate".
  */
 final class TerminalEventPoller
 {

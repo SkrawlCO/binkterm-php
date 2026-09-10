@@ -475,15 +475,17 @@ $poller->poll(function (string $type, array $payload, int $id) {
 });
 ```
 
-It is **not** wired into `BbsSession` yet: the wiring point is where a
-session-monitor / kick / page / MRC UI would attach, and that UI is out of
-scope.
+Its first consumer is the session revocation / kick watch:
+`BbsSession::beginSessionKickWatch()` constructs a poller anchored post-login
+and `pumpRealtimeAndCheckSession()` polls it (with a `SessionKickHandler`) at
+the head of every idle-aware read primitive. Additional consumers (a sysop
+broadcast display, page notifications, MRC) would attach the same way, each
+with its own `TerminalEventHandlerInterface`; that UI is still out of scope.
 
 ### Not yet wired (later stages)
 
 - `TerminalRenderContext.t()` is param-driven for parity; it does not yet
   substitute the stored locale when a caller omits one.
-- `TerminalEventPoller` has no `BbsSession` call site (see above).
 - The dead `probeAnsiSupport()` / `probeSixelSupport()` methods remain — for
   Telnet, `$sixelSupported` is only set from the SSH `pty-req` path today; the
   capability seam propagates whatever value is set. Re-enabling an active Telnet
