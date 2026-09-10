@@ -55,6 +55,26 @@ final class NewscanPlan
         return $n;
     }
 
+    /**
+     * Canonical per-area NEW counts, keyed by echoarea id — the same
+     * watermark-based "new since I last caught up here" figure that
+     * {@see echomailCount()} aggregates. Areas with nothing new are absent
+     * (callers treat a missing key as 0). This is the projection the authored
+     * Echomail area browser uses; it is NOT `EchoareaManager.unread_count`,
+     * which is a different (all-time unread) concept.
+     *
+     * @return array<int,int> echoareaId => new-message count
+     */
+    public function areaNewCounts(): array
+    {
+        $out = [];
+        foreach ($this->areas as $area) {
+            $out[$area->echoareaId] = $area->count();
+        }
+
+        return $out;
+    }
+
     /** Any messages to traverse (netmail or echomail)? Bulletins do not count. */
     public function hasMessages(): bool
     {

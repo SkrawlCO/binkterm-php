@@ -2,11 +2,17 @@
 
 namespace BinktermPHP\TelnetServer;
 
+use BinktermPHP\Newscan\NewscanPlan;
+use BinktermPHP\Newscan\NewscanSnapshot;
+use BinktermPHP\Newscan\UnifiedNewscanService;
 use BinktermPHP\TelnetServer\TelnetServer;
+use BinktermPHP\Terminal\Navigation\NavigationTheme;
+use BinktermPHP\Terminal\Navigation\NavigationThemeConfig;
 use BinktermPHP\Terminal\Presentation\DenseList;
 use BinktermPHP\Terminal\Presentation\DenseListColumn;
 use BinktermPHP\Terminal\Presentation\DenseListRow;
 use BinktermPHP\Terminal\Presentation\DenseListView;
+use BinktermPHP\Terminal\Presentation\ThemedDenseListView;
 
 /**
  * EchomailHandler - Handles echomail (forum/echo) functionality for telnet daemon
@@ -97,19 +103,11 @@ class EchomailHandler
      */
     public function showEchoareas($conn, array &$state, string $session): void
     {
+        // The area browser is an authored M2 space now (see the echoareas
+        // surface theme); it flows straight in from Messages with no ceremonial
+        // title/description/press-any-key screen in front of it.
         TelnetUtils::safeWrite($conn, "\033[2J\033[H");
-        if (TelnetUtils::showScreenIfExists('echomail.ans', $this->server, $conn)) {
-            TelnetUtils::safeWrite($conn, "\r\n" . TelnetUtils::colorize(
-                $this->server->t('ui.terminalserver.server.press_any_key', 'Press any key to continue...', [], $state['locale']),
-                TelnetUtils::ANSI_YELLOW
-            ));
-            while (true) {
-                $key = $this->server->readKeyWithIdleCheck($conn, $state);
-                if ($key !== '') {
-                    break;
-                }
-            }
-        }
+
         $savedState      = $this->loadSavedListState((int)($state['user_id'] ?? 0));
         $page            = $savedState['areas_page'];
         $perPage         = MailUtils::getMessagesPerPage($state);
@@ -117,6 +115,11 @@ class EchomailHandler
         $searchFilter    = null;
         $allAreasMode    = false;
         $shell           = TerminalShellFactory::create($this->server, $state);
+
+        // Canonical "what's new" state, shared with Messages / What's New. One
+        // write-free snapshot per visit; recomputed only when the caller returns
+        // from an area (or subscribes/unsubscribes), never on cursor movement.
+        $newscan = $this->echoareaNewscan($state);
 
         while (true) {
             $locale = $state['locale'];
@@ -168,6 +171,10 @@ class EchomailHandler
             $headerKey      = $allAreasMode ? 'ui.terminalserver.echomail.areas_all_header' : 'ui.terminalserver.echomail.areas_header';
             $headerFallback = $allAreasMode ? 'All Echoareas (page {page}/{total}):' : 'Echoareas (page {page}/{total}):';
 
+            // Canonical per-area NEW state. Only meaningful for the caller's
+            // followed areas (a watermark concept) — absent in all-areas mode.
+            $plan = ($allAreasMode || $newscan === null) ? null : $this->safePlan($newscan);
+
             $result = $this->pickEchoarea(
                 $conn, $state, $filteredAreas, $page, $perPage,
                 $this->server->t($headerKey, $headerFallback, [], $locale),
@@ -184,6 +191,12 @@ class EchomailHandler
                     'location' => $allAreasMode
                         ? $this->server->t('ui.terminalserver.echomail.areas_location_all', 'All Echomail Areas', [], $locale)
                         : $this->server->t('ui.terminalserver.echomail.areas_location', 'Echomail Areas', [], $locale),
+                    'newscan'  => $plan === null ? null : [
+                        'counts'    => $plan->areaNewCounts(),
+                        'total'     => $plan->echomailCount(),
+                        'areas'     => $plan->areaCount(),
+                        'truncated' => $plan->truncated,
+                    ],
                 ]
             );
             $page = $result['page'];
@@ -238,6 +251,7 @@ class EchomailHandler
                             : $this->server->t('ui.terminalserver.echomail.unsubscribe_failed', 'Failed to unsubscribe from {area}.', ['area' => $areaLabel], $locale);
                         $shell->showAlert($conn, $state, 'Unsubscribe', $msg, $ok ? 'info' : 'error');
                         if ($ok) {
+                            $newscan?->invalidate();
                             $this->server->logAction($state['username'] ?? 'unknown', "Echomail: unsubscribed from {$areaLabel}");
                         }
                     }
@@ -272,15 +286,127 @@ class EchomailHandler
                                     'error');
                                 break;
                             }
+                            $newscan?->invalidate();
                             $this->server->logAction($state['username'] ?? 'unknown', "Echomail: subscribed to {$areaLabel}");
                         }
                     }
 
                     $this->server->logAction($state['username'] ?? 'unknown', "Echomail: entered area {$areaLabel}");
                     $this->showMessages($conn, $state, $session, $tag, $domain);
+                    // The caller may have read messages in there — the per-area
+                    // NEW counts on the browser must reflect the advanced
+                    // watermark on the next draw.
+                    $newscan?->invalidate();
                     break;
             }
         }
+    }
+
+    /**
+     * A per-visit {@see NewscanSnapshot} for the authored area browser, or null
+     * when the caller is not an authenticated user. The snapshot is lazy and
+     * only recomputes {@see UnifiedNewscanService::plan()} after {@see
+     * NewscanSnapshot::invalidate()} — the browser calls that when the caller
+     * returns from an area or (un)subscribes, never on cursor movement.
+     */
+    private function echoareaNewscan(array $state): ?NewscanSnapshot
+    {
+        $userId  = (int) ($state['user_id'] ?? 0);
+        $isGuest = empty($state['username']) || $state['username'] === '_guest';
+        if ($isGuest || $userId <= 0) {
+            return null;
+        }
+        $isAdmin = !empty($state['is_admin']);
+
+        return new NewscanSnapshot(
+            static fn (): NewscanPlan => (new UnifiedNewscanService())
+                ->plan(['user_id' => $userId, 'is_admin' => $isAdmin]),
+            0 // no TTL: invalidation is explicit, tied to the child-flow boundary
+        );
+    }
+
+    /** {@see NewscanSnapshot::plan()}, but a resolution failure yields null (logged). */
+    private function safePlan(NewscanSnapshot $snapshot): ?NewscanPlan
+    {
+        try {
+            return $snapshot->plan();
+        } catch (\Throwable $e) {
+            $this->server->logInfo('Echoarea browser: newscan plan unavailable — ' . $e->getMessage());
+
+            return null;
+        }
+    }
+
+    /**
+     * The STATUS block for the authored area browser: one honest line —
+     * "<scope> · <canonical new state> · Page N/M". The new-state clause is
+     * omitted when nothing is new (zero counts stay quiet); a scan-limit cap is
+     * stated rather than hidden.
+     *
+     * @param array{total?:int,areas?:int,truncated?:bool}|null $newscan
+     * @return list<string>
+     */
+    private function echoareaStatusLines(
+        string $locale,
+        int $areaTotal,
+        int $page,
+        int $totalPages,
+        ?string $searchFilter,
+        bool $allAreasMode,
+        ?array $newscan
+    ): array {
+        if ($searchFilter !== null) {
+            $scope = $this->server->t(
+                'ui.terminalserver.echomail.areas_context_filter',
+                'Filter: {term} - {count} matching',
+                ['term' => $searchFilter, 'count' => $areaTotal],
+                $locale
+            );
+        } elseif ($allAreasMode) {
+            $scope = $this->server->t(
+                'ui.terminalserver.echomail.areas_context_all',
+                'All areas - {count} total',
+                ['count' => $areaTotal],
+                $locale
+            );
+        } else {
+            $scope = $this->server->t(
+                'ui.terminalserver.echomail.areas_context_subscribed',
+                'Areas you follow - {count}',
+                ['count' => $areaTotal],
+                $locale
+            );
+        }
+
+        $parts = [$scope];
+
+        $newTotal = (int)($newscan['total'] ?? 0);
+        if ($newTotal > 0) {
+            $clause = $this->server->t(
+                'ui.terminalserver.echomail.browser.status_new',
+                '{new} new across {areas} area(s)',
+                ['new' => $newTotal, 'areas' => (int)($newscan['areas'] ?? 0)],
+                $locale
+            );
+            if (!empty($newscan['truncated'])) {
+                $clause .= ' (' . $this->server->t(
+                    'ui.terminalserver.echomail.browser.status_truncated',
+                    'scan limit reached',
+                    [],
+                    $locale
+                ) . ')';
+            }
+            $parts[] = $clause;
+        }
+
+        $parts[] = $this->server->t(
+            'ui.terminalserver.list.dense_page_indicator',
+            'Page {page}/{total}',
+            ['page' => $page, 'total' => max(1, $totalPages)],
+            $locale
+        );
+
+        return [implode('   ' . "\u{00B7}" . '   ', $parts)];
     }
 
     /**
@@ -1028,6 +1154,12 @@ class EchomailHandler
         $shell ??= TerminalShellFactory::create($this->server, $state);
         $ctx   = $this->server->getRenderContext();
 
+        // Canonical per-area NEW state (echoareaId => count), passed by the
+        // caller from one write-free UnifiedNewscanService::plan(); empty in
+        // all-areas mode and for guests.
+        $newscan   = is_array($identity['newscan'] ?? null) ? $identity['newscan'] : null;
+        $newCounts = is_array($newscan['counts'] ?? null) ? $newscan['counts'] : [];
+
         $extraKeys = ['/' => 'filter', 's' => 'search', 'a' => 'allareas', 'u' => 'unsubscribe', 'g' => 'ignorerules'];
         if ($showInterestKey) {
             $extraKeys['i'] = 'interests';
@@ -1090,12 +1222,17 @@ class EchomailHandler
             new DenseListColumn('desc', 0),
         ];
 
+        $newLabel = fn (int $n): string => $this->server->t(
+            'ui.terminalserver.echomail.area_new_count', '{count} new', ['count' => $n], $locale
+        );
+
         $buildList = function (array $pageAreas, int $pageNum) use (
-            $columns, $location, $crumbs, $context, $totalPages, $allAreasMode
+            $columns, $location, $crumbs, $context, $totalPages, $allAreasMode, $newCounts, $newLabel
         ): DenseList {
             $rows = [];
             foreach ($pageAreas as $area) {
                 $subscribed = !empty($area['subscribed']);
+                $newCount   = (int)($newCounts[(int)($area['id'] ?? 0)] ?? 0);
                 $rows[] = new DenseListRow(
                     [
                         'tag'  => (string)($area['tag'] ?? ''),
@@ -1104,7 +1241,8 @@ class EchomailHandler
                     ],
                     $area,
                     $allAreasMode ? ($subscribed ? '[+]' : '[ ]') : null,
-                    $allAreasMode ? ($subscribed ? TelnetUtils::ANSI_GREEN : TelnetUtils::ANSI_DIM) : null
+                    $allAreasMode ? ($subscribed ? TelnetUtils::ANSI_GREEN : TelnetUtils::ANSI_DIM) : null,
+                    $newCount > 0 ? $newLabel($newCount) : null
                 );
             }
 
@@ -1134,8 +1272,11 @@ class EchomailHandler
             return $out;
         };
 
+        $listOptions = [];
+
         if ($ctx !== null) {
-            $composed    = DenseListView::compose($buildList($areas, $page), $ctx);
+            $denseList   = $buildList($areas, $page);
+            $composed    = DenseListView::compose($denseList, $ctx);
             $listTitle   = $composed['title'];
             $listRows    = $composed['rows'];
             $headerLines = $composed['headerLines'];
@@ -1159,6 +1300,35 @@ class EchomailHandler
 
                 return ['rows' => $c['rows'], 'title' => $c['title'], 'header_lines' => $c['headerLines']];
             };
+
+            // Authored M2 frame — optional presentation over the exact same
+            // structured list. A missing / invalid / non-fitting surface theme,
+            // or a non-80x24 / mono terminal, transparently yields to the dense
+            // renderer above (runSelectableList owns selection/paging/dispatch).
+            $surface = NavigationThemeConfig::loadSurface('echoareas')->theme();
+            if ($surface !== null && $surface->isEnabled() && $surface->schema === NavigationTheme::COMPOSITION_SCHEMA) {
+                $statusLines = $this->echoareaStatusLines(
+                    $locale, count($allAreas), $page, $totalPages, $searchFilter, $allAreasMode, $newscan
+                );
+                $describe = function (DenseListRow $r): string {
+                    $tag  = trim((string)($r->cells['tag'] ?? ''));
+                    $net  = trim((string)($r->cells['net'] ?? ''));
+                    $desc = trim((string)($r->cells['desc'] ?? ''));
+                    $id   = $net !== '' ? "{$tag}@{$net}" : $tag;
+
+                    return $desc !== '' ? "{$id}  -  {$desc}" : $id;
+                };
+                $themedView = new ThemedDenseListView($denseList, $surface, $statusLines, $describe);
+                $listOptions['frame_renderer'] = function (int $selected, int $cols, int $rows, array $statusBar) use ($themedView): bool {
+                    $ctx = $this->server->getRenderContext();
+                    if ($ctx === null) {
+                        return false;
+                    }
+                    $ctx->setGeometry($cols, $rows);
+
+                    return $themedView->tryRender($ctx, $selected, $statusBar);
+                };
+            }
         } else {
             $header = str_replace(['{page}', '{total}'], [$page, $totalPages], $title);
             if ($searchFilter !== null) {
@@ -1181,7 +1351,9 @@ class EchomailHandler
         $result = $shell->showSelectableList(
             $conn, $state,
             $listTitle, $listRows, $page, $totalPages, 0,
-            $statusBar, $extraKeys, $rebuildFn, ['header_lines' => $headerLines], $helpItems
+            $statusBar, $extraKeys, $rebuildFn,
+            ['header_lines' => $headerLines] + $listOptions,
+            $helpItems
         );
 
         switch ($result['action']) {

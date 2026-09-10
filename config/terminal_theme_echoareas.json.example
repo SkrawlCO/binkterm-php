@@ -1,0 +1,17 @@
+{
+  "_comment": "Authored Echomail AREA BROWSER (M2). Select as config/terminal_theme_echoareas.json beside the active terminal_theme.json to activate; the EchomailHandler loads it by name (NavigationThemeConfig::loadSurface('echoareas')), independently of the front-door theme and the Crossroads surface. Absent / invalid / disabled -> the existing dense area list renders unchanged. A dense browser: the MENU region is a 17-row selection-following window of the real grid; DESCRIPTION is one compact line for the selected area; STATUS carries the canonical newscan aggregate. Per-area NEW counts are a write-free projection of UnifiedNewscanService::plan() -- nothing here marks a message read or advances a watermark.",
+  "schema": 2,
+  "id": "l33test.echoareas",
+  "enabled": true,
+  "geometries": {
+    "80x24": {
+      "template": "nav-echoarea-m2",
+      "regions": {
+        "STATUS": { "row": 3, "col": 5, "width": 72, "height": 1 },
+        "MENU": { "row": 5, "col": 5, "width": 72, "height": 17 },
+        "DESCRIPTION": { "row": 22, "col": 5, "width": 72, "height": 1 },
+        "FOOTER": { "row": 23, "col": 5, "width": 72, "height": 1 }
+      }
+    }
+  }
+}

@@ -583,6 +583,73 @@ throughout. Technical tests are not visual/product acceptance. Rich
 plan-derived selected-destination context, and other authored spaces, remain
 deferred.
 
+## Authored Echomail area browser (M2)
+
+The Echomail area list — `EchomailHandler::showEchoareas()`, a `DenseList` on the
+structured selectable-list runtime, **not** a nav node — becomes an authored
+80x24 browser. Density is the point: the current ~17 areas/page is preserved.
+
+`ThemedDenseListView` is the dense-list sibling of `ThemedDirectoryView`. It
+plugs into the existing `showSelectableList()` → `runSelectableList()`
+`frame_renderer` hook (the same seam Crossroads uses through `showDirectory()`):
+on success it paints the M2 regions, on any failure it returns false and the
+existing dense renderer paints. `runSelectableList()` keeps the full page row
+array, selected index, paging (L/R), Enter, Q, `Ctrl-K` help, the `/ s a u g i`
+shortcuts, resize and dispatch. The `.ans` never owns behaviour.
+
+Supplied composition: `config/terminal_theme_echoareas.json.example` (a schema-2
+**surface**, loaded by `NavigationThemeConfig::loadSurface('echoareas')`,
+independent of the front-door theme and the Crossroads surface) with
+`telnet/screens/nav-echoarea-m2.ans`, at exact 80x24:
+
+| Region | Position | Content |
+|---|---|---|
+| STATUS | Row 3, cols 5–76 | One honest line: `<scope> · <canonical new state> · Page N/M`. Scope is the existing "Areas you follow — 31" / "All areas — …" / "Filter: …". The new-state clause (`91 new across 3 area(s)`) is a projection of `UnifiedNewscanService::plan()` and is omitted entirely when nothing is new; a scan-limit cap is stated, not hidden. |
+| MENU | Rows 5–21, cols 5–76 | A 17-row selection-following window of the real grid (`DenseListView::viewport()`) — same rows, numbers, subscription `[+]/[ ]` badge and payloads. A right-aligned canonical **NEW** count per area, suppressed when zero. |
+| DESCRIPTION | Row 22, cols 5–76 | One compact line for the selected area: `TAG@network  -  full description` (the grid's `desc` column is clipped; this is not). |
+| FOOTER | Row 23, cols 5–76 | The shell's real key hints plus the visible range `[N-M/total]`. |
+
+### NEW vs UNREAD — the semantic contract
+
+Two different concepts; the browser uses the first, matching Messages:
+
+- **Newscan NEW** (`UnifiedNewscanService::newMessageIds()` → `NewscanPlan::areaNewCounts()`, keyed by echoarea id): `em.id > user_echoarea_subscriptions.last_read_id` **and** no `message_read_status` row, ignore/moderation/future-date filtered. The classic per-area watermark pointer. `plan()->echomailCount()` is its aggregate — the "91 new in 3 areas" Messages shows.
+- **`EchoareaManager.listForUser().unread_count`**: `message_read_status.read_at IS NULL` only — every message never individually opened, with no watermark. For a freshly-followed busy area this is the whole backlog. **Not used here.**
+
+`NewscanPlan::areaNewCounts()` keys on `echoareaId`, which is `$area['id']` from
+the list; an area not in the plan renders 0 NEW (quiet). All-areas mode and
+guests get no NEW column (a watermark is meaningless for an area you do not
+follow).
+
+### State lifetime
+
+`EchomailHandler::echoareaNewscan()` builds one `NewscanSnapshot` per visit
+(`UnifiedNewscanService::plan()`, SELECT-only — the browser render performs no
+writes and advances no watermark). The `showEchoareas()` loop reads
+`->plan()` once per redraw and calls `->invalidate()` after the caller returns
+from an area (they may have read messages → watermark advanced) and after a
+subscribe/unsubscribe. Cursor movement stays inside `runSelectableList()` and
+never recomputes the plan. TTL is 0 — invalidation is explicit.
+
+### The ceremonial ECHOMAIL transition screen
+
+`showEchoareas()` previously did `clear → showScreenIfExists('echomail.ans') →
+"Press any key" → wait`. That block is purely presentational — no state
+mutation, init, access check, cleanup or session logic — and is removed; the
+browser now flows straight in from Messages. `telnet/screens/echomail.ans` is
+left on disk (a later bounded transition-screen inventory classifies the rest);
+`netmail.ans` / `doors.ans` / `files.ans` are untouched.
+
+### Activation
+
+`EchomailHandler` is eagerly `require_once`d by both daemon entrypoints, so a
+**Telnet/SSH daemon restart is required**. Then select
+`config/terminal_theme_echoareas.json.example` as
+`config/terminal_theme_echoareas.json` beside the active theme. A missing /
+invalid / disabled surface, a non-80x24 terminal, or a mono terminal → the
+existing dense area list, unchanged. The implementation transaction does neither
+step.
+
 ## Behaviour at runtime
 
 - **Hotkeys** work as before. Arrow keys / Enter drive a lightbar.

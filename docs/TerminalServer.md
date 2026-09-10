@@ -146,6 +146,24 @@ non-80x24 terminal, or a terminal without ANSI colour falls back to the normal
 Messages menu. See
 [the Messages landing composition and activation](TerminalNavigationFramework.md#authored-messages-landing-m2-slice-state-forward-messages).
 
+### Authored Echomail area browser (M2)
+
+The Echomail area list is an authored 80x24 browser: it flows straight in from
+Messages with no ceremonial title/description/press-any-key screen, keeps the
+dense ~17-areas-per-page grid, and shows a right-aligned canonical **NEW** count
+against each area you follow — the same "what's new" figure Messages aggregates
+(a watermark-based projection, not all-time unread). A STATUS line names the
+scope and that aggregate. Selection, paging, Enter, Q, `Ctrl-K` help, and the
+`/ s a u g` shortcuts are unchanged; the counts refresh when you return from an
+area or (un)subscribe. Nothing about the browser marks a message read.
+
+Activation: restart the Telnet/SSH daemons (an eagerly-loaded class changed),
+then select `config/terminal_theme_echoareas.json.example` as
+`config/terminal_theme_echoareas.json` beside the active theme. A missing,
+invalid, or oversized surface, or a non-80x24 / mono terminal, falls back to the
+existing dense area list. See
+[the composition and activation detail](TerminalNavigationFramework.md#authored-echomail-area-browser-m2).
+
 ### Message Browsing
 
 - List netmail and echomail messages with pagination

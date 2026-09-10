@@ -153,6 +153,34 @@ final class DenseListSelectableListTest extends TestCase
         return substr_count($plain, "\n") + 1;
     }
 
+    public function testFlatFrameRendererPaintsAndSuppressesTheDefaultList(): void
+    {
+        $calls = [];
+        $out = $this->runList(['frame_renderer' => function (int $sel, int $cols, int $rows, array $sb) use (&$calls): bool {
+            $calls[] = [$sel, $cols, $rows];
+
+            return true; // "I painted it"
+        }]);
+
+        self::assertNotEmpty($calls, 'frame_renderer was invoked from the flat list loop');
+        self::assertSame([0, 80, 24], $calls[0]);
+        self::assertStringNotContainsString('ALPHA', $out, 'the default row list was not painted');
+    }
+
+    public function testFlatFrameRendererFalseYieldsToTheDefaultRenderer(): void
+    {
+        $out = $this->runList(['frame_renderer' => static fn (): bool => false]);
+        self::assertStringContainsString('ALPHA', $out, 'a declining frame_renderer never strands the list');
+    }
+
+    public function testFlatFrameRendererExceptionYieldsToTheDefaultRenderer(): void
+    {
+        $out = $this->runList(['frame_renderer' => static function (): bool {
+            throw new \RuntimeException('boom');
+        }]);
+        self::assertStringContainsString('ALPHA', $out, 'a throwing frame_renderer never strands the list');
+    }
+
     public function testLineShellRendersHeaderLinesInPlainMode(): void
     {
         $this->state['term_shell_mode'] = 'line';

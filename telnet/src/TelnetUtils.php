@@ -1971,7 +1971,7 @@ class TelnetUtils
      * @param array         $options       Optional: 'header_lines' => string[] renders fixed pre-formatted lines
      *                                     directly under the title, above the first row (flat-row lists only);
      *                                     'color_scheme', 'multiSelect', 'toggleKey', 'selectedRows' as before.
-     *                                     Structured rows may supply 'frame_renderer':
+     *                                     Both flat and structured rows may supply 'frame_renderer':
      *                                     fn(int $selected, int $cols, int $rows, array $statusBar): bool.
      *                                     True means the application painted the frame; false/exception
      *                                     uses the existing renderer. It must never read input or dispatch.
@@ -2036,6 +2036,14 @@ class TelnetUtils
 
         $statusLine = '';
 
+        // Optional authored presentation over the flat list — the same contract
+        // the structured renderer honours (see runSelectableStructuredList):
+        // `fn(int $selected, int $cols, int $rows, array $statusBar): bool`.
+        // True = the frame was painted, skip the default; false / throw =
+        // fall through to the exact renderer below. It never owns selection,
+        // shortcuts, resize or dispatch.
+        $frameRenderer = is_callable($options['frame_renderer'] ?? null) ? $options['frame_renderer'] : null;
+
         // Render closure — always recomputes layout from current $state so it is safe
         // to call both from within the key loop and as $state['repaint_fn'] from overlays.
         // Mutable variables ($cols, $termRows, etc.) are captured by reference so that
@@ -2044,7 +2052,7 @@ class TelnetUtils
             $conn, &$state,
             &$rows, &$title, &$statusLine, &$selectedIndex, &$selectedRows, &$headerLines, &$listStartRow,
             &$cols, &$termRows, &$inputRow, &$maxDisplayRows,
-            $showMarker, $statusBar, $colorScheme
+            $showMarker, $statusBar, $colorScheme, $frameRenderer
         ): void {
             $cols           = $state['cols'] ?? 80;
             $termRows       = self::getSelectorRows($state);
@@ -2054,6 +2062,16 @@ class TelnetUtils
             $statusLine     = self::buildStatusBar($statusBar, $cols);
             $titleColor     = (string)($colorScheme['title'] ?? self::ANSI_CYAN . self::ANSI_BOLD);
             $selectedBg     = (string)($colorScheme['selected_bg'] ?? (self::ANSI_BG_BLUE . self::ANSI_BOLD));
+
+            if ($frameRenderer !== null) {
+                try {
+                    if ($frameRenderer($selectedIndex, (int)$cols, (int)($state['rows'] ?? 24), $statusBar) === true) {
+                        return;
+                    }
+                } catch (\Throwable) {
+                    // No presentation failure can strand navigation.
+                }
+            }
 
             self::safeWrite($conn, "\033[2J\033[H");
             self::writeLine($conn, self::colorize($title, $titleColor));

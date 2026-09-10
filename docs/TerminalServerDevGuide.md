@@ -227,6 +227,34 @@ to the existing presence resolver. Activation also requires a daemon restart
 (`DeclarativeMenuBridge` is eagerly included). See
 [the exact layout and activation boundary](TerminalNavigationFramework.md#authored-messages-landing-m2-slice-state-forward-messages).
 
+### Authored Echomail area browser (M2)
+
+`EchomailHandler::showEchoareas()` builds a `DenseList` and runs it through
+`showSelectableList()`. `ThemedDenseListView` (the dense-list sibling of
+`ThemedDirectoryView`) plugs into that call's existing
+`$options['frame_renderer']` hook: it windows the real grid into the MENU region
+(`DenseListView::viewport()` / `windowStart()`), puts the selected area's full
+identifier + description in DESCRIPTION, the handler's authored aggregate line in
+STATUS, and the shell's real hints + range in FOOTER. False → the dense renderer
+paints; `runSelectableList()` keeps all input and dispatch.
+
+`DenseListRow` gained an optional `$trailing` (a pre-formatted right-aligned
+annotation, e.g. `"42 new"`); `DenseListView` renders it right-aligned in both
+the flat fallback and the themed viewport, suppressed when null. Only
+`EchomailHandler` sets it — `FileHandler` and other dense lists are unaffected.
+
+Per-area NEW is `NewscanPlan::areaNewCounts()` (echoareaId → count) from one
+`NewscanSnapshot` per visit; `showEchoareas()` reads it per redraw and
+`->invalidate()`s after an area/subscription child flow, never on cursor
+movement. `plan()` is SELECT-only. This is the canonical watermark "new", **not**
+`EchoareaManager.unread_count` (all-time unread — a different concept).
+
+The ceremonial `showScreenIfExists('echomail.ans')` + press-any-key block was
+verified purely presentational and removed. Activation: daemon restart
+(`EchomailHandler` is eagerly included) + select
+`config/terminal_theme_echoareas.json.example` as the surface file. See
+[the exact layout, semantic contract and activation boundary](TerminalNavigationFramework.md#authored-echomail-area-browser-m2).
+
 ### Experience detail screen (telnet Crossroads slice 1)
 
 Selecting an experience in the `DoorHandler` chooser now opens
@@ -685,6 +713,7 @@ key loop.
 | `DirectoryRow` | `label`, `description`, `badge`, and an opaque `value` payload returned on selection |
 | `DirectoryView::compose()` | composes a `Directory` + `TerminalRenderContext` into the structured selectable-list contract (`['title', 'items', 'values']`) that `chooseFromList()` already consumes |
 | `ThemedDirectoryView` | optional authored projection into the existing M2 MENU/STATUS/DESCRIPTION/FOOTER regions; follows the structured list's selected index without owning input or dispatch |
+| `ThemedDenseListView` | the dense-list sibling of `ThemedDirectoryView`: windows a `DenseList` grid into the MENU region (density preserved) with a right-aligned `DenseListRow::$trailing` annotation, via the `showSelectableList()` `frame_renderer` hook |
 | `TextBlock` | pure `padRight()` / `ellipsize()` text-geometry helpers, shared with `NavigationScreenRenderer` (extracted verbatim; the front door delegates to them) |
 
 `TuiShell::showDirectory()` and `LineShell::showDirectory()` call

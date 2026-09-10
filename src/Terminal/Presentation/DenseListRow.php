@@ -19,12 +19,17 @@ final class DenseListRow
      *                                         (e.g. a subscription badge "[+]")
      * @param string|null          $prefixSgr SGR string the prefix is colourised with
      *                                         (ignored when colour is disabled)
+     * @param string|null          $trailing  short pre-formatted annotation rendered
+     *                                         right-aligned after the columns (e.g. a
+     *                                         canonical "42 new" count). Null / '' =
+     *                                         nothing (zero values suppress cleanly).
      */
     public function __construct(
         public readonly array $cells,
         public readonly mixed $value = null,
         public readonly ?string $prefix = null,
         public readonly ?string $prefixSgr = null,
+        public readonly ?string $trailing = null,
     ) {
     }
 }

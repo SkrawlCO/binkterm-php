@@ -836,5 +836,9 @@ return [
     'ui.terminalserver.messages.badge.netmail'        => '{count} unread',
     'ui.terminalserver.messages.badge.echomail'       => '{count} new, {areas} area(s)',
     'ui.terminalserver.messages.badge.bulletins'      => '{count} new',
+    // Echomail area browser (M2 authored, canonical newscan projection)
+    'ui.terminalserver.echomail.area_new_count'            => '{count} new',
+    'ui.terminalserver.echomail.browser.status_new'        => '{new} new across {areas} area(s)',
+    'ui.terminalserver.echomail.browser.status_truncated'  => 'scan limit reached',
 ];
 
