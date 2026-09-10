@@ -213,6 +213,12 @@ ADMIN_DAEMON_SCHEDULE_INTERVAL=60    # seconds between scheduler ticks
 ```bash
 # SSH_PORT=2022
 # SSH_BIND_HOST=0.0.0.0
+
+# Pre-fork admission control (checked before pcntl_fork() / the SSH handshake)
+# SSH_RATE_LIMIT_MAX=5       # new connections per source IP per window; 0 disables
+# SSH_RATE_LIMIT_WINDOW=60   # rate-limit window in seconds
+# SSH_MAX_CHILDREN=32        # global ceiling on live SSH session processes;
+                             # a non-positive value falls back to 32 (never "disabled")
 ```
 
 See [docs/SSHServer.md](SSHServer.md) for full SSH daemon setup including key generation.

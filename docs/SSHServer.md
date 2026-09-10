@@ -147,7 +147,7 @@ ssh -p 2022 your-bbs-hostname
 | Scenario | Result |
 |----------|--------|
 | Correct username + password | SSH auth succeeds → logged in, main menu shown immediately |
-| Wrong password (all attempts) | SSH channel still opened → BBS login screen shown |
+| Wrong password (or SSH auth attempts exhausted) | SSH channel still opened → BBS login/register screen shown (same as Telnet); the client is not disconnected |
 | Protocol error / client disconnect | Connection closed |
 
 Both the initial SSH password check and the fallback `BbsSession` login screen

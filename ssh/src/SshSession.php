@@ -12,13 +12,16 @@ namespace BinktermPHP\SshServer;
  * Supported algorithms (chosen for maximum client compatibility):
  *   Key exchange  : curve25519-sha256, curve25519-sha256@libssh.org,
  *                   diffie-hellman-group14-sha256
- *   Host key      : rsa-sha2-256 (2048-bit RSA, auto-generated if absent)
+ *   Host key      : rsa-sha2-256 (3072-bit RSA, auto-generated if absent)
  *   Cipher C→S   : aes128-ctr
  *   Cipher S→C   : aes128-ctr
  *   MAC C→S      : hmac-sha2-256
  *   MAC S→C      : hmac-sha2-256
  *   Compression   : none
- *   Auth method   : password (verified via the BBS /api/auth/login endpoint)
+ *   Auth method   : password (verified via the BBS /api/auth/login endpoint).
+ *                   A failed password does not disconnect: the server still
+ *                   opens the channel and BbsSession shows its own
+ *                   login/register screen, matching the Telnet transport.
  *
  * curve25519-sha256 is offered first: some clients (e.g. SyncTERM's DeuceSSH
  * library) only implement modern ECDH/group-exchange KEX methods and do not
