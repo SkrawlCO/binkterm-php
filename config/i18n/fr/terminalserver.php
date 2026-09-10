@@ -802,4 +802,7 @@ return [
     'ui.terminalserver.echomail.area_new_count'            => '{count} new',
     'ui.terminalserver.echomail.browser.status_new'        => '{new} new across {areas} area(s)',
     'ui.terminalserver.echomail.browser.status_truncated'  => 'scan limit reached',
+    // Echomail message list (M2 authored dense browser)
+    'ui.terminalserver.echomail.msglist.unread_of'        => '{unread} unread of {total}',
+    'ui.terminalserver.echomail.msglist.all_read'         => 'all {total} read',
 ];

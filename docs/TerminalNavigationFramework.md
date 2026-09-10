@@ -650,6 +650,66 @@ invalid / disabled surface, a non-80x24 terminal, or a mono terminal → the
 existing dense area list, unchanged. The implementation transaction does neither
 step.
 
+## Authored Echomail message list (M2)
+
+Inside a selected area, `EchomailHandler::showMessages()` renders the message
+page — `showMessageList()` → `runMessageList()` → the **flat**
+`runSelectableList()` loop — as an authored 80x24 dense browser, reusing the same
+`ThemedDenseListView` seam as the area browser. **The reader is untouched.** The
+message list still marks **zero** messages read merely by rendering; every
+read-state write stays in `MessageHandler::getMessage()` when the reader opens a
+message.
+
+`EchomailHandler::echomailListFrameRenderer()` builds the presentation model and
+returns the `frame_renderer` closure passed through `showMessageList()`'s options.
+`runSelectableList()` keeps U/D selection, L/R paging, Enter→read, C→compose,
+O→sort, S→search, Space→multi-select, M→bulk mark-read, `Ctrl-K` help, Q→back,
+the saved per-area page/message position and resize.
+
+Supplied composition: `config/terminal_theme_echomsgs.json.example` (a schema-2
+**surface**, `NavigationThemeConfig::loadSurface('echomsgs')`, independent of the
+front-door theme, the Crossroads surface and the echoareas surface) with
+`telnet/screens/nav-echomsg-m2.ans`, at exact 80x24:
+
+| Region | Position | Content |
+|---|---|---|
+| STATUS | Row 3, cols 5–76 | One honest line: `<TAG @ network> · <N unread of M \| all M read> · <sort> · Page P/T`. The count is **UNREAD** on this screen — see below. Zero states simplify (`all M read`). |
+| MENU | Rows 5–21, cols 5–76 | A 17-row selection-following window of the real message page (`DenseListView::viewport()`) — same rows, numbers and payloads. Columns: `from` (18), `subject` (flex), `date` (16, right). Unread rows carry a bold emphasis run (`DenseListRow::$emphasis`); a `›` / `>` trailing glyph marks a reply (`reply_to_id` present); a green `*` marks a multi-selected row (`DenseListRow::$prefix` / `$prefixSgr`). |
+| DESCRIPTION | Row 22, cols 5–76 | One compact line for the selected message: `subject · from name <address> · MSGID`, trimmed in that priority order. |
+| FOOTER | Row 23, cols 5–76 | The shell's real key hints plus the visible range `[N-M/total]`. The range is the priority — a hint line longer than the region is byte-trimmed (no ellipsis glyph) so the range survives rather than the whole frame falling back. |
+
+### NEW vs UNREAD on this screen
+
+Deliberately **UNREAD**, not Newscan NEW. The Messages landing and the area
+browser count Newscan NEW (`em.id > last_read_id` and no `message_read_status`
+row). Inside one area the screen instead reports messages **individually
+unopened** — `getEchomail().unreadCount`, i.e. `message_read_status.read_at IS
+NULL` — which is what "3 unread of 40 in this area" means to a reader working a
+thread. No new read-state concept, no extra query: `fetchMessagesPage()` returns
+the count the canonical fetch already computed as a third tuple element
+(`[$messages, $totalPages, $meta]`; existing two-element `list()` callers
+unaffected).
+
+### The flat `runSelectableList()` cursor-move repaint
+
+The flat selectable-list loop historically repainted only single rows in place on
+U/D / Space / digit-jump; it never re-invoked `frame_renderer`, so an authored
+frame over the flat loop never re-windowed on cursor movement. `runSelectableList()`
+now routes those moves through a `$repaintMove` helper that calls the full
+`$render()` (which re-invokes `frame_renderer`) when a frame renderer is present,
+and keeps the in-place single-row path when it is not. This also corrects the
+same latent gap for any future flat-loop `frame_renderer` consumer.
+
+### Activation
+
+`EchomailHandler` and `TelnetUtils` are eagerly `require_once`d by both daemon
+entrypoints, so a **Telnet/SSH daemon restart is required**. Then select
+`config/terminal_theme_echomsgs.json.example` as
+`config/terminal_theme_echomsgs.json` beside the active theme. A missing /
+invalid / disabled surface, a non-80x24 terminal, a mono terminal, or any
+composition failure → the existing flat message list, unchanged. The
+implementation transaction does neither step.
+
 ## Behaviour at runtime
 
 - **Hotkeys** work as before. Arrow keys / Enter drive a lightbar.

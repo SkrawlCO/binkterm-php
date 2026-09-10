@@ -1,0 +1,17 @@
+{
+  "_comment": "Authored Echomail MESSAGE LIST (M2). Select as config/terminal_theme_echomsgs.json beside the active terminal_theme.json to activate; EchomailHandler::showMessages() loads it by name (NavigationThemeConfig::loadSurface('echomsgs')), independent of the front-door theme, the Crossroads surface and the echoareas surface. Absent / invalid / disabled -> the existing flat message list renders unchanged. A dense browser inside a selected area: MENU is a 17-row selection-following window of the real message page (from / subject / date, unread emphasis, a thread indicator when reply_to_id is set, and a '*' multi-select marker); STATUS carries the area, the individually-UNREAD count (message_read_status.read_at IS NULL, NOT Newscan 'new'), the sort and the page. Rendering marks ZERO messages read.",
+  "schema": 2,
+  "id": "l33test.echomsgs",
+  "enabled": true,
+  "geometries": {
+    "80x24": {
+      "template": "nav-echomsg-m2",
+      "regions": {
+        "STATUS": { "row": 3, "col": 5, "width": 72, "height": 1 },
+        "MENU": { "row": 5, "col": 5, "width": 72, "height": 17 },
+        "DESCRIPTION": { "row": 22, "col": 5, "width": 72, "height": 1 },
+        "FOOTER": { "row": 23, "col": 5, "width": 72, "height": 1 }
+      }
+    }
+  }
+}

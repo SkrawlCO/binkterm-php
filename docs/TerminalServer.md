@@ -164,6 +164,26 @@ invalid, or oversized surface, or a non-80x24 / mono terminal, falls back to the
 existing dense area list. See
 [the composition and activation detail](TerminalNavigationFramework.md#authored-echomail-area-browser-m2).
 
+### Authored Echomail message list (M2)
+
+Inside a selected area the message list is an authored 80x24 dense browser that
+keeps the same ~17-messages-per-page grid and every existing key (U/D select,
+L/R page, Enter read, C compose, O sort, S search, Space multi-select, M bulk
+mark-read, `Ctrl-K` help, Q back) and the saved per-area position. Each row shows
+from / subject / date with unread messages in bold, a `›` reply marker when the
+message is a reply, and a green `*` on multi-selected rows. A STATUS line names
+the area, the **unread** count for that area (`3 unread of 40` — messages you
+have not individually opened, distinct from the "what's new" figure the area
+browser and Messages show), the sort order and the page. The reader is
+unchanged, and **the message list marks nothing read just by being displayed**.
+
+Activation: restart the Telnet/SSH daemons (eagerly-loaded classes changed),
+then select `config/terminal_theme_echomsgs.json.example` as
+`config/terminal_theme_echomsgs.json` beside the active theme. A missing,
+invalid, or disabled surface, a non-80x24 or mono terminal, or any composition
+failure falls back to the existing flat message list. See
+[the composition and activation detail](TerminalNavigationFramework.md#authored-echomail-message-list-m2).
+
 ### Message Browsing
 
 - List netmail and echomail messages with pagination

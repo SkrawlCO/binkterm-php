@@ -288,6 +288,9 @@ final class DenseListView
 
         // Rebuild with colour, preserving the exact visible column layout by
         // re-cutting `$left` at known offsets.
+        $emphOpen  = ($row->emphasis !== null && $row->emphasis !== '') ? $row->emphasis : '';
+        $emphClose = $emphOpen !== '' ? "\033[0m" : '';
+
         $out = ' ';
         $pos = 1;
         $out .= $ctx->colorize(sprintf('%2d', $index + 1), self::NUM_SGR)
@@ -302,10 +305,10 @@ final class DenseListView
         }
         if ($trail !== '') {
             $mid = mb_substr($left, $pos, -mb_strlen($trail, 'UTF-8'), 'UTF-8');
-            $out .= $ctx->encodeForTerminal($mid)
+            $out .= $emphOpen . $ctx->encodeForTerminal($mid) . $emphClose
                 . $ctx->colorize($ctx->encodeForTerminal($trail), self::TRAILING_SGR);
         } else {
-            $out .= $ctx->encodeForTerminal(mb_substr($left, $pos, null, 'UTF-8'));
+            $out .= $emphOpen . $ctx->encodeForTerminal(mb_substr($left, $pos, null, 'UTF-8')) . $emphClose;
         }
 
         return $out;

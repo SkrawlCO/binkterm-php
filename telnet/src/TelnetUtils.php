@@ -2091,6 +2091,26 @@ class TelnetUtils
         // not restored on exit — the next surface to become active will overwrite it.
         $state['repaint_fn'] = $render;
 
+        // Selection-move repaint. With no authored frame this is the historical
+        // pair of in-place single-row updates; when an authored frame owns the
+        // screen a whole-frame redraw is required so the themed viewport
+        // re-windows (a single in-place row would land at the flat layout's
+        // coordinates, not the themed region's). Mirrors the structured-row
+        // renderer, which already redraws the whole frame on every move.
+        $repaintMove = static function (int $prev) use (
+            &$render, $conn, &$rows, &$selectedIndex, $listStartRow, &$cols,
+            &$selectedRows, $showMarker, $colorScheme, $frameRenderer, &$inputRow, &$buffer, $inputColStart
+        ): void {
+            if ($frameRenderer !== null) {
+                $render();
+                return;
+            }
+            $bg = (string) ($colorScheme['selected_bg'] ?? (self::ANSI_BG_BLUE . self::ANSI_BOLD));
+            self::renderSelectableListLine($conn, $rows, $prev,          false, $listStartRow, $cols, isset($selectedRows[$prev]), $showMarker, $bg);
+            self::renderSelectableListLine($conn, $rows, $selectedIndex, true,  $listStartRow, $cols, isset($selectedRows[$selectedIndex]), $showMarker, $bg);
+            self::safeWrite($conn, "\033[{$inputRow};" . ($inputColStart + strlen($buffer)) . 'H');
+        };
+
         // --- Initial render ---
         $render();
 
@@ -2186,10 +2206,10 @@ class TelnetUtils
                 if ($selectedIndex > 0) {
                     $prev = $selectedIndex;
                     $selectedIndex--;
-                    self::renderSelectableListLine($conn, $rows, $prev,          false, $listStartRow, $cols, isset($selectedRows[$prev]), $showMarker, (string)($colorScheme['selected_bg'] ?? (self::ANSI_BG_BLUE . self::ANSI_BOLD)));
-                    self::renderSelectableListLine($conn, $rows, $selectedIndex, true,  $listStartRow, $cols, isset($selectedRows[$selectedIndex]), $showMarker, (string)($colorScheme['selected_bg'] ?? (self::ANSI_BG_BLUE . self::ANSI_BOLD)));
+                    $repaintMove($prev);
+                } else {
+                    self::safeWrite($conn, "\033[{$inputRow};" . ($inputColStart + strlen($buffer)) . 'H');
                 }
-                self::safeWrite($conn, "\033[{$inputRow};" . ($inputColStart + strlen($buffer)) . "H");
                 continue;
             }
 
@@ -2197,10 +2217,10 @@ class TelnetUtils
                 if ($selectedIndex < $rowCount - 1) {
                     $prev = $selectedIndex;
                     $selectedIndex++;
-                    self::renderSelectableListLine($conn, $rows, $prev,          false, $listStartRow, $cols, isset($selectedRows[$prev]), $showMarker, (string)($colorScheme['selected_bg'] ?? (self::ANSI_BG_BLUE . self::ANSI_BOLD)));
-                    self::renderSelectableListLine($conn, $rows, $selectedIndex, true,  $listStartRow, $cols, isset($selectedRows[$selectedIndex]), $showMarker, (string)($colorScheme['selected_bg'] ?? (self::ANSI_BG_BLUE . self::ANSI_BOLD)));
+                    $repaintMove($prev);
+                } else {
+                    self::safeWrite($conn, "\033[{$inputRow};" . ($inputColStart + strlen($buffer)) . 'H');
                 }
-                self::safeWrite($conn, "\033[{$inputRow};" . ($inputColStart + strlen($buffer)) . "H");
                 continue;
             }
 
@@ -2258,7 +2278,12 @@ class TelnetUtils
                     } else {
                         $selectedRows[$selectedIndex] = true;
                     }
-                    self::renderSelectableListLine($conn, $rows, $selectedIndex, true, $listStartRow, $cols, isset($selectedRows[$selectedIndex]), $showMarker, (string)($colorScheme['selected_bg'] ?? (self::ANSI_BG_BLUE . self::ANSI_BOLD)));
+                    // The caller redraws immediately with the new selection set;
+                    // an in-place row paint here (flat coordinates) would only
+                    // flash under an authored frame.
+                    if ($frameRenderer === null) {
+                        self::renderSelectableListLine($conn, $rows, $selectedIndex, true, $listStartRow, $cols, isset($selectedRows[$selectedIndex]), $showMarker, (string)($colorScheme['selected_bg'] ?? (self::ANSI_BG_BLUE . self::ANSI_BOLD)));
+                    }
                     return [
                         'action' => 'toggle_select',
                         'index' => $selectedIndex,
@@ -2270,16 +2295,24 @@ class TelnetUtils
                 }
                 if (ctype_digit($char)) {
                     $buffer .= $char;
-                    self::safeWrite($conn, $char);
                     $num = (int)$buffer;
                     if ($num > 0 && $num <= $rowCount) {
                         $prev          = $selectedIndex;
                         $selectedIndex = $num - 1;
-                        if ($prev !== $selectedIndex) {
-                            self::renderSelectableListLine($conn, $rows, $prev,          false, $listStartRow, $cols, isset($selectedRows[$prev]), $showMarker, (string)($colorScheme['selected_bg'] ?? (self::ANSI_BG_BLUE . self::ANSI_BOLD)));
-                            self::renderSelectableListLine($conn, $rows, $selectedIndex, true,  $listStartRow, $cols, isset($selectedRows[$selectedIndex]), $showMarker, (string)($colorScheme['selected_bg'] ?? (self::ANSI_BG_BLUE . self::ANSI_BOLD)));
+                        if ($frameRenderer !== null) {
+                            if ($prev !== $selectedIndex) {
+                                $render();
+                            }
+                        } else {
+                            self::safeWrite($conn, $char);
+                            if ($prev !== $selectedIndex) {
+                                self::renderSelectableListLine($conn, $rows, $prev,          false, $listStartRow, $cols, isset($selectedRows[$prev]), $showMarker, (string)($colorScheme['selected_bg'] ?? (self::ANSI_BG_BLUE . self::ANSI_BOLD)));
+                                self::renderSelectableListLine($conn, $rows, $selectedIndex, true,  $listStartRow, $cols, isset($selectedRows[$selectedIndex]), $showMarker, (string)($colorScheme['selected_bg'] ?? (self::ANSI_BG_BLUE . self::ANSI_BOLD)));
+                            }
+                            self::safeWrite($conn, "\033[{$inputRow};" . ($inputColStart + strlen($buffer)) . "H");
                         }
-                        self::safeWrite($conn, "\033[{$inputRow};" . ($inputColStart + strlen($buffer)) . "H");
+                    } else {
+                        self::safeWrite($conn, $char);
                     }
                     continue;
                 }

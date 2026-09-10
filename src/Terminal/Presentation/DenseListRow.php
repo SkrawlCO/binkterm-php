@@ -23,6 +23,11 @@ final class DenseListRow
      *                                         right-aligned after the columns (e.g. a
      *                                         canonical "42 new" count). Null / '' =
      *                                         nothing (zero values suppress cleanly).
+     * @param string|null          $emphasis  SGR applied to the whole (non-selected)
+     *                                         row content — e.g. bold for an unread
+     *                                         message. Ignored when the row is the
+     *                                         cursor row (reverse video) or colour is
+     *                                         off. Null = the default row style.
      */
     public function __construct(
         public readonly array $cells,
@@ -30,6 +35,7 @@ final class DenseListRow
         public readonly ?string $prefix = null,
         public readonly ?string $prefixSgr = null,
         public readonly ?string $trailing = null,
+        public readonly ?string $emphasis = null,
     ) {
     }
 }

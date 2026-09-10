@@ -91,18 +91,29 @@ final class ThemedDenseListView
         }
         $detail = [$this->plain($detailText)];
 
-        // FOOTER: the shell's real hint string plus the visible range.
+        // FOOTER: the shell's real key hints, then the visible range. The range
+        // is the priority — a hint line longer than the region is trimmed so the
+        // range stays on screen rather than the whole authored frame falling
+        // back over a few characters of key labels.
         $first = $total > 0 ? DenseListView::windowStart($total, $menu->height, $selectedIndex) : 0;
         $last  = $total > 0 ? min($total - 1, $first + count($window) - 1) : -1;
+        $footer = $geo->region('FOOTER');
+        if ($footer === null) {
+            throw new \UnexpectedValueException('Missing FOOTER region');
+        }
         $hints = '';
         foreach ($statusBar as $segment) {
             $hints .= (string) ($segment['text'] ?? '');
         }
-        if ($total > 0) {
-            $hints = trim($hints) . sprintf('  [%d-%d/%d]', $first + 1, $last + 1, $total);
-        } else {
-            $hints = trim($hints);
+        $hints = $this->plain($hints);
+        $range = $total > 0 ? sprintf('  [%d-%d/%d]', $first + 1, $last + 1, $total) : '';
+        $budget = max(0, $footer->width - mb_strlen($range, 'UTF-8'));
+        if (mb_strlen($hints, 'UTF-8') > $budget) {
+            // Plain byte cut — no ellipsis glyph, so nothing transliterates wider
+            // on CP437 (see the closed ellipsis-overflow regression).
+            $hints = rtrim(mb_substr($hints, 0, $budget, 'UTF-8'));
         }
+        $hints .= $range;
 
         $blocks = ['MENU' => $this->composer->fitSemanticBlock($ctx, $window, $menu, true)];
         foreach (['DESCRIPTION' => $detail, 'STATUS' => array_values($this->statusLines), 'FOOTER' => [$hints]] as $name => $lines) {

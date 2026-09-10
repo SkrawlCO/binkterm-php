@@ -255,6 +255,39 @@ verified purely presentational and removed. Activation: daemon restart
 `config/terminal_theme_echoareas.json.example` as the surface file. See
 [the exact layout, semantic contract and activation boundary](TerminalNavigationFramework.md#authored-echomail-area-browser-m2).
 
+### Authored Echomail message list (M2)
+
+`EchomailHandler::showMessages()` renders the per-area message page through the
+**flat** `runSelectableList()` loop (`showMessageList()` → `runMessageList()`).
+`EchomailHandler::echomailListFrameRenderer()` builds a `DenseList`
+(`from` 18 / `subject` flex / `date` 16-right) and returns the `frame_renderer`
+closure carried in `showMessageList()`'s options; it reuses `ThemedDenseListView`
+against the `echomsgs` surface. **The reader is not touched, and rendering marks
+zero messages read.**
+
+`DenseListRow` gained an optional `$emphasis` (an SGR run wrapped around the whole
+non-selected row — bold for unread here); the existing `$prefix` / `$prefixSgr`
+carry the green `*` multi-select marker and `$trailing` the `›` reply glyph.
+`DenseListView::formatRow()` applies `$emphasis` in both the flat fallback and the
+themed viewport, ignored on the cursor row.
+
+STATUS reports **UNREAD** for the area (`getEchomail().unreadCount`,
+`message_read_status.read_at IS NULL`), *not* Newscan NEW — the reader-facing
+"unread in this area" figure. `fetchMessagesPage()` returns it (plus
+`pagination.total`) as a third tuple element `[$messages, $totalPages, $meta]`;
+two-element `list()` destructures are unaffected. No extra query.
+
+`runSelectableList()`'s flat loop now routes U/D / Space / digit-jump cursor
+moves through a `$repaintMove` helper that calls the full `$render()` (which
+re-invokes `frame_renderer`) when one is set, fixing a latent gap where an
+authored frame over the flat loop never re-windowed on cursor movement. The
+in-place single-row repaint is kept when no frame renderer is present.
+
+Activation: daemon restart (`EchomailHandler` and `TelnetUtils` are eagerly
+included) + select `config/terminal_theme_echomsgs.json.example` as the surface
+file. See
+[the exact layout, semantic contract and activation boundary](TerminalNavigationFramework.md#authored-echomail-message-list-m2).
+
 ### Experience detail screen (telnet Crossroads slice 1)
 
 Selecting an experience in the `DoorHandler` chooser now opens
@@ -713,7 +746,7 @@ key loop.
 | `DirectoryRow` | `label`, `description`, `badge`, and an opaque `value` payload returned on selection |
 | `DirectoryView::compose()` | composes a `Directory` + `TerminalRenderContext` into the structured selectable-list contract (`['title', 'items', 'values']`) that `chooseFromList()` already consumes |
 | `ThemedDirectoryView` | optional authored projection into the existing M2 MENU/STATUS/DESCRIPTION/FOOTER regions; follows the structured list's selected index without owning input or dispatch |
-| `ThemedDenseListView` | the dense-list sibling of `ThemedDirectoryView`: windows a `DenseList` grid into the MENU region (density preserved) with a right-aligned `DenseListRow::$trailing` annotation, via the `showSelectableList()` `frame_renderer` hook |
+| `ThemedDenseListView` | the dense-list sibling of `ThemedDirectoryView`: windows a `DenseList` grid into the MENU region (density preserved) with a right-aligned `DenseListRow::$trailing` annotation, an optional `DenseListRow::$prefix` marker and an optional `DenseListRow::$emphasis` row SGR (bold for unread), via the `showSelectableList()` / flat `runSelectableList()` `frame_renderer` hook |
 | `TextBlock` | pure `padRight()` / `ellipsize()` text-geometry helpers, shared with `NavigationScreenRenderer` (extracted verbatim; the front door delegates to them) |
 
 `TuiShell::showDirectory()` and `LineShell::showDirectory()` call

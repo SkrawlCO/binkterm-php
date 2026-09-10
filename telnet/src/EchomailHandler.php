@@ -1489,7 +1489,7 @@ class EchomailHandler
         $selectedMessageIds = [];
 
         while (true) {
-            [$messages, $totalPages] = $this->fetchMessagesPage($session, $area, $page, $perPage, $sort, (int)($state['user_id'] ?? 0));
+            [$messages, $totalPages, $meta] = $this->fetchMessagesPage($session, $area, $page, $perPage, $sort, (int)($state['user_id'] ?? 0));
 
             if (!$messages) {
                 if ($page > 1 && $totalPages > 0) {
@@ -1519,6 +1519,19 @@ class EchomailHandler
                 TelnetUtils::ANSI_CYAN . TelnetUtils::ANSI_BOLD
             );
             $shell = TerminalShellFactory::create($this->server, $state);
+
+            $listOptions = [
+                'multiSelect' => true,
+                'toggleKey' => ' ',
+                'selectedMessageIds' => $selectedMessageIds,
+            ];
+            $frame = $this->echomailListFrameRenderer(
+                $state, $area, $tag, $domain, $messages, $meta, $sort, $page, $totalPages, $selectedMessageIds
+            );
+            if ($frame !== null) {
+                $listOptions['frame_renderer'] = $frame;
+            }
+
             $result = $shell->showMessageList(
                 $conn, $state, $title, $messages, $page, $totalPages, $selectedIndex,
                 ['m' => 'mark_selected_read', 'o' => 'order', 's' => 'search'],
@@ -1526,11 +1539,7 @@ class EchomailHandler
                     ['text' => 'S', 'color' => TelnetUtils::ANSI_RED],
                     ['text' => ' Search', 'color' => TelnetUtils::ANSI_BLUE],
                 ],
-                [
-                    'multiSelect' => true,
-                    'toggleKey' => ' ',
-                    'selectedMessageIds' => $selectedMessageIds,
-                ],
+                $listOptions,
                 [
                     ['key' => 'Space', 'label' => $this->server->t('ui.terminalserver.list.help_toggle_selection', 'Toggle selection', [], $state['locale'])],
                     ['key' => 'M', 'label' => $this->server->t('ui.terminalserver.echomail.mark_selected_status', 'Mark Read', [], $state['locale'])],
@@ -2741,9 +2750,119 @@ class EchomailHandler
     }
 
     /**
+     * Build the authored M2 frame for the Echomail message list, or null when
+     * the `echomsgs` surface theme is absent / invalid / disabled. Presentation
+     * only: the flat message-list runtime keeps every keystroke, and this frame
+     * renders ZERO read-state — the list still marks nothing.
+     *
+     * @param array<int,array<string,mixed>> $messages the current page
+     * @param array{unread:int,total:int}    $meta     from fetchMessagesPage()
+     * @param list<int>                      $selectedMessageIds  multi-select set
+     */
+    private function echomailListFrameRenderer(
+        array $state,
+        string $area,
+        string $tag,
+        string $domain,
+        array $messages,
+        array $meta,
+        string $sort,
+        int $page,
+        int $totalPages,
+        array $selectedMessageIds
+    ): ?callable {
+        $surface = NavigationThemeConfig::loadSurface('echomsgs')->theme();
+        if ($surface === null || !$surface->isEnabled() || $surface->schema !== NavigationTheme::COMPOSITION_SCHEMA) {
+            return null;
+        }
+
+        $locale  = (string) ($state['locale'] ?? 'en');
+        $markSet = array_fill_keys(array_map('intval', $selectedMessageIds), true);
+        $utf8    = $this->server->getTerminalCharset() === 'utf8';
+        $thread  = $utf8 ? "\u{203A}" : '>';
+
+        $columns = [
+            new DenseListColumn('from', 18),
+            new DenseListColumn('subj', 0),
+            new DenseListColumn('date', 16, DenseListColumn::ALIGN_RIGHT),
+        ];
+
+        $rows = [];
+        foreach ($messages as $msg) {
+            $id       = (int) ($msg['id'] ?? 0);
+            $isRead   = !empty($msg['is_read']);
+            $isMarked = isset($markSet[$id]);
+            $rows[] = new DenseListRow(
+                [
+                    'from' => \BinktermPHP\TerminalTextSanitizer::sanitize((string) ($msg['from_name'] ?? 'Unknown')),
+                    'subj' => \BinktermPHP\TerminalTextSanitizer::sanitize((string) ($msg['subject'] ?? '(no subject)')),
+                    'date' => TelnetUtils::formatUserDate((string) ($msg['date_written'] ?? ''), $state, false),
+                ],
+                $msg,
+                $isMarked ? '*' : ' ',
+                $isMarked ? (TelnetUtils::ANSI_GREEN . TelnetUtils::ANSI_BOLD) : null,
+                !empty($msg['reply_to_id']) ? $thread : null,
+                $isRead ? null : TelnetUtils::ANSI_BOLD,
+            );
+        }
+
+        $sortLabel = [
+            'date_desc' => $this->server->t('ui.terminalserver.echomail.sort_newest', 'Newest', [], $locale),
+            'date_asc'  => $this->server->t('ui.terminalserver.echomail.sort_oldest', 'Oldest', [], $locale),
+            'subject'   => $this->server->t('ui.terminalserver.echomail.sort_subject', 'Subject', [], $locale),
+            'author'    => $this->server->t('ui.terminalserver.echomail.sort_author', 'Author', [], $locale),
+        ][$this->normalizeSort($sort)] ?? '';
+
+        $identifier = $domain !== '' ? "{$tag} @ {$domain}" : $tag;
+        $parts = [$identifier];
+        $unread = (int) ($meta['unread'] ?? 0);
+        $total  = (int) ($meta['total'] ?? count($messages));
+        $parts[] = $unread > 0
+            ? $this->server->t('ui.terminalserver.echomail.msglist.unread_of', '{unread} unread of {total}', ['unread' => $unread, 'total' => $total], $locale)
+            : $this->server->t('ui.terminalserver.echomail.msglist.all_read', 'all {total} read', ['total' => $total], $locale);
+        if ($sortLabel !== '') {
+            $parts[] = $sortLabel;
+        }
+        $parts[] = $this->server->t('ui.terminalserver.list.dense_page_indicator', 'Page {page}/{total}', ['page' => $page, 'total' => max(1, $totalPages)], $locale);
+        $statusLines = [implode('   ' . "\u{00B7}" . '   ', $parts)];
+
+        $describe = function (DenseListRow $r): string {
+            $subj = trim((string) ($r->cells['subj'] ?? ''));
+            $msg  = is_array($r->value) ? $r->value : [];
+            $from = trim((string) ($msg['from_name'] ?? ''));
+            $addr = trim((string) ($msg['from_address'] ?? ''));
+            $who  = $addr !== '' ? "{$from} <{$addr}>" : $from;
+            $mid  = trim((string) ($msg['message_id'] ?? ''));
+            $line = $subj !== '' ? $subj : '(no subject)';
+            if ($who !== '') {
+                $line .= '  ' . "\u{00B7}" . '  ' . $who;
+            }
+            if ($mid !== '') {
+                $line .= '  ' . "\u{00B7}" . '  ' . $mid;
+            }
+
+            return $line;
+        };
+
+        $list = new DenseList($identifier, ['Messages', 'Echomail'], $statusLines[0], $columns, $rows, $page, $totalPages);
+        $view = new ThemedDenseListView($list, $surface, $statusLines, $describe);
+
+        return function (int $selected, int $cols, int $rows, array $statusBar) use ($view): bool {
+            $ctx = $this->server->getRenderContext();
+            if ($ctx === null) {
+                return false;
+            }
+            $ctx->setGeometry($cols, $rows);
+
+            return $view->tryRender($ctx, $selected, $statusBar);
+        };
+    }
+
+    /**
      * Fetch a page of echomail messages for an area.
      *
-     * @return array [messages, totalPages]
+     * @return array{0:array<int,array<string,mixed>>,1:int,2:array{unread:int,total:int}}
+     *         [messages, totalPages, meta]
      */
     protected function fetchMessagesPage(string $session, string $area, int $page, int $perPage, string $sort, int $userId): array
     {
@@ -2772,7 +2891,16 @@ class EchomailHandler
         $totalPages  = $result['pagination']['pages'] ?? 1;
         $messages    = array_slice($allMessages, 0, $perPage);
 
-        return [$messages, (int)$totalPages];
+        // Third element: presentation state the canonical fetch already
+        // computed (existing callers that destructure `[$messages, $totalPages]`
+        // are unaffected). `unread` is the area's individually-unopened count
+        // (message_read_status.read_at IS NULL) — NOT Newscan "new".
+        $meta = [
+            'unread' => (int) ($result['unreadCount'] ?? 0),
+            'total'  => (int) ($result['pagination']['total'] ?? count($allMessages)),
+        ];
+
+        return [$messages, (int) $totalPages, $meta];
     }
 
     /**
