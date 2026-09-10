@@ -102,6 +102,10 @@ class FileHandler
             if ($result['action'] === 'quit') {
                 return;
             }
+            if ($result['action'] === 'search') {
+                $this->searchFiles($conn, $state, $session, $shell);
+                continue;
+            }
             if ($result['action'] === 'select') {
                 $selectedArea = $result['area'];
                 $areaTag      = $selectedArea['tag'] ?? '';
@@ -188,6 +192,13 @@ class FileHandler
 
             if ($result['action'] === 'quit') {
                 return;
+            }
+
+            if ($result['action'] === 'search') {
+                // Cross-area search: the current area's file list is unchanged,
+                // so no re-fetch — the loop just repaints it on return.
+                $this->searchFiles($conn, $state, $session, $shell);
+                continue;
             }
 
             if ($result['action'] === 'back' && $inSubfolder) {
@@ -317,6 +328,207 @@ class FileHandler
         }
     }
 
+    // ===========================================================
+    // FILE SEARCH (F-1)
+    // ===========================================================
+
+    /**
+     * Prompt for a term and search filenames / descriptions across every file
+     * area the caller can access.
+     *
+     * The search runs directly against
+     * {@see FileAreaManager::searchAccessibleFiles()} — the same service the
+     * `GET /api/files/search` web route delegates to — so no HTTP round-trip
+     * happens here. A blank entry or Esc returns to the caller's list without
+     * disturbing its navigation state.
+     *
+     * @param resource $conn    Socket connection
+     * @param array    $state   Terminal state
+     * @param string   $session Session token (used only for the file-detail /
+     *                          download path a selected result leads into)
+     */
+    private function searchFiles($conn, array &$state, string $session, TerminalShellInterface $shell): void
+    {
+        $locale = $state['locale'] ?? '';
+
+        $term = $shell->promptText(
+            $conn,
+            $state,
+            $this->t('ui.terminalserver.files.search_title', 'Search Files', [], $locale),
+            $this->t('ui.terminalserver.files.search_prompt', 'Search files:', [], $locale),
+            ['prefill' => '']
+        );
+
+        // Esc (null) or an empty submission: return cleanly, caller repaints.
+        if ($term === null) {
+            return;
+        }
+        $term = trim($term);
+        if ($term === '') {
+            return;
+        }
+        if (mb_strlen($term) < 2) {
+            $shell->showAlert(
+                $conn,
+                $state,
+                $this->t('ui.terminalserver.files.search_title', 'Search Files', [], $locale),
+                $this->t('ui.terminalserver.files.search_too_short', 'Search term must be at least 2 characters.', [], $locale),
+                'info'
+            );
+            return;
+        }
+
+        $shell->showWorkingOverlay(
+            $conn,
+            $state,
+            $this->t('ui.terminalserver.files.searching', 'Searching...', [], $locale)
+        );
+
+        $userId  = (int)($state['user_id'] ?? 0);
+        $results = (new FileAreaManager())->searchAccessibleFiles(
+            $term,
+            $userId > 0 ? $userId : null,
+            !empty($state['is_admin']),
+            $userId <= 0,
+            100
+        );
+
+        $this->server->logAction(
+            $state['username'] ?? 'unknown',
+            'Files: searched "' . $term . '" (' . count($results) . ' result(s))'
+        );
+
+        if (empty($results)) {
+            $shell->showAlert(
+                $conn,
+                $state,
+                $this->t('ui.terminalserver.files.search_title', 'Search Files', [], $locale),
+                $this->t('ui.terminalserver.files.search_no_results', "No files found for '{term}'.", ['term' => $term], $locale),
+                'info'
+            );
+            return;
+        }
+
+        $this->showSearchResults($conn, $state, $session, $term, $results, $shell);
+    }
+
+    /**
+     * Paginated list of cross-area search results.  Selecting a row opens the
+     * existing file-detail view (which offers download); it does not create a
+     * parallel file viewer.  Quit / Esc returns to the caller's Files context.
+     *
+     * @param array<int,array<string,mixed>> $allResults Rows from
+     *        {@see FileAreaManager::searchAccessibleFiles()}
+     */
+    private function showSearchResults(
+        $conn,
+        array &$state,
+        string $session,
+        string $term,
+        array $allResults,
+        TerminalShellInterface $shell
+    ): void {
+        $perPage           = MailUtils::getMessagesPerPage($state);
+        $total             = count($allResults);
+        $totalPages        = max(1, (int)ceil($total / $perPage));
+        $page              = 1;
+        $downloadAvailable = ZmodemTransfer::canDownload();
+
+        while (true) {
+            $locale      = $state['locale'] ?? '';
+            $page        = max(1, min($page, $totalPages));
+            $pageResults = array_slice($allResults, ($page - 1) * $perPage, $perPage);
+
+            $rows = [];
+            foreach ($pageResults as $idx => $r) {
+                $rows[] = $this->encodeForTerminal($this->renderFileSelectionLine(
+                    $idx + 1,
+                    '[' . (string)($r['area_tag'] ?? '?') . '] ' . (string)($r['filename'] ?? '?'),
+                    (string)($r['short_description'] ?? ''),
+                    $this->formatSize((int)($r['filesize'] ?? 0))
+                ));
+            }
+
+            $title = $this->encodeForTerminal(TelnetUtils::colorize(
+                $this->t(
+                    'ui.terminalserver.files.search_results_header',
+                    'Search: {term} (page {page}/{total})',
+                    ['term' => $term, 'page' => $page, 'total' => $totalPages],
+                    $locale
+                ),
+                TelnetUtils::ANSI_CYAN . TelnetUtils::ANSI_BOLD
+            ));
+
+            $statusBar = [
+                ['text' => 'U/D',   'color' => TelnetUtils::ANSI_RED],
+                ['text' => ' ' . $this->t('ui.terminalserver.files.status_move', 'Move', [], $locale) . '  ', 'color' => TelnetUtils::ANSI_BLUE],
+                ['text' => 'L/R',   'color' => TelnetUtils::ANSI_RED],
+                ['text' => ' ' . $this->t('ui.terminalserver.files.status_page', 'Page', [], $locale) . '  ', 'color' => TelnetUtils::ANSI_BLUE],
+                ['text' => 'Enter', 'color' => TelnetUtils::ANSI_RED],
+                ['text' => ' ' . $this->t('ui.terminalserver.files.status_open', 'Open', [], $locale) . '  ', 'color' => TelnetUtils::ANSI_BLUE],
+            ];
+            $extraKeys = [];
+            if ($downloadAvailable) {
+                $statusBar[] = ['text' => 'D', 'color' => TelnetUtils::ANSI_RED];
+                $statusBar[] = ['text' => ' ' . $this->t('ui.terminalserver.files.status_download', 'Download', [], $locale) . '  ', 'color' => TelnetUtils::ANSI_BLUE];
+                $extraKeys['d'] = 'download';
+            }
+            $statusBar[] = ['text' => 'Q', 'color' => TelnetUtils::ANSI_RED];
+            $statusBar[] = ['text' => ' ' . $this->t('ui.terminalserver.files.status_quit', 'Quit', [], $locale), 'color' => TelnetUtils::ANSI_BLUE];
+
+            $result = $shell->showSelectableList(
+                $conn,
+                $state,
+                $title,
+                $rows,
+                $page,
+                $totalPages,
+                0,
+                $statusBar,
+                $extraKeys
+            );
+
+            $action = $result['action'] ?? 'quit';
+            if ($action === 'quit' || $action === 'disconnect') {
+                return;
+            }
+            if ($action === 'next') {
+                $page = min($page + 1, $totalPages);
+                continue;
+            }
+            if ($action === 'prev') {
+                $page = max($page - 1, 1);
+                continue;
+            }
+            if (($action === 'select' || $action === 'download') && isset($pageResults[$result['index']])) {
+                $entry  = $pageResults[$result['index']];
+                $fileId = (int)($entry['id'] ?? 0);
+
+                if ($action === 'download') {
+                    $fileRecord = $this->fetchFullFileRecord($session, $fileId);
+                    if ($fileRecord === null) {
+                        $shell->showAlert(
+                            $conn,
+                            $state,
+                            $this->t('ui.terminalserver.files.detail_title', 'File Info', [], $locale),
+                            $this->t('ui.terminalserver.files.download_error', 'File not found on server.', [], $locale),
+                            'error'
+                        );
+                        continue;
+                    }
+                    $this->downloadFile($conn, $state, $session, $fileRecord, $locale);
+                    continue;
+                }
+
+                $this->server->logAction(
+                    $state['username'] ?? 'unknown',
+                    'Files: search opened ' . (string)($entry['area_tag'] ?? '?') . '/' . (string)($entry['filename'] ?? '?')
+                );
+                $this->showFileDetail($conn, $state, $session, $entry, $downloadAvailable, $shell);
+            }
+        }
+    }
+
     /**
      * Format a UTC/local datetime string for terminal display.
      */
@@ -359,6 +571,8 @@ class FileHandler
             ['text' => ' ' . $this->t('ui.terminalserver.files.status_page', 'Page', [], $locale) . '  ', 'color' => TelnetUtils::ANSI_BLUE],
             ['text' => 'Enter', 'color' => TelnetUtils::ANSI_RED],
             ['text' => ' ' . $this->t('ui.terminalserver.files.status_open', 'Open', [], $locale) . '  ', 'color' => TelnetUtils::ANSI_BLUE],
+            ['text' => 'S',     'color' => TelnetUtils::ANSI_RED],
+            ['text' => ' ' . $this->t('ui.terminalserver.files.status_search', 'Search', [], $locale) . '  ', 'color' => TelnetUtils::ANSI_BLUE],
             ['text' => 'Q',     'color' => TelnetUtils::ANSI_RED],
             ['text' => ' ' . $this->t('ui.terminalserver.files.status_quit', 'Quit', [], $locale), 'color' => TelnetUtils::ANSI_BLUE],
         ];
@@ -457,13 +671,14 @@ class FileHandler
             $totalPages,
             0,
             $statusBar,
-            [],
+            ['s' => 'search'],
             $rebuildFn,
             ['header_lines' => $headerLines]
         );
 
         return match ($result['action']) {
             'disconnect', 'quit' => ['action' => 'quit', 'page' => $page],
+            'search' => ['action' => 'search', 'page' => $page],
             'next' => ['action' => 'redraw', 'page' => min($page + 1, $totalPages)],
             'prev' => ['action' => 'redraw', 'page' => max($page - 1, 1)],
             'select' => isset($pageAreas[$result['index']])
@@ -549,6 +764,9 @@ class FileHandler
             $statusBar[] = ['text' => ' ' . $this->t('ui.terminalserver.files.status_up', 'Up', [], $locale) . '  ', 'color' => TelnetUtils::ANSI_BLUE];
             $extraKeys['b'] = 'back';
         }
+        $statusBar[] = ['text' => 'S', 'color' => TelnetUtils::ANSI_RED];
+        $statusBar[] = ['text' => ' ' . $this->t('ui.terminalserver.files.status_search', 'Search', [], $locale) . '  ', 'color' => TelnetUtils::ANSI_BLUE];
+        $extraKeys['s'] = 'search';
         $statusBar[] = ['text' => 'Q', 'color' => TelnetUtils::ANSI_RED];
         $statusBar[] = ['text' => ' ' . $this->t('ui.terminalserver.files.status_quit', 'Quit', [], $locale), 'color' => TelnetUtils::ANSI_BLUE];
 
@@ -585,7 +803,7 @@ class FileHandler
             'disconnect', 'quit' => ['action' => 'quit', 'page' => $page, 'selectedIndex' => $result['selectedIndex'] ?? 0],
             'next' => ['action' => 'redraw', 'page' => min($page + 1, $totalPages), 'selectedIndex' => 0],
             'prev' => ['action' => 'redraw', 'page' => max($page - 1, 1), 'selectedIndex' => 0],
-            'upload', 'back' => ['action' => $result['action'], 'page' => $page, 'selectedIndex' => $result['selectedIndex'] ?? 0],
+            'upload', 'back', 'search' => ['action' => $result['action'], 'page' => $page, 'selectedIndex' => $result['selectedIndex'] ?? 0],
             'download', 'select' => isset($pageEntries[$result['index']])
                 ? ['action' => $result['action'], 'page' => $page, 'entry' => $pageEntries[$result['index']], 'selectedIndex' => $result['index']]
                 : ['action' => 'redraw', 'page' => $page, 'selectedIndex' => 0],

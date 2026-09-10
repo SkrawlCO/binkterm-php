@@ -689,11 +689,25 @@ shows `Files ` + `File Areas` + a right-aligned `Page n/m`, a dim context line
 (`N areas - M files`), and a `tag / file count / description` grid — the
 right-aligned `count` column is fixed-width and placed before the flexible
 `description` column so it keeps a stable right edge. Lightbar, `L/R` + `n`/`p`
-paging, numeric jump, `Enter` and `Q` are unchanged; there are no extra keys and
-no `Ctrl-K` overlay (the selector has no secondary actions). The legacy flat
+paging, numeric jump, `Enter` and `Q` are unchanged. The legacy flat
 `renderFileAreaSelectionLine()` row is kept only for the no-render-context
 (pre-auth / mono) pathway. No primitive change was needed — the M1 Crossroads
 and M2 Echomail output is byte-for-byte unchanged.
+
+#### File Search (F-1)
+
+`S` from `FileHandler::pickFileArea()` or `FileHandler::pickFileEntry()`
+returns the `search` action, which `FileHandler::searchFiles()` handles:
+`promptText()` for the term, then a **direct** call to
+`FileAreaManager::searchAccessibleFiles($query, $userId, $isAdmin, $isGuest,
+$limit)` — no terminal HTTP round-trip. That service holds the one copy of the
+accessible-area / private-area / guest / approved-file / limit / ordering rules
+that were extracted from the inline `GET /api/files/search` SQL; the web route is
+now a thin adapter over the same method. `FileHandler::showSearchResults()`
+paginates the rows through `showSelectableList()` (`[AREA] filename` rows) and a
+selected row leads into the existing `showFileDetail()` / `downloadFile()` path
+rather than a parallel viewer. A blank term or Esc returns without disturbing the
+caller's navigation state.
 
 ### Adding a New Shell
 

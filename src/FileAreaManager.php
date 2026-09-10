@@ -1368,6 +1368,105 @@ class FileAreaManager
     }
 
     /**
+     * Search filenames and short descriptions across every accessible file area.
+     *
+     * F-1: this is the canonical accessible-file search. The access logic was
+     * extracted verbatim from the inline implementation in
+     * `GET /api/files/search` so the web route and the terminal File Search
+     * share one copy of the rules:
+     *   - only active areas (`fa.is_active = TRUE`)
+     *   - private areas are excluded unless the area is the caller's own
+     *     `PRIVATE_USER_<id>` area
+     *   - guests (`$isGuest`) are further restricted to `is_public` areas
+     *   - only `status = 'approved'` files; ISO sub-directory pseudo-rows
+     *     (`source_type = 'iso_subdir'`) are excluded
+     *   - case-insensitive substring match on `filename` OR `short_description`
+     *   - ordered by area tag then filename, capped at `$limit` rows
+     *
+     * A query shorter than 2 characters (after trimming) returns `[]`, matching
+     * the route's previous pre-query short-circuit.
+     *
+     * `$isAdmin` is accepted for parity with the route's caller context; the
+     * current rules already grant any authenticated user every active
+     * non-private area, so administrators gain no additional search scope here.
+     * Do not broaden that in this method.
+     *
+     * @param string   $query   Raw search term; trimmed here.
+     * @param int|null $userId  Authenticated user id, or null for a guest / no user.
+     * @param bool     $isAdmin Whether the caller is an administrator (see note above).
+     * @param bool     $isGuest Whether the caller is unauthenticated.
+     * @param int      $limit   Maximum number of rows to return.
+     * @return array<int,array<string,mixed>> Result rows with keys: id, filename,
+     *   short_description, filesize, created_at, area_id, area_tag, subfolder.
+     *   id, area_id and filesize are cast to int.
+     */
+    public function searchAccessibleFiles(
+        string $query,
+        ?int $userId,
+        bool $isAdmin,
+        bool $isGuest,
+        int $limit = 100
+    ): array {
+        $query = trim($query);
+        if (mb_strlen($query) < 2) {
+            return [];
+        }
+
+        $userId = ($userId !== null && $userId > 0) ? $userId : null;
+
+        // Build accessible-area conditions:
+        // - Area must be active
+        // - Exclude private areas that do not belong to this user
+        // - Admins can see all active non-private areas plus their own private area
+        $areaConditions = "fa.is_active = TRUE AND (fa.is_private = FALSE OR fa.is_private IS NULL";
+        if ($userId !== null) {
+            $privateTag = 'PRIVATE_USER_' . $userId;
+            $areaConditions .= " OR fa.tag = " . $this->db->quote($privateTag);
+        }
+        $areaConditions .= ")";
+        if ($isGuest) {
+            $areaConditions .= " AND fa.is_public = TRUE";
+        }
+
+        $sql = "
+            SELECT
+                f.id,
+                f.filename,
+                f.short_description,
+                f.filesize,
+                f.created_at,
+                f.file_area_id AS area_id,
+                fa.tag         AS area_tag,
+                f.subfolder
+            FROM files f
+            JOIN file_areas fa ON fa.id = f.file_area_id
+            WHERE {$areaConditions}
+              AND f.status = 'approved'
+              AND f.source_type <> 'iso_subdir'
+              AND (
+                    f.filename          ILIKE '%' || :q1 || '%'
+                 OR f.short_description ILIKE '%' || :q2 || '%'
+              )
+            ORDER BY fa.tag ASC, f.filename ASC
+            LIMIT " . max(1, (int)$limit) . "
+        ";
+
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([':q1' => $query, ':q2' => $query]);
+        $results = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // Cast numeric fields (the web route relied on these being ints).
+        foreach ($results as &$row) {
+            $row['id']       = (int)$row['id'];
+            $row['area_id']  = (int)$row['area_id'];
+            $row['filesize'] = (int)$row['filesize'];
+        }
+        unset($row);
+
+        return $results;
+    }
+
+    /**
      * Get files in a file area
      *
      * @param int $areaId File area ID
