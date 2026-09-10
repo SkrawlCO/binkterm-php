@@ -642,3 +642,11 @@ TELNET_RZ_BIN=/usr/bin/rz
 
 - [Telnet Daemon](TelnetServer.md)
 - [SSH Server](SSHServer.md)
+
+## Recent Callers
+
+The authenticated front door shows a compact Recent Callers line with at most two public usernames and approximate presence. Telnet and SSH share this presentation. It uses the existing root-menu header spacer or themed ambient footer; submenu navigation, key hints and login prompts are unchanged. Built-in text/line menus also show the line. A quiet or unavailable source adds no report or pause.
+
+Genuine normal logins record a durable arrival. Debug auto-login does not. Logout does not remove the caller. Online now retains the existing session-presence definition. The last seven days are eligible; this is not a behavioral feed.
+
+M1 requires migration `v20260910141945_add_last_caller_visit_at.sql`. After applying it through the normal upgrade workflow, Telnet and SSH daemon code requires human-present activation (restart both daemons). Existing caller rows start NULL; the list populates naturally.

@@ -1,0 +1,15 @@
+<div class="dash-card-wrapper" data-card-id="recent_callers">
+    <div class="card mb-3">
+        <div class="card-header"><h6 class="mb-0">{{ t('ui.recent_callers.title', {}, locale, ['common']) }}</h6></div>
+        <div class="card-body py-2">
+            {% for caller in recent_callers %}
+                <div class="d-flex justify-content-between gap-2 small py-1">
+                    <a href="/profile/{{ caller.username|url_encode }}" class="text-decoration-none text-break">{{ caller.username }}</a>
+                    <span class="text-muted text-nowrap">{{ caller.presence }}</span>
+                </div>
+            {% else %}
+                <span class="text-muted small">{{ t('ui.recent_callers.empty', {}, locale, ['common']) }}</span>
+            {% endfor %}
+        </div>
+    </div>
+</div>

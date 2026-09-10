@@ -87,6 +87,7 @@ final class DeclarativeMenuBridge
                     ? $fallback
                     : $this->server->t($key, $fallback, [], $loc),
                 $this->liveBadgeResolver($state),
+                fn (string $loc): ?string => $this->server->recentCallersLine($loc, max(8, $ctx->cols() - 8)),
             );
 
             // Presentation: an optional, validated ANSI theme frames the

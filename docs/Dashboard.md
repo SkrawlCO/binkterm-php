@@ -43,6 +43,14 @@ Shows the count of unread bulletins with a link to the Bulletins page. Displays 
 
 Shows the sysop name, the system's configured location (when set to something other than the "Unknown Location" placeholder), the logged-in user's username, and the FTN network addresses the BBS is registered on. A few extra running totals — registered user count, today's caller count, system uptime (host OS uptime, when it can be determined), file area file count, all-time total login count, and total echomail message count — can also be shown, controlled by **Admin → Appearance & Content → Dashboard → Extra statistics in System Information card**, which offers three modes: **Off**, **Sysop Only** (default), and **All Users**.
 
+### Recent Callers *(sidebar)*
+
+Available to ordinary callers: up to six public usernames who genuinely arrived within the past seven days, newest first, with profile links and approximate presence (Online now, 12m ago, 2h ago, Yesterday). The card participates in normal dashboard layout customization. Hiding the card changes only the viewer's layout; it does not hide that viewer from other callers.
+
+Arrival persists across logout in `users.last_caller_visit_at`. Normal Web, Telnet and SSH login records it. A remembered Web caller's trusted keyboard, pointer or touch interaction in a focused, visible document records a return; 30 minutes without such interaction starts a new episode. Continuous use sends one signal per episode. Polling, visibility changes, automatic restoration and passive reading of an already-rendered tab do not record arrival. Online now uses the separate existing session definition and can include unattended sessions.
+
+M1 starts with NULL arrival timestamps, without historical seeding. Apply migration `v20260910141945_add_last_caller_visit_at.sql` through the normal human-supervised upgrade workflow. While that migration is pending, recording is inactive and the card shows its empty state. The list refreshes on dashboard navigation/reload.
+
 ### Today's Callers *(sidebar, admin only)*
 
 A table of users who have logged in today, with the time of their last activity and an online indicator for users currently active.

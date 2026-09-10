@@ -1,6 +1,8 @@
 <?php
 
 return [
+    'ui.recent_callers.title' => 'Недавние посетители',
+    'ui.recent_callers.empty' => 'Недавних посетителей пока нет.',
     // Relative time strings used by app.js formatting helpers.
     'time.soon' => 'Скоро',
     'time.in_hours' => 'Через {count} час{suffix}',

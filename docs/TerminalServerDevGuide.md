@@ -1183,3 +1183,11 @@ The daemon proxies every user's API traffic through the server, so without help 
 - [TelnetServer.md](TelnetServer.md) — Telnet daemon setup and transport-specific details
 - [SSHServer.md](SSHServer.md) — SSH daemon setup
 - [API Reference](API.md) — Full HTTP endpoint reference
+
+## Recent Callers M1
+
+`Auth::createAuthenticatedSession()` records `users.last_caller_visit_at` for normal Web/Telnet/SSH establishment. Low-level `createSessionForConnection()` and cookie validation never record it, excluding terminal debug auto-login. `Auth::getRecentCallerVisits()` selects at most six active non-system users over seven days, independently deriving the existing 15-minute online flag with an EXISTS session query. `RecentCallers` reduces this to public identity and approximate text.
+
+`BbsSession::recentCallersLine()` shares a 30-second query snapshot for a two-caller ambient line. `DeclarativeMenuBridge` injects a root-only authenticated ambient resolver into `NavigationScreenBuilder`. `NavigationScreenRenderer` uses its existing header spacer or the themed ambient footer line; menu badges remain available and key hints keep their own line. The built-in menu's existing second row and the LineShell preamble provide the fallback presentation. No additional input reader or login screen is added. Telnet and SSH use the same classes; no daemon include changes are needed.
+
+The additive migration starts all existing rows NULL. Column availability is checked before reads/writes so bind-mounted Web code remains compatible during a pending upgrade. The migration and terminal daemon activation belong to the human-supervised upgrade; do not treat copying daemon source as activation.

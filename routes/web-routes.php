@@ -429,6 +429,9 @@ SimpleRouter::get('/', function() {
     // Same timezone used for both so the System Information stat and the Today's Callers list agree
     $activeTodayCount = $auth->getActiveTodayCount($adminTimezone);
     $todaysCallers = !empty($user['is_admin']) ? $auth->getTodaysCallers($adminTimezone) : null;
+    $recentLocale = (new \BinktermPHP\I18n\LocaleResolver(new \BinktermPHP\I18n\Translator()))->resolveLocale(
+        trim((string)($_GET['locale'] ?? '')) ?: (($userSettings['locale'] ?? '') ?: null), $user
+    );
 
     $dashboardStatsMode = \BinktermPHP\AppearanceConfig::getDashboardSystemInfoStatsMode();
     $showDashboardSystemInfoStats = $dashboardStatsMode === 'all'
@@ -507,6 +510,7 @@ SimpleRouter::get('/', function() {
         'shell_art_content' => $shellArtContent,
         'online_user_count' => $onlineCount,
         'active_today_count' => $activeTodayCount,
+        'recent_callers' => \BinktermPHP\RecentCallers::present($auth->getRecentCallerVisits(), $recentLocale),
         'todays_callers' => $todaysCallers,
         'show_dashboard_system_info_stats' => $showDashboardSystemInfoStats,
         'registered_user_count' => $registeredUserCount,

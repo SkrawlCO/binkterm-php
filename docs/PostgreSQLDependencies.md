@@ -417,3 +417,7 @@ When adding a new entry, keep it brief and concrete. A good note answers:
 4. What would a future compatibility effort probably replace it with?
 
 If the answer is "this is PostgreSQL-specific on purpose because it is clearly better here," that is fine. Write that down and move on.
+
+### Recent Callers additive-column readiness
+
+`Auth::callerVisitsAvailable()` checks `pg_attribute` using `'users'::regclass` before accessing `last_caller_visit_at`. This PostgreSQL-specific catalog check lets bind-mounted code operate while the additive migration is pending and resolves the current search path (including temporary test tables). A future database port would replace it with that backend's schema-introspection equivalent; migration difficulty is low.

@@ -25,6 +25,7 @@ final class NavigationScreenModel
         public readonly bool $backAvailable,
         public readonly bool $homeAvailable,
         public readonly PresentationHints $presentation,
+        public readonly ?string $ambient = null,
     ) {
     }
 

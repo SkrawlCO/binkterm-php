@@ -765,7 +765,9 @@ class BbsSession
             $this->safeWrite($conn, "\033[1;1H");
             $this->safeWrite($conn, $statusLine . "\r");
             $this->safeWrite($conn, "\033[2;1H");
-            $this->writeLine($conn, '');
+            $this->writeLine($conn, $this->encodeForTerminal(
+                $this->recentCallersLine($state['locale'], max(8, $cols - 2)) ?? ''
+            ));
             $styleProfile = TelnetUtils::getStyleProfile($state);
             $panelScheme = $styleProfile['panel'] ?? [];
             $listScheme = $styleProfile['list'] ?? [];
@@ -1028,11 +1030,14 @@ class BbsSession
                 }
 
                 $selectedIndex = $shell->chooseFromList($conn, $state, $title, $listItems, [
-                    'preamble_fn' => function () use ($conn): bool {
-                        if ($this->sixelSupported && TelnetUtils::showSixelScreenIfExists('mainmenu.sixel', $this, $conn)) {
-                            return true;
+                    'preamble_fn' => function () use ($conn, &$state): bool {
+                        $shown = ($this->sixelSupported && TelnetUtils::showSixelScreenIfExists('mainmenu.sixel', $this, $conn))
+                            || TelnetUtils::showScreenIfExists('mainmenu.ans', $this, $conn);
+                        $recent = $this->recentCallersLine($state['locale'], max(8, ($state['cols'] ?? 80) - 2));
+                        if ($recent !== null) {
+                            $this->writeLine($conn, $this->encodeForTerminal($recent));
                         }
-                        return TelnetUtils::showScreenIfExists('mainmenu.ans', $this, $conn);
+                        return $shown;
                     },
                     'prompt' => $this->t('ui.terminalserver.server.menu.select_option', 'Select option:', [], $state['locale']) . ' ',
                     'key_to_index' => $keyToIndex,
@@ -3140,9 +3145,26 @@ class BbsSession
         }
     }
 
-    /**
-     * Show system news from data/systemnews.md before entering the shoutbox.
-     */
+    /** Shared Telnet/SSH front-door snapshot; no extra screen, prompt or input reader. */
+    public function recentCallersLine(string $locale, int $width = 72): ?string
+    {
+        static $rows = null;
+        static $takenAt = 0;
+        try {
+            if ($rows === null || time() - $takenAt >= 30) {
+                $rows = (new \BinktermPHP\Auth())->getRecentCallerVisits(2);
+                $takenAt = time();
+            }
+            return \BinktermPHP\RecentCallers::terminalLine(
+                \BinktermPHP\RecentCallers::present($rows, $locale), $locale, $width
+            );
+        } catch (\Throwable $e) {
+            $this->logInfo('Recent Callers unavailable: ' . $e->getMessage());
+            return null;
+        }
+    }
+
+    /** Show system news from data/systemnews.md during arrival. */
     private function showSystemNews($conn, array &$state): void
     {
         $markdown = \BinktermPHP\AppearanceConfig::getSystemNewsMarkdown();

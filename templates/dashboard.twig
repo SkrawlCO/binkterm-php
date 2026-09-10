@@ -428,6 +428,8 @@
         </div>
         </div>{# /dash-card-wrapper system_info #}
 
+        {% include 'partials/dashboard_recent_callers.twig' %}
+
         {% if current_user.is_admin and todays_callers is not null %}
         <div class="dash-card-wrapper" data-card-id="todays_callers">
         <div class="card">

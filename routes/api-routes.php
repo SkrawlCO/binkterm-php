@@ -201,6 +201,14 @@ SimpleRouter::group(['prefix' => '/api'], function() {
         }
     });
 
+    // Called only by the trusted foreground interaction listener, never polling.
+    SimpleRouter::post('/caller-visit', function() {
+        $user = RouteHelper::requireAuth(); // Includes the standard POST CSRF check.
+        $recorded = (new Auth())->recordCallerVisit((int)($user['user_id'] ?? $user['id']));
+        header('Content-Type: application/json');
+        echo json_encode(['success' => $recorded]);
+    });
+
     SimpleRouter::post('/auth/logout', function() {
         header('Content-Type: application/json');
 

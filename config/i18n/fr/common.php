@@ -1,6 +1,8 @@
 <?php
 
 return [
+    'ui.recent_callers.title' => 'Visiteurs récents',
+    'ui.recent_callers.empty' => 'Aucun visiteur récent pour le moment.',
     'time.soon' => 'Bientôt',
     'time.in_hours' => 'Dans {count} heure{suffix}',
     'time.tomorrow' => 'Demain',

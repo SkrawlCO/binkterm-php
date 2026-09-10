@@ -30,6 +30,7 @@ class Auth
     private const DUMMY_PASSWORD_HASH = '$2y$12$z0uT/KorOHPD6uVca/ak2eZdZ9VWNjFhjBVydlbMGkU9KUGe8VKpu';
 
     private $db;
+    private ?bool $callerVisitColumnAvailable = null;
 
     public function __construct()
     {
@@ -129,6 +130,12 @@ class Auth
         $csrfToken = bin2hex(random_bytes(32));
         $meta = new UserMeta();
         $meta->setValue($userId, 'csrf_token', $csrfToken);
+
+        // Only normal interactive caller establishment records arrival. Low-level
+        // session creation (including terminal debug auto-login) stays separate.
+        if (in_array($service, ['web', 'telnet', 'ssh'], true)) {
+            $this->recordCallerVisit($userId, true);
+        }
 
         return [
             'session_id' => $sessionId,
@@ -644,6 +651,67 @@ class Auth
             ORDER BY MAX(s.last_activity) DESC
         ");
         $stmt->execute([':hours' => $hours]);
+        return $stmt->fetchAll(\PDO::FETCH_ASSOC);
+    }
+
+    /** Allow bind-mounted code to run safely before the additive migration is applied. */
+    public function callerVisitsAvailable(): bool
+    {
+        if ($this->callerVisitColumnAvailable === null) {
+            $this->callerVisitColumnAvailable = (bool)$this->db->query("
+                SELECT EXISTS (SELECT 1 FROM pg_attribute
+                    WHERE attrelid = 'users'::regclass
+                      AND attname = 'last_caller_visit_at' AND NOT attisdropped)
+            ")->fetchColumn();
+        }
+        return $this->callerVisitColumnAvailable;
+    }
+
+    /**
+     * Record explicit caller establishment or a trusted foreground Web return.
+     * Never call from cookie validation, presence heartbeats or low-level session creation.
+     * The return signal is coalesced to at most one write per 30 minutes.
+     * Returns false while the additive migration is pending.
+     */
+    public function recordCallerVisit(int $userId, bool $explicitLogin = false): bool
+    {
+        if (!$this->callerVisitsAvailable()) {
+            return false;
+        }
+        $sql = "UPDATE users SET last_caller_visit_at = NOW()
+                WHERE id = :id AND is_active = TRUE AND is_system = FALSE";
+        if (!$explicitLogin) {
+            $sql .= " AND (last_caller_visit_at IS NULL
+                      OR last_caller_visit_at < NOW() - INTERVAL '30 minutes')";
+        }
+        $this->db->prepare($sql)->execute([':id' => $userId]);
+        return true;
+    }
+
+    /**
+     * Public caller arrivals over seven days, newest first, at most six people.
+     * Session existence/activity never qualifies a caller; it only supplies the
+     * unchanged canonical 15-minute online indicator. Logout cannot erase arrival.
+     * @return array<array{username:string,last_caller_visit_at:string,is_online:bool}>
+     */
+    public function getRecentCallerVisits(int $limit = 6): array
+    {
+        if (!$this->callerVisitsAvailable()) {
+            return [];
+        }
+        $stmt = $this->db->prepare("
+            SELECT u.username, u.last_caller_visit_at,
+                   EXISTS (SELECT 1 FROM user_sessions s WHERE s.user_id = u.id
+                       AND s.last_activity > NOW() - INTERVAL '15 minutes'
+                       AND s.expires_at > NOW()) AS is_online
+            FROM users u
+            WHERE u.is_active = TRUE AND u.is_system = FALSE
+              AND u.last_caller_visit_at >= NOW() - INTERVAL '168 hours'
+            ORDER BY u.last_caller_visit_at DESC, u.id DESC
+            LIMIT :limit
+        ");
+        $stmt->bindValue(':limit', max(1, min(6, $limit)), \PDO::PARAM_INT);
+        $stmt->execute();
         return $stmt->fetchAll(\PDO::FETCH_ASSOC);
     }
 

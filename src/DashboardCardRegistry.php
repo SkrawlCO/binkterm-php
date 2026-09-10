@@ -29,6 +29,7 @@ class DashboardCardRegistry
             'advertising'    => ['label_key' => 'ui.dashboard.card.advertising',    'default_zone' => 'main',    'required' => false, 'feature' => 'advertising'],
             'bulletins'      => ['label_key' => 'ui.dashboard.card.bulletins',      'default_zone' => 'sidebar', 'required' => false],
             'system_info'    => ['label_key' => 'ui.dashboard.card.system_info',    'default_zone' => 'sidebar', 'required' => false],
+            'recent_callers' => ['label_key' => 'ui.recent_callers.title', 'default_zone' => 'sidebar', 'required' => false],
             'todays_callers' => ['label_key' => 'ui.dashboard.card.todays_callers', 'default_zone' => 'sidebar', 'required' => false, 'admin_only' => true],
             'voting_booth'     => ['label_key' => 'ui.dashboard.card.voting_booth',     'default_zone' => 'sidebar', 'required' => false, 'feature' => 'voting_booth'],
             'packetbbs_status' => ['label_key' => 'ui.dashboard.card.packetbbs_status', 'default_zone' => 'sidebar', 'required' => false, 'conditional' => 'packetbbs_nodes_exist'],

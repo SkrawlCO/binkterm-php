@@ -236,11 +236,10 @@ final class NavigationScreenRenderer implements NavigationRenderer
 
         $menu = $this->fitBlock($lines, $menuWidth, $menuHeight);
 
-        // --- FOOTER block: an ambient activity line (only when there is live
-        // activity to show — assembled from badge annotations already on the
-        // model, no queries) above the key hints; intentional blank otherwise.
+        // Root caller context uses the existing ambient slot. Elsewhere retain
+        // badge context; key hints keep their own line. No queries here.
         $hints   = $ctx->colorize($ctx->encodeForTerminal($this->footerHints($screen)), self::EMPHASIS_COLOR['muted']);
-        $ambient = $this->ambientActivityLine($screen);
+        $ambient = $screen->ambient ?? $this->ambientActivityLine($screen);
 
         if ($footerHeight >= 2) {
             $footerLines = [
@@ -471,7 +470,9 @@ final class NavigationScreenRenderer implements NavigationRenderer
             }
         }
 
-        $out[] = '';
+        $out[] = $screen->ambient !== null
+            ? $pad . $ctx->colorize($ctx->encodeForTerminal($this->clipVisible($screen->ambient, $width)), self::EMPHASIS_COLOR['muted'])
+            : '';
 
         return $out;
     }

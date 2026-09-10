@@ -54,6 +54,20 @@ Content-Type: application/json
 }
 ```
 
+## Caller Visit
+
+### POST /api/caller-visit
+
+Requires an authenticated caller and the standard `X-CSRF-Token`; administrative privilege is not required. The first-party Web client sends this only after trusted keyboard/pointer/touch interaction while the document is visible and focused. It does not run from polling, timers, visibility changes or page loading. After 30 minutes without trusted interaction, the next interaction starts another return episode. Client episode suppression uses existing user-scoped storage; a server-side 30-minute write guard coalesces duplicate requests. Trust in the DOM event is enforced by the first-party client, not asserted by a request payload.
+
+No request body. The server derives the user from authentication and stores only `users.last_caller_visit_at`. No username, timestamp, session, network or activity details are returned. This endpoint is not an activity heartbeat.
+
+| Response field | Type | Meaning |
+|---|---|---|
+| `success` | boolean | True when recording is available (including a coalesced duplicate); false while the additive migration is pending. |
+
+Authentication/CSRF failures use the standard 401/403 structured errors (`error_code`, `error`).
+
 ## Contents
 
 - [Public API](#public-api)
@@ -66,6 +80,7 @@ Content-Type: application/json
   - [Bulletins](#bulletins) (3)
   - [Chat](#chat) (6)
   - [Credits](#credits) (1)
+  - [Caller Visit](#caller-visit) (1)
   - [Dashboard](#dashboard) (2)
   - [Debug](#debug) (1)
   - [Docs](#docs) (1)

@@ -21,11 +21,14 @@ final class NavigationScreenBuilder
      *        signal is unknown / has nothing worth showing. Only ever called for items that
      *        have already passed every access and availability gate, so it can never be used
      *        to probe a hidden item. Off-session callers (preview, tests) pass null.
+     * @param (callable(string):?string)|null $ambientResolver authenticated root-only
+     *        ambient text, receiving the resolved locale. No input/navigation behavior.
      */
     public function __construct(
         private readonly ActionRegistry $actions,
         private readonly mixed $translate,
         private readonly mixed $badgeResolver = null,
+        private readonly mixed $ambientResolver = null,
     ) {
     }
 
@@ -56,6 +59,8 @@ final class NavigationScreenBuilder
             backAvailable: !$path->isRoot(),
             homeAvailable: $path->depth() > 2,
             presentation: $node->presentation,
+            ambient: $path->isRoot() && $ctx->isAuthenticated() && is_callable($this->ambientResolver)
+                ? ($this->ambientResolver)($locale) : null,
         );
     }
 
