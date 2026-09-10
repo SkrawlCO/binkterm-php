@@ -1,0 +1,18 @@
+{
+  "_comment": "M2 first proof: root navigation only, at exact 80x24. Select this theme during human-present activation; it does not change navigation configuration. Other screens and geometries use the normal declarative renderer.",
+  "schema": 2,
+  "id": "l33test.frontdoor.m2",
+  "enabled": true,
+  "root_only": true,
+  "geometries": {
+    "80x24": {
+      "template": "nav-frontdoor-m2",
+      "regions": {
+        "MENU": { "row": 5, "col": 5, "width": 72, "height": 12 },
+        "DESCRIPTION": { "row": 18, "col": 5, "width": 72, "height": 2 },
+        "STATUS": { "row": 21, "col": 5, "width": 72, "height": 2 },
+        "FOOTER": { "row": 24, "col": 5, "width": 72, "height": 1 }
+      }
+    }
+  }
+}

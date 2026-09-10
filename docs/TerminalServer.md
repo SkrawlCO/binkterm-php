@@ -91,6 +91,23 @@ Pipe-code rendering for plain bulletins and other ANSI/pipe text shared with the
 - On narrow terminals, list rows are ANSI-aware truncated at the right edge so colors (bold unread, cyan row numbers, etc.) are preserved. The status bar is likewise hard-capped to one line so it cannot wrap and cause the screen to scroll.
 - The main menu clips lower menu sections from the bottom on short terminals so the box header (status line, box border, "Main Menu" title) always remains visible.
 
+### Compositional ANSI presentation (M2 first slice)
+
+An optional schema-2 theme can place the existing front-door navigation into
+separate MENU, DESCRIPTION, STATUS and FOOTER rectangles at 80x24. DESCRIPTION
+follows the selected destination; STATUS shows existing Recent Callers and
+destination badge data. ANSI contains presentation only; application navigation
+and access checks are unchanged. Missing or invalid themes and layouts that
+cannot fit navigation use the normal declarative renderer.
+
+The root-only proof is `config/terminal_theme_m2.json.example`, with
+`telnet/screens/nav-frontdoor-m2.ans`. It does not activate itself or replace the
+accepted M1 theme. F6 previews the configured theme without writes or live status
+queries. Expanded sizes continue to use the normal renderer. See
+[M2 composition and activation](TerminalNavigationFramework.md#m2-first-slice-semantic-composition-at-80x24)
+for the operator-managed theme selection, fresh-session requirement and short
+SyncTerm acceptance check. Caller-selectable themes are not part of this slice.
+
 ### Message Browsing
 
 - List netmail and echomail messages with pagination

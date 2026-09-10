@@ -12,11 +12,13 @@ namespace BinktermPHP\Terminal\Navigation;
  * universal fallback — a theme that does not apply (disabled, geometry not
  * themed, template missing/unsafe, validation failure) simply yields to it.
  *
- * M1 scope: schema 1, a single 80x24 geometry, MENU + FOOTER regions.
+ * Schema 1 retains MENU + FOOTER. Schema 2 adds STATUS + DESCRIPTION.
+ * Both currently use exact 80x24 geometry.
  */
 final class NavigationTheme
 {
     public const SCHEMA = 1;
+    public const COMPOSITION_SCHEMA = 2;
 
     /** The only geometry a schema-1 theme may define. */
     public const SUPPORTED_GEOMETRY = '80x24';
@@ -28,6 +30,8 @@ final class NavigationTheme
         public readonly string $id,
         public readonly bool $enabled,
         public readonly array $geometries,
+        public readonly int $schema = self::SCHEMA,
+        public readonly bool $rootOnly = false,
     ) {
     }
 

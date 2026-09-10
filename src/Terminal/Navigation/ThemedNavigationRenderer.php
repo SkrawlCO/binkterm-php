@@ -10,7 +10,7 @@ use BinktermPHP\TelnetServer\TerminalRenderContext;
  *
  * Responsibilities are strictly presentation:
  *   - load + sanitise the trusted template art for the current geometry
- *   - ask the canonical renderer to compose the MENU and FOOTER blocks
+ *   - ask the canonical renderer to compose the schema's semantic blocks
  *   - paint the template, then place each block inside its validated rectangle
  *   - never interpret an action, a hotkey, an ACS predicate, or navigation
  *     structure — those all belong to the definition and the runtime
@@ -46,7 +46,8 @@ final class ThemedNavigationRenderer implements NavigationRenderer
     public function render(TerminalRenderContext $ctx, NavigationScreenModel $screen, array $opts = []): void
     {
         $geoKey = $ctx->cols() . 'x' . $ctx->rows();
-        $plan   = $this->plan($ctx);
+        $plan   = $this->theme->rootOnly && !$screen->path->isRoot()
+            ? $this->cannot('theme applies only to the root screen') : $this->plan($ctx);
 
         if (!$plan['ok']) {
             $this->recordFallback($plan['reason'], $geoKey);
@@ -103,6 +104,25 @@ final class ThemedNavigationRenderer implements NavigationRenderer
             return $this->cannot("template '{$geo->templateToken}' has no safe content in charset '{$charset}'");
         }
 
+        if ($this->theme->schema === NavigationTheme::COMPOSITION_SCHEMA) {
+            $plain = preg_replace('/\033\[[0-9;:]*m/', '', $art) ?? '';
+            if ($charset === 'cp437') {
+                $plain = iconv('CP437', 'UTF-8', $plain) ?: '';
+            }
+            $lines = explode("\n", rtrim($plain, "\n"));
+            if (trim($plain) === '' || str_contains($plain, "\t")) {
+                return $this->cannot('composition template has no printable content or contains tabs');
+            }
+            if (count($lines) > $geo->rows) {
+                return $this->cannot('composition template exceeds geometry height');
+            }
+            foreach ($lines as $line) {
+                if (mb_strlen($line, 'UTF-8') > $geo->cols) {
+                    return $this->cannot('composition template exceeds geometry width');
+                }
+            }
+        }
+
         return ['ok' => true, 'reason' => null, 'geometry' => $geo, 'art' => $art];
     }
 
@@ -150,18 +170,23 @@ final class ThemedNavigationRenderer implements NavigationRenderer
         $menu   = $geo->menu();
         $footer = $geo->footer();
 
-        $blocks = $this->inner->composeRegions(
-            $ctx,
-            $screen,
-            $menu->width,
-            $menu->height,
-            $footer->width,
-            $footer->height,
-            [
-                'show_hotkeys' => $opts['show_hotkeys'] ?? true,
-                'cursor'       => $opts['cursor'] ?? null,
-            ]
-        );
+        $semantic = $this->theme->schema === NavigationTheme::COMPOSITION_SCHEMA;
+        if ($semantic) {
+            $blocks = $this->inner->composeSemanticRegions($ctx, $screen, $geo, $opts);
+        } else {
+            $blocks = $this->inner->composeRegions(
+                $ctx,
+                $screen,
+                $menu->width,
+                $menu->height,
+                $footer->width,
+                $footer->height,
+                [
+                    'show_hotkeys' => $opts['show_hotkeys'] ?? true,
+                    'cursor'       => $opts['cursor'] ?? null,
+                ]
+            );
+        }
 
         $artLines = explode("\n", $art);
 
@@ -175,11 +200,20 @@ final class ThemedNavigationRenderer implements NavigationRenderer
                 if (!isset($artLines[$i])) {
                     break;
                 }
-                $ctx->write("\033[" . ($i + 1) . ';1H' . $this->clipTemplateLine($artLines[$i], $geo->cols));
+                // Schema 2 has already validated the complete encoded row;
+                // preserve CP437 bytes rather than passing them to UTF-8 clipping.
+                $line = $semantic ? $artLines[$i] : $this->clipTemplateLine($artLines[$i], $geo->cols);
+                $ctx->write("\033[" . ($i + 1) . ';1H' . $line);
             }
 
-            $this->placeBlock($ctx, $blocks['menu'], $menu);
-            $this->placeBlock($ctx, $blocks['footer'], $footer);
+            if ($semantic) {
+                foreach ($blocks as $name => $lines) {
+                    $this->placeBlock($ctx, $lines, $geo->region($name));
+                }
+            } else {
+                $this->placeBlock($ctx, $blocks['menu'], $menu);
+                $this->placeBlock($ctx, $blocks['footer'], $footer);
+            }
 
             // Park the cursor out of the way; the lightbar carries the selection.
             $ctx->write("\033[0m\033[" . $geo->rows . ';1H');

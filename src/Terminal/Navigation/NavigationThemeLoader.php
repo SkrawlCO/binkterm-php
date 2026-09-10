@@ -10,13 +10,13 @@ namespace BinktermPHP\Terminal\Navigation;
  * rejected with a path-tagged {@see ValidationError}, and the caller uses the
  * fallback renderer:
  *
- *   - schema must be exactly {@see NavigationTheme::SCHEMA}
+ *   - schema must be 1 (M1) or 2 (semantic composition)
  *   - `id` a non-empty string; `enabled` a boolean (default true)
  *   - `geometries` an object whose only key is "80x24" for schema 1
  *   - each geometry: `template` a safe token ([A-Za-z0-9_-]), `regions` an
- *     object with exactly MENU and FOOTER
+ *     object with exactly MENU/FOOTER (1), plus STATUS/DESCRIPTION (2)
  *   - each region: integer row/col/width/height, all >= 1, wholly inside the
- *     geometry, and MENU/FOOTER must not overlap
+ *     geometry, and all rectangles must be disjoint
  */
 final class NavigationThemeLoader
 {
@@ -64,10 +64,10 @@ final class NavigationThemeLoader
         }
 
         $schema = $data['schema'] ?? null;
-        if ($schema !== NavigationTheme::SCHEMA) {
+        if (!in_array($schema, [NavigationTheme::SCHEMA, NavigationTheme::COMPOSITION_SCHEMA], true)) {
             $errors[] = new ValidationError(
                 'schema',
-                sprintf('unsupported schema %s (this release understands %d)', var_export($schema, true), NavigationTheme::SCHEMA),
+                sprintf('unsupported schema %s (this release understands 1 and 2)', var_export($schema, true)),
                 'schema'
             );
         }
@@ -87,6 +87,13 @@ final class NavigationThemeLoader
             }
         }
 
+        $rootOnly = $data['root_only'] ?? false;
+        if (array_key_exists('root_only', $data)
+            && ($schema !== NavigationTheme::COMPOSITION_SCHEMA || !is_bool($data['root_only']))) {
+            $errors[] = new ValidationError('root_only', 'root_only requires schema 2 and a boolean', 'root_only');
+        }
+        $regionNames = $schema === NavigationTheme::COMPOSITION_SCHEMA
+            ? NavigationThemeGeometry::COMPOSITION_REGIONS : NavigationThemeGeometry::KNOWN_REGIONS;
         $geometries = [];
         $rawGeos = $data['geometries'] ?? null;
         if (!is_array($rawGeos) || !$this->isAssoc($rawGeos) || $rawGeos === []) {
@@ -106,7 +113,7 @@ final class NavigationThemeLoader
                     continue;
                 }
                 [$cols, $rows] = $this->parseGeometryKey($key);
-                $geo = $this->geometry($cols, $rows, $geoData, $path, $errors);
+                $geo = $this->geometry($cols, $rows, $geoData, $path, $errors, $regionNames);
                 if ($geo !== null) {
                     $geometries[$key] = $geo;
                 }
@@ -117,13 +124,13 @@ final class NavigationThemeLoader
             return NavigationThemeLoadResult::invalid($errors);
         }
 
-        return NavigationThemeLoadResult::ok(new NavigationTheme((string) $id, $enabled, $geometries));
+        return NavigationThemeLoadResult::ok(new NavigationTheme((string) $id, $enabled, $geometries, $schema, $rootOnly));
     }
 
     /**
      * @param array<mixed> $errors passed by reference
      */
-    private function geometry(int $cols, int $rows, mixed $geoData, string $path, array &$errors): ?NavigationThemeGeometry
+    private function geometry(int $cols, int $rows, mixed $geoData, string $path, array &$errors, array $regionNames): ?NavigationThemeGeometry
     {
         if (!is_array($geoData) || !$this->isAssoc($geoData)) {
             $errors[] = new ValidationError('geometry_shape', 'a geometry must be an object', $path);
@@ -155,10 +162,10 @@ final class NavigationThemeLoader
                 continue; // documentation key
             }
             $rpath = "{$path}.regions[{$name}]";
-            if (!in_array($name, NavigationThemeGeometry::KNOWN_REGIONS, true)) {
+            if (!in_array($name, $regionNames, true)) {
                 $errors[] = new ValidationError(
                     'region_unknown',
-                    sprintf("unknown region '%s'; this release supports: %s", $name, implode(', ', NavigationThemeGeometry::KNOWN_REGIONS)),
+                    sprintf("unknown region '%s'; this schema supports: %s", $name, implode(', ', $regionNames)),
                     $rpath
                 );
                 continue;
@@ -170,7 +177,7 @@ final class NavigationThemeLoader
             }
         }
 
-        foreach (NavigationThemeGeometry::KNOWN_REGIONS as $required) {
+        foreach ($regionNames as $required) {
             if (!isset($seen[$required])) {
                 $errors[] = new ValidationError(
                     'region_missing',
@@ -180,13 +187,17 @@ final class NavigationThemeLoader
             }
         }
 
-        if (isset($regions[NavigationThemeGeometry::REGION_MENU], $regions[NavigationThemeGeometry::REGION_FOOTER])
-            && $regions[NavigationThemeGeometry::REGION_MENU]->intersects($regions[NavigationThemeGeometry::REGION_FOOTER])) {
-            $errors[] = new ValidationError(
-                'region_overlap',
-                'MENU and FOOTER regions overlap; their rectangles must be disjoint',
-                "{$path}.regions"
-            );
+        $rectangles = array_values($regions);
+        foreach ($rectangles as $i => $rect) {
+            foreach (array_slice($rectangles, $i + 1) as $other) {
+                if ($rect->intersects($other)) {
+                    $errors[] = new ValidationError(
+                        'region_overlap',
+                        "{$rect->name} and {$other->name} regions overlap; their rectangles must be disjoint",
+                        "{$path}.regions"
+                    );
+                }
+            }
         }
 
         if ($errors !== []) {

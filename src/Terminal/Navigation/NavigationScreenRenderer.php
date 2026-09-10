@@ -258,6 +258,83 @@ final class NavigationScreenRenderer implements NavigationRenderer
     }
 
     /**
+     * Schema-2 semantic content, composed only from the resolved view model.
+     * Navigation and key hints must fit in full; informational text may clip.
+     * Returns terminal-encoded blocks keyed by semantic region name.
+     *
+     * @return array<string,array<int,string>>
+     */
+    public function composeSemanticRegions(
+        TerminalRenderContext $ctx,
+        NavigationScreenModel $screen,
+        NavigationThemeGeometry $geo,
+        array $opts = []
+    ): array {
+        $menu = $geo->menu();
+        $cursor = $opts['cursor'] ?? 0;
+        $menuLines = $this->directoryBlock($ctx, $screen, $menu->width, $opts['show_hotkeys'] ?? true, $cursor, true);
+        if (!$screen->path->isRoot()) {
+            array_unshift($menuLines, $ctx->encodeForTerminal($screen->path->crumb(' > ')), '');
+        }
+
+        $selected = $screen->selectableItems()[$cursor] ?? null;
+        $description = [
+            $selected?->label ?? $screen->title,
+            $selected?->description ?? $screen->description ?? '',
+        ];
+        $status = [$screen->ambient ?? '', trim($this->ambientActivityLine($screen))];
+        $plainBlocks = [
+            'DESCRIPTION' => $description,
+            'STATUS' => $status,
+            'FOOTER' => [$this->footerHints($screen)],
+        ];
+        $blocks = ['MENU' => $this->fitSemanticBlock($ctx, $menuLines, $menu, true)];
+        foreach ($plainBlocks as $name => $lines) {
+            // Model text is data, never a source of terminal control sequences.
+            $encoded = array_map(function (string $line) use ($ctx): string {
+                $line = preg_replace('/[\x00-\x1f\x7f-\x9f]/u', ' ', $line) ?? '';
+                return $ctx->encodeForTerminal($line);
+            }, $lines);
+            $region = $geo->region($name);
+            if ($region === null) {
+                throw new \UnexpectedValueException("Missing {$name} region");
+            }
+            $blocks[$name] = $this->fitSemanticBlock($ctx, $encoded, $region, $name === 'FOOTER');
+        }
+        return $blocks;
+    }
+
+    /** Fit encoded content without treating CP437 bytes as UTF-8 glyphs. */
+    private function fitSemanticBlock(
+        TerminalRenderContext $ctx,
+        array $lines,
+        NavigationThemeRegion $region,
+        bool $mustFit
+    ): array {
+        $utf8 = array_map(static function (string $line) use ($ctx): string {
+            if ($ctx->effectiveCharset() === 'cp437') {
+                $line = iconv('CP437', 'UTF-8', $line) ?: '';
+            }
+            // Keep composer SGR, but never allow model strings to position the
+            // terminal or introduce additional display rows inside a region.
+            return str_replace(["\n", "\t"], ' ', TemplateArtSanitizer::sanitize($line, 'utf8'));
+        }, $lines);
+        if ($mustFit) {
+            if (count($utf8) > $region->height) {
+                throw new \LengthException("{$region->name} cannot fit its content height");
+            }
+            foreach ($utf8 as $line) {
+                $plain = preg_replace('/\033\[[0-9;]*m/', '', $line) ?? $line;
+                if (mb_strlen($plain, 'UTF-8') > $region->width) {
+                    throw new \LengthException("{$region->name} cannot fit its content width");
+                }
+            }
+        }
+        return array_map(fn (string $line): string => $ctx->encodeForTerminal($line),
+            $this->fitBlock($utf8, $region->width, $region->height));
+    }
+
+    /**
      * The themed directory: sectioned, one row per destination.
      *
      * @return array<int,string>
@@ -267,7 +344,8 @@ final class NavigationScreenRenderer implements NavigationRenderer
         NavigationScreenModel $screen,
         int $width,
         bool $showHotkeys,
-        ?int $cursor
+        ?int $cursor,
+        bool $compact = false
     ): array {
         $utf8   = $ctx->effectiveCharset() === 'utf8';
         $subGlyph = $utf8 ? "\u{203A}" : '>';
@@ -321,7 +399,8 @@ final class NavigationScreenRenderer implements NavigationRenderer
                     $badgeW,
                     $showHotkeys,
                     $subGlyph,
-                    $cursor !== null && isset($selectableIndex[$it->id]) && $selectableIndex[$it->id] === $cursor
+                    $cursor !== null && isset($selectableIndex[$it->id]) && $selectableIndex[$it->id] === $cursor,
+                    $compact
                 );
             }
         }
@@ -338,7 +417,8 @@ final class NavigationScreenRenderer implements NavigationRenderer
         int $badgeW,
         bool $showHotkeys,
         string $subGlyph,
-        bool $isCursor
+        bool $isCursor,
+        bool $compact = false
     ): string {
         $key = '';
         if ($showHotkeys && $it->hotkey !== null) {
@@ -353,6 +433,17 @@ final class NavigationScreenRenderer implements NavigationRenderer
         }
         if (!$it->isSelectable()) {
             $name .= ' (' . ($it->disabledReason ?? 'unavailable') . ')';
+        }
+
+        if ($compact) {
+            $text = '  ' . $key . $name;
+            if (mb_strlen($text, 'UTF-8') > $width) {
+                throw new \LengthException('MENU cannot fit a navigation label');
+            }
+            return $ctx->colorize(
+                $ctx->encodeForTerminal($this->padVisible($text, $width)),
+                $isCursor ? "\033[7m" : (self::EMPHASIS_COLOR[$it->isSelectable() ? $it->emphasis : 'muted'] ?? '')
+            );
         }
 
         // Name segment: exactly $descCol visible cells.

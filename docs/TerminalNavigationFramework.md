@@ -252,8 +252,9 @@ frame. A theme can never make navigation unusable.
 
 ### `config/terminal_theme.json`
 
-Schema 1 themes exactly **one** geometry, `80x24`, with exactly two regions,
-`MENU` and `FOOTER`. See `config/terminal_theme.json.example`.
+Schema 1 (accepted M1) themes exactly **one** geometry, `80x24`, with exactly
+two regions, `MENU` and `FOOTER`. It remains supported unchanged. See
+`config/terminal_theme.json.example`. Schema 2 composition is described below.
 
 ```json
 {
@@ -305,11 +306,85 @@ actions, ACS and item order are exactly what the flowing renderer would show.
 each destination is one full-width row — hotkey, an uppercase name, its purpose
 in a description column, and any live badge (`3 playing`, `2 online`) right-
 aligned — under a short section sign; the selected row is a full-width bar. The
-FOOTER's first line is an ambient activity summary assembled from the badge
-annotations already on the screen model (empty when the board is quiet); its
+FOOTER's first line uses the model's root Recent Callers ambient text when
+available, otherwise a summary of existing badge annotations; its
 last line is the key hints. Identity and the "place" framing come from the
 template around it, so the themed layout drops the flowing renderer's title band
 and roaming status line. `composeLines()` — the flowing renderer — is unchanged.
+
+### M2 first slice: semantic composition at 80x24
+
+`config/terminal_theme_m2.json.example` and `telnet/screens/nav-frontdoor-m2.ans`
+provide one root front-door proof. The example is not automatically activated.
+Schema 2 requires four pairwise-disjoint, in-bounds rectangles:
+
+| Region | Application-provided content |
+|---|---|
+| `MENU` | Existing access-filtered destinations, grouping, hotkeys, and selection bar. Purpose and badges are moved out of each row. All navigation rows must fit. |
+| `DESCRIPTION` | Selected destination label and description; without a selectable destination, the screen title and description. Changes as the existing runtime moves the cursor. |
+| `STATUS` | First row: existing root ambient text (Recent Callers). Second row: existing resolved badge annotations, labelled by destination. Missing data leaves blank cells; no synthetic activity. |
+| `FOOTER` | Existing application-owned key hints, which must fit in full. |
+
+`NavigationScreenRenderer::composeSemanticRegions()` consumes only the resolved
+`NavigationScreenModel` and cursor. It performs no database or service reads.
+`NavigationScreenBuilder` and `DeclarativeMenuBridge` continue to own badge and
+ambient resolution, including existing access gates and snapshot intervals.
+The navigation runtime rebuilds on input, idle redraw, and return from actions;
+this slice adds no polling or activity semantics.
+
+The schema-2 optional boolean `root_only` limits presentation to the definition's
+root, independently of its node ID. The proof sets it to `true`; submenus use the
+normal flowing renderer, without changing their definitions or behavior. Omit it
+or use `false` for a theme intended to apply across nodes; no other proof screens
+are supplied in this slice.
+
+Schema 2 validates complete template dimensions after the existing sanitization:
+empty/control-only art, tabs, or art exceeding 80x24 cause fallback. Invalid
+regions, missing assets, ASCII/mono terminals and unmatched geometry also fall
+back. MENU/FOOTER overflow falls back instead of hiding navigation. DESCRIPTION
+and STATUS are informational and clip to their authored rectangles. Every
+region is reset and space-filled, including when content becomes empty.
+CP437 content is measured through UTF-8 and encoded back for output; template
+rows that passed the size check retain their original terminal-encoded bytes.
+Schema-1 clipping and sanitization behavior remain unchanged.
+
+80x24 is deliberately the only authored geometry in this slice. `132x36` and
+`132x51` remain normal declarative presentations; the existing exact-geometry
+lookup and per-render fallback boundary are retained for future expanded themes.
+
+F6 preview needs no new editor controls: its existing `renderReport()` path
+uses the same compositor and grid flattening. It shows the first selectable
+destination's description. Off-session previews have no live badge/ambient
+resolvers, so STATUS is honestly empty. Preview neither saves nor activates a
+theme, invokes an action, nor changes session/runtime state.
+
+#### Activation and minimal acceptance
+
+This slice leaves the accepted active M1 configuration and asset untouched.
+During human-present activation, select the supplied M2 example as
+`config/terminal_theme.json` (or through the existing `TERMINAL_NAV_THEME_CONFIG`
+override). Theme saving is not implemented in the admin UI, so this remains an
+operator-managed file. Reconnect in SyncTerm at 80x24 with ANSI colour enabled.
+
+The changed `src/Terminal/Navigation` classes are Composer-autoloaded when the
+session's `DeclarativeMenuBridge::run()` creates the renderer, after the normal
+Telnet/SSH connection fork. No daemon entrypoint or eagerly included terminal
+class changed. Fresh forked sessions load the new classes; existing sessions
+retain loaded PHP classes and their renderer/template cache until disconnect.
+The normal forked runtime therefore needs a fresh connection, not a daemon
+restart. Non-forking runtimes that have already loaded the classes require a
+human-authorized restart. No service restart is performed by this slice.
+
+On the front door, move the highlight and confirm DESCRIPTION follows it.
+Compare STATUS with actual caller/badge state; allow the existing snapshot
+interval and redraw, rather than expecting new instant push updates. Open
+Messages with its hotkey or Enter, then Back; confirm normal submenu behavior
+and return to the composed root. Optionally reconnect at 132x36 and confirm the
+normal declarative fallback.
+
+Expanded assets, additional authored spaces, per-item coordinates, scripting,
+theme preferences, and an ANSI IDE remain deferred. Historical M1 rendering
+fidelity defects are closed; they are not M2 blockers.
 
 ---
 
@@ -335,7 +410,7 @@ and roaming status line. `composeLines()` — the flowing renderer — is unchan
 `BinktermPHP\Terminal\Navigation\NavigationPreviewService` renders a definition
 off-session — no socket, no login, no database — at an arbitrary geometry /
 charset / colour / access profile, through the same renderer the live session
-uses. This is the foundation the planned sysop editor's live preview builds on.
+uses. The existing F6 admin editor consumes this same preview path.
 
 ```php
 $service = new NavigationPreviewService();
