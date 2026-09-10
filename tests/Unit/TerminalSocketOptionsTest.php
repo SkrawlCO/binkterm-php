@@ -126,6 +126,25 @@ final class TerminalSocketOptionsTest extends TestCase
         }
     }
 
+    public function testBothAcceptLoopsApplyTheTuningRightAfterAccept(): void
+    {
+        // Guard against a future refactor silently dropping the call.
+        $telnet = file_get_contents(__DIR__ . '/../../telnet/src/TelnetServer.php');
+        $ssh = file_get_contents(__DIR__ . '/../../ssh/src/SshServer.php');
+        self::assertIsString($telnet);
+        self::assertIsString($ssh);
+
+        foreach ([['TelnetServer', $telnet], ['SshServer', $ssh]] as [$name, $src]) {
+            $acceptPos = strpos($src, 'stream_socket_accept($');
+            self::assertNotFalse($acceptPos, "$name must accept a socket");
+            $nodelayPos = strpos($src, 'TerminalSocketOptions::enableNoDelay(', $acceptPos);
+            self::assertNotFalse($nodelayPos, "$name must tune the accepted socket");
+            // Within a short window after the accept, before the connection is
+            // handed off (fork / handshake).
+            self::assertLessThan(700, $nodelayPos - $acceptPos, "$name must tune right after accept()");
+        }
+    }
+
     public function testNonResourceInputIsSwallowed(): void
     {
         self::assertFalse(TerminalSocketOptions::enableNoDelay(null));

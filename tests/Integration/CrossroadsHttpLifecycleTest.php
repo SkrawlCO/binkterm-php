@@ -126,6 +126,45 @@ final class CrossroadsHttpLifecycleTest extends TestCase
         self::assertSame(0, $final['json']['state']['session_count']);
     }
 
+    public function testFailedLoginThrottleRefusesTheRouteAfterRepeatedFailures(): void
+    {
+        $this->startIsolatedApplication();
+
+        // Five wrong-password attempts for the real user — all the generic 401.
+        for ($i = 0; $i < 5; $i++) {
+            $bad = $this->request('POST', '/api/auth/login', [
+                'username' => 'httptraveler',
+                'password' => 'wrong-' . $i,
+            ]);
+            self::assertSame(401, $bad['status'], $bad['body']);
+        }
+
+        // The sixth attempt is refused by the throttle before Auth::login()
+        // runs — even with the CORRECT password — with the same generic 401
+        // and error code as a wrong password (no lockout / enumeration signal).
+        $blocked = $this->request('POST', '/api/auth/login', [
+            'username' => 'httptraveler',
+            'password' => 'correct horse',
+        ]);
+        self::assertSame(401, $blocked['status'], $blocked['body']);
+        self::assertFalse($blocked['json']['success'] ?? true);
+        self::assertSame(
+            'errors.auth.invalid_credentials',
+            $blocked['json']['error_code'] ?? null,
+            $blocked['body']
+        );
+
+        // The username counter is per-identifier: a different username from the
+        // same client is still evaluated normally (the IP counter has only 5
+        // failures, well under its limit), so this 401s as an ordinary bad
+        // login rather than a throttle block.
+        $otherUser = $this->request('POST', '/api/auth/login', [
+            'username' => 'nobody-here',
+            'password' => 'whatever',
+        ]);
+        self::assertSame(401, $otherUser['status'], $otherUser['body']);
+    }
+
     private function startIsolatedApplication(): void
     {
         $config = Config::getDatabaseConfig();
