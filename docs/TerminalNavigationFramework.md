@@ -773,6 +773,108 @@ invalid / disabled surface, a non-80x24 terminal, a mono terminal, or any
 composition failure → the existing flat message list, unchanged. The
 implementation transaction does neither step.
 
+## ANSI Theme M2 — campaign complete (accepted design system)
+
+The ANSI Theme M2 authored-space campaign is **complete, human-accepted and
+closed**. Its purpose was to give the caller-facing terminal a small set of
+purpose-built 80x24 compositions in place of ceremonial title / press-any-key
+screens, without changing navigation structure, message semantics, or any child
+handler. No further M2 authored destination is planned — Compose polish, a
+Netmail authored list, Bulletins, BBS Directory dense-list cleanup, and the
+Library / Explore / Settings landings are independent future work, not a
+continuation of this campaign.
+
+### Accepted authored surfaces
+
+| Surface | Purpose | Composition |
+|---|---|---|
+| **Front door** | orientation / major destinations | authored navigational hierarchy + selected-destination context + Around the Board / Recent Callers + restrained L33TEST identity |
+| **Crossroads** | games, worlds, people, activity | destination browser + selected-Experience context + honest live/recent activity + Curated Experiences / Game Hall structure (per-surface theme) |
+| **Messages landing** | what needs attention | canonical Newscan state + Netmail / Echomail / Bulletins / What's New / QWK navigation |
+| **Echomail Areas** | where new conversation is | high-density area browser + canonical per-area NEW projection + network/description, ~17 rows/page where geometry permits (per-surface theme) |
+| **Echomail Message List** | what messages exist / remain unread | dense From / Subject / Date browser + UNREAD at message depth + reply/thread glyph + visible multi-select + one-line selected-message context (per-surface theme) |
+| **Message Reader** | read the content | **deliberately not an authored ANSI space** — compact 3-row metadata header, content dominates (~20 body rows at 80x24), existing reader engine preserved |
+| **People** | who's around / who just was | authored social landing — live presence distinct from historical Recent Callers; the four existing social destinations (Who's Online / Local Chat / Shoutbox / Polls) preserved |
+
+### Locked design principles
+
+- **Form far trumps fashion.** L33TEST supplies the identity; the space supplies
+  the composition; content supplies the character.
+- Crossroads should feel like a place you enter, not a menu you open. ANSI art
+  can decorate a place; interaction is what makes it feel like one.
+- Every screen should earn the keypress it demands.
+- Authored spaces replace purely ceremonial transition screens.
+- Not every screen needs an L33TEST masthead.
+- Compose state when state matters; preserve density when browsing matters; get
+  out of the way when content matters; preserve specialized interfaces that
+  already work well.
+- **Never fabricate activity to make a quiet board look busy.**
+- **LIVE state and RECENT / HISTORICAL state must remain distinct** and
+  separately labelled.
+- Fallback is first-class; a presentation failure must never strand navigation.
+- 80x24 remains the classic acceptance geometry.
+
+### NEW vs UNREAD — semantic contract
+
+- **NEW** = canonical Newscan semantics (per-area `last_read_id` watermark, etc.).
+  Used at: **Messages landing**, **What's New**, **Echomail Areas**.
+- **UNREAD** = individually unopened `message_read_status` state within one
+  Echomail area. Used at: **Echomail Message List**.
+- Do not blur NEW and UNREAD in future work. Reader rendering invents no
+  additional read-state mutation.
+
+### Transition-screen rule
+
+The older title / description / press-any-key screens existed to give visual
+identity and punctuation when the underlying interfaces had none. Where a
+destination now has a proper authored composition, that mechanism is superseded
+and the ceremonial screen is removed (done and accepted for Echomail Areas).
+**Do not globally delete transition screens** — each must first be verified as
+purely presentational with no functional responsibility.
+
+### Reusable infrastructure now proven
+
+Declarative navigation; schema-2 semantic regions (STATUS / MENU / DESCRIPTION /
+FOOTER); per-node authored theme `nodes` (`nodes.messages`, `nodes.people`);
+per-surface themes (`terminal_theme_crossroads` / `_echoareas` / `_echomsgs`);
+`NavigationScreenBuilder` `summaryResolver`; `ThemedDirectoryView`;
+`ThemedDenseListView` with `DenseListRow` emphasis / trailing / context state;
+the state-forward landing projection pattern (`TerminalNewscanLanding`,
+`PeopleLanding`); the bounded snapshot/cache + action-boundary-invalidation
+pattern (`NewscanSnapshot`, `PeopleRosterSnapshot`); the canonical Newscan
+projection (`UnifiedNewscanService`); charset-aware CP437/UTF-8 clipping
+discipline (hard cut, no ellipsis glyph); and the flowing/fallback renderer as a
+first-class safety path.
+
+### Correctness fixes surfaced during M2
+
+- **CP437 ellipsis expansion** (`d5272ef5`): a single-glyph U+2026 transliterates
+  to `...` on CP437/ASCII, three cells, which could push a fitted MENU row past
+  its region and force whole-frame fallback. Fixed with target-charset-aware
+  width handling; authored composers now hard-cut without an ellipsis glyph.
+- **Framed selectable-list repaint** (`e9b04fa2`): the flat `runSelectableList()`
+  loop repainted only single rows on cursor / multi-select moves and never
+  re-invoked `frame_renderer`, so an authored frame never re-windowed. Fixed
+  while keeping the cheap single-row path for ordinary (unframed) lists.
+- **Compact reader header** (`eb02f03f`): reclaimed ~4 body rows at 80x24 without
+  touching the reader engine, and moved a latent `runSelectableList()`
+  `$inputColStart` declaration ahead of a by-value closure capture (it had been
+  capturing `null` instead of `1`).
+
+### M2 commit ledger
+
+| Commit | Subject |
+|---|---|
+| `0e762b4c` | Add ANSI Theme M2 semantic composition proof (front door) |
+| `4d3c45fe` | Add authored Crossroads M2 terminal composition |
+| `5d55b0ba` | Standardize the restrained M2 L33TEST identity stamp |
+| `ec4e2378` | Add the state-forward authored Messages landing (M2) |
+| `e5be6307` | Author the Echomail area browser (M2); drop its transition screen |
+| `d5272ef5` | Fix CP437 ellipsis overflow in the authored Echomail M2 browser |
+| `e9b04fa2` | Author the Echomail message list (M2 dense browser) |
+| `eb02f03f` | Compact the terminal message-reader header |
+| `44759a80` | Add the authored People landing (M2, who's here / who was) |
+
 ## Behaviour at runtime
 
 - **Hotkeys** work as before. Arrow keys / Enter drive a lightbar.

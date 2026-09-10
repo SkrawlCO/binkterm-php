@@ -91,6 +91,19 @@ Pipe-code rendering for plain bulletins and other ANSI/pipe text shared with the
 - On narrow terminals, list rows are ANSI-aware truncated at the right edge so colors (bold unread, cyan row numbers, etc.) are preserved. The status bar is likewise hard-capped to one line so it cannot wrap and cause the screen to scroll.
 - The main menu clips lower menu sections from the bottom on short terminals so the box header (status line, box border, "Main Menu" title) always remains visible.
 
+### Authored ANSI surfaces (M2) — complete
+
+The ANSI Theme M2 authored-space work is **complete and accepted**. Seven
+caller-facing terminal surfaces now have purpose-built 80x24 compositions:
+the **front door**, **Crossroads**, the **Messages landing**, the **Echomail
+area browser**, the **Echomail message list**, the **compact message reader**
+(deliberately kept content-first, not an authored ANSI frame), and the
+**People landing**. Each is optional, activated per operator config, and falls
+back to the normal renderer on any non-80x24 / mono / invalid-theme case;
+navigation is never lost. Navigation structure, message read-state semantics
+and every child screen are unchanged. The subsections below describe each
+surface and its activation. There is no further M2 authored surface planned.
+
 ### Compositional ANSI presentation (M2 first slice)
 
 An optional schema-2 theme can place the existing front-door navigation into
