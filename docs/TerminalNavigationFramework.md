@@ -388,6 +388,38 @@ fidelity defects are closed; they are not M2 blockers.
 
 ---
 
+## L33TEST identity stamp (M2 Slice 3)
+
+The shared identity is a seven-cell, single-line `L33TEST` wordmark in bright
+cyan (SGR `1;36`). It is a trusted asset authoring convention, not a new semantic
+region, fragment loader, or application header. The space owns its composition;
+the mark occupies an existing identity position without displacing content.
+
+Use the same literal ASCII text and SGR sequence in authored assets:
+`ESC[1;36mL33TESTESC[0;36m` (replace `ESC` with byte 0x1B). The trailing sequence
+restores normal cyan for the surrounding asset; the existing line-end reset
+remains in place. Do not scale the mark, add a tagline, or reserve extra rows.
+Seven characters of deliberate duplication are simpler to maintain than an
+additional runtime composition mechanism. This section defines the convention
+for future authored spaces; there is no central runtime branding dependency.
+
+The accepted root asset `telnet/screens/nav-frontdoor-m2.ans` keeps its mark at
+row 2, column 6. `telnet/screens/nav-crossroads.ans` keeps it at row 1, column 4.
+Only the wordmark's intensity changes. Titles, all other visible cells, semantic
+rectangles, navigation, and dynamic content remain unchanged. ASCII text and
+standard SGR work through the existing UTF-8/CP437 sanitizer and painter; theme
+validation, geometry checks, fallback, and F6 preview need no changes.
+
+Both assets are already selected by the accepted runtime configurations.
+`ThemedNavigationRenderer::template()` reads the asset with `file_get_contents`
+and caches it on the renderer instance. A fresh connection loads the updated
+assets; no configuration selection or daemon restart is required. Existing
+sessions may retain cached art. Reconnect at effective 80x24, inspect the front
+door and Crossroads, confirm restrained consistent identity without lost space,
+and check normal navigation. Visual acceptance remains a human decision.
+
+---
+
 ## Authored Crossroads arrival (M2 Slice 2)
 
 Crossroads uses `Directory` and the structured selectable-list runtime, not
