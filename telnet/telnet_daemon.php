@@ -12,6 +12,7 @@ require_once __DIR__ . '/src/TerminalCapabilities.php';
 require_once __DIR__ . '/src/TerminalRenderContext.php';
 require_once __DIR__ . '/src/TerminalEventHandlerInterface.php';
 require_once __DIR__ . '/src/TerminalEventPoller.php';
+require_once __DIR__ . '/src/SessionKickHandler.php';
 require_once __DIR__ . '/src/BbsSession.php';
 require_once __DIR__ . '/src/TerminalLineEditor.php';
 require_once __DIR__ . '/src/TerminalLineHistory.php';

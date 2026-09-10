@@ -14,6 +14,7 @@ require_once __DIR__ . '/../telnet/src/TerminalCapabilities.php';
 require_once __DIR__ . '/../telnet/src/TerminalRenderContext.php';
 require_once __DIR__ . '/../telnet/src/TerminalEventHandlerInterface.php';
 require_once __DIR__ . '/../telnet/src/TerminalEventPoller.php';
+require_once __DIR__ . '/../telnet/src/SessionKickHandler.php';
 require_once __DIR__ . '/../telnet/src/BbsSession.php';
 require_once __DIR__ . '/../telnet/src/TerminalLineEditor.php';
 require_once __DIR__ . '/../telnet/src/TerminalLineHistory.php';

@@ -8775,18 +8775,21 @@ SimpleRouter::group(['prefix' => '/api'], function() {
 
         header('Content-Type: application/json');
 
-        $db = Database::getInstance()->getPdo();
+        // Self-service: ownership is enforced inside the service, and a
+        // successful revoke also disconnects a live terminal child and ends any
+        // attached door sessions (Slice A).
+        $revoked = (new \BinktermPHP\Security\ActiveSessionService())
+            ->revokeSession((string)$sessionId, (int)$user['user_id']);
 
-        // Only allow users to revoke their own sessions
-        $stmt = $db->prepare("DELETE FROM user_sessions WHERE session_id = ? AND user_id = ?");
-        $result = $stmt->execute([$sessionId, $user['user_id']]);
-
-        if ($result) {
+        if ($revoked) {
             echo json_encode([
                 'success' => true,
                 'message_code' => 'ui.settings.sessions.revoked_success'
             ]);
         } else {
+            // Nothing was revoked — the session is unknown or not this user's.
+            // (Previously this path returned 200; the route's own 404 branch and
+            // the ownership filter make 404 the correct answer.)
             http_response_code(404);
             apiError('errors.user.sessions.revoke_failed', apiLocalizedText('errors.user.sessions.revoke_failed', 'Failed to revoke session', $user));
         }
@@ -8797,23 +8800,21 @@ SimpleRouter::group(['prefix' => '/api'], function() {
 
         header('Content-Type: application/json');
 
-        $db = Database::getInstance()->getPdo();
-
-        // Delete all sessions for this user
-        $stmt = $db->prepare("DELETE FROM user_sessions WHERE user_id = ?");
-        $result = $stmt->execute([$user['user_id']]);
-
-        if ($result) {
-            // Clear the current session cookie
-            setcookie('binktermphp_session', '', time() - 3600, '/');
-            echo json_encode([
-                'success' => true,
-                'message_code' => 'ui.settings.sessions.logged_out_all_success'
-            ]);
-        } else {
+        try {
+            (new \BinktermPHP\Security\ActiveSessionService())
+                ->revokeAllForUser((int)$user['user_id']);
+        } catch (\Throwable $e) {
             http_response_code(500);
             apiError('errors.user.sessions.revoke_all_failed', apiLocalizedText('errors.user.sessions.revoke_all_failed', 'Failed to revoke sessions', $user));
+            return;
         }
+
+        // Clear the current session cookie
+        setcookie('binktermphp_session', '', time() - 3600, '/');
+        echo json_encode([
+            'success' => true,
+            'message_code' => 'ui.settings.sessions.logged_out_all_success'
+        ]);
     });
 
     // Get echolist filter preference

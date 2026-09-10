@@ -145,6 +145,27 @@ class BbsSession
     private ?array $preAuthSession;
 
     /**
+     * Session-revocation watch (Slice A). Set once, post-login, by
+     * {@see beginSessionKickWatch()}. The realtime bus is the fast path; the
+     * time-based re-validation is a backstop for a kick that raced the poller
+     * anchor, a plain expiry, or a direct DB invalidation with no event.
+     */
+    private ?string $authSessionId = null;
+    private ?TerminalEventPoller $sessionEventPoller = null;
+    private ?SessionKickHandler $sessionKickHandler = null;
+    private float $lastSessionValidityCheckAt = 0.0;
+    private bool $sessionTerminated = false;
+
+    /**
+     * Backstop interval for re-validating the auth session against the store.
+     * The event path terminates a revoked/kicked session within ~2s while the
+     * caller is at a prompt, and by the next idle wake (<=30s) when idle; 60s
+     * bounds the worst case for a missed event or a direct DB delete, at a cost
+     * of one indexed primary-key lookup per minute per idle session.
+     */
+    private const SESSION_VALIDITY_CHECK_SECONDS = 60.0;
+
+    /**
      * @param resource    $conn           Bidirectional socket for this session
      * @param string      $apiBase        BBS API base URL
      * @param bool        $debug          Enable verbose debug output
@@ -496,6 +517,11 @@ class BbsSession
         }
 
         $this->clearFailedLogins($peerIp);
+
+        // Slice A: start watching for revocation of this auth session so a
+        // self-service (or, later, admin) revoke actually disconnects this
+        // live child. Shared by Telnet and SSH — both run through here.
+        $this->beginSessionKickWatch($session, (int)($state['user_id'] ?? 0), !empty($state['is_admin']));
 
         $transport = $this->isSsh ? 'ssh' : 'telnet';
         $this->log("Login: {$username} from {$peerName} via {$transport}");
@@ -2093,6 +2119,133 @@ class BbsSession
         }
     }
 
+    // ===== SESSION REVOCATION / KICK (Slice A) =====
+
+    /**
+     * Begin watching for revocation of this authenticated session.
+     *
+     * Called once, post-login, for both Telnet and SSH. Sets up a
+     * {@see TerminalEventPoller} anchored at the current bus position (so only
+     * events emitted from here on are seen) plus a {@see SessionKickHandler}
+     * bound to this exact session id. Failure is non-fatal — the time-based
+     * validity net still covers revocation.
+     */
+    private function beginSessionKickWatch(string $sessionId, int $userId, bool $isAdmin): void
+    {
+        if ($sessionId === '' || $userId <= 0) {
+            return;
+        }
+
+        $this->authSessionId = $sessionId;
+        $this->lastSessionValidityCheckAt = microtime(true);
+
+        try {
+            $stream = new \BinktermPHP\Realtime\StreamService(
+                \BinktermPHP\Database::getInstance()->getPdo()
+            );
+            $this->sessionEventPoller = new TerminalEventPoller(
+                $stream,
+                ['user_id' => $userId, 'is_admin' => $isAdmin]
+            );
+            $this->sessionEventPoller->start();
+            $this->sessionKickHandler = new SessionKickHandler($sessionId);
+        } catch (\Throwable $e) {
+            $this->sessionEventPoller = null;
+            $this->sessionKickHandler = null;
+            $this->log('Session kick watch unavailable: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * One low-cost realtime pump + time-throttled session re-check, called at
+     * the head of every idle-aware read primitive.
+     *
+     *  - fast path: {@see TerminalEventPoller::poll()} (self-throttled to ~2s)
+     *    surfaces a `session.kick` for this exact session id
+     *  - backstop: at most once per {@see SESSION_VALIDITY_CHECK_SECONDS} the
+     *    auth session is re-validated against the store, catching an expiry, a
+     *    direct DB invalidation, or a kick that raced the poller anchor
+     *
+     * Returns true once the session has been terminated (message written,
+     * best-effort logout done); callers should then disconnect.
+     */
+    private function pumpRealtimeAndCheckSession($conn, array &$state): bool
+    {
+        if ($this->authSessionId === null) {
+            return false; // pre-auth read — nothing to watch
+        }
+        if ($this->sessionTerminated) {
+            return true;  // already handled; keep signalling disconnect
+        }
+
+        $code = null;
+
+        if ($this->sessionEventPoller !== null && $this->sessionKickHandler !== null) {
+            try {
+                $this->sessionEventPoller->poll($this->sessionKickHandler);
+            } catch (\Throwable $e) {
+                // A bus hiccup must never disconnect a live caller.
+            }
+            $code = $this->sessionKickHandler->takeTerminationCode();
+        }
+
+        if ($code === null) {
+            $now = microtime(true);
+            if (($now - $this->lastSessionValidityCheckAt) >= self::SESSION_VALIDITY_CHECK_SECONDS) {
+                $this->lastSessionValidityCheckAt = $now;
+                try {
+                    if (!(new \BinktermPHP\Auth())->validateSession($this->authSessionId)) {
+                        $code = SessionKickHandler::CODE_GENERIC;
+                    }
+                } catch (\Throwable $e) {
+                    // Transient DB error — try again next interval, don't disconnect.
+                }
+            }
+        }
+
+        if ($code === null) {
+            return false;
+        }
+
+        $this->terminateRevokedSession($conn, $state, $code);
+        return true;
+    }
+
+    /**
+     * Show a fixed, localized caller-facing message for the reason code and do
+     * best-effort session cleanup. Never renders arbitrary server text.
+     */
+    private function terminateRevokedSession($conn, array &$state, string $code): void
+    {
+        if ($this->sessionTerminated) {
+            return;
+        }
+        $this->sessionTerminated = true;
+
+        [$key, $fallback] = match ($code) {
+            'revoked'     => ['ui.terminalserver.server.session.revoked',
+                              'This session was signed out from another device.'],
+            'revoked_all' => ['ui.terminalserver.server.session.revoked_all',
+                              'You signed out of all your sessions.'],
+            default       => ['ui.terminalserver.server.session.ended',
+                              'Your session has ended. Please reconnect.'],
+        };
+
+        $locale = $state['locale'] ?? $this->systemLocale;
+        if (is_resource($conn)) {
+            $this->writeLine($conn, '');
+            $this->writeLine($conn, $this->colorize(
+                $this->t($key, $fallback, [], $locale),
+                self::ANSI_YELLOW . self::ANSI_BOLD
+            ));
+            $this->writeLine($conn, '');
+            if (is_resource($conn)) { @fflush($conn); }
+        }
+
+        $this->logoutSession($this->authSessionId ?? '');
+        $this->log('Session terminated (' . $code . ') for ' . ($state['username'] ?? '?'));
+    }
+
     /**
      * Read a single key token with an upper-bound timeout.
      *
@@ -2102,6 +2255,10 @@ class BbsSession
      */
     public function readKeyWithTimeout($conn, array &$state, int $timeoutMs): array
     {
+        if ($this->pumpRealtimeAndCheckSession($conn, $state)) {
+            return [null, true, true];
+        }
+
         $elapsed   = time() - ($state['last_activity'] ?? time());
         $warnAt    = (int)($state['idle_warning_timeout'] ?? 300);
         $disconnAt = (int)($state['idle_disconnect_timeout'] ?? 420);
@@ -3367,6 +3524,10 @@ class BbsSession
      */
     private function readTelnetLineWithTimeout($conn, array &$state): array
     {
+        if ($this->pumpRealtimeAndCheckSession($conn, $state)) {
+            return [null, true, true];
+        }
+
         $elapsed    = time() - $state['last_activity'];
         $warnAt     = $state['idle_warning_timeout'];
         $disconnAt  = $state['idle_disconnect_timeout'];
@@ -3408,6 +3569,10 @@ class BbsSession
      */
     private function readTelnetKeyWithTimeout($conn, array &$state): array
     {
+        if ($this->pumpRealtimeAndCheckSession($conn, $state)) {
+            return [null, true, true];
+        }
+
         $elapsed   = time() - $state['last_activity'];
         $warnAt    = $state['idle_warning_timeout'];
         $disconnAt = $state['idle_disconnect_timeout'];
