@@ -99,6 +99,7 @@ return [
     'ui.terminalserver.server.idle.disconnect'         => 'Idle timeout - disconnecting...',
     'ui.terminalserver.server.session.revoked'         => 'This session was signed out from another device.',
     'ui.terminalserver.server.session.revoked_all'     => 'You signed out of all your sessions.',
+    'ui.terminalserver.server.session.admin_ended'     => 'This session was ended by an administrator.',
     'ui.terminalserver.server.session.ended'           => 'Your session has ended. Please reconnect.',
     'ui.terminalserver.server.idle.warning_line'       => 'Are you still there? (Press Enter to continue)',
     'ui.terminalserver.server.idle.warning_key'        => 'Are you still there? (Press any key to continue)',

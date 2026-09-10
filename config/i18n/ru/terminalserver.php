@@ -99,6 +99,7 @@ return [
     'ui.terminalserver.server.idle.disconnect' => 'Таймаут бездействия — отключение…',
     'ui.terminalserver.server.session.revoked' => 'Эта сессия была завершена с другого устройства.',
     'ui.terminalserver.server.session.revoked_all' => 'Вы вышли из всех своих сессий.',
+    'ui.terminalserver.server.session.admin_ended' => 'Эта сессия была завершена администратором.',
     'ui.terminalserver.server.session.ended' => 'Ваша сессия завершена. Пожалуйста, переподключитесь.',
     'ui.terminalserver.server.idle.warning_line' => 'Вы ещё здесь? (Нажмите Enter, чтобы продолжить)',
     'ui.terminalserver.server.idle.warning_key' => 'Вы ещё здесь? (Нажмите любую клавишу, чтобы продолжить)',

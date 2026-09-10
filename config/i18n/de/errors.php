@@ -223,6 +223,8 @@ return [
     'errors.admin.users.create_failed' => 'Benutzer konnte nicht erstellt werden',
     'errors.admin.users.update_failed' => 'Benutzer konnte nicht aktualisiert werden',
     'errors.admin.users.delete_failed' => 'Benutzer konnte nicht gelöscht werden',
+    'errors.admin.sessions.not_found' => 'Sitzung nicht gefunden',
+    'errors.admin.sessions.revoke_failed' => 'Sitzung konnte nicht widerrufen werden',
 
     // Admin Polls
     'errors.admin.polls.question_required' => 'Frage ist erforderlich',

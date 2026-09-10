@@ -9457,6 +9457,9 @@ Confirmation of state update
 | `POST` | [`/api/admin/users/cleanup`](#post-apiadminuserscleanup) | Yes | Clean up old pending registrations |
 | `POST` | [`/api/admin/users/{userId}/send-reminder`](#post-apiadminusersuseridsend-reminder) | Yes | Send account reminder to a user |
 | `GET` | [`/api/admin/users/need-reminders`](#get-apiadminusersneed-reminders) | Yes | List users eligible for account reminders |
+| `GET` | [`/api/admin/users/{id}/sessions`](#get-apiadminusersidsessions) | Yes | List a user's live authenticated sessions (admin) |
+| `DELETE` | [`/api/admin/users/{id}/sessions/{ref}`](#delete-apiadminusersidsessionsref) | Yes | Terminate one specific session of a user (admin) |
+| `POST` | [`/api/admin/users/{id}/sessions/revoke-all`](#post-apiadminusersidsessionsrevoke-all) | Yes | Terminate all of a user's sessions (admin) |
 
 #### `GET /api/admin/users`
 
@@ -9778,6 +9781,104 @@ Reminder send result
 | 404 | Target user not found |
 | 400 | User is not eligible for reminder |
 | 500 | Reminder send failed |
+
+---
+
+#### `GET /api/admin/users/{id}/sessions`
+
+**Requires authentication** · admin only
+
+Lists a user's live (non-expired) authenticated sessions across all transports (web / telnet / ssh / ftp / nntp), including idle-but-unexpired ones. Each session is addressed by an opaque, non-secret reference (`ref`) that is resolvable only within this user's scope; the underlying bearer `session_id` is never returned.
+
+**Path Parameters**
+
+| Name | Type | Description |
+|------|------|-------------|
+| `id` | integer | Target user ID |
+
+**Response** _(JSON)_
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `success` | boolean | Always `true` on 200 |
+| `username` | string | Target user's username |
+| `current_ref` | string\|null | The `ref` of the requesting admin's own current session, when it appears in this list (else `null`) |
+| `sessions` | array of objects | Live sessions, newest first |
+| `sessions[].ref` | string | Opaque 16-hex session reference (kick target) |
+| `sessions[].user_id` | integer | Owning user ID |
+| `sessions[].username` | string | Owning user's username |
+| `sessions[].service` | string | Transport: `web`, `telnet`, `ssh`, `ftp`, `nntp` |
+| `sessions[].ip_address` | string\|null | Client IP |
+| `sessions[].created_at` | string\|null | Login time (ISO 8601) |
+| `sessions[].last_activity` | string\|null | Last activity time (ISO 8601) |
+| `sessions[].activity` | string\|null | Internal activity label (e.g. "Reading echomail") |
+| `sessions[].is_online` | boolean | Active within the last 15 minutes |
+| `sessions[].is_current` | boolean | This is the requesting admin's own current session |
+
+**Error Responses**
+
+| Status | Description |
+|--------|-------------|
+| 403 | Requester is not an admin |
+| 404 | Target user not found |
+
+---
+
+#### `DELETE /api/admin/users/{id}/sessions/{ref}`
+
+**Requires authentication** · admin only · CSRF required
+
+Terminates exactly one session belonging to the target user. The `ref` is resolved to a single `session_id` **only** among that user's live sessions; zero or ambiguous matches fail closed with 404. The actual revocation is performed by `ActiveSessionService::revokeSession()` with an ownership assertion against `{id}` — a `ref` that does not resolve to a session owned by `{id}` is rejected. On success a targeted `session.kick` event (`code = admin_revoked`) is emitted and any attached door session is ended; a live terminal child disconnects with a fixed "ended by an administrator" message. This does **not** change `users.is_active`.
+
+**Path Parameters**
+
+| Name | Type | Description |
+|------|------|-------------|
+| `id` | integer | Target user ID |
+| `ref` | string | Opaque session reference from the list endpoint |
+
+**Response** _(JSON)_
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `success` | boolean | `true` when a session was terminated |
+| `message_code` | string | Localization key for the result message |
+
+**Error Responses**
+
+| Status | Description |
+|--------|-------------|
+| 403 | Requester is not an admin, or missing/invalid CSRF token |
+| 404 | Target user not found, or `ref` matched zero / more than one of the user's sessions |
+
+---
+
+#### `POST /api/admin/users/{id}/sessions/revoke-all`
+
+**Requires authentication** · admin only · CSRF required
+
+Terminates every live session belonging to the target user. Emits one targeted `session.kick` (`code = admin_revoked`) per removed session and ends any attached door sessions. Only the target user's sessions are affected; this does **not** change `users.is_active`.
+
+**Path Parameters**
+
+| Name | Type | Description |
+|------|------|-------------|
+| `id` | integer | Target user ID |
+
+**Response** _(JSON)_
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `success` | boolean | Always `true` on 200 |
+| `revoked` | integer | Number of sessions terminated |
+| `message_code` | string | Localization key for the result message |
+
+**Error Responses**
+
+| Status | Description |
+|--------|-------------|
+| 403 | Requester is not an admin, or missing/invalid CSRF token |
+| 404 | Target user not found |
 
 ---
 

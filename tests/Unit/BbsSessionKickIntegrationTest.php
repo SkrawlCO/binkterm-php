@@ -208,6 +208,17 @@ final class BbsSessionKickIntegrationTest extends TestCase
         self::assertStringContainsString('session has ended', $this->drain());
     }
 
+    public function testAdminRevokedKickShowsTheAdministratorMessage(): void
+    {
+        $sid = $this->newSession();
+        $this->beginWatch($sid);
+        $this->emitKick($sid, ActiveSessionService::CODE_ADMIN_REVOKED);
+
+        $state = $this->state();
+        self::assertTrue($this->pump($state));
+        self::assertStringContainsString('ended by an administrator', $this->drain());
+    }
+
     public function testTerminationIsHandledOnceNoDuplicateMessage(): void
     {
         $sid = $this->newSession();

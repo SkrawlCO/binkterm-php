@@ -77,6 +77,7 @@ return [
     'ui.terminalserver.server.idle.disconnect' => 'Délai d\'inactivité dépassé - déconnexion...',
     'ui.terminalserver.server.session.revoked' => 'Cette session a été déconnectée depuis un autre appareil.',
     'ui.terminalserver.server.session.revoked_all' => 'Vous vous êtes déconnecté de toutes vos sessions.',
+    'ui.terminalserver.server.session.admin_ended' => 'Cette session a été terminée par un administrateur.',
     'ui.terminalserver.server.session.ended' => 'Votre session est terminée. Veuillez vous reconnecter.',
     'ui.terminalserver.server.idle.warning_line' => 'Êtes-vous toujours là ? (Appuyez sur Entrée pour continuer)',
     'ui.terminalserver.server.idle.warning_key' => 'Êtes-vous toujours là ? (Appuyez sur une touche pour continuer)',

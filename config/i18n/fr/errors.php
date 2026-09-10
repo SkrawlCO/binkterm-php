@@ -167,6 +167,8 @@ return [
     'errors.admin.users.create_failed' => 'Échec de la création de l\'utilisateur',
     'errors.admin.users.update_failed' => 'Échec de la mise à jour de l\'utilisateur',
     'errors.admin.users.delete_failed' => 'Échec de la suppression de l\'utilisateur',
+    'errors.admin.sessions.not_found' => 'Session introuvable',
+    'errors.admin.sessions.revoke_failed' => 'Échec de la révocation de la session',
     'errors.admin.polls.question_required' => 'La question est requise',
     'errors.admin.polls.options_required' => 'Au moins deux options sont requises',
     'errors.admin.polls.not_found' => 'Sondage introuvable',

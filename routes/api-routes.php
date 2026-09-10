@@ -11605,6 +11605,108 @@ SimpleRouter::group(['prefix' => '/api'], function() {
         }
     });
 
+    // ---- Session administration (Slice B) --------------------------------
+    // Inspect and terminate a specific user's live sessions. Every kick flows
+    // through ActiveSessionService (the accepted Slice A path); admin routes
+    // never run a bare DELETE FROM user_sessions. Sessions are addressed by an
+    // opaque, non-secret reference (ActiveSessionService::sessionRef) resolved
+    // only within the target user's scope — the full bearer session_id is
+    // never returned to the browser.
+
+    SimpleRouter::get('/admin/users/{id}/sessions', function($id) {
+        $user = RouteHelper::requireAdmin();
+        header('Content-Type: application/json');
+
+        $targetId = (int)$id;
+        $target = (new \BinktermPHP\AdminController())->getUser($targetId);
+        if (!$target) {
+            http_response_code(404);
+            apiError('errors.admin.users.not_found', apiLocalizedText('errors.admin.users.not_found', 'User not found', $user));
+            return;
+        }
+
+        $svc = new \BinktermPHP\Security\ActiveSessionService();
+        $sessions = $svc->listActive($targetId);
+
+        // Tag the admin's own current web session so the UI can warn on self-kick,
+        // without exposing the cookie value itself.
+        $currentRef = null;
+        $cookie = $_COOKIE['binktermphp_session'] ?? '';
+        if ($cookie !== '' && (int)($user['user_id'] ?? $user['id'] ?? 0) === $targetId) {
+            $currentRef = \BinktermPHP\Security\ActiveSessionService::sessionRef((string)$cookie);
+        }
+        foreach ($sessions as &$s) {
+            $s['is_current'] = ($currentRef !== null && hash_equals($currentRef, $s['ref']));
+        }
+        unset($s);
+
+        echo json_encode([
+            'success'     => true,
+            'username'    => $target['username'],
+            'sessions'    => $sessions,
+            'current_ref' => $currentRef,
+        ]);
+    })->where(['id' => '[0-9]+']);
+
+    SimpleRouter::delete('/admin/users/{id}/sessions/{ref}', function($id, $ref) {
+        $user = RouteHelper::requireAdmin();
+        header('Content-Type: application/json');
+
+        $targetId = (int)$id;
+        $target = (new \BinktermPHP\AdminController())->getUser($targetId);
+        if (!$target) {
+            http_response_code(404);
+            apiError('errors.admin.users.not_found', apiLocalizedText('errors.admin.users.not_found', 'User not found', $user));
+            return;
+        }
+
+        $svc = new \BinktermPHP\Security\ActiveSessionService();
+        $sessionId = $svc->resolveSessionRef($targetId, (string)$ref);
+        if ($sessionId === null) {
+            // zero or ambiguous match — fail closed, never guess
+            http_response_code(404);
+            apiError('errors.admin.sessions.not_found', apiLocalizedText('errors.admin.sessions.not_found', 'Session not found', $user));
+            return;
+        }
+
+        $revoked = $svc->revokeSession(
+            $sessionId,
+            $targetId, // ownership assertion: must belong to this user
+            \BinktermPHP\Security\ActiveSessionService::CODE_ADMIN_REVOKED
+        );
+        if (!$revoked) {
+            http_response_code(404);
+            apiError('errors.admin.sessions.revoke_failed', apiLocalizedText('errors.admin.sessions.revoke_failed', 'Failed to revoke session', $user));
+            return;
+        }
+
+        echo json_encode(['success' => true, 'message_code' => 'ui.admin_users.sessions.kicked']);
+    })->where(['id' => '[0-9]+']);
+
+    SimpleRouter::post('/admin/users/{id}/sessions/revoke-all', function($id) {
+        $user = RouteHelper::requireAdmin();
+        header('Content-Type: application/json');
+
+        $targetId = (int)$id;
+        $target = (new \BinktermPHP\AdminController())->getUser($targetId);
+        if (!$target) {
+            http_response_code(404);
+            apiError('errors.admin.users.not_found', apiLocalizedText('errors.admin.users.not_found', 'User not found', $user));
+            return;
+        }
+
+        $revoked = (new \BinktermPHP\Security\ActiveSessionService())->revokeAllForUser(
+            $targetId,
+            \BinktermPHP\Security\ActiveSessionService::CODE_ADMIN_REVOKED
+        );
+
+        echo json_encode([
+            'success'      => true,
+            'revoked'      => $revoked,
+            'message_code' => 'ui.admin_users.sessions.revoked_all',
+        ]);
+    })->where(['id' => '[0-9]+']);
+
     // Get users who need reminders
     SimpleRouter::get('/admin/users/need-reminders', function() {
         $user = RouteHelper::requireAuth();

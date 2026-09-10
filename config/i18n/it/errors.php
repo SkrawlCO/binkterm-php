@@ -224,6 +224,8 @@ return [
     'errors.admin.users.create_failed' => 'Impossibile creare l’utente',
     'errors.admin.users.update_failed' => 'Impossibile aggiornare l’utente',
     'errors.admin.users.delete_failed' => 'Impossibile eliminare l’utente',
+    'errors.admin.sessions.not_found' => 'Sessione non trovata',
+    'errors.admin.sessions.revoke_failed' => 'Impossibile revocare la sessione',
 
     // Admin Polls
     'errors.admin.polls.question_required' => 'Domanda obbligatoria',

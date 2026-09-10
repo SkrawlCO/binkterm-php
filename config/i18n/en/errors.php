@@ -224,6 +224,8 @@ return [
     'errors.admin.users.create_failed' => 'Failed to create user',
     'errors.admin.users.update_failed' => 'Failed to update user',
     'errors.admin.users.delete_failed' => 'Failed to delete user',
+    'errors.admin.sessions.not_found' => 'Session not found',
+    'errors.admin.sessions.revoke_failed' => 'Failed to revoke session',
 
     // Admin Polls
     'errors.admin.polls.question_required' => 'Question is required',

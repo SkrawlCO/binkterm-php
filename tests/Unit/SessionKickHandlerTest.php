@@ -65,4 +65,11 @@ final class SessionKickHandlerTest extends TestCase
         $h->handleTerminalEvent('session.kick', ['code' => 'revoked'], 1);
         self::assertNull($h->takeTerminationCode());
     }
+
+    public function testAdminRevokedCodePassesThroughTheAllowList(): void
+    {
+        $h = new SessionKickHandler('sess-abc');
+        $h->handleTerminalEvent('session.kick', ['session_id' => 'sess-abc', 'code' => 'admin_revoked'], 1);
+        self::assertSame('admin_revoked', $h->takeTerminationCode());
+    }
 }

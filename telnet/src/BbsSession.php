@@ -2223,12 +2223,14 @@ class BbsSession
         $this->sessionTerminated = true;
 
         [$key, $fallback] = match ($code) {
-            'revoked'     => ['ui.terminalserver.server.session.revoked',
-                              'This session was signed out from another device.'],
-            'revoked_all' => ['ui.terminalserver.server.session.revoked_all',
-                              'You signed out of all your sessions.'],
-            default       => ['ui.terminalserver.server.session.ended',
-                              'Your session has ended. Please reconnect.'],
+            'revoked'       => ['ui.terminalserver.server.session.revoked',
+                                'This session was signed out from another device.'],
+            'revoked_all'   => ['ui.terminalserver.server.session.revoked_all',
+                                'You signed out of all your sessions.'],
+            'admin_revoked' => ['ui.terminalserver.server.session.admin_ended',
+                                'This session was ended by an administrator.'],
+            default         => ['ui.terminalserver.server.session.ended',
+                                'Your session has ended. Please reconnect.'],
         };
 
         $locale = $state['locale'] ?? $this->systemLocale;

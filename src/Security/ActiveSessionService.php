@@ -41,6 +41,10 @@ final class ActiveSessionService
      *  message; it never renders free text from the payload. */
     public const CODE_REVOKED = 'revoked';
     public const CODE_REVOKED_ALL = 'revoked_all';
+    public const CODE_ADMIN_REVOKED = 'admin_revoked';
+
+    /** Length (hex chars) of the opaque admin session reference. 16 = 64 bits. */
+    private const REF_LENGTH = 16;
 
     private PDO $db;
     private ?Logger $logger;
@@ -113,9 +117,12 @@ final class ActiveSessionService
      * Revoke every session owned by $userId. One `session.kick` is emitted per
      * removed session, each targeted at $userId.
      *
+     * @param string $code One of the CODE_* constants for the kick payload
+     *                     (self-service passes the default; admin passes
+     *                     CODE_ADMIN_REVOKED).
      * @return int Number of sessions revoked.
      */
-    public function revokeAllForUser(int $userId): int
+    public function revokeAllForUser(int $userId, string $code = self::CODE_REVOKED_ALL): int
     {
         if ($userId <= 0) {
             return 0;
@@ -127,7 +134,7 @@ final class ActiveSessionService
 
         $revoked = 0;
         foreach ($sessionIds as $sessionId) {
-            if ($this->revokeSession((string) $sessionId, $userId, self::CODE_REVOKED_ALL)) {
+            if ($this->revokeSession((string) $sessionId, $userId, $code)) {
                 $revoked++;
             }
         }
@@ -135,9 +142,131 @@ final class ActiveSessionService
         return $revoked;
     }
 
+    // -----------------------------------------------------------------------
+    // Admin listing + opaque session references (Slice B)
+    // -----------------------------------------------------------------------
+
+    /**
+     * Opaque, non-secret administrative reference for a session.
+     *
+     * `substr(HMAC-SHA256(domain || session_id, server key), 0, 16)` — 64 bits,
+     * hex. Deterministic (the list and a later kick agree), one-way (SHA-256
+     * is not invertible, so the bearer `session_id` cannot be reconstructed
+     * from the reference), and collision-resistant far beyond the handful of
+     * sessions a single user holds. The keying provides defence-in-depth
+     * against offline precomputation; the essential property — no bearer-token
+     * disclosure — holds from the hash's one-wayness regardless of the key.
+     */
+    public static function sessionRef(string $sessionId): string
+    {
+        return substr(
+            hash_hmac('sha256', 'binkterm.admin-session-ref.v1|' . $sessionId, self::refKey()),
+            0,
+            self::REF_LENGTH
+        );
+    }
+
+    /**
+     * Resolve (target user id, opaque reference) to exactly one live
+     * `session_id`, or null. Zero matches -> null (caller returns 404). More
+     * than one match -> null (fail closed; never guess). A reference computed
+     * for a different user simply will not match this user's sessions.
+     */
+    public function resolveSessionRef(int $userId, string $ref): ?string
+    {
+        $ref = strtolower(trim($ref));
+        if ($userId <= 0 || !preg_match('/^[0-9a-f]{' . self::REF_LENGTH . '}$/', $ref)) {
+            return null;
+        }
+
+        $stmt = $this->db->prepare(
+            'SELECT session_id FROM user_sessions WHERE user_id = ? AND expires_at > NOW()'
+        );
+        $stmt->execute([$userId]);
+
+        $match = null;
+        foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) ?: [] as $sessionId) {
+            if (hash_equals(self::sessionRef((string) $sessionId), $ref)) {
+                if ($match !== null) {
+                    return null; // ambiguous — fail closed
+                }
+                $match = (string) $sessionId;
+            }
+        }
+
+        return $match;
+    }
+
+    /**
+     * Admin-facing list of live (non-expired) sessions.
+     *
+     * The full `session_id` is used internally only to derive `ref` and is
+     * never included in a returned row.
+     *
+     * @param int|null $userId Scope to one user, or null for all users.
+     * @param int      $limit  Row cap (1..2000).
+     * @return list<array{ref:string,user_id:int,username:string,service:string,
+     *   ip_address:?string,created_at:?string,last_activity:?string,
+     *   activity:?string,is_online:bool}>
+     */
+    public function listActive(?int $userId = null, int $limit = 500): array
+    {
+        $limit = max(1, min(2000, $limit));
+
+        $sql = "
+            SELECT s.session_id, s.user_id, u.username, s.service,
+                   s.ip_address::text AS ip_address,
+                   s.created_at, s.last_activity, s.activity,
+                   (s.last_activity > NOW() - INTERVAL '15 minutes') AS is_online
+            FROM user_sessions s
+            JOIN users u ON u.id = s.user_id
+            WHERE s.expires_at > NOW()
+        ";
+        $params = [];
+        if ($userId !== null) {
+            $sql .= ' AND s.user_id = ?';
+            $params[] = $userId;
+        }
+        $sql .= ' ORDER BY u.username ASC, s.created_at DESC LIMIT ' . $limit;
+
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute($params);
+
+        $out = [];
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $out[] = [
+                'ref'           => self::sessionRef((string) $row['session_id']),
+                'user_id'       => (int) $row['user_id'],
+                'username'      => (string) $row['username'],
+                'service'       => (string) $row['service'],
+                'ip_address'    => $row['ip_address'] !== null ? (string) $row['ip_address'] : null,
+                'created_at'    => $row['created_at'] !== null ? (string) $row['created_at'] : null,
+                'last_activity' => $row['last_activity'] !== null ? (string) $row['last_activity'] : null,
+                'activity'      => $row['activity'] !== null ? (string) $row['activity'] : null,
+                'is_online'     => (bool) $row['is_online'],
+            ];
+        }
+
+        return $out;
+    }
+
+    /** Key for {@see sessionRef()}: the site secret, else APP_SECRET, else a
+     *  fixed domain string (still one-way + collision-resistant). */
+    private static function refKey(): string
+    {
+        $key = Config::terminalRegistrationSecret();
+        if ($key === '') {
+            $key = trim((string) Config::env('APP_SECRET', ''));
+        }
+        if ($key === '') {
+            $key = 'binkterm.admin-session-ref.static-fallback';
+        }
+        return $key;
+    }
+
     private function normalizeCode(string $code): string
     {
-        return in_array($code, [self::CODE_REVOKED, self::CODE_REVOKED_ALL], true)
+        return in_array($code, [self::CODE_REVOKED, self::CODE_REVOKED_ALL, self::CODE_ADMIN_REVOKED], true)
             ? $code
             : self::CODE_REVOKED;
     }

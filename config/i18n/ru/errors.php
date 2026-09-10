@@ -219,6 +219,8 @@ return [
     'errors.admin.users.create_failed' => 'Не удалось создать пользователя',
     'errors.admin.users.update_failed' => 'Не удалось обновить пользователя',
     'errors.admin.users.delete_failed' => 'Не удалось удалить пользователя',
+    'errors.admin.sessions.not_found' => 'Сессия не найдена',
+    'errors.admin.sessions.revoke_failed' => 'Не удалось отозвать сессию',
 
     // Admin Polls
     'errors.admin.polls.question_required' => 'Вопрос обязателен',

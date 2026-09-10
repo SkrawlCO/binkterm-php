@@ -28,7 +28,7 @@ final class SessionKickHandler implements TerminalEventHandlerInterface
     public const EVENT_TYPE = 'session.kick';
 
     /** Payload codes echoed through as-is; anything else -> CODE_GENERIC. */
-    private const KNOWN_CODES = ['revoked', 'revoked_all'];
+    private const KNOWN_CODES = ['revoked', 'revoked_all', 'admin_revoked'];
 
     /** Used for an unknown/absent payload code and by the time-based validity net. */
     public const CODE_GENERIC = 'terminated';

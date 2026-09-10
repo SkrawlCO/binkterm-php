@@ -167,6 +167,34 @@
     </div>
 </div>
 
+<!-- User Active Sessions Modal (Slice B) -->
+<div class="modal fade" id="userSessionsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-plug me-2"></i>
+                    <span>{{ t('ui.admin_users.sessions.title', {}, locale, ['common']) }}</span>
+                    <span class="text-muted" id="user-sessions-username"></span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="user-sessions-body">{{ t('ui.common.loading', {}, locale, ['common']) }}</div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-danger me-auto" id="user-sessions-revoke-all" onclick="revokeAllUserSessions()">
+                    <i class="fas fa-ban me-1"></i>{{ t('ui.admin_users.sessions.revoke_all', {}, locale, ['common']) }}
+                </button>
+                <button type="button" class="btn btn-outline-secondary" onclick="reloadUserSessions()">
+                    <i class="fas fa-sync me-1"></i>{{ t('ui.common.refresh', {}, locale, ['common']) }}
+                </button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ t('ui.common.close', {}, locale, ['common']) }}</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Create New User Modal -->
 <div class="modal fade" id="createUserModal" tabindex="-1">
     <div class="modal-dialog modal-lg">
@@ -775,6 +803,9 @@ function renderAllUsers(users) {
                     <button class="btn btn-sm btn-primary me-1" onclick="editUser(${user.id})">
                         <i class="fas fa-edit"></i> ${uiT('ui.common.edit', 'Edit')}
                     </button>
+                    <button class="btn btn-sm btn-outline-secondary me-1" onclick="openUserSessions(${user.id}, '${escapeHtml(user.username)}')" title="${uiT('ui.admin_users.sessions.action', 'Sessions')}">
+                        <i class="fas fa-plug"></i> ${uiT('ui.admin_users.sessions.action', 'Sessions')}
+                    </button>
                     <button class="btn btn-sm btn-${user.is_active ? 'warning' : 'success'} me-1" onclick="toggleUserStatus(${user.id}, ${user.is_active ? 'false' : 'true'})">
                         <i class="fas fa-${user.is_active ? 'pause' : 'play'}"></i> ${user.is_active ? uiT('ui.common.disable', 'Disable') : uiT('ui.common.enable', 'Enable')}
                     </button>`;
@@ -1119,6 +1150,131 @@ function toggleUserStatus(userId, newStatus) {
         error: function(xhr) {
             console.error('AJAX error for toggle status:', xhr.status, xhr.statusText, xhr.responseText);
             showError(uiT('ui.admin_users.user_action_failed_prefix', 'Failed to {action} user: ', { action }) + xhr.status + ' ' + xhr.statusText);
+        }
+    });
+}
+
+// ---- User active-session administration (Slice B) ----
+let currentSessionsUserId = null;
+let currentSessionsUsername = '';
+let currentSessionsData = [];
+
+function openUserSessions(userId, username) {
+    currentSessionsUserId = userId;
+    currentSessionsUsername = username;
+    currentSessionsData = [];
+    $('#user-sessions-username').text(' — ' + username);
+    $('#user-sessions-body').html(escapeHtml(uiT('ui.common.loading', 'Loading...')));
+    $('#user-sessions-revoke-all').prop('disabled', true);
+    new bootstrap.Modal(document.getElementById('userSessionsModal')).show();
+    reloadUserSessions();
+}
+
+function reloadUserSessions() {
+    if (!currentSessionsUserId) { return; }
+    $.ajax({
+        url: '/api/admin/users/' + currentSessionsUserId + '/sessions',
+        method: 'GET',
+        dataType: 'json',
+        success: function(resp) {
+            currentSessionsData = (resp && resp.sessions) || [];
+            renderUserSessions(currentSessionsData);
+        },
+        error: function() {
+            $('#user-sessions-body').html('<div class="text-danger">'
+                + escapeHtml(uiT('ui.admin_users.sessions.load_failed', 'Failed to load sessions.')) + '</div>');
+            $('#user-sessions-revoke-all').prop('disabled', true);
+        }
+    });
+}
+
+function renderUserSessions(sessions) {
+    if (!sessions.length) {
+        $('#user-sessions-body').html('<div class="text-muted">'
+            + escapeHtml(uiT('ui.admin_users.sessions.none', 'No active sessions.')) + '</div>');
+        $('#user-sessions-revoke-all').prop('disabled', true);
+        return;
+    }
+    $('#user-sessions-revoke-all').prop('disabled', false);
+
+    const rows = sessions.map(function(s) {
+        const you = s.is_current
+            ? ' <span class="badge bg-warning text-dark">' + escapeHtml(uiT('ui.admin_users.sessions.this_is_you', '(this is you)')) + '</span>'
+            : '';
+        const onl = s.is_online
+            ? ' <span class="badge bg-success">' + escapeHtml(uiT('ui.admin_users.sessions.online', 'online')) + '</span>'
+            : '';
+        const ref = escapeHtml((s.ref || '').slice(0, 6));
+        return '<tr>'
+            + '<td><code>' + escapeHtml(s.service || '?') + '</code> <span class="text-muted small">#' + ref + '</span>' + you + onl + '</td>'
+            + '<td><code>' + escapeHtml(s.ip_address || '?') + '</code></td>'
+            + '<td class="small">' + (s.created_at ? new Date(s.created_at).toLocaleString() : '—') + '</td>'
+            + '<td class="small">' + (s.last_activity ? new Date(s.last_activity).toLocaleString() : '—') + '</td>'
+            + '<td class="small">' + escapeHtml(s.activity || '—') + '</td>'
+            + '<td><button class="btn btn-sm btn-outline-danger" onclick="kickUserSession(\''
+                + encodeURIComponent(s.ref || '') + '\', ' + (s.is_current ? 'true' : 'false') + ')">'
+                + '<i class="fas fa-times"></i> ' + escapeHtml(uiT('ui.admin_users.sessions.kick', 'Kick')) + '</button></td>'
+            + '</tr>';
+    }).join('');
+
+    $('#user-sessions-body').html(
+        '<div class="table-responsive"><table class="table table-sm align-middle">'
+        + '<thead><tr>'
+        + '<th>' + escapeHtml(uiT('ui.admin_users.sessions.col_service', 'Type')) + '</th>'
+        + '<th>' + escapeHtml(uiT('ui.common.ip_address', 'IP Address')) + '</th>'
+        + '<th>' + escapeHtml(uiT('ui.admin_users.sessions.col_login', 'Login')) + '</th>'
+        + '<th>' + escapeHtml(uiT('ui.admin_users.sessions.col_last', 'Last active')) + '</th>'
+        + '<th>' + escapeHtml(uiT('ui.admin_users.sessions.col_activity', 'Activity')) + '</th>'
+        + '<th></th>'
+        + '</tr></thead><tbody>' + rows + '</tbody></table></div>'
+    );
+}
+
+function kickUserSession(refEnc, isSelf) {
+    if (!currentSessionsUserId) { return; }
+    const ref = decodeURIComponent(refEnc);
+    const msg = isSelf
+        ? uiT('ui.admin_users.sessions.kick_self_confirm', 'This is your current session — kicking it disconnects you too. Continue?')
+        : uiT('ui.admin_users.sessions.kick_confirm', 'Kick this session for {username}? They will be disconnected immediately.', { username: currentSessionsUsername });
+    if (!confirm(msg)) { return; }
+
+    $.ajax({
+        url: '/api/admin/users/' + currentSessionsUserId + '/sessions/' + encodeURIComponent(ref),
+        method: 'DELETE',
+        dataType: 'json',
+        success: function(resp) {
+            showSuccess(window.getApiMessage
+                ? window.getApiMessage(resp, uiT('ui.admin_users.sessions.kicked', 'Session ended.'))
+                : uiT('ui.admin_users.sessions.kicked', 'Session ended.'));
+            reloadUserSessions();
+        },
+        error: function(xhr) {
+            showError(apiError(xhr.responseJSON || {}, uiT('ui.common.unknown_error', 'Unknown error')));
+        }
+    });
+}
+
+function revokeAllUserSessions() {
+    if (!currentSessionsUserId) { return; }
+    const count = currentSessionsData.length;
+    if (!count) { return; }
+    if (!confirm(uiT('ui.admin_users.sessions.revoke_all_confirm',
+        'Revoke ALL {count} session(s) for {username}? Every connection is disconnected immediately. This does NOT disable the account.',
+        { count: count, username: currentSessionsUsername }))) {
+        return;
+    }
+
+    $.ajax({
+        url: '/api/admin/users/' + currentSessionsUserId + '/sessions/revoke-all',
+        method: 'POST',
+        dataType: 'json',
+        success: function(resp) {
+            const n = (resp && typeof resp.revoked === 'number') ? resp.revoked : 0;
+            showSuccess(uiT('ui.admin_users.sessions.revoked_all', '{count} session(s) ended.', { count: n }));
+            reloadUserSessions();
+        },
+        error: function(xhr) {
+            showError(apiError(xhr.responseJSON || {}, uiT('ui.common.unknown_error', 'Unknown error')));
         }
     });
 }
