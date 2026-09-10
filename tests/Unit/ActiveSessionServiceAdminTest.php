@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use BinktermPHP\Database;
+use BinktermPHP\DoorBridgeControlClient;
 use BinktermPHP\DoorSessionManager;
 use BinktermPHP\Security\ActiveSessionService;
 use PHPUnit\Framework\TestCase;
@@ -77,14 +78,17 @@ final class ActiveSessionServiceAdminTest extends TestCase
         return $sid;
     }
 
-    private function seedDoorSession(string $authSessionId): string
-    {
+    private function seedDoorSession(
+        string $authSessionId,
+        ?string $wsToken = null,
+        ?int $dosboxPid = null
+    ): string {
         $dsid = 'doorb_' . bin2hex(random_bytes(12));
         $stmt = $this->pdo->prepare(
-            "INSERT INTO door_sessions (session_id, expires_at, auth_session_id, ended_at)
-             VALUES (?, NOW() + INTERVAL '1 hour', ?, NULL)"
+            "INSERT INTO door_sessions (session_id, expires_at, auth_session_id, ended_at, ws_token, dosbox_pid)
+             VALUES (?, NOW() + INTERVAL '1 hour', ?, NULL, ?, ?)"
         );
-        $stmt->execute([$dsid, $authSessionId]);
+        $stmt->execute([$dsid, $authSessionId, $wsToken, $dosboxPid]);
         return $dsid;
     }
 
@@ -98,9 +102,70 @@ final class ActiveSessionServiceAdminTest extends TestCase
         return $stmt->fetchAll(\PDO::FETCH_ASSOC);
     }
 
-    private function svc(?DoorSessionManager $doors = null): ActiveSessionService
+    private function svc(
+        ?DoorSessionManager $doors = null,
+        ?DoorBridgeControlClient $bridge = null
+    ): ActiveSessionService {
+        return new ActiveSessionService($this->pdo, null, $doors, $bridge);
+    }
+
+    /**
+     * Recording fake for {@see DoorBridgeControlClient} — mirrors the anonymous
+     * fake-DoorSessionManager pattern used elsewhere in this suite. Never opens
+     * a socket. $trace (when given) receives an ordered marker so a test can
+     * assert bridge-termination happens before endSession() cleanup.
+     */
+    private function fakeBridge(array $response = ['success' => true], ?\ArrayObject $trace = null): DoorBridgeControlClient
     {
-        return new ActiveSessionService($this->pdo, null, $doors);
+        return new class ($response, $trace) extends DoorBridgeControlClient {
+            /** @var list<array{session_id:string,ws_token:string}> */
+            public array $calls = [];
+            private array $response;
+            private ?\ArrayObject $trace;
+            public function __construct(array $response, ?\ArrayObject $trace)
+            {
+                $this->response = $response;
+                $this->trace = $trace;
+            }
+            public function terminate(string $sessionId, string $wsToken): array
+            {
+                $this->calls[] = ['session_id' => $sessionId, 'ws_token' => $wsToken];
+                if ($this->trace !== null) {
+                    $this->trace->append('bridge:' . $sessionId);
+                }
+                return $this->response;
+            }
+        };
+    }
+
+    /**
+     * Recording fake for {@see DoorSessionManager::endSession()}. $trace (when
+     * given) receives an ordered marker.
+     */
+    private function fakeDoors(?\ArrayObject $trace = null, bool $throw = false): DoorSessionManager
+    {
+        return new class ($trace, $throw) extends DoorSessionManager {
+            /** @var list<array{session_id:string,confirmed:bool}> */
+            public array $ended = [];
+            private ?\ArrayObject $trace;
+            private bool $throw;
+            public function __construct(?\ArrayObject $trace, bool $throw)
+            {
+                $this->trace = $trace;
+                $this->throw = $throw;
+            }
+            public function endSession(string $sessionId, bool $runtimeTerminationConfirmed = false): bool
+            {
+                $this->ended[] = ['session_id' => $sessionId, 'confirmed' => $runtimeTerminationConfirmed];
+                if ($this->trace !== null) {
+                    $this->trace->append('endSession:' . $sessionId);
+                }
+                if ($this->throw) {
+                    throw new \RuntimeException('endSession blew up');
+                }
+                return true;
+            }
+        };
     }
 
     // ---- listActive -----------------------------------------------------
@@ -260,6 +325,165 @@ final class ActiveSessionServiceAdminTest extends TestCase
 
         self::assertTrue($this->svc($fakeDoors)->revokeSession($sid, $this->userA, ActiveSessionService::CODE_ADMIN_REVOKED));
         self::assertSame([$dsid], $fakeDoors->ended);
+    }
+
+    // ---- Acceptance C: forced door-runtime termination via the bridge -----
+
+    public function testCascadeAsksBridgeToTerminateTheManagedRuntimeWithExactIdentity(): void
+    {
+        $sid = $this->newSession($this->userA, 'telnet');
+        $dsid = $this->seedDoorSession($sid, 'wstok-lord-abc', 1270249);
+        // A sibling door session with no managed runtime must not reach the bridge.
+        $this->seedDoorSession('kickb_unrelated_auth', null, null);
+
+        $bridge = $this->fakeBridge(['success' => true]);
+        $doors = $this->fakeDoors();
+
+        self::assertTrue(
+            $this->svc($doors, $bridge)->revokeSession($sid, $this->userA, ActiveSessionService::CODE_ADMIN_REVOKED)
+        );
+
+        self::assertSame(
+            [['session_id' => $dsid, 'ws_token' => 'wstok-lord-abc']],
+            $bridge->calls,
+            'exactly the attached managed door session is terminated through the bridge'
+        );
+    }
+
+    public function testEndSessionCleanupStillRunsAndIsToldTheRuntimeWasConfirmed(): void
+    {
+        $sid = $this->newSession($this->userA);
+        $dsid = $this->seedDoorSession($sid, 'wstok-1', 999001);
+
+        $bridge = $this->fakeBridge(['success' => true]);
+        $doors = $this->fakeDoors();
+
+        self::assertTrue($this->svc($doors, $bridge)->revokeSession($sid, $this->userA));
+
+        self::assertSame(
+            [['session_id' => $dsid, 'confirmed' => true]],
+            $doors->ended,
+            'endSession still runs and is told the bridge already confirmed the kill'
+        );
+    }
+
+    public function testBridgeTerminationHappensBeforeEndSessionCleanup(): void
+    {
+        $sid = $this->newSession($this->userA);
+        $dsid = $this->seedDoorSession($sid, 'wstok-order', 999002);
+
+        $trace = new \ArrayObject();
+        $bridge = $this->fakeBridge(['success' => true], $trace);
+        $doors = $this->fakeDoors($trace);
+
+        self::assertTrue($this->svc($doors, $bridge)->revokeSession($sid, $this->userA));
+
+        self::assertSame(
+            ['bridge:' . $dsid, 'endSession:' . $dsid],
+            $trace->getArrayCopy(),
+            'the bridge kill must precede endSession(), which would otherwise stamp ended_at and void authorization'
+        );
+    }
+
+    public function testBridgeFailureDoesNotBlockRevocationKickOrCleanup(): void
+    {
+        $sid = $this->newSession($this->userA, 'telnet');
+        $dsid = $this->seedDoorSession($sid, 'wstok-fail', 999003);
+
+        $bridge = $this->fakeBridge(['success' => false, 'error' => 'Door bridge control socket is unavailable']);
+        $doors = $this->fakeDoors();
+
+        self::assertTrue(
+            $this->svc($doors, $bridge)->revokeSession($sid, $this->userA, ActiveSessionService::CODE_ADMIN_REVOKED),
+            'the auth session is revoked even when the bridge cannot be reached'
+        );
+
+        // auth session gone
+        $stmt = $this->pdo->prepare('SELECT COUNT(*) FROM user_sessions WHERE session_id = ?');
+        $stmt->execute([$sid]);
+        self::assertSame(0, (int) $stmt->fetchColumn());
+
+        // kick still emitted
+        $events = $this->kickEvents($this->userA);
+        self::assertCount(1, $events);
+        self::assertSame('admin_revoked', json_decode($events[0]['payload'], true)['code']);
+
+        // cleanup still attempted, and NOT falsely told the runtime was confirmed
+        self::assertSame(
+            [['session_id' => $dsid, 'confirmed' => false]],
+            $doors->ended,
+            'endSession still runs, but is not told the bridge confirmed a kill it did not confirm'
+        );
+    }
+
+    public function testBridgeExceptionIsContainedAndRevocationStillCompletes(): void
+    {
+        $sid = $this->newSession($this->userA);
+        $dsid = $this->seedDoorSession($sid, 'wstok-throw', 999004);
+
+        $bridge = new class extends DoorBridgeControlClient {
+            public function __construct()
+            {
+            }
+            public function terminate(string $sessionId, string $wsToken): array
+            {
+                throw new \RuntimeException('socket exploded');
+            }
+        };
+
+        self::assertTrue($this->svc($this->fakeDoors(), $bridge)->revokeSession($sid, $this->userA));
+
+        $stmt = $this->pdo->prepare('SELECT COUNT(*) FROM user_sessions WHERE session_id = ?');
+        $stmt->execute([$sid]);
+        self::assertSame(0, (int) $stmt->fetchColumn());
+        self::assertCount(1, $this->kickEvents($this->userA));
+    }
+
+    public function testCascadeWithoutManagedRuntimeNeverContactsTheBridge(): void
+    {
+        $sid = $this->newSession($this->userA);
+        // Caller-owned door session (e.g. Telnet line relay): ws_token present
+        // but no recorded runtime pid -> bridge must not be called.
+        $dsid = $this->seedDoorSession($sid, 'wstok-linerelay', null);
+
+        $bridge = $this->fakeBridge(['success' => true]);
+        $doors = $this->fakeDoors();
+
+        self::assertTrue($this->svc($doors, $bridge)->revokeSession($sid, $this->userA));
+
+        self::assertSame([], $bridge->calls, 'no managed runtime -> no bridge control request');
+        self::assertSame(
+            [['session_id' => $dsid, 'confirmed' => false]],
+            $doors->ended
+        );
+    }
+
+    public function testSiblingAndUnrelatedDoorSessionsAreUntouched(): void
+    {
+        $target = $this->newSession($this->userA, 'telnet');
+        $other = $this->newSession($this->userA, 'web');
+
+        $targetDoor = $this->seedDoorSession($target, 'wstok-target', 999005);
+        $siblingDoor = $this->seedDoorSession($other, 'wstok-sibling', 999006);
+        $unrelatedDoor = $this->seedDoorSession('kickb_no_such_auth', 'wstok-unrelated', 999007);
+
+        $bridge = $this->fakeBridge(['success' => true]);
+        $doors = $this->fakeDoors();
+
+        self::assertTrue(
+            $this->svc($doors, $bridge)->revokeSession($target, $this->userA, ActiveSessionService::CODE_ADMIN_REVOKED)
+        );
+
+        self::assertSame(
+            [['session_id' => $targetDoor, 'ws_token' => 'wstok-target']],
+            $bridge->calls,
+            'only the door session attached to the revoked auth session is terminated'
+        );
+        self::assertSame(
+            [$targetDoor],
+            array_column($doors->ended, 'session_id'),
+            'endSession is called only for the attached door session; sibling and unrelated rows are never selected'
+        );
     }
 
     public function testAdminRevokeAllScopesToTargetUserAndUsesAdminCode(): void

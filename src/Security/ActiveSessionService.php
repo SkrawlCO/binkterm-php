@@ -5,6 +5,7 @@ namespace BinktermPHP\Security;
 use BinktermPHP\Binkp\Logger;
 use BinktermPHP\Config;
 use BinktermPHP\Database;
+use BinktermPHP\DoorBridgeControlClient;
 use BinktermPHP\DoorSessionManager;
 use BinktermPHP\Realtime\BinkStream;
 use PDO;
@@ -18,16 +19,25 @@ use PDO;
  *   1. resolve the session and its owning user
  *   2. enforce caller ownership where a self-service path requires it
  *   3. delete the `user_sessions` row
- *   4. end any door sessions still attached via `door_sessions.auth_session_id`
- *      (through {@see DoorSessionManager::endSession()}, not a parallel path)
+ *   4. forcibly end any door sessions still attached via
+ *      `door_sessions.auth_session_id`: for a bridge-managed runtime, ask the
+ *      bridge to kill the process group it owns (through
+ *      {@see DoorBridgeControlClient::terminate()} — PHP running as the web
+ *      user cannot signal a root-owned process group itself), then run the
+ *      normal {@see DoorSessionManager::endSession()} cleanup. Not a parallel
+ *      revocation path — the same teardown a voluntary door exit performs.
  *   5. publish a targeted `session.kick` event on the realtime bus so a live
  *      Telnet/SSH child that is polling can terminate itself promptly
  *
  * Ordering guarantees:
  *   - a kick is emitted **only** after a row was actually deleted; a lookup
  *     miss or an ownership mismatch emits nothing
+ *   - bridge runtime termination is attempted **before** `endSession()` stamps
+ *     `door_sessions.ended_at`, because the bridge only authorizes a control
+ *     request against a row whose `ended_at IS NULL`
  *   - door-session cleanup is best-effort but never silent — a failure is
- *     logged and the revoke still completes
+ *     logged and the revoke still completes (the auth-session security
+ *     boundary must not depend on door-runtime cleanup succeeding)
  *
  * This class knows nothing about live processes; the terminal side reacts to
  * the emitted event (see {@see \BinktermPHP\TelnetServer\SessionKickHandler}).
@@ -49,15 +59,18 @@ final class ActiveSessionService
     private PDO $db;
     private ?Logger $logger;
     private ?DoorSessionManager $doorSessions;
+    private ?DoorBridgeControlClient $bridgeControl;
 
     public function __construct(
         ?PDO $db = null,
         ?Logger $logger = null,
-        ?DoorSessionManager $doorSessions = null
+        ?DoorSessionManager $doorSessions = null,
+        ?DoorBridgeControlClient $bridgeControl = null
     ) {
         $this->db = $db ?? Database::getInstance()->getPdo();
         $this->logger = $logger;
         $this->doorSessions = $doorSessions;
+        $this->bridgeControl = $bridgeControl;
     }
 
     /**
@@ -272,30 +285,68 @@ final class ActiveSessionService
     }
 
     /**
-     * End any not-yet-ended door sessions still owned by this auth session,
-     * reusing {@see DoorSessionManager::endSession()} so the dosbox/bridge
-     * runtime is torn down the same way a normal door exit does it.
+     * Forcibly end any not-yet-ended door sessions still owned by this auth
+     * session.
      *
-     * Best-effort: a failure is logged (never silent) and never blocks the
-     * revoke. Stale rows are also swept by DoorSessionManager's own expiry.
+     * For a bridge-managed runtime (a row with a recorded `dosbox_pid` and a
+     * `ws_token`) the bridge is asked to kill the process group it owns —
+     * {@see DoorBridgeControlClient::terminate()} — because this code runs in
+     * the web-request context as the unprivileged web user and cannot signal a
+     * root-owned process group. This happens **before**
+     * {@see DoorSessionManager::endSession()}, which stamps `ended_at` and would
+     * then cause the bridge to reject the control request as unauthorized.
+     * `endSession()` still runs afterwards for the drop-file / presence / DB
+     * bookkeeping (and, when the bridge did not confirm, its own best-effort
+     * fallback kill).
+     *
+     * Best-effort throughout: a bridge failure or an `endSession()` failure is
+     * logged (never silent) and never blocks the revoke — the auth-session
+     * security boundary must not depend on door-runtime cleanup succeeding.
+     * Stale rows are also swept by DoorSessionManager's own expiry.
      */
     private function cascadeDoorSessions(string $authSessionId): void
     {
         try {
             $stmt = $this->db->prepare(
-                'SELECT session_id FROM door_sessions WHERE auth_session_id = ? AND ended_at IS NULL'
+                'SELECT session_id, ws_token, dosbox_pid
+                 FROM door_sessions
+                 WHERE auth_session_id = ? AND ended_at IS NULL'
             );
             $stmt->execute([$authSessionId]);
-            $doorSessionIds = $stmt->fetchAll(PDO::FETCH_COLUMN) ?: [];
+            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
-            if ($doorSessionIds === []) {
+            if ($rows === []) {
                 return;
             }
 
             $manager = $this->doorSessions ?? new DoorSessionManager();
-            foreach ($doorSessionIds as $doorSessionId) {
+            foreach ($rows as $row) {
+                $doorSessionId = (string) $row['session_id'];
+                $wsToken = (string) ($row['ws_token'] ?? '');
+                $hasManagedRuntime = (int) ($row['dosbox_pid'] ?? 0) > 0 && $wsToken !== '';
+                $runtimeTerminationConfirmed = false;
+
+                if ($hasManagedRuntime) {
+                    try {
+                        $result = $this->bridgeControl()->terminate($doorSessionId, $wsToken);
+                        if (($result['success'] ?? false) === true) {
+                            $runtimeTerminationConfirmed = true;
+                        } else {
+                            $this->log(
+                                'bridge did not confirm runtime termination for door session '
+                                . $doorSessionId . ': ' . ($result['error'] ?? 'unknown failure')
+                            );
+                        }
+                    } catch (\Throwable $e) {
+                        $this->log(
+                            'bridge termination request failed for door session '
+                            . $doorSessionId . ': ' . $e->getMessage()
+                        );
+                    }
+                }
+
                 try {
-                    $manager->endSession((string) $doorSessionId);
+                    $manager->endSession($doorSessionId, $runtimeTerminationConfirmed);
                 } catch (\Throwable $e) {
                     $this->log('door session cleanup failed for ' . $doorSessionId . ': ' . $e->getMessage());
                 }
@@ -303,6 +354,12 @@ final class ActiveSessionService
         } catch (\Throwable $e) {
             $this->log('door session cascade failed for auth session ' . $authSessionId . ': ' . $e->getMessage());
         }
+    }
+
+    /** Lazy accessor for the bridge control-socket client (test seam). */
+    private function bridgeControl(): DoorBridgeControlClient
+    {
+        return $this->bridgeControl ??= new DoorBridgeControlClient();
     }
 
     private function log(string $message): void

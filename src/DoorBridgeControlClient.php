@@ -10,8 +10,14 @@ namespace BinktermPHP;
  * The socket is never exposed through the web server. The bridge additionally
  * verifies the database-issued WebSocket token so a request can address only
  * the exact managed session already authorized by the HTTP endpoint.
+ *
+ * Not `final`: callers that own a runtime-teardown step (for example
+ * {@see \BinktermPHP\Security\ActiveSessionService}) inject this as a seam and
+ * unit tests substitute an anonymous subclass, mirroring the fake
+ * {@see \BinktermPHP\DoorSessionManager} pattern. Production code always uses
+ * this class as-is.
  */
-final class DoorBridgeControlClient
+class DoorBridgeControlClient
 {
     private string $socketPath;
     private float $timeoutSeconds;

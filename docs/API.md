@@ -9828,7 +9828,7 @@ Lists a user's live (non-expired) authenticated sessions across all transports (
 
 **Requires authentication** · admin only · CSRF required
 
-Terminates exactly one session belonging to the target user. The `ref` is resolved to a single `session_id` **only** among that user's live sessions; zero or ambiguous matches fail closed with 404. The actual revocation is performed by `ActiveSessionService::revokeSession()` with an ownership assertion against `{id}` — a `ref` that does not resolve to a session owned by `{id}` is rejected. On success a targeted `session.kick` event (`code = admin_revoked`) is emitted and any attached door session is ended; a live terminal child disconnects with a fixed "ended by an administrator" message. This does **not** change `users.is_active`.
+Terminates exactly one session belonging to the target user. The `ref` is resolved to a single `session_id` **only** among that user's live sessions; zero or ambiguous matches fail closed with 404. The actual revocation is performed by `ActiveSessionService::revokeSession()` with an ownership assertion against `{id}` — a `ref` that does not resolve to a session owned by `{id}` is rejected. On success a targeted `session.kick` event (`code = admin_revoked`) is emitted and any attached door session — including its live door-runtime process — is forcibly terminated through the door bridge, so the caller does not have to voluntarily exit the door; a live terminal child then disconnects with a fixed "ended by an administrator" message. This does **not** change `users.is_active`.
 
 **Path Parameters**
 
@@ -9857,7 +9857,7 @@ Terminates exactly one session belonging to the target user. The `ref` is resolv
 
 **Requires authentication** · admin only · CSRF required
 
-Terminates every live session belonging to the target user. Emits one targeted `session.kick` (`code = admin_revoked`) per removed session and ends any attached door sessions. Only the target user's sessions are affected; this does **not** change `users.is_active`.
+Terminates every live session belonging to the target user. Emits one targeted `session.kick` (`code = admin_revoked`) per removed session and forcibly terminates any attached door session and its live runtime through the door bridge. Only the target user's sessions are affected; this does **not** change `users.is_active`.
 
 **Path Parameters**
 
