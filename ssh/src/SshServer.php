@@ -167,6 +167,14 @@ class SshServer
             $conn = @stream_socket_accept($server, 0);
             if (!$conn) { continue; }
 
+            // Disable Nagle's algorithm on the accepted socket — SSH carries the
+            // same latency-sensitive interactive terminal traffic as Telnet.
+            // Best-effort; never fatal to the connection.
+            \BinktermPHP\TelnetServer\TerminalSocketOptions::enableNoDelay(
+                $conn,
+                $this->debug ? fn(string $m) => $this->log($m) : null
+            );
+
             $connectionCount++;
 
             // Per-IP connection rate limit — BEFORE pcntl_fork(), the SSH

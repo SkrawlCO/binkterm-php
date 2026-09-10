@@ -149,6 +149,12 @@ ADMIN_DAEMON_SCHEDULE_INTERVAL=60    # seconds between scheduler ticks
 # TELNET_RATE_LIMIT_MAX=5
 # TELNET_RATE_LIMIT_WINDOW=60
 
+# Disable Nagle's algorithm (TCP_NODELAY) on accepted interactive terminal
+# connections -- Telnet, TLS-Telnet and SSH. Keeps single keystrokes and
+# incremental screen redraws from being batched. Enabled by default; set to
+# false to leave Nagle in place.
+# TERMINAL_TCP_NODELAY=true
+
 # PROXY protocol v1: source addresses allowed to supply a PROXY header naming
 # the real client (loopback and TELNET_BIND_HOST are always trusted on top of
 # this). Used by the PubTerm door so rate limiting / screening / logs see the

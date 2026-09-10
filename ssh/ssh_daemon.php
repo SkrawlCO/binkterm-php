@@ -2,6 +2,7 @@
 <?php
 
 require_once __DIR__ . '/../vendor/autoload.php';
+require_once __DIR__ . '/../telnet/src/TerminalSocketOptions.php';
 require_once __DIR__ . '/src/SshSession.php';
 require_once __DIR__ . '/src/SshStreamWrapper.php';
 require_once __DIR__ . '/src/SshServer.php';
