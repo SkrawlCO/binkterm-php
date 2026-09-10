@@ -15,19 +15,25 @@ use BinktermPHP\TelnetServer\TerminalRenderContext;
  *   - never interpret an action, a hotkey, an ACS predicate, or navigation
  *     structure — those all belong to the definition and the runtime
  *
+ * The geometry to paint is resolved per screen: a schema-2 theme's `nodes`
+ * override for the current node wins, else the theme's own geometry when it
+ * applies (root, or a non-`root_only` theme). A directory surface
+ * ({@see ThemedDirectoryView}) passes no screen and keeps using the theme's
+ * top-level geometry.
+ *
  * Fallback is a first-class path, decided on every render (the geometry can
- * change mid-session): whenever the theme does not apply — size not themed,
- * charset/colour unsuitable, template missing or unsafe — it delegates to the
- * inner renderer unchanged. {@see lastReport()} records which path ran and why,
- * for the F6 preview and the live log.
+ * change mid-session): whenever the theme does not apply — screen not themed,
+ * size not themed, charset/colour unsuitable, template missing or unsafe — it
+ * delegates to the inner renderer unchanged. {@see lastReport()} records which
+ * path ran and why, for the F6 preview and the live log.
  */
 final class ThemedNavigationRenderer implements NavigationRenderer
 {
     private const MODE_THEMED   = 'themed';
     private const MODE_FALLBACK = 'fallback';
 
-    /** @var array{token:string,charset:string,art:string}|null */
-    private ?array $templateCache = null;
+    /** @var array<string,string> "<token>|<charset>" => sanitised art */
+    private array $templateCache = [];
 
     /** @var array{mode:string,reason:?string,geometry:?string} */
     private array $lastReport = ['mode' => self::MODE_FALLBACK, 'reason' => 'not rendered yet', 'geometry' => null];
@@ -45,13 +51,19 @@ final class ThemedNavigationRenderer implements NavigationRenderer
 
     public function render(TerminalRenderContext $ctx, NavigationScreenModel $screen, array $opts = []): void
     {
-        if ($this->theme->rootOnly && !$screen->path->isRoot()) {
+        // A root-only theme still yields for a submenu — unless that submenu is
+        // explicitly authored by the theme's `nodes` map (Messages), in which
+        // case the geometry check below decides.
+        if ($this->theme->rootOnly
+            && !$screen->path->isRoot()
+            && !$this->theme->themesNode($screen->nodeId)
+        ) {
             $this->recordFallback('theme applies only to the root screen', $ctx->cols() . 'x' . $ctx->rows());
             $this->inner->render($ctx, $screen, $opts);
             return;
         }
         if (!$this->tryRenderRegions($ctx, fn (NavigationThemeGeometry $geo): array =>
-            $this->navigationBlocks($ctx, $screen, $opts, $geo))) {
+            $this->navigationBlocks($ctx, $screen, $opts, $geo), $screen)) {
             $this->inner->render($ctx, $screen, $opts);
         }
     }
@@ -62,11 +74,15 @@ final class ThemedNavigationRenderer implements NavigationRenderer
      * The composer must return every fitted region, keyed by semantic name.
      *
      * @param callable(NavigationThemeGeometry):array<string,array<int,string>> $compose
+     * @param NavigationScreenModel|null $screen when given, the geometry is
+     *        resolved for that screen's node (a `nodes` override wins over the
+     *        theme's own geometry); when null (a directory surface) the theme's
+     *        top-level geometry is used, exactly as before.
      */
-    public function tryRenderRegions(TerminalRenderContext $ctx, callable $compose): bool
+    public function tryRenderRegions(TerminalRenderContext $ctx, callable $compose, ?NavigationScreenModel $screen = null): bool
     {
         $geoKey = $ctx->cols() . 'x' . $ctx->rows();
-        $plan = $this->plan($ctx);
+        $plan = $this->plan($ctx, $screen);
         if (!$plan['ok']) {
             $this->recordFallback($plan['reason'], $geoKey);
             return false;
@@ -100,7 +116,7 @@ final class ThemedNavigationRenderer implements NavigationRenderer
     /**
      * @return array{ok:bool,reason:?string,geometry:?NavigationThemeGeometry,art:?string}
      */
-    private function plan(TerminalRenderContext $ctx): array
+    private function plan(TerminalRenderContext $ctx, ?NavigationScreenModel $screen = null): array
     {
         $charset = $ctx->effectiveCharset();
         if ($charset !== 'utf8' && $charset !== 'cp437') {
@@ -110,7 +126,9 @@ final class ThemedNavigationRenderer implements NavigationRenderer
             return $this->cannot('terminal has ANSI colour disabled');
         }
 
-        $geo = $this->theme->forGeometry($ctx->cols(), $ctx->rows());
+        $geo = $screen !== null
+            ? $this->theme->geometryForScreen($screen->nodeId, $screen->path->isRoot(), $ctx->cols(), $ctx->rows())
+            : $this->theme->forGeometry($ctx->cols(), $ctx->rows());
         if ($geo === null) {
             return $this->cannot(sprintf(
                 '%dx%d is not a themed geometry (themed: %s)',
@@ -160,10 +178,12 @@ final class ThemedNavigationRenderer implements NavigationRenderer
 
     private function template(string $token, string $charset): ?string
     {
-        if ($this->templateCache !== null
-            && $this->templateCache['token'] === $token
-            && $this->templateCache['charset'] === $charset) {
-            return $this->templateCache['art'];
+        // A themed session alternates between the front door and an authored
+        // node (each with its own template), so the cache keeps one sanitised
+        // copy per token+charset rather than thrashing a single slot.
+        $key = $token . '|' . $charset;
+        if (isset($this->templateCache[$key])) {
+            return $this->templateCache[$key];
         }
 
         $path = NavigationThemeConfig::templatePath($token);
@@ -176,7 +196,7 @@ final class ThemedNavigationRenderer implements NavigationRenderer
         }
 
         $art = TemplateArtSanitizer::sanitize($raw, $charset);
-        $this->templateCache = ['token' => $token, 'charset' => $charset, 'art' => $art];
+        $this->templateCache[$key] = $art;
 
         return $art;
     }

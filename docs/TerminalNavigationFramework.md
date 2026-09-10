@@ -490,6 +490,99 @@ and return, then Q back to the accepted front door. Technical tests are not
 visual/product acceptance. Expanded templates and other authored spaces remain
 deferred.
 
+## Authored Messages landing (M2 Slice: state-forward Messages)
+
+The `messages` navigation node — a real declarative submenu, not a `Directory`
+handler — becomes an authored 80x24 screen whose primary content is the
+caller's messaging state, with the five existing destinations as the action
+bar. It uses the same `NavigationScreenModel` / `NavigationScreenRenderer` /
+`ThemedNavigationRenderer` path as the front door; only two small seams are new.
+
+### The `nodes` theme key
+
+A schema-2 theme may carry an optional `nodes` object keyed by navigation node
+id; each value has the same shape as a top-level geometry set
+(`{ "geometries": { "80x24": { "template": …, "regions": … } } }`) and is
+validated by the identical loader (region bounds, disjointness, template token).
+`NavigationTheme::geometryForScreen()` picks a node override when one exists for
+that node and size, otherwise the theme's own geometry when it applies (root, or
+a non-`root_only` theme), otherwise null → the flowing renderer. `root_only`
+therefore now means "root **and** any node the theme explicitly authors".
+
+The one supplied composition is `config/terminal_theme_m2_messages.json.example`
+(front door + `nodes.messages`) with `telnet/screens/nav-messages-m2.ans`, at
+exact 80x24:
+
+| Region | Position | Content |
+|---|---|---|
+| STATUS | Rows 8–9, columns 5–76 | "Waiting for you" — one projected sentence from `UnifiedNewscanService::plan()`: unread netmail · new echomail + area count · unread bulletins; or "You're all caught up."; a second line names a scan-limit cap when `plan()` was truncated. |
+| MENU | Rows 12–18, columns 5–76 | The five existing destinations, order and hotkeys unchanged, each with a restrained right-aligned live annotation (netmail unread, echomail "N new, K area(s)", bulletins new); zero-value annotations are suppressed; What's New and QWK carry none. |
+| DESCRIPTION | Rows 20–21, columns 5–76 | The selected destination's existing `description_fallback` — **no** plan-derived context in this slice. |
+| FOOTER | Row 23, columns 5–76 | The runtime's real key hints, unchanged. |
+
+STATUS answers the overall question once, above the destinations; this stacked,
+state-first shape is deliberately distinct from the front door (menu first) and
+Crossroads (side-by-side). The breadcrumb line is dropped only on a node that
+carries an authored summary, since the trusted template already names it.
+
+### The projection seam
+
+`NavigationScreenBuilder` gains a fifth optional constructor argument, a
+`summaryResolver(nodeId, locale): ?string[]`. Unlike the root-only ambient
+resolver it is called for every node, so an authored non-root node can receive
+semantic STATUS content. `NavigationScreenModel::$summary` carries the result;
+`composeSemanticRegions()` uses it in place of the ambient/activity STATUS when
+present. Per-destination annotations reuse the existing
+`presentation.badge` → `badgeResolver` path (`NavigationScreenItem::$annotation`);
+the three `messages` items in `config/terminal_navigation.json` reference the
+`messages.netmail_unread` / `messages.echomail_new` / `messages.bulletins_new`
+signals. Compact MENU rows render an annotation **only** on a node that has a
+summary, so the front door's menu rows stay clean.
+
+`DeclarativeMenuBridge::messagesLanding()` wires both seams from ONE
+`NewscanSnapshot` over `UnifiedNewscanService::plan()` (a write-free SELECT-only
+projection — nothing here marks a message read or advances a watermark). The
+snapshot is resolved lazily (only when a caller actually opens Messages),
+reused across cursor movement, and **invalidated at the action boundary**
+(`onActionBoundary`, alongside the existing pushback clear) so reading mail and
+returning shows fresh counts on the next draw. A 90-second TTL is a staleness
+backstop only. `TerminalNewscanLanding::project()` is the pure formatter
+(summary sentence + badge strings), unit-tested off-session. Guests / failures
+yield no summary and no badges — the themed screen simply renders a blank
+STATUS. Missing/invalid/overflowing theme, wrong geometry, or no colour/charset
+fall back to the flowing declarative Messages submenu; navigation is never
+stranded.
+
+### Activation
+
+`DeclarativeMenuBridge` is eagerly `require_once`d by both daemon entrypoints
+before they fork, so a **Telnet/SSH daemon restart is required** — a reconnect
+alone cannot replace it in the daemon parent. Activation is three operator
+steps:
+
+1. Select `config/terminal_theme_m2_messages.json.example` as
+   `config/terminal_theme.json` (it is the accepted front-door M2 theme plus the
+   `nodes.messages` block).
+2. Add the three `presentation.badge` hints to the `messages` node items in the
+   live `config/terminal_navigation.json` — `messages.netmail_unread`,
+   `messages.echomail_new`, `messages.bulletins_new` on netmail / echomail /
+   bulletins (see `config/terminal_navigation.json.example`). Without them the
+   MENU annotations are simply absent; the STATUS summary still works.
+3. Restart the Telnet/SSH daemons with explicit authorization.
+
+The runtime nav/theme config files are operator-managed and not version
+controlled; the `.example` files carry the reference shapes. The implementation
+transaction does none of these steps.
+
+Minimal SyncTerm acceptance after activation: reconnect at effective 80x24,
+enter Messages, judge whether it reads as purpose-built rather than decorated,
+confirm "Waiting for you" reflects real state, move the selection and check the
+static contextual descriptions, enter one destination, read/act, return and
+confirm counts refresh, then Back to the front door — normal navigation
+throughout. Technical tests are not visual/product acceptance. Rich
+plan-derived selected-destination context, and other authored spaces, remain
+deferred.
+
 ## Behaviour at runtime
 
 - **Hotkeys** work as before. Arrow keys / Enter drive a lightbar.

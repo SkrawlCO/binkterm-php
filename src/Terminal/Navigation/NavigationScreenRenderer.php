@@ -272,8 +272,24 @@ final class NavigationScreenRenderer implements NavigationRenderer
     ): array {
         $menu = $geo->menu();
         $cursor = $opts['cursor'] ?? 0;
-        $menuLines = $this->directoryBlock($ctx, $screen, $menu->width, $opts['show_hotkeys'] ?? true, $cursor, true);
-        if (!$screen->path->isRoot()) {
+        $summary = $screen->summaryLines();
+        // Per-destination MENU annotations are shown only on an authored
+        // state-forward node (one that carries a summary). The front door keeps
+        // its live context in the STATUS/activity line and its menu rows clean.
+        $menuLines = $this->directoryBlock(
+            $ctx,
+            $screen,
+            $menu->width,
+            $opts['show_hotkeys'] ?? true,
+            $cursor,
+            true,
+            $summary !== null
+        );
+        // A node with an authored summary owns its own orientation through the
+        // template (its title and section labels are baked into the trusted
+        // art), so the redundant breadcrumb line is dropped. Every other themed
+        // submenu keeps it.
+        if (!$screen->path->isRoot() && $summary === null) {
             array_unshift($menuLines, $ctx->encodeForTerminal($screen->path->crumb(' > ')), '');
         }
 
@@ -282,7 +298,10 @@ final class NavigationScreenRenderer implements NavigationRenderer
             $selected?->label ?? $screen->title,
             $selected?->description ?? $screen->description ?? '',
         ];
-        $status = [$screen->ambient ?? '', trim($this->ambientActivityLine($screen))];
+        // STATUS: an authored per-node summary (a projection of existing
+        // authoritative state) wins; otherwise the root ambient slot + the
+        // roaming activity line, exactly as before.
+        $status = $summary ?? [$screen->ambient ?? '', trim($this->ambientActivityLine($screen))];
         $plainBlocks = [
             'DESCRIPTION' => $description,
             'STATUS' => $status,
@@ -345,7 +364,8 @@ final class NavigationScreenRenderer implements NavigationRenderer
         int $width,
         bool $showHotkeys,
         ?int $cursor,
-        bool $compact = false
+        bool $compact = false,
+        bool $withAnnotations = false
     ): array {
         $utf8   = $ctx->effectiveCharset() === 'utf8';
         $subGlyph = $utf8 ? "\u{203A}" : '>';
@@ -400,7 +420,8 @@ final class NavigationScreenRenderer implements NavigationRenderer
                     $showHotkeys,
                     $subGlyph,
                     $cursor !== null && isset($selectableIndex[$it->id]) && $selectableIndex[$it->id] === $cursor,
-                    $compact
+                    $compact,
+                    $withAnnotations
                 );
             }
         }
@@ -418,7 +439,8 @@ final class NavigationScreenRenderer implements NavigationRenderer
         bool $showHotkeys,
         string $subGlyph,
         bool $isCursor,
-        bool $compact = false
+        bool $compact = false,
+        bool $withAnnotations = false
     ): string {
         $key = '';
         if ($showHotkeys && $it->hotkey !== null) {
@@ -439,6 +461,20 @@ final class NavigationScreenRenderer implements NavigationRenderer
             $text = '  ' . $key . $name;
             if (mb_strlen($text, 'UTF-8') > $width) {
                 throw new \LengthException('MENU cannot fit a navigation label');
+            }
+            // Restrained live annotation, right-aligned within the row. Only on
+            // an authored state-forward screen, only for a selectable item, only
+            // when non-empty (zero-value annotations are already suppressed
+            // upstream), and only when it fits after the label with at least one
+            // space of separation — otherwise the label wins and the annotation
+            // is silently dropped.
+            $ann = ($withAnnotations && $it->isSelectable() && $it->annotation !== null && trim($it->annotation) !== '')
+                ? trim($it->annotation) : '';
+            if ($ann !== '') {
+                $gap = $width - mb_strlen($text, 'UTF-8') - mb_strlen($ann, 'UTF-8');
+                if ($gap >= 1) {
+                    $text .= str_repeat(' ', $gap) . $ann;
+                }
             }
             return $ctx->colorize(
                 $ctx->encodeForTerminal($this->padVisible($text, $width)),

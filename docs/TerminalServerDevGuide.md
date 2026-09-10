@@ -188,6 +188,45 @@ receives those through `theme_status_lines` with `theme_surface: crossroads`.
 No additional state query, participation rule, or visibility rule is introduced.
 See [the exact layout and activation boundary](TerminalNavigationFramework.md#authored-crossroads-arrival-m2-slice-2).
 
+### Authored Messages landing (M2, state-forward)
+
+The `messages` declarative node (not a `Directory`) becomes an authored 80x24
+screen through two seams, both in the shared `NavigationScreenModel` path:
+
+1. **`nodes` theme key** — a schema-2 theme may author individual nodes:
+   `NavigationTheme::geometryForScreen(nodeId, isRoot, cols, rows)` returns a
+   `nodes[<id>]` geometry override, else the theme geometry when it applies,
+   else null. `ThemedNavigationRenderer::render()` passes the screen so
+   `plan()` selects the right geometry; `tryRenderRegions()` keeps its no-screen
+   signature for `ThemedDirectoryView`.
+2. **`NavigationScreenBuilder` summary resolver** — 5th ctor arg
+   `summaryResolver(nodeId, locale): ?string[]`, called for every node (not
+   root-gated). Result → `NavigationScreenModel::$summary` →
+   `NavigationScreenRenderer::composeSemanticRegions()` uses it for STATUS in
+   place of ambient/activity, and drops the breadcrumb for that node. The
+   compact MENU row shows `NavigationScreenItem::$annotation` only when the
+   screen has a summary (front-door menu rows stay clean).
+
+`DeclarativeMenuBridge::messagesLanding()` builds one `NewscanSnapshot` over
+`UnifiedNewscanService::plan()` and derives both the STATUS summary and the
+`messages.*` badges from a single `TerminalNewscanLanding::project()` call.
+`NewscanSnapshot` is lazy (first Messages draw), reused across cursor movement
+(`generation()` gates the projection rebuild), and `invalidate()`d from
+`onActionBoundary` so a destination that marked mail read yields fresh counts on
+return; a 90s TTL is a staleness backstop. `plan()` is SELECT-only — the landing
+render performs no writes and advances no watermark. `TerminalNewscanLanding`
+and `NewscanSnapshot` are pure and unit-tested off-session
+(`tests/Unit/MessagesLandingCompositionTest.php`).
+
+The `messages` items opt into per-destination badges via
+`presentation.badge` signals (`messages.netmail_unread`, `messages.echomail_new`,
+`messages.bulletins_new`) — shown in `config/terminal_navigation.json.example`
+and added by the operator to the live (untracked) nav config as an activation
+step. The bridge routes `messages.*` to the landing resolver and everything else
+to the existing presence resolver. Activation also requires a daemon restart
+(`DeclarativeMenuBridge` is eagerly included). See
+[the exact layout and activation boundary](TerminalNavigationFramework.md#authored-messages-landing-m2-slice-state-forward-messages).
+
 ### Experience detail screen (telnet Crossroads slice 1)
 
 Selecting an experience in the `DoorHandler` chooser now opens

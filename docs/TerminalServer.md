@@ -125,6 +125,27 @@ authorized Telnet/SSH daemon restart before reconnecting. The accepted front-doo
 M2 configuration is independent. See
 [Crossroads composition and activation](TerminalNavigationFramework.md#authored-crossroads-arrival-m2-slice-2).
 
+### Authored Messages landing (M2)
+
+The Messages menu has an optional authored 80x24 landing that shows the caller's
+messaging state first — one "Waiting for you" line (unread netmail, new echomail
+and its area count, unread bulletins, or "You're all caught up") above the five
+existing destinations (What's New, Netmail, Echomail, Bulletins, QWK), each with
+a small live count. All counts are a read-only projection of the same newscan
+that powers "What's New"; opening the landing marks nothing read. Selecting a
+destination, hotkeys, Enter and Back are unchanged, and the counts refresh when
+you return from reading mail.
+
+Activation: select `config/terminal_theme_m2_messages.json.example` as
+`config/terminal_theme.json` (it is the front-door M2 theme plus a
+`nodes.messages` block), add the three `presentation.badge` hints to the
+`messages` items in `config/terminal_navigation.json` (see its `.example`), then
+restart the Telnet/SSH daemons — a class loaded into the daemon parent changed,
+so a reconnect alone is not enough. A missing, invalid, or oversized theme, a
+non-80x24 terminal, or a terminal without ANSI colour falls back to the normal
+Messages menu. See
+[the Messages landing composition and activation](TerminalNavigationFramework.md#authored-messages-landing-m2-slice-state-forward-messages).
+
 ### Message Browsing
 
 - List netmail and echomail messages with pagination

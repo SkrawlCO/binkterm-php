@@ -833,4 +833,13 @@ return [
     'ui.terminalserver.newscan.summary_netmail'       => 'Netmail    {count}{plus} new',
     'ui.terminalserver.newscan.summary_echomail'      => 'Echomail   {count}{plus} new across {areas} area(s)',
     'ui.terminalserver.newscan.summary_bulletins'     => 'Bulletins  {count} new',
+    // Messages M2 landing (state-forward authored screen)
+    'ui.terminalserver.messages.landing.netmail'      => '{count} unread netmail',
+    'ui.terminalserver.messages.landing.echomail'     => '{count} new echomail in {areas} area(s)',
+    'ui.terminalserver.messages.landing.bulletins'    => '{count} unread bulletin(s)',
+    'ui.terminalserver.messages.landing.caught_up'    => 'You\'re all caught up.',
+    'ui.terminalserver.messages.landing.truncated'    => 'More new messages remain beyond the scan limit.',
+    'ui.terminalserver.messages.badge.netmail'        => '{count} unread',
+    'ui.terminalserver.messages.badge.echomail'       => '{count} new, {areas} area(s)',
+    'ui.terminalserver.messages.badge.bulletins'      => '{count} new',
 ];

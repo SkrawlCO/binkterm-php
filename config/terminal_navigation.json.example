@@ -62,9 +62,12 @@
       "id": "messages",
       "label_fallback": "Messages",
       "items": [
-        { "id": "netmail",   "label_fallback": "Netmail",   "hotkey": "n", "action": "netmail" },
-        { "id": "echomail",  "label_fallback": "Echomail",  "hotkey": "e", "action": "echomail" },
-        { "id": "bulletins", "label_fallback": "Bulletins", "hotkey": "b", "action": "bulletins" },
+        { "id": "netmail",   "label_fallback": "Netmail",   "hotkey": "n", "action": "netmail",
+          "presentation": { "badge": "messages.netmail_unread" } },
+        { "id": "echomail",  "label_fallback": "Echomail",  "hotkey": "e", "action": "echomail",
+          "presentation": { "badge": "messages.echomail_new" } },
+        { "id": "bulletins", "label_fallback": "Bulletins", "hotkey": "b", "action": "bulletins",
+          "presentation": { "badge": "messages.bulletins_new" } },
         { "id": "qwk",       "label_fallback": "QWK Offline Mail", "hotkey": "q", "action": "qwk", "access": "feature:qwk" }
       ]
     },

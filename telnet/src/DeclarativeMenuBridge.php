@@ -5,6 +5,9 @@ namespace BinktermPHP\TelnetServer;
 use BinktermPHP\Auth;
 use BinktermPHP\BbsConfig;
 use BinktermPHP\Config;
+use BinktermPHP\Newscan\NewscanSnapshot;
+use BinktermPHP\Newscan\TerminalNewscanLanding;
+use BinktermPHP\Newscan\UnifiedNewscanService;
 use BinktermPHP\Terminal\Navigation\AccessContext;
 use BinktermPHP\Terminal\Navigation\NavigationConfig;
 use BinktermPHP\Terminal\Navigation\NavigationRendererFactory;
@@ -24,6 +27,9 @@ use BinktermPHP\Terminal\Navigation\TerminalActionCatalog;
  */
 final class DeclarativeMenuBridge
 {
+    /** Lazily created only when a caller actually opens the Messages landing. */
+    private ?UnifiedNewscanService $newscanService = null;
+
     public function __construct(private readonly BbsSession $server)
     {
     }
@@ -81,13 +87,29 @@ final class DeclarativeMenuBridge
             );
 
             $locale  = (string) ($state['locale'] ?? 'en');
+
+            // The authored Messages landing: one per-session snapshot of the
+            // canonical newscan plan feeds both the STATUS summary and the
+            // per-destination MENU badges. It is resolved lazily (only when the
+            // caller actually opens Messages), reused across cursor movement,
+            // and invalidated at the action boundary below so reading mail and
+            // returning shows fresh counts.
+            $messagesLanding = $this->messagesLanding($state);
+            $presenceBadge   = $this->liveBadgeResolver($state);
+            $badgeResolver   = static function (string $signal) use ($presenceBadge, $messagesLanding): ?string {
+                return str_starts_with($signal, 'messages.')
+                    ? ($messagesLanding['badge'])($signal)
+                    : $presenceBadge($signal);
+            };
+
             $builder = new NavigationScreenBuilder(
                 $registry,
                 fn (?string $key, string $fallback, string $loc) => $key === null || $key === ''
                     ? $fallback
                     : $this->server->t($key, $fallback, [], $loc),
-                $this->liveBadgeResolver($state),
+                $badgeResolver,
                 fn (string $loc): ?string => $this->server->recentCallersLine($loc, max(8, $ctx->cols() - 8)),
+                $messagesLanding['summary'],
             );
 
             // Presentation: an optional, validated ANSI theme frames the
@@ -112,8 +134,11 @@ final class DeclarativeMenuBridge
             // the R5 screen we are about to redraw. Drop it so it cannot be read
             // as an R5 keystroke (the reported "Q on a child screen logs you
             // off" bug).
-            $onActionBoundary = function () use (&$state): void {
+            $onActionBoundary = function () use (&$state, $messagesLanding): void {
                 $state['pushback'] = '';
+                // A destination may have marked mail read; drop the landing
+                // snapshot so the next Messages redraw reflects the new state.
+                ($messagesLanding['invalidate'])();
             };
 
             $this->server->logInfo('Declarative navigation runtime: definition "' . $definition->id . '"');
@@ -168,6 +193,97 @@ final class DeclarativeMenuBridge
             ));
         }
         // 'quit' terminates the runtime directly — it needs no binding.
+    }
+
+    /**
+     * The authored Messages landing's per-session state seam.
+     *
+     * One lazily-resolved snapshot of the canonical {@see UnifiedNewscanService}
+     * plan — a pure, write-free projection ({@see TerminalNewscanLanding}) — is
+     * shared by:
+     *   - `summary`    the STATUS "waiting for you" block for the `messages` node
+     *   - `badge`      the `messages.*` per-destination MENU annotations
+     *   - `invalidate` clears the snapshot; the runtime calls this at every
+     *                  action boundary so returning from a destination that may
+     *                  have marked mail read shows fresh counts on the next draw
+     *
+     * The snapshot survives cursor movement (the resolvers are called on every
+     * redraw but only recompute the plan after an invalidation or the TTL
+     * backstop, never per keystroke). Guests / unauthenticated sessions get no
+     * summary and no badges, and the themed screen simply renders a blank
+     * STATUS. Any failure to resolve the plan is logged and also yields nothing.
+     *
+     * @return array{summary:callable(string,string):?array<int,string>,badge:callable(string):?string,invalidate:callable():void}
+     */
+    private function messagesLanding(array $state): array
+    {
+        $userId  = (int) ($state['user_id'] ?? 0);
+        $isAdmin = !empty($state['is_admin']);
+        $isGuest = empty($state['username']) || $state['username'] === '_guest';
+        $locale  = (string) ($state['locale'] ?? 'en');
+
+        if ($isGuest || $userId <= 0) {
+            // Guests get no summary and no badges; the themed screen simply
+            // renders a blank STATUS.
+            return [
+                'summary'    => static fn (string $nodeId, string $loc): ?array => null,
+                'badge'      => static fn (string $signal): ?string => null,
+                'invalidate' => static function (): void {
+                },
+            ];
+        }
+
+        // TTL is a backstop only. onActionBoundary is the authoritative refresh;
+        // this just bounds staleness for a caller who sits idle on the landing
+        // while new mail arrives (the runtime redraws roughly every 30s).
+        $snapshot = new NewscanSnapshot(
+            fn (): \BinktermPHP\Newscan\NewscanPlan => ($this->newscanService ??= new UnifiedNewscanService())
+                ->plan(['user_id' => $userId, 'is_admin' => $isAdmin]),
+            90
+        );
+
+        // One projection per resolved plan, shared by the summary + badge
+        // resolvers so a redraw never formats twice and never re-queries. It is
+        // rebuilt only when the snapshot's generation advances (an invalidation
+        // or the TTL backstop) — never on cursor movement.
+        $projection = null; // array{summary:list<string>,badges:array<string,string>}|null
+        $projectionGen = -1;
+        $ensure = function () use (&$projection, &$projectionGen, $snapshot, $locale): ?array {
+            try {
+                $plan = $snapshot->plan();
+            } catch (\Throwable $e) {
+                $this->server->logInfo('Messages landing: newscan plan unavailable — ' . $e->getMessage());
+
+                return null;
+            }
+            if ($projection === null || $projectionGen !== $snapshot->generation()) {
+                $t = fn (string $k, string $f, array $args = []): string => $this->server->t($k, $f, $args, $locale);
+                $projection = TerminalNewscanLanding::project($plan, $t);
+                $projectionGen = $snapshot->generation();
+            }
+
+            return $projection;
+        };
+
+        return [
+            'summary' => static function (string $nodeId, string $loc) use ($ensure): ?array {
+                if ($nodeId !== 'messages') {
+                    return null;
+                }
+                $p = $ensure();
+
+                return $p === null ? null : ($p['summary'] ?? null);
+            },
+            'badge' => static function (string $signal) use ($ensure): ?string {
+                $p = $ensure();
+
+                return $p === null ? null : ($p['badges'][$signal] ?? null);
+            },
+            'invalidate' => static function () use (&$projection, $snapshot): void {
+                $snapshot->invalidate();
+                $projection = null;
+            },
+        ];
     }
 
     /**

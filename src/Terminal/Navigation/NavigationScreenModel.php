@@ -15,6 +15,13 @@ final class NavigationScreenModel
 {
     /**
      * @param array<int,NavigationScreenItem> $items visible items, in order
+     * @param array<int,string>|null $summary an authored, already-resolved
+     *        semantic STATUS/summary block for this node — plain text only, one
+     *        entry per line, in the order it should be shown. It is a pure
+     *        projection of existing authoritative state (never a query result
+     *        computed here) and replaces the ambient/activity STATUS content for
+     *        a themed node when present. `null` = no authored summary; `[]` is
+     *        treated the same as `null`.
      */
     public function __construct(
         public readonly string $nodeId,
@@ -26,7 +33,14 @@ final class NavigationScreenModel
         public readonly bool $homeAvailable,
         public readonly PresentationHints $presentation,
         public readonly ?string $ambient = null,
+        public readonly ?array $summary = null,
     ) {
+    }
+
+    /** The authored summary lines, or null when there is nothing authored. */
+    public function summaryLines(): ?array
+    {
+        return ($this->summary === null || $this->summary === []) ? null : $this->summary;
     }
 
     /** @return array<int,NavigationScreenItem> */

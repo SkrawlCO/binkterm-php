@@ -23,12 +23,21 @@ final class NavigationScreenBuilder
      *        to probe a hidden item. Off-session callers (preview, tests) pass null.
      * @param (callable(string):?string)|null $ambientResolver authenticated root-only
      *        ambient text, receiving the resolved locale. No input/navigation behavior.
+     * @param (callable(string,string):?array<int,string>)|null $summaryResolver
+     *        per-node authored semantic STATUS/summary: it receives the node id
+     *        and the resolved locale and returns already-translated plain-text
+     *        lines (a pure projection of existing authoritative state), or null
+     *        when the node has no authored summary. Unlike the ambient resolver
+     *        it is not root-gated — an authored non-root node (e.g. Messages) is
+     *        exactly its purpose. No input/navigation behaviour; performs no
+     *        writes. Off-session callers (preview, tests) pass null.
      */
     public function __construct(
         private readonly ActionRegistry $actions,
         private readonly mixed $translate,
         private readonly mixed $badgeResolver = null,
         private readonly mixed $ambientResolver = null,
+        private readonly mixed $summaryResolver = null,
     ) {
     }
 
@@ -61,6 +70,8 @@ final class NavigationScreenBuilder
             presentation: $node->presentation,
             ambient: $path->isRoot() && $ctx->isAuthenticated() && is_callable($this->ambientResolver)
                 ? ($this->ambientResolver)($locale) : null,
+            summary: is_callable($this->summaryResolver)
+                ? $this->normalizeSummary(($this->summaryResolver)($node->id, $locale)) : null,
         );
     }
 
@@ -139,6 +150,30 @@ final class NavigationScreenBuilder
         $text = is_string($text) ? trim($text) : '';
 
         return $text !== '' ? $text : null;
+    }
+
+    /**
+     * Coerce a summary resolver's result to a clean list of plain-text lines,
+     * or null. Anything that is not a non-empty list of strings becomes null so
+     * a malformed resolver simply falls back to the ambient/activity STATUS.
+     *
+     * @param mixed $lines
+     * @return array<int,string>|null
+     */
+    private function normalizeSummary(mixed $lines): ?array
+    {
+        if (!is_array($lines) || $lines === [] || !array_is_list($lines)) {
+            return null;
+        }
+        $clean = [];
+        foreach ($lines as $line) {
+            if (!is_string($line)) {
+                return null;
+            }
+            $clean[] = $line;
+        }
+
+        return $clean;
     }
 
     /** Resolve a label the same way item/node titles are resolved. */

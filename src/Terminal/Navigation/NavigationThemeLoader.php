@@ -17,6 +17,9 @@ namespace BinktermPHP\Terminal\Navigation;
  *     object with exactly MENU/FOOTER (1), plus STATUS/DESCRIPTION (2)
  *   - each region: integer row/col/width/height, all >= 1, wholly inside the
  *     geometry, and all rectangles must be disjoint
+ *   - optional `nodes` (schema 2 only): an object keyed by navigation node id,
+ *     each value `{ "geometries": { "80x24": { ...same shape as above... } } }`,
+ *     giving one authored non-root node its own trusted template + regions
  */
 final class NavigationThemeLoader
 {
@@ -120,11 +123,91 @@ final class NavigationThemeLoader
             }
         }
 
+        $nodeGeometries = [];
+        if (array_key_exists('nodes', $data)) {
+            if ($schema !== NavigationTheme::COMPOSITION_SCHEMA) {
+                $errors[] = new ValidationError('nodes', 'nodes requires schema 2', 'nodes');
+            } elseif (!is_array($data['nodes']) || !$this->isAssoc($data['nodes'])) {
+                $errors[] = new ValidationError('nodes', 'nodes must be an object keyed by node id', 'nodes');
+            } else {
+                foreach ($data['nodes'] as $nodeId => $nodeData) {
+                    if (is_string($nodeId) && str_starts_with($nodeId, '_')) {
+                        continue; // documentation key
+                    }
+                    if (!is_string($nodeId) || !preg_match('/^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/', $nodeId)) {
+                        $errors[] = new ValidationError('node_id', 'node id must be a simple token', "nodes[{$nodeId}]");
+                        continue;
+                    }
+                    $geos = $this->nodeGeometries($nodeId, $nodeData, $errors, $regionNames);
+                    if ($geos !== []) {
+                        $nodeGeometries[$nodeId] = $geos;
+                    }
+                }
+            }
+        }
+
         if ($errors !== []) {
             return NavigationThemeLoadResult::invalid($errors);
         }
 
-        return NavigationThemeLoadResult::ok(new NavigationTheme((string) $id, $enabled, $geometries, $schema, $rootOnly));
+        return NavigationThemeLoadResult::ok(
+            new NavigationTheme((string) $id, $enabled, $geometries, $schema, $rootOnly, $nodeGeometries)
+        );
+    }
+
+    /**
+     * Parse the `geometries` object of one entry in the theme's `nodes` map,
+     * with the same strictness and the same geometry validator as the theme's
+     * own top-level geometries.
+     *
+     * @param array<mixed> $errors passed by reference
+     * @param array<int,string> $regionNames
+     * @return array<string,NavigationThemeGeometry>
+     */
+    private function nodeGeometries(string $nodeId, mixed $nodeData, array &$errors, array $regionNames): array
+    {
+        $base = "nodes[{$nodeId}]";
+        if (!is_array($nodeData) || !$this->isAssoc($nodeData)) {
+            $errors[] = new ValidationError('node_shape', 'a node theme must be an object', $base);
+
+            return [];
+        }
+        foreach (array_keys($nodeData) as $key) {
+            if (is_string($key) && ($key === 'geometries' || str_starts_with($key, '_'))) {
+                continue;
+            }
+            $errors[] = new ValidationError('node_field', "unknown node theme field \"{$key}\"", $base);
+        }
+
+        $rawGeos = $nodeData['geometries'] ?? null;
+        if (!is_array($rawGeos) || !$this->isAssoc($rawGeos) || $rawGeos === []) {
+            $errors[] = new ValidationError('node_geometries', 'a node theme needs a non-empty geometries object', "{$base}.geometries");
+
+            return [];
+        }
+
+        $geometries = [];
+        foreach ($rawGeos as $key => $geoData) {
+            if (is_string($key) && str_starts_with($key, '_')) {
+                continue;
+            }
+            $path = "{$base}.geometries[{$key}]";
+            if ($key !== NavigationTheme::SUPPORTED_GEOMETRY) {
+                $errors[] = new ValidationError(
+                    'geometry_unsupported',
+                    sprintf("geometry '%s' is not supported; only %s may be themed", $key, NavigationTheme::SUPPORTED_GEOMETRY),
+                    $path
+                );
+                continue;
+            }
+            [$cols, $rows] = $this->parseGeometryKey($key);
+            $geo = $this->geometry($cols, $rows, $geoData, $path, $errors, $regionNames);
+            if ($geo !== null) {
+                $geometries[$key] = $geo;
+            }
+        }
+
+        return $geometries;
     }
 
     /**
