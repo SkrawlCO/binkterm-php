@@ -484,13 +484,17 @@ class MailUtils
     }
 
     /**
-     * Fetches dashboard stats for the main menu via /api/dashboard/stats.
+     * Fetches dashboard stats for the main menu.
      *
      * Returns unread/new counts for messaging, online users, bulletins, and
-     * credits. Replaces getMessageCounts() for the main menu — one API call
+     * credits. Replaces getMessageCounts() for the main menu — one lookup
      * instead of two, and provides true unread/new figures instead of totals.
      *
-     * @param string $apiBase Base URL for API requests
+     * Served in-process by {@see \BinktermPHP\Terminal\TerminalMenuData} (the
+     * same shared services `GET /api/dashboard/stats` uses) — no HTTP round
+     * trip out to the public site URL.
+     *
+     * @param string $apiBase Retained for signature stability; unused.
      * @param string $session Session token for authentication
      * @return array{
      *   unread_netmail: int,
@@ -511,7 +515,7 @@ class MailUtils
             'crossroads'       => null,
         ];
 
-        $response = TelnetUtils::apiRequest($apiBase, 'GET', '/api/dashboard/stats', null, $session);
+        $response = (new \BinktermPHP\Terminal\TerminalMenuData())->dashboardStats($session);
         if (($response['status'] ?? 0) !== 200 || empty($response['data'])) {
             return $defaults;
         }

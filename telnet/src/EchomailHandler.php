@@ -39,6 +39,9 @@ class EchomailHandler
     /** Canonical owner of the per-user terminal browser state (page positions, sort). */
     private ?\BinktermPHP\Terminal\TerminalMailState $mailState = null;
 
+    /** Network-free equivalent of the `GET /api/echoareas` fetch. */
+    private ?\BinktermPHP\Terminal\TerminalMenuData $menuData = null;
+
     /**
      * Create a new EchomailHandler instance
      *
@@ -64,6 +67,19 @@ class EchomailHandler
     protected function mailState(): \BinktermPHP\Terminal\TerminalMailState
     {
         return $this->mailState ??= new \BinktermPHP\Terminal\TerminalMailState();
+    }
+
+    /**
+     * Fetch the user's echoareas without a `GET /api/echoareas` HTTP round trip.
+     * Same envelope shape as {@see TelnetUtils::apiRequest()}.
+     *
+     * @return array{status:int,data:array<string,mixed>,error:?string}
+     */
+    private function fetchEchoareas(string $session, bool $subscribedOnly): array
+    {
+        $this->menuData ??= new \BinktermPHP\Terminal\TerminalMenuData();
+
+        return $this->menuData->echoareas($session, $subscribedOnly);
     }
 
     /**
@@ -104,10 +120,7 @@ class EchomailHandler
 
         while (true) {
             $locale = $state['locale'];
-            $url    = $allAreasMode
-                ? '/api/echoareas'
-                : '/api/echoareas?subscribed_only=true';
-            $response = TelnetUtils::apiRequest($this->apiBase, 'GET', $url, null, $session);
+            $response = $this->fetchEchoareas($session, !$allAreasMode);
             $allAreas = $response['data']['echoareas'] ?? [];
 
             if (!$allAreas) {
@@ -1777,7 +1790,7 @@ class EchomailHandler
     {
         $locale   = $state['locale'];
         $shell    = TerminalShellFactory::create($this->server, $state);
-        $response = TelnetUtils::apiRequest($this->apiBase, 'GET', '/api/echoareas?subscribed_only=true', null, $session);
+        $response = $this->fetchEchoareas($session, true);
         $allAreas = array_values(array_filter(
             $response['data']['echoareas'] ?? [],
             fn(array $a): bool => $this->formatEchoareaIdentifier($a['tag'] ?? '', $a['domain'] ?? '') !== $primaryArea
@@ -2375,7 +2388,7 @@ class EchomailHandler
         $perPage = MailUtils::getMessagesPerPage($state);
         $shell   = TerminalShellFactory::create($this->server, $state);
 
-        $response = TelnetUtils::apiRequest($this->apiBase, 'GET', '/api/echoareas?subscribed_only=true', null, $session);
+        $response = $this->fetchEchoareas($session, true);
         $allAreas = array_values(array_filter(
             $response['data']['echoareas'] ?? [],
             fn(array $a): bool => $this->formatEchoareaIdentifier($a['tag'] ?? '', $a['domain'] ?? '') !== $sourceArea

@@ -1043,9 +1043,18 @@ Terminal code must not depend on web controllers, route handlers, Twig/view help
 > (`EchomailHandler`/`NetmailHandler::fetchMessagesPage()`) and message detail
 > (`TerminalMessageService::echomailDetail()` / `netmailDetail()`, which
 > reproduce the routes' REPLYTO enrichment, activity tracking and 404 envelope
-> exactly). `apiRequest()` stays the path for routes that carry real
-> controller-side validation not yet factored into a service
-> (`/api/user/terminal-mail-state`, `/api/echoareas`) and for mutations.
+> exactly). The main-menu badge counts and the Echomail area picker take the
+> same treatment: `MailUtils::getDashboardStats()` and
+> `EchomailHandler`'s area fetches go through
+> `BinktermPHP\Terminal\TerminalMenuData` (`dashboardStats()` /
+> `echoareas()`), which call `DashboardStatsService::getStats()` +
+> `Crossroads\TerminalDashboardSignal::compose()` and
+> `EchoareaManager::listForUser()` — the same shared services
+> `GET /api/dashboard/stats` and `GET /api/echoareas` now delegate to. Those
+> methods return the `apiRequest()` envelope shape, and a contained failure
+> yields a non-200 envelope so the caller's existing fallback engages.
+> `apiRequest()` stays the path for routes that carry real controller-side
+> validation not yet factored into a service and for mutations.
 
 ### `TelnetUtils::apiRequest()` — Response Structure
 
@@ -1128,7 +1137,7 @@ When adding any new user-visible string in a handler:
 
 ## API Endpoints Used
 
-The terminal server uses `TelnetUtils::apiRequest()` for most operations. A subset of direct internal calls are made for performance-critical paths: session validation (`Auth`), login activity tracking (`ActivityTracker`), nodelist presence check, feature flags (`BbsConfig`, `BinkpConfig`), and system news (`AppearanceConfig`).
+The terminal server uses `TelnetUtils::apiRequest()` for most operations. A subset of direct internal calls are made for performance-critical paths: session validation (`Auth`), login activity tracking (`ActivityTracker`), nodelist presence check, feature flags (`BbsConfig`, `BinkpConfig`), system news (`AppearanceConfig`), message list/detail reads (`MessageHandler` / `TerminalMessageService`), and the main-menu badge counts + Echomail area list (`Terminal\TerminalMenuData` → `DashboardStatsService` / `EchoareaManager::listForUser()`).
 
 Primary endpoints used by `BbsSession` and the core handlers:
 
