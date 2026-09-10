@@ -1,6 +1,14 @@
 <?php
 
 return [
+    'ui.dashboard.newscan.title' => 'Quoi de neuf ?',
+    'ui.dashboard.newscan.caught_up' => 'Vous êtes à jour.',
+    'ui.dashboard.newscan.netmail' => 'Netmail non lu',
+    'ui.dashboard.newscan.echomail' => 'Nouvel echomail',
+    'ui.dashboard.newscan.bulletins' => 'Bulletins non lus',
+    'ui.dashboard.newscan.areas' => 'Zones : {count}',
+    'ui.dashboard.newscan.capped' => 'Limite de recherche atteinte ; d\'autres nouveaux messages peuvent être disponibles.',
+    'ui.dashboard.newscan.unavailable' => 'Newscan est temporairement indisponible.',
     'ui.recent_callers.title' => 'Visiteurs récents',
     'ui.recent_callers.empty' => 'Aucun visiteur récent pour le moment.',
     'time.soon' => 'Bientôt',

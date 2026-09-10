@@ -1,0 +1,37 @@
+<div class="dash-card-wrapper" data-card-id="newscan">
+    <div class="card">
+        <div class="card-header"><h6 class="mb-0">{{ t('ui.dashboard.newscan.title', {}, locale, ['common']) }}</h6></div>
+        <div class="card-body">
+            {% if newscan_summary is null %}
+                <p class="text-muted small mb-0">{{ t('ui.dashboard.newscan.unavailable', {}, locale, ['common']) }}</p>
+            {% elseif newscan_summary.empty and not newscan_summary.truncated %}
+                <p class="text-muted small mb-0">{{ t('ui.dashboard.newscan.caught_up', {}, locale, ['common']) }}</p>
+            {% else %}
+                <div class="row g-3">
+                    <div class="col-sm-4">
+                        <a href="/netmail" class="d-flex justify-content-between gap-2 text-decoration-none">
+                            <span>{{ t('ui.dashboard.newscan.netmail', {}, locale, ['common']) }}</span>
+                            <strong>{{ newscan_summary.netmail }}</strong>
+                        </a>
+                    </div>
+                    <div class="col-sm-4">
+                        <a href="/echomail" class="d-flex justify-content-between gap-2 text-decoration-none">
+                            <span>{{ t('ui.dashboard.newscan.echomail', {}, locale, ['common']) }}</span>
+                            <strong>{{ newscan_summary.echomail }}</strong>
+                        </a>
+                        <span class="text-muted small">{{ t('ui.dashboard.newscan.areas', {'count': newscan_summary.areas}, locale, ['common']) }}</span>
+                    </div>
+                    <div class="col-sm-4">
+                        <a href="/bulletins?unread=1" class="d-flex justify-content-between gap-2 text-decoration-none">
+                            <span>{{ t('ui.dashboard.newscan.bulletins', {}, locale, ['common']) }}</span>
+                            <strong>{{ newscan_summary.bulletins }}</strong>
+                        </a>
+                    </div>
+                </div>
+                {% if newscan_summary.truncated %}
+                    <p class="text-muted small mt-3 mb-0">{{ t('ui.dashboard.newscan.capped', {}, locale, ['common']) }}</p>
+                {% endif %}
+            {% endif %}
+        </div>
+    </div>
+</div>

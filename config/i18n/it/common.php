@@ -1,6 +1,14 @@
 <?php
 
 return [
+    'ui.dashboard.newscan.title' => 'Novità',
+    'ui.dashboard.newscan.caught_up' => 'Sei in pari.',
+    'ui.dashboard.newscan.netmail' => 'Netmail non letto',
+    'ui.dashboard.newscan.echomail' => 'Nuova echomail',
+    'ui.dashboard.newscan.bulletins' => 'Bollettini non letti',
+    'ui.dashboard.newscan.areas' => 'Aree: {count}',
+    'ui.dashboard.newscan.capped' => 'Limite di scansione raggiunto; potrebbero esserci altri nuovi messaggi.',
+    'ui.dashboard.newscan.unavailable' => 'Newscan è temporaneamente non disponibile.',
     'ui.recent_callers.title' => 'Visitatori recenti',
     'ui.recent_callers.empty' => 'Nessun visitatore recente.',
     // Relative time strings used by app.js formatting helpers.

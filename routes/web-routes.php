@@ -474,6 +474,18 @@ SimpleRouter::get('/', function() {
         $dashboardLayout = \BinktermPHP\DashboardCardRegistry::getDefaultLayout($availableCards);
     }
 
+    // Use the terminal's unchanged canonical plan; summary construction never opens
+    // content or advances read state. Hidden cards do not incur a scan.
+    $newscanSummary = null;
+    if (isset($availableCards['newscan']) && !in_array('newscan', $dashboardLayout['hidden'] ?? [], true)) {
+        try {
+            $newscanPlan = (new \BinktermPHP\Newscan\UnifiedNewscanService())->plan($user);
+            $newscanSummary = \BinktermPHP\Newscan\WebNewscanSummary::fromPlan($newscanPlan);
+        } catch (\Throwable $e) {
+            getServerLogger()->warning('Dashboard Newscan summary failed: ' . $e->getMessage());
+        }
+    }
+
     // Compose the Crossroads pulse only when the card is available AND the
     // viewer has not hidden it — one ExperienceState read + one bounded
     // recent-footprint read, reduced by a pure view-model builder. No new
@@ -501,6 +513,7 @@ SimpleRouter::get('/', function() {
     }
 
     $template->renderResponse('dashboard.twig', [
+        'newscan_summary' => $newscanSummary,
         'crossroads_available' => $crossroadsAvailable,
         'crossroads_pulse' => $crossroadsPulse,
         'system_news_content' => $systemNewsContent,
