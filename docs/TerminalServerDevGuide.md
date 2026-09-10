@@ -567,6 +567,16 @@ post-login setup — before the `session-init` response optionally overrides the
 An SSH protocol-authenticated session skips the login branch and so never enters
 the short pre-auth window.
 
+The idle deadline is re-checked only at the top of `readTelnetLineWithTimeout()`,
+between complete lines. So when `readTelnetLine()` has consumed only protocol
+chatter (`"\x00"`), no line has started, and nothing more is immediately
+readable, it returns the `LINE_CHATTER_ONLY` sentinel instead of blocking on the
+next byte; the wrapper maps that to a soft timeout so the caller loops back to
+the deadline check. Without this, a real terminal that streams
+TTYPE/NAWS/CHARSET/DA/DSR chatter but never presses Enter could sit past the
+idle timeout (bounded only by the socket's 300s `stream_set_timeout`). Chatter
+never refreshes `last_activity`; a real entered line still does.
+
 One behaviour change in `readRawChar()`: after consuming a DO/DONT/WILL/WONT
 triple with nothing else buffered it now returns `"\x00"` (benign no-op),
 matching the existing SB branch, instead of `null` (which callers treat as a

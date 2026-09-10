@@ -212,6 +212,163 @@ final class TelnetPreAuthIdleTimeoutTest extends TestCase
         fclose($client);
     }
 
+    // ---- line reader must not block past the idle deadline on protocol chatter
+
+    private const IAC = "\xff";
+    private const CMD_DO = "\xfd";
+    private const OPT_NAWS = "\x1f";
+
+    /**
+     * The human-acceptance failure: a real terminal sends Telnet negotiation
+     * chatter but never presses Enter. Pre-fix, readTelnetLine() consumed the
+     * chatter and then blocked on the next byte, so the idle deadline (only
+     * re-checked between lines) was never reached. It must now yield.
+     */
+    public function testChatterOnlyReadYieldsInsteadOfBlocking(): void
+    {
+        [$session, $server, $client] = $this->makeWiredSession(blocking: true, readTimeout: 2);
+
+        // Under the deadline at entry, so the top-of-function check does not
+        // short-circuit — the chatter path itself must be exercised.
+        $state = $this->baseState();
+        $state['idle_disconnect_timeout'] = 3;
+        $state['idle_warning_timeout']    = 3;
+        $state['last_activity']           = time();
+        $before = $state['last_activity'];
+
+        fwrite($client, self::IAC . self::CMD_DO . self::OPT_NAWS); // lone negotiation, no CR/LF
+
+        $start = microtime(true);
+        [$line, $timedOut, $shouldDisconnect] = $this->invoke(
+            $session,
+            'readTelnetLineWithTimeout',
+            [$server, &$state]
+        );
+        $elapsed = microtime(true) - $start;
+
+        self::assertLessThan(2.0, $elapsed, 'chatter-only read must not block on the next byte');
+        self::assertSame('', $line);
+        self::assertTrue($timedOut, 'chatter-only must surface as a soft timeout so the caller re-checks the deadline');
+        self::assertFalse($shouldDisconnect);
+        self::assertSame($before, $state['last_activity'], 'protocol chatter must not refresh last_activity');
+        self::assertFalse($state['idle_warned']);
+
+        fclose($server);
+        fclose($client);
+    }
+
+    /**
+     * And once the soft-timeout loop carries the session past the deadline, the
+     * normal idle-disconnect path fires (message written, shouldDisconnect set).
+     */
+    public function testChatterYieldStillReachesIdleDisconnectPastTheDeadline(): void
+    {
+        [$session, $server, $client] = $this->makeWiredSession(blocking: true, readTimeout: 2);
+
+        $state = $this->baseState();
+        $state['idle_disconnect_timeout'] = 2;
+        $state['idle_warning_timeout']    = 2;
+        $state['last_activity']           = time() - 5; // already past the deadline
+
+        fwrite($client, self::IAC . self::CMD_DO . self::OPT_NAWS);
+
+        [$line, $timedOut, $shouldDisconnect] = $this->invoke(
+            $session,
+            'readTelnetLineWithTimeout',
+            [$server, &$state]
+        );
+
+        self::assertNull($line);
+        self::assertTrue($timedOut);
+        self::assertTrue($shouldDisconnect);
+        self::assertNotSame('', $this->drain($client), 'the existing idle-disconnect message must be written');
+
+        fclose($server);
+        fclose($client);
+    }
+
+    public function testChatterThenRealLineReturnsTheLineAndAdvancesActivity(): void
+    {
+        [$session, $server, $client] = $this->makeWiredSession(blocking: true, readTimeout: 2);
+
+        $state = $this->baseState();
+        $state['idle_disconnect_timeout'] = 90;
+        $state['idle_warning_timeout']    = 90;
+        $state['last_activity']           = time() - 10;
+        $before = $state['last_activity'];
+
+        // Negotiation immediately followed by a real menu choice.
+        fwrite($client, self::IAC . self::CMD_DO . self::OPT_NAWS . "L\r\n");
+
+        [$line, $timedOut, $shouldDisconnect] = $this->invoke(
+            $session,
+            'readTelnetLineWithTimeout',
+            [$server, &$state]
+        );
+
+        self::assertSame('L', $line);
+        self::assertFalse($timedOut);
+        self::assertFalse($shouldDisconnect);
+        self::assertGreaterThan($before, $state['last_activity'], 'a real line refreshes last_activity');
+        self::assertFalse($state['idle_warned']);
+
+        fclose($server);
+        fclose($client);
+    }
+
+    public function testReadTelnetLineReturnsTheChatterSentinelDirectly(): void
+    {
+        [$session, $server, $client] = $this->makeWiredSession(blocking: true, readTimeout: 2);
+        $state = $this->baseState();
+
+        fwrite($client, self::IAC . self::CMD_DO . self::OPT_NAWS);
+
+        $result = $this->invoke($session, 'readTelnetLine', [$server, &$state]);
+
+        self::assertSame($this->chatterSentinel(), $result);
+        self::assertStringContainsString("\x00", $result, 'sentinel must be unrepresentable as real input');
+
+        fclose($server);
+        fclose($client);
+    }
+
+    public function testGenuineEofStillReturnsNullNotTheSentinel(): void
+    {
+        [$session, $server, $client] = $this->makeWiredSession(blocking: true, readTimeout: 2);
+        $state = $this->baseState();
+        $state['idle_disconnect_timeout'] = 90;
+        $state['idle_warning_timeout']    = 90;
+
+        fclose($client); // peer gone
+
+        [$line, $timedOut, $shouldDisconnect] = $this->invoke(
+            $session,
+            'readTelnetLineWithTimeout',
+            [$server, &$state]
+        );
+
+        self::assertNull($line, 'EOF still yields null, not the chatter sentinel');
+        self::assertFalse($timedOut);
+
+        fclose($server);
+    }
+
+    public function testCtrlCStillReturnsNull(): void
+    {
+        [$session, $server, $client] = $this->makeWiredSession(blocking: true, readTimeout: 2);
+        $state = $this->baseState();
+
+        fwrite($client, "\x03"); // ETX
+
+        $result = $this->invoke($session, 'readTelnetLine', [$server, &$state]);
+
+        self::assertNull($result, 'Ctrl-C semantics unchanged: readTelnetLine returns null');
+        self::assertStringContainsString('^C', $this->drain($client));
+
+        fclose($server);
+        fclose($client);
+    }
+
     // ---- SSH non-impact (source guardrail) -------------------------------
 
     /**
@@ -249,20 +406,35 @@ final class TelnetPreAuthIdleTimeoutTest extends TestCase
 
     // ---- helpers --------------------------------------------------------
 
-    /** @return array{0:BbsSession,1:resource,2:resource} */
-    private function makeWiredSession(): array
+    /**
+     * @param bool $blocking when true the server-side socket stays blocking with
+     *        a short read timeout — used to prove the chatter-only path yields
+     *        instead of blocking on the next byte (a regression would stall for
+     *        at most $readTimeout seconds, not forever).
+     * @return array{0:BbsSession,1:resource,2:resource}
+     */
+    private function makeWiredSession(bool $blocking = false, int $readTimeout = 2): array
     {
         $pair = stream_socket_pair(STREAM_PF_UNIX, STREAM_SOCK_STREAM, 0);
         if ($pair === false) {
             self::markTestSkipped('stream_socket_pair() unavailable');
         }
         [$server, $client] = $pair;
-        stream_set_blocking($server, false);
+        stream_set_blocking($server, !$blocking ? false : true);
         stream_set_blocking($client, false);
+        if ($blocking) {
+            stream_set_timeout($server, $readTimeout);
+        }
 
         $session = new BbsSession($server, 'http://127.0.0.1', false, false, false, false);
 
         return [$session, $server, $client];
+    }
+
+    /** The private sentinel readTelnetLine() returns for chatter-only reads. */
+    private function chatterSentinel(): string
+    {
+        return (new \ReflectionClassConstant(BbsSession::class, 'LINE_CHATTER_ONLY'))->getValue();
     }
 
     private function makeSession(): BbsSession

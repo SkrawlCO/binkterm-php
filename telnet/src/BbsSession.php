@@ -101,6 +101,15 @@ class BbsSession
     public const AUTH_IDLE_DISCONNECT_DEFAULT = 420;
     public const PREAUTH_IDLE_TIMEOUT_DEFAULT = 90;
 
+    /**
+     * Sentinel returned by {@see readTelnetLine()} when it consumed only Telnet
+     * protocol chatter (negotiation, terminal reports) with no application line
+     * started and nothing more immediately readable. It tells the idle-aware
+     * caller to yield and re-check its deadline rather than block on the next
+     * byte. Contains a NUL, so it can never collide with a real input line.
+     */
+    private const LINE_CHATTER_ONLY = "\x00chatter-only";
+
     /** @var resource */
     private $conn;
     private string $apiBase;
@@ -3687,6 +3696,11 @@ class BbsSession
         if ($hasData === 0)     { $this->maybeSendKeepalive($conn); return ['', true, false]; }
 
         $line = $this->readTelnetLine($conn, $state);
+        if ($line === self::LINE_CHATTER_ONLY) {
+            // Only Telnet protocol chatter was available — not user input. Loop
+            // back to the idle-deadline check without refreshing last_activity.
+            return ['', true, false];
+        }
         if ($line !== null) {
             $state['last_activity'] = time();
             $state['idle_warned']   = false;
@@ -3819,6 +3833,17 @@ class BbsSession
                 return null;
             }
             if ($char === "\x00") {
+                // Telnet protocol chatter, not user input. If no line has begun
+                // and nothing more is waiting, yield to the idle-aware caller
+                // instead of blocking on the next byte — the idle deadline is
+                // only re-checked between lines, so a client that streams
+                // chatter but never presses Enter would otherwise sit past it.
+                if ($line === '' && ($state['pushback'] ?? '') === '') {
+                    $r = [$conn]; $w = $e = null;
+                    if (@stream_select($r, $w, $e, 0, 0) < 1) {
+                        return self::LINE_CHATTER_ONLY;
+                    }
+                }
                 continue;
             }
 
