@@ -1938,6 +1938,16 @@ class DoorHandler
 
         $wsBuf = '';
 
+        // Defence-in-depth session-liveness guard. The kick cascade
+        // (cascadeDoorSessions -> DoorBridgeControlClient::terminate + endSession)
+        // is the primary path and normally closes $wsSock immediately when a
+        // session is revoked. This throttled re-check covers the case where that
+        // path fails (bridge unreachable, or the door runtime keeps the socket
+        // open): it just stops the relay so the caller's normal post-door
+        // teardown runs. It never terminates the door runtime itself.
+        $livenessIntervalSeconds = 15.0;
+        $lastLivenessCheckAt = microtime(true);
+
         try {
             while (true) {
                 if (!is_resource($conn) || feof($conn)) {
@@ -1945,6 +1955,14 @@ class DoorHandler
                 }
                 if (!is_resource($wsSock) || feof($wsSock)) {
                     break;
+                }
+
+                $now = microtime(true);
+                if (($now - $lastLivenessCheckAt) >= $livenessIntervalSeconds) {
+                    $lastLivenessCheckAt = $now;
+                    if (!$this->server->authSessionStillValid()) {
+                        break;
+                    }
                 }
 
                 $read = [$conn, $wsSock];

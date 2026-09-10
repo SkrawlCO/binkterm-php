@@ -2212,6 +2212,36 @@ class BbsSession
     }
 
     /**
+     * Whether this session's authenticated BBS session is still valid.
+     *
+     * A read-only, best-effort check for long-running inner loops (e.g. the
+     * managed-door relay in {@see DoorHandler::relayLoop()}) that do not go
+     * through {@see pumpRealtimeAndCheckSession()} and so would otherwise keep a
+     * caller connected to a door after their session was revoked or expired.
+     *
+     * Returns:
+     *   - true  for a pre-auth session (nothing to check)
+     *   - false once {@see terminateRevokedSession()} has fired
+     *   - false only when the store positively reports the session invalid
+     *   - true  on any transient error (never disconnect a live caller on a
+     *     DB hiccup — the normal 60s backstop will catch a real revocation)
+     */
+    public function authSessionStillValid(): bool
+    {
+        if ($this->authSessionId === null) {
+            return true;
+        }
+        if ($this->sessionTerminated) {
+            return false;
+        }
+        try {
+            return (bool) (new \BinktermPHP\Auth())->validateSession($this->authSessionId);
+        } catch (\Throwable $e) {
+            return true;
+        }
+    }
+
+    /**
      * Show a fixed, localized caller-facing message for the reason code and do
      * best-effort session cleanup. Never renders arbitrary server text.
      */
