@@ -227,6 +227,30 @@ to the existing presence resolver. Activation also requires a daemon restart
 (`DeclarativeMenuBridge` is eagerly included). See
 [the exact layout and activation boundary](TerminalNavigationFramework.md#authored-messages-landing-m2-slice-state-forward-messages).
 
+### Authored People landing (M2, who's here / who was)
+
+The `people` declarative node reuses the **same two seams** — `nodes.people`
+theme geometry + the `summaryResolver` — with no framework change.
+`DeclarativeMenuBridge::peopleLanding()` mirrors `messagesLanding()`:
+`PeopleRosterSnapshot` (a `NewscanSnapshot`-shaped bounded cache: provider +
+TTL + injectable clock, `value()` / `generation()` / `invalidate()`) wraps one
+`Auth::getOnlineSessions(15)` read reduced by `PeopleLanding::fromSessions()`
+(dedupe by user, viewer's own sessions dropped, only `username` +
+`public_activity` retained) plus `BbsSession::recentCallersLine()`.
+`PeopleLanding::project()` is the pure two-line formatter — line 1 live
+(`Online now: …` / `The board is quiet right now.`), line 2 the historical
+Recent Callers line or blank — unit-tested off-session
+(`tests/Unit/PeopleLandingCompositionTest.php`). The snapshot is lazy, reused
+across cursor movement (`generation()` gates the projection rebuild), and
+`invalidate()`d from `onActionBoundary` so returning from Who's Online refreshes
+the roster; a 10s TTL is the staleness backstop. The render is write-free and
+never mutates presence. Guests and a presence-read failure return a null summary
+→ blank STATUS. This slice adds **no** `presentation.badge` signals, so the only
+activation step beyond selecting the theme example is the daemon restart. The
+summary resolver routes `people` to `peopleLanding()`, `messages` to
+`messagesLanding()`, everything else to null. See
+[the exact layout and activation boundary](TerminalNavigationFramework.md#authored-people-landing-m2-slice-whos-here--who-was).
+
 ### Authored Echomail area browser (M2)
 
 `EchomailHandler::showEchoareas()` builds a `DenseList` and runs it through

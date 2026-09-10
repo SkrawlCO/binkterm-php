@@ -583,6 +583,69 @@ throughout. Technical tests are not visual/product acceptance. Rich
 plan-derived selected-destination context, and other authored spaces, remain
 deferred.
 
+## Authored People landing (M2 Slice: who's here / who was)
+
+The `people` navigation node becomes an authored 80x24 screen using the **same**
+`nodes` theme key and `summaryResolver` seam as the Messages landing — no new
+framework. It answers one narrow question: **who is around right now, and who
+was here recently.** The four existing destinations (Who's Online, Local Chat,
+Shoutbox, Polls) are unchanged in order, hotkey, action and access gate.
+
+The supplied composition adds a `nodes.people` block to
+`config/terminal_theme_m2_messages.json.example` with
+`telnet/screens/nav-people-m2.ans`, reusing the Messages node's region
+rectangle:
+
+| Region | Position | Content |
+|---|---|---|
+| STATUS | Rows 8–9, columns 5–76 | Exactly two lines. Line 1 — **live**: `Online now: <names>` (name, plus intentional public activity in parens; bounded to three names then `(+N more)`), or `The board is quiet right now.` when no one else is visible. Line 2 — **historical**: the existing Recent Callers line verbatim, or blank when there is no history. The two are never blurred; a recent caller is never implied to still be on. |
+| MENU | Rows 12–18, columns 5–76 | The four destinations, unchanged. No per-item badges in this slice. |
+| DESCRIPTION | Rows 20–21, columns 5–76 | The selected destination's existing `description_fallback`. |
+| FOOTER | Row 23, columns 5–76 | The runtime's real key hints, unchanged. |
+
+### Projection seam
+
+`DeclarativeMenuBridge::peopleLanding()` mirrors `messagesLanding()`. One
+`PeopleRosterSnapshot` (structurally identical to `NewscanSnapshot`: provider +
+TTL + injectable clock, `value()` / `generation()` / `invalidate()`) wraps a
+single bounded read — `Auth::getOnlineSessions(15)` reduced by
+`PeopleLanding::fromSessions()` (dedupe by user, the viewer's own sessions
+removed, **only** `username` + `public_activity` carried forward — never a
+service, IP, internal `activity`, real name, FTN address or last-seen field),
+plus the shared `BbsSession::recentCallersLine()` the front door already uses.
+`PeopleLanding::project()` is the pure two-line formatter, unit-tested
+off-session. The snapshot is lazy (first People draw), reused across cursor
+movement (generation gate), and invalidated at `onActionBoundary` so returning
+from Who's Online redraws with a fresh roster; a 10-second TTL is a staleness
+backstop. The render is write-free and never touches presence. Guests and a
+presence-read failure yield a null summary → blank STATUS (never a false "quiet"
+claim). Missing/invalid/overflowing theme, wrong geometry or no colour/charset
+fall back to the flowing People submenu; navigation is never stranded.
+
+The Recent Callers line reuse is deliberate: `recentCallersLine()` was already
+non-root-only at the source (only the *ambient* STATUS slot is root-gated in
+`NavigationScreenBuilder`), so the People summary calls it directly. Root
+behaviour is unchanged.
+
+### Activation
+
+Same shape as the Messages landing and the **same** daemon restart requirement.
+Two operator steps (there is no nav-config edit — this slice adds no badges):
+
+1. Select `config/terminal_theme_m2_messages.json.example` as
+   `config/terminal_theme.json` (it now carries `nodes.messages` **and**
+   `nodes.people`), or add just the `nodes.people` block to the live theme.
+2. Restart the Telnet/SSH daemons with explicit authorization.
+
+The implementation transaction does neither step.
+
+Minimal SyncTerm acceptance after activation: reconnect at effective 80x24 on a
+quiet board, enter People, confirm it honestly says the board is quiet while
+showing bounded recent-caller history if any; navigate all four destinations;
+enter Who's Online and return (child unchanged); with another visible caller
+present, re-enter People and confirm the live line changes honestly; return to
+the front door and confirm the root Recent Callers line is unchanged.
+
 ## Authored Echomail area browser (M2)
 
 The Echomail area list — `EchomailHandler::showEchoareas()`, a `DenseList` on the

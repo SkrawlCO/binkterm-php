@@ -836,6 +836,10 @@ return [
     'ui.terminalserver.messages.badge.netmail'        => '{count} unread',
     'ui.terminalserver.messages.badge.echomail'       => '{count} new, {areas} area(s)',
     'ui.terminalserver.messages.badge.bulletins'      => '{count} new',
+    // People M2 landing (state-forward authored screen)
+    'ui.terminalserver.people.landing.quiet'          => 'The board is quiet right now.',
+    'ui.terminalserver.people.landing.online'         => 'Online now: {names}',
+    'ui.terminalserver.people.landing.online_more'    => 'Online now: {names} (+{count} more)',
     // Echomail area browser (M2 authored, canonical newscan projection)
     'ui.terminalserver.echomail.area_new_count'            => '{count} new',
     'ui.terminalserver.echomail.browser.status_new'        => '{new} new across {areas} area(s)',

@@ -146,6 +146,30 @@ non-80x24 terminal, or a terminal without ANSI colour falls back to the normal
 Messages menu. See
 [the Messages landing composition and activation](TerminalNavigationFramework.md#authored-messages-landing-m2-slice-state-forward-messages).
 
+### Authored People landing (M2)
+
+The People menu has an optional authored 80x24 landing that answers "who's
+around, and who was just here" before the four destinations (Who's Online, Local
+Chat, Shoutbox, Polls). Two lines: a live line — `Online now: <names>` (with a
+caller's own public activity where they set one, bounded with a "+N more" count)
+or, when nobody else is visible, `The board is quiet right now.` — and beneath
+it the same Recent Callers line the front door shows, or nothing when there is
+no recent history. Live and recent are kept clearly separate; a recent caller is
+never shown as still online. It reads only the same public presence fields as
+Who's Online (a name and any public activity — never a service, address or
+last-seen time), reflects only callers other than you, and changes nothing.
+Destinations, hotkeys, Enter and Back are unchanged, and the live line refreshes
+when you return from Who's Online.
+
+Activation: select `config/terminal_theme_m2_messages.json.example` as
+`config/terminal_theme.json` (it now carries a `nodes.people` block alongside
+`nodes.messages`), then restart the Telnet/SSH daemons — a class loaded into the
+daemon parent changed, so a reconnect alone is not enough. There is no
+navigation-config change for this landing. A missing, invalid, or oversized
+theme, a non-80x24 terminal, or a terminal without ANSI colour falls back to the
+normal People menu. See
+[the People landing composition and activation](TerminalNavigationFramework.md#authored-people-landing-m2-slice-whos-here--who-was).
+
 ### Authored Echomail area browser (M2)
 
 The Echomail area list is an authored 80x24 browser: it flows straight in from

@@ -146,14 +146,16 @@ final class MessagesLandingCompositionTest extends TestCase
 
     // ---- 1. the shipped theme validates and themes exactly the messages node -
 
-    public function testShippedExampleThemesTheMessagesNodeOnlyAt80x24(): void
+    public function testShippedExampleThemesTheMessagesNodeAt80x24(): void
     {
         $t = $this->theme();
         self::assertTrue($t->themesNode('messages'));
-        self::assertFalse($t->themesNode('people'));
         self::assertSame('nav-messages-m2', $t->geometryForScreen('messages', false, 80, 24)?->templateToken);
         self::assertNull($t->geometryForScreen('messages', false, 132, 24));
-        self::assertNull($t->geometryForScreen('people', false, 80, 24), 'root_only theme still yields for other submenus');
+        // The shipped example also authors `people` (its own slice); a node the
+        // example does not name still yields to the flowing renderer.
+        self::assertFalse($t->themesNode('settings'));
+        self::assertNull($t->geometryForScreen('settings', false, 80, 24), 'root_only theme still yields for un-authored submenus');
         self::assertSame('nav-frontdoor-m2', $t->geometryForScreen('root', true, 80, 24)?->templateToken);
     }
 

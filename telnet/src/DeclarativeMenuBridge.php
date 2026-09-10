@@ -14,6 +14,8 @@ use BinktermPHP\Terminal\Navigation\NavigationRendererFactory;
 use BinktermPHP\Terminal\Navigation\NavigationRuntime;
 use BinktermPHP\Terminal\Navigation\NavigationScreenBuilder;
 use BinktermPHP\Terminal\Navigation\TerminalActionCatalog;
+use BinktermPHP\Terminal\People\PeopleLanding;
+use BinktermPHP\Terminal\People\PeopleRosterSnapshot;
 
 /**
  * Glue between {@see BbsSession} and the generic declarative navigation runtime
@@ -102,6 +104,25 @@ final class DeclarativeMenuBridge
                     : $presenceBadge($signal);
             };
 
+            // The authored People landing: one per-session snapshot of live
+            // presence (Auth::getOnlineSessions, self removed) plus the existing
+            // Recent Callers line feeds the `people` node's STATUS. Resolved
+            // lazily (only when the caller opens People), reused across cursor
+            // movement, and invalidated at the action boundary below so
+            // returning from Who's Online shows a fresh roster. Purely a
+            // projection of existing state — no writes, no presence mutation.
+            $peopleLanding = $this->peopleLanding($state);
+
+            // One resolver, keyed by node id: the authored non-root nodes each
+            // own their STATUS; every other node returns null (flowing STATUS).
+            $summaryResolver = static function (string $nodeId, string $locale) use ($messagesLanding, $peopleLanding): ?array {
+                return match ($nodeId) {
+                    'messages' => ($messagesLanding['summary'])($nodeId, $locale),
+                    'people'   => ($peopleLanding['summary'])($nodeId, $locale),
+                    default    => null,
+                };
+            };
+
             $builder = new NavigationScreenBuilder(
                 $registry,
                 fn (?string $key, string $fallback, string $loc) => $key === null || $key === ''
@@ -109,7 +130,7 @@ final class DeclarativeMenuBridge
                     : $this->server->t($key, $fallback, [], $loc),
                 $badgeResolver,
                 fn (string $loc): ?string => $this->server->recentCallersLine($loc, max(8, $ctx->cols() - 8)),
-                $messagesLanding['summary'],
+                $summaryResolver,
             );
 
             // Presentation: an optional, validated ANSI theme frames the
@@ -134,11 +155,14 @@ final class DeclarativeMenuBridge
             // the R5 screen we are about to redraw. Drop it so it cannot be read
             // as an R5 keystroke (the reported "Q on a child screen logs you
             // off" bug).
-            $onActionBoundary = function () use (&$state, $messagesLanding): void {
+            $onActionBoundary = function () use (&$state, $messagesLanding, $peopleLanding): void {
                 $state['pushback'] = '';
                 // A destination may have marked mail read; drop the landing
                 // snapshot so the next Messages redraw reflects the new state.
                 ($messagesLanding['invalidate'])();
+                // Who's Online / Local Chat may have changed who is present;
+                // drop the People snapshot so the next People redraw is fresh.
+                ($peopleLanding['invalidate'])();
             };
 
             $this->server->logInfo('Declarative navigation runtime: definition "' . $definition->id . '"');
@@ -283,6 +307,117 @@ final class DeclarativeMenuBridge
                 $snapshot->invalidate();
                 $projection = null;
             },
+        ];
+    }
+
+    /**
+     * The authored People landing's per-session state seam.
+     *
+     * Mirrors {@see messagesLanding()}: a bounded snapshot of existing
+     * authoritative state (the live presence roster from
+     * {@see \BinktermPHP\Auth::getOnlineSessions()} with the viewer's own
+     * sessions removed, plus the already-formatted Recent Callers line the
+     * front door uses) is projected once per generation by the pure
+     * {@see PeopleLanding::project()} into the `people` node's STATUS lines.
+     *
+     * The snapshot is lazy (first People draw), reused across cursor movement
+     * (generation gate — cursor keys never re-query), and dropped at every
+     * navigation action boundary so returning from Who's Online redraws with a
+     * fresh roster; a short TTL only bounds staleness for an idle caller. The
+     * render performs no writes and does not touch presence. Guests and a
+     * presence read failure yield a null summary (blank STATUS), never a lie.
+     *
+     * @return array{summary:callable(string,string):(array<int,string>|null),invalidate:callable():void}
+     */
+    private function peopleLanding(array $state): array
+    {
+        $selfId  = (int) ($state['user_id'] ?? 0);
+        $isGuest = empty($state['username']) || $state['username'] === '_guest';
+
+        if ($isGuest) {
+            return [
+                'summary'    => static fn (string $nodeId, string $loc): ?array => null,
+                'invalidate' => static function (): void {
+                },
+            ];
+        }
+
+        // One bounded presence read, cached like the Messages newscan snapshot:
+        // the TTL is a staleness backstop only, onActionBoundary is the
+        // authoritative refresh. A null roster (read failed) is distinct from an
+        // empty roster (a genuinely quiet board).
+        $locale   = (string) ($state['locale'] ?? 'en');
+        $snapshot = new PeopleRosterSnapshot(
+            fn (): array => $this->peopleSnapshot($selfId, $locale),
+            10,
+        );
+
+        $projection    = null;
+        $projectionGen = -1;
+
+        return [
+            'summary' => function (string $nodeId, string $loc) use (
+                $snapshot, &$projection, &$projectionGen
+            ): ?array {
+                if ($nodeId !== 'people') {
+                    return null;
+                }
+                try {
+                    $value = $snapshot->value();
+                } catch (\Throwable $e) {
+                    $this->server->logInfo('People landing: presence snapshot failed — ' . $e->getMessage());
+
+                    return null;
+                }
+                if (($value['roster'] ?? null) === null) {
+                    return null; // could not read presence — blank STATUS, no claim
+                }
+                if ($projection === null || $projectionGen !== $snapshot->generation()) {
+                    $t = fn (string $k, string $f, array $p = []): string => $this->server->t($k, $f, $p, $loc);
+                    $projection    = PeopleLanding::project($value['roster'], $value['recentLine'] ?? null, $t);
+                    $projectionGen = $snapshot->generation();
+                }
+
+                return $projection;
+            },
+            'invalidate' => static function () use ($snapshot, &$projection): void {
+                $snapshot->invalidate();
+                $projection = null;
+            },
+        ];
+    }
+
+    /**
+     * One bounded read for the People landing: the distinct live roster visible
+     * to this caller (own sessions and duplicate sessions removed; only the
+     * caller-visible username + intentional public activity kept — never a
+     * service, IP, internal activity or last-seen field, see
+     * {@see PeopleLanding::fromSessions()}), and the shared Recent Callers line.
+     * A presence-read failure yields a null roster so the landing renders a
+     * blank STATUS rather than asserting the board is quiet.
+     *
+     * @return array{roster: array<int,array{name:string,activity:string}>|null, recentLine: string|null}
+     */
+    private function peopleSnapshot(int $selfId, string $locale): array
+    {
+        try {
+            $rows = (new Auth())->getOnlineSessions(15);
+        } catch (\Throwable $e) {
+            $this->server->logInfo('People landing: could not read presence — ' . $e->getMessage());
+
+            return ['roster' => null, 'recentLine' => null];
+        }
+
+        $recentLine = null;
+        try {
+            $recentLine = $this->server->recentCallersLine($locale, 72);
+        } catch (\Throwable $e) {
+            $this->server->logInfo('People landing: Recent Callers unavailable — ' . $e->getMessage());
+        }
+
+        return [
+            'roster'     => PeopleLanding::fromSessions($rows, $selfId),
+            'recentLine' => $recentLine,
         ];
     }
 

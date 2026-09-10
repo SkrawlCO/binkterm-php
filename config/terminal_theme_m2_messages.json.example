@@ -1,5 +1,5 @@
 {
-  "_comment": "M2 with the authored Messages landing (Slice: state-forward Messages). Same front-door presentation as terminal_theme_m2.json.example, plus a `nodes` entry that gives the `messages` navigation node its own trusted template and regions. Select this as config/terminal_theme.json during human-present activation; it does not change navigation configuration. Every screen this theme does not name (other submenus, other geometries, no colour/charset) uses the flowing declarative renderer. The `messages` STATUS block is a write-free projection of UnifiedNewscanService::plan(); nothing here marks a message read.",
+  "_comment": "M2 with the authored Messages and People landings. Same front-door presentation as terminal_theme_m2.json.example, plus a `nodes` entry that gives the `messages` and `people` navigation nodes their own trusted templates and regions. Select this as config/terminal_theme.json during human-present activation; it does not change navigation configuration. Every screen this theme does not name (other submenus, other geometries, no colour/charset) uses the flowing declarative renderer. The `messages` STATUS block is a write-free projection of UnifiedNewscanService::plan(); the `people` STATUS block is a write-free projection of Auth::getOnlineSessions() plus the existing Recent Callers line; nothing here marks a message read or mutates presence.",
   "schema": 2,
   "id": "l33test.frontdoor.m2",
   "enabled": true,
@@ -16,11 +16,24 @@
     }
   },
   "nodes": {
-    "_comment": "Per-node authored presentation, keyed by navigation node id. Each entry has the same shape as a top-level geometry set. Only the `messages` node is authored here.",
+    "_comment": "Per-node authored presentation, keyed by navigation node id. Each entry has the same shape as a top-level geometry set. The `messages` and `people` nodes are authored here; every other node uses the flowing renderer.",
     "messages": {
       "geometries": {
         "80x24": {
           "template": "nav-messages-m2",
+          "regions": {
+            "STATUS": { "row": 8, "col": 5, "width": 72, "height": 2 },
+            "MENU": { "row": 12, "col": 5, "width": 72, "height": 7 },
+            "DESCRIPTION": { "row": 20, "col": 5, "width": 72, "height": 2 },
+            "FOOTER": { "row": 23, "col": 5, "width": 72, "height": 1 }
+          }
+        }
+      }
+    },
+    "people": {
+      "geometries": {
+        "80x24": {
+          "template": "nav-people-m2",
           "regions": {
             "STATUS": { "row": 8, "col": 5, "width": 72, "height": 2 },
             "MENU": { "row": 12, "col": 5, "width": 72, "height": 7 },
