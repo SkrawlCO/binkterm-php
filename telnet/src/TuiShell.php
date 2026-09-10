@@ -4,6 +4,9 @@ namespace BinktermPHP\TelnetServer;
 
 use BinktermPHP\Terminal\Presentation\Directory;
 use BinktermPHP\Terminal\Presentation\DirectoryView;
+use BinktermPHP\Terminal\Presentation\ThemedDirectoryView;
+use BinktermPHP\Terminal\Navigation\NavigationTheme;
+use BinktermPHP\Terminal\Navigation\NavigationThemeConfig;
 
 /**
  * Full-screen widget-backed terminal shell implementation.
@@ -76,6 +79,7 @@ class TuiShell implements TerminalShellInterface
                 [
                     'color_scheme' => $this->styleProfile['panel'],
                     'help_overlay' => $this->styleProfile['help_overlay'],
+                    'frame_renderer' => $options['frame_renderer'] ?? null,
                 ]
             );
 
@@ -112,6 +116,16 @@ class TuiShell implements TerminalShellInterface
         }
 
         $chooseOptions = ['selected_index' => max(0, (int)($options['selected_index'] ?? 0))];
+        if (isset($options['theme_surface']) && is_string($options['theme_surface'])) {
+            $theme = NavigationThemeConfig::loadSurface($options['theme_surface'])->theme();
+            if ($theme !== null && $theme->isEnabled() && $theme->schema === NavigationTheme::COMPOSITION_SCHEMA) {
+                $view = new ThemedDirectoryView($directory, $theme, $options['theme_status_lines'] ?? []);
+                $chooseOptions['frame_renderer'] = static function (int $selected, int $cols, int $rows, array $statusBar) use ($ctx, $view): bool {
+                    $ctx->setGeometry($cols, $rows);
+                    return $view->tryRender($ctx, $selected, $statusBar);
+                };
+            }
+        }
         if (isset($options['prompt'])) {
             $chooseOptions['prompt'] = (string)$options['prompt'];
         }

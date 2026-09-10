@@ -181,6 +181,13 @@ secondary context line, and a compact badge (`Multiplayer` for a multiplayer
 Game, `Gateway` for a gateway; a single-player Game gets none). Full detail
 still lives only in Experience detail.
 
+The optional M2 Slice 2 authored arrival uses the same `Directory` and input
+loop. `DoorHandler::composeArrivalThemeStatus()` selects three already-resolved
+lines from Live Now, the newest footprint, and non-empty Your Places. The shell
+receives those through `theme_status_lines` with `theme_surface: crossroads`.
+No additional state query, participation rule, or visibility rule is introduced.
+See [the exact layout and activation boundary](TerminalNavigationFramework.md#authored-crossroads-arrival-m2-slice-2).
+
 ### Experience detail screen (telnet Crossroads slice 1)
 
 Selecting an experience in the `DoorHandler` chooser now opens
@@ -638,6 +645,7 @@ key loop.
 | `DirectorySection` | a titled group of rows (`''` title = unheaded leading block) |
 | `DirectoryRow` | `label`, `description`, `badge`, and an opaque `value` payload returned on selection |
 | `DirectoryView::compose()` | composes a `Directory` + `TerminalRenderContext` into the structured selectable-list contract (`['title', 'items', 'values']`) that `chooseFromList()` already consumes |
+| `ThemedDirectoryView` | optional authored projection into the existing M2 MENU/STATUS/DESCRIPTION/FOOTER regions; follows the structured list's selected index without owning input or dispatch |
 | `TextBlock` | pure `padRight()` / `ellipsize()` text-geometry helpers, shared with `NavigationScreenRenderer` (extracted verbatim; the front door delegates to them) |
 
 `TuiShell::showDirectory()` and `LineShell::showDirectory()` call
@@ -647,9 +655,14 @@ existing proven behaviour; only the composition and the payload-based return are
 new. `DirectoryView` performs no I/O: `contextLines` must be pre-resolved plain
 text.
 
-First consumer: the Crossroads arrival (`DoorHandler::show()`). The
-`NavigationScreenRenderer` themed/flowing path is a separate renderer and is not
-routed through `DirectoryView` in this milestone.
+First consumer: the Crossroads arrival (`DoorHandler::show()`). M2 Slice 2 adds
+an opt-in `frame_renderer` to the structured list: on success it paints using
+the existing M2 `ThemedNavigationRenderer::tryRenderRegions()`; on failure the
+same structured renderer paints normally. Only TuiShell directories with a
+`theme_surface` option load a named surface configuration. The full structured
+row list, original numbering, selected index, resize handling and result payload
+remain authoritative. The root navigation renderer continues to use its own
+model and accepted compositor through the shared painter.
 
 ### Shared dense-list presentation primitive
 

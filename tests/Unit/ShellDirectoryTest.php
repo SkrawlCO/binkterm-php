@@ -163,6 +163,85 @@ final class ShellDirectoryTest extends TestCase
 
     // ===== LineShell parity =====
 
+    /** Install only a disposable test surface config, never the live selection. */
+    private function withCrossroadsTheme(?string $contents, callable $run): void
+    {
+        $dir = sys_get_temp_dir() . '/crossroads-theme-' . bin2hex(random_bytes(6));
+        mkdir($dir, 0700);
+        $file = $dir . '/terminal_theme_crossroads.json';
+        $oldEnv = $_ENV['TERMINAL_NAV_THEME_CONFIG'] ?? null;
+        $oldProcess = getenv('TERMINAL_NAV_THEME_CONFIG');
+        try {
+            if ($contents !== null) { file_put_contents($file, $contents); }
+            $_ENV['TERMINAL_NAV_THEME_CONFIG'] = $dir . '/terminal_theme.json';
+            putenv('TERMINAL_NAV_THEME_CONFIG=' . $dir . '/terminal_theme.json');
+            $run();
+        } finally {
+            if (is_file($file)) { unlink($file); }
+            rmdir($dir);
+            if ($oldEnv === null) { unset($_ENV['TERMINAL_NAV_THEME_CONFIG']); }
+            else { $_ENV['TERMINAL_NAV_THEME_CONFIG'] = $oldEnv; }
+            putenv($oldProcess === false ? 'TERMINAL_NAV_THEME_CONFIG' : 'TERMINAL_NAV_THEME_CONFIG=' . $oldProcess);
+            \BinktermPHP\Terminal\Navigation\NavigationThemeConfig::reset();
+        }
+    }
+
+    public function testAuthoredDirectoryPreservesArrowsNumbersEnterAndBack(): void
+    {
+        $json = file_get_contents(dirname(__DIR__, 2) . '/config/terminal_theme_crossroads.json.example');
+        $this->withCrossroadsTheme($json, function (): void {
+            foreach ([["\033[B\033[B\r", 'ascii-royale', 2], ['4', 'lord', 3], ["\r", 'live_now', 0], ['q', null, -1]] as [$input, $value, $index]) {
+                $this->client($input);
+                $result = (new TuiShell($this->bbs))->showDirectory($this->srv, $this->state, $this->directory(), [
+                    'theme_surface' => 'crossroads',
+                    'theme_status_lines' => ['2 callers in 1 Experience', 'Bard played LORD - 47m ago'],
+                ]);
+                self::assertSame($value, $result['value']);
+                self::assertSame($index, $result['index']);
+                self::assertSame($value === null ? 'back' : 'select', $result['action']);
+                $out = $this->serverOutput();
+                self::assertStringContainsString('LOOKING AT', $out);
+                self::assertStringContainsString('Bard played LORD - 47m ago', $out);
+                if ($index === 2) { self::assertStringContainsString('Last player standing.', $out); }
+            }
+        });
+    }
+
+    public function testMissingInvalidAndNonFittingThemesKeepTheExistingDirectoryUsable(): void
+    {
+        $config = json_decode(file_get_contents(dirname(__DIR__, 2) . '/config/terminal_theme_crossroads.json.example'), true);
+        $missing = $config;
+        $missing['geometries']['80x24']['template'] = 'missing-crossroads-test';
+        $overflow = $config;
+        $overflow['geometries']['80x24']['regions']['MENU']['width'] = 8;
+        $invalid = $config;
+        unset($invalid['geometries']['80x24']['regions']['STATUS']);
+        foreach ([null, '{ malformed', json_encode($missing), json_encode($overflow), json_encode($invalid)] as $json) {
+            $this->withCrossroadsTheme($json, function (): void {
+                $this->client("\033[B\033[B\r");
+                $result = (new TuiShell($this->bbs))->showDirectory($this->srv, $this->state, $this->directory(), ['theme_surface' => 'crossroads']);
+                self::assertSame('ascii-royale', $result['value']);
+                $out = $this->serverOutput();
+                self::assertStringContainsString('Where people, games, and worlds meet.', $out);
+                self::assertStringNotContainsString('LOOKING AT', $out);
+            });
+        }
+    }
+
+    public function testSurfaceThemeDoesNotChangeOtherDirectoriesOrLineShell(): void
+    {
+        $json = file_get_contents(dirname(__DIR__, 2) . '/config/terminal_theme_crossroads.json.example');
+        $this->withCrossroadsTheme($json, function (): void {
+            $this->client('q');
+            (new TuiShell($this->bbs))->showDirectory($this->srv, $this->state, $this->directory());
+            self::assertStringNotContainsString('LOOKING AT', $this->serverOutput());
+            $this->client("3\r\n");
+            $result = (new LineShell($this->bbs))->showDirectory($this->srv, $this->state, $this->directory(), ['theme_surface' => 'crossroads']);
+            self::assertSame('ascii-royale', $result['value']);
+            self::assertStringNotContainsString('LOOKING AT', $this->serverOutput());
+        });
+    }
+
     public function testLineShellSelectsByNumberAndReturnsThePayload(): void
     {
         $this->state['term_shell_mode'] = 'line';

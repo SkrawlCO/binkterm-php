@@ -388,6 +388,76 @@ fidelity defects are closed; they are not M2 blockers.
 
 ---
 
+## Authored Crossroads arrival (M2 Slice 2)
+
+Crossroads uses `Directory` and the structured selectable-list runtime, not
+`NavigationScreenModel`. It now opts into the same M2 painter through
+`showDirectory()` options `theme_surface: crossroads` and `theme_status_lines`.
+The latter contains only existing authorized arrival text, resolved by
+`DoorHandler::composeArrivalThemeStatus()`; the renderer makes no queries.
+
+The one supplied composition is `config/terminal_theme_crossroads.json.example`
+with `telnet/screens/nav-crossroads.ans`, at exact 80x24:
+
+| Region | Position | Content |
+|---|---|---|
+| STATUS | Rows 4–6, columns 4–75 | Existing Live Now summary; newest existing historical footprint; Your Places summary only when participation exists. |
+| MENU | Rows 9–20, columns 4–40 | Original numbered rows and category headings, in a selection-following window over the full directory. |
+| DESCRIPTION | Rows 9–20, columns 46–75 | Selected row's name, existing badge, and wrapped description. Long informational text is bounded. |
+| FOOTER | Row 23, columns 4–75 | The shell's existing key hints plus the visible destination range. |
+
+Identity and continuity occupy the top; destinations and selected context share
+the body horizontally. This is deliberately different from the front door's
+stacked proof. Rosters, fuller activity history, participation actions and
+Enter/Return remain in existing Live Now, Your Places and Experience detail
+views. The arrival keeps its existing snapshot lifetime: returning to it reloads
+the shared state; moving the selection adds no polling or queries. Quiet hours
+remain explicit, and history is expressed as past play rather than live presence.
+
+`ThemedDirectoryView` composes presentation only. The existing
+`TelnetUtils::runSelectableStructuredList()` retains the complete row array,
+selected index and input ownership; its optional application-owned
+`frame_renderer` callback can paint a frame or return false. Number shortcuts,
+arrows, Enter, Q/Back, resize and handler dispatch stay in that same loop. A
+viewport does not filter or renumber destinations; its category heading is
+repeated when starting inside a category. A required visible row/category or
+footer that cannot fit yields to the original directory renderer.
+
+`ThemedNavigationRenderer::tryRenderRegions()` is the shared template loading,
+validation, frame and placement path. The root renderer still invokes it with
+its original navigation composer; directories invoke it with resolved directory
+blocks fitted by `NavigationScreenRenderer::fitSemanticBlock()`. There is no
+second ANSI parser, navigation model or input loop. Missing/invalid configuration,
+missing/unsafe/non-fitting art, unsupported geometry or colour/charset, and
+composition failure use the existing directory frame. LineShell and directories
+that do not opt in retain their accepted presentation. F6/root preview is unchanged;
+this slice does not add a Crossroads preview editor.
+
+### Selection and activation
+
+`NavigationThemeConfig::loadSurface('crossroads')` reads
+`terminal_theme_crossroads.json` beside the selected root theme file (normally
+`config/terminal_theme.json`). The surface token is application-owned and path
+validated; the file uses the existing schema-2 loader and trusted asset directory.
+An absent, invalid or disabled file leaves the existing Crossroads rendering in
+place. The example does not activate itself. Root/front-door M2 configuration
+and its M1 backup are unaffected by this separate surface selection.
+
+Unlike Slice 1, Slice 2 changes `DoorHandler`, `TuiShell`, and `TelnetUtils`, which
+both terminal daemon entrypoints eagerly include before forking connections.
+**Human-present activation is required:** select the Crossroads example as the
+surface runtime file, then restart the affected Telnet/SSH daemon only with
+explicit authorization. A reconnect alone cannot replace classes already loaded
+in the daemon parent. This implementation transaction does not select the runtime
+file or restart services.
+
+Minimal SyncTerm acceptance after activation: reconnect at effective 80x24,
+enter Crossroads, judge spacing and identity, move across several destinations
+and a category boundary, inspect quiet/live context, enter an Experience detail
+and return, then Q back to the accepted front door. Technical tests are not
+visual/product acceptance. Expanded templates and other authored spaces remain
+deferred.
+
 ## Behaviour at runtime
 
 - **Hotkeys** work as before. Arrow keys / Enter drive a lightbar.

@@ -190,6 +190,8 @@ class DoorHandler
                 $state,
                 $directory,
                 [
+                    'theme_surface' => 'crossroads',
+                    'theme_status_lines' => self::composeArrivalThemeStatus($liveNow, $yourPlaces, $recentFootprints, $t),
                     'prompt' => $this->server->t('ui.terminalserver.doors.enter_choice', 'Select an experience or Q to return: ', [], $state['locale']),
                     'empty_message' => $this->server->t('ui.terminalserver.doors.no_doors', 'No games or experiences are currently available.', [], $state['locale']),
                 ]
@@ -243,6 +245,17 @@ class DoorHandler
             );
             continue;
         }
+    }
+
+    /** Three presentation lines from the existing authorized arrival snapshots. */
+    public static function composeArrivalThemeStatus(array $liveNow, array $yourPlaces, array $footprints, callable $t): array
+    {
+        $places = self::buildYourPlacesArrivalItem($yourPlaces, $t);
+        return [
+            (string)($liveNow['summary'] ?? ''),
+            (string)($footprints['lines'][1] ?? ''),
+            ($yourPlaces['experience_count'] ?? 0) > 0 ? $places['label'] . ': ' . $places['detail'] : '',
+        ];
     }
 
     /**

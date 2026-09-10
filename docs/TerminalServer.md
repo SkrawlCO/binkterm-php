@@ -108,6 +108,23 @@ queries. Expanded sizes continue to use the normal renderer. See
 for the operator-managed theme selection, fresh-session requirement and short
 SyncTerm acceptance check. Caller-selectable themes are not part of this slice.
 
+### Authored Crossroads presentation (M2 Slice 2)
+
+Crossroads has an optional authored 80x24 arrival: live/quiet context and one
+existing historical footprint above a destination pane, with selected context
+beside it. The full catalog remains available through its existing scrolling
+selection. Live Now, Your Places, Experience detail, Enter/Return and Back keep
+their established behavior. Missing or invalid themes fall back to the existing
+directory; other geometries and LineShell also retain that presentation.
+
+The supplied `config/terminal_theme_crossroads.json.example` is selected as
+`terminal_theme_crossroads.json` beside the active root theme. Theme file selection
+remains operator-managed; the example does not activate itself. This slice changes
+classes loaded into the daemon parent, so activation requires an explicitly
+authorized Telnet/SSH daemon restart before reconnecting. The accepted front-door
+M2 configuration is independent. See
+[Crossroads composition and activation](TerminalNavigationFramework.md#authored-crossroads-arrival-m2-slice-2).
+
 ### Message Browsing
 
 - List netmail and echomail messages with pagination

@@ -1,0 +1,17 @@
+{
+  "_comment": "Authored Crossroads arrival, M2 Slice 2. Select as terminal_theme_crossroads.json beside the active terminal_theme.json. Root/front-door presentation is independent. No navigation or actions are defined here.",
+  "schema": 2,
+  "id": "l33test.crossroads",
+  "enabled": true,
+  "geometries": {
+    "80x24": {
+      "template": "nav-crossroads",
+      "regions": {
+        "STATUS": { "row": 4, "col": 4, "width": 72, "height": 3 },
+        "MENU": { "row": 9, "col": 4, "width": 37, "height": 12 },
+        "DESCRIPTION": { "row": 9, "col": 46, "width": 30, "height": 12 },
+        "FOOTER": { "row": 23, "col": 4, "width": 72, "height": 1 }
+      }
+    }
+  }
+}

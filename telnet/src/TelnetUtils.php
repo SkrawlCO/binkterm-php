@@ -1971,6 +1971,10 @@ class TelnetUtils
      * @param array         $options       Optional: 'header_lines' => string[] renders fixed pre-formatted lines
      *                                     directly under the title, above the first row (flat-row lists only);
      *                                     'color_scheme', 'multiSelect', 'toggleKey', 'selectedRows' as before.
+     *                                     Structured rows may supply 'frame_renderer':
+     *                                     fn(int $selected, int $cols, int $rows, array $statusBar): bool.
+     *                                     True means the application painted the frame; false/exception
+     *                                     uses the existing renderer. It must never read input or dispatch.
      * @return array{action: string, index: int, selectedIndex: int}
      *   action:        'quit' | 'disconnect' | 'select' | 'prev' | 'next' | (value from $extraKeys)
      *   index:         item index (meaningful for 'select')
@@ -2428,7 +2432,7 @@ class TelnetUtils
 
         $render = self::framed($conn, function() use (
             $conn, &$state, &$sourceRows, &$blocks, &$title, &$selectedIndex, &$cols, &$termRows, &$inputRow, &$maxDisplayRows, &$statusLine,
-            $statusBar, $listStartRow, $computeOffset, $rebuildBlocks, $colorScheme
+            $statusBar, $listStartRow, $computeOffset, $rebuildBlocks, $colorScheme, $options
         ): void {
             $cols          = $state['cols'] ?? 80;
             $termRows      = self::getSelectorRows($state);
@@ -2438,6 +2442,19 @@ class TelnetUtils
             $selectedIndex = max(0, min($selectedIndex, count($blocks) - 1));
             $statusLine    = self::buildStatusBar($statusBar, $cols);
             $offset        = $computeOffset($blocks, $selectedIndex, $maxDisplayRows);
+
+            // Optional presentation only. The existing loop below continues to
+            // own selection, shortcuts, resize and dispatch for the full list.
+            // A failed authored frame always yields to this exact renderer.
+            if (is_callable($options['frame_renderer'] ?? null)) {
+                try {
+                    if (($options['frame_renderer'])($selectedIndex, (int)$cols, (int)($state['rows'] ?? 24), $statusBar) === true) {
+                        return;
+                    }
+                } catch (\Throwable) {
+                    // No presentation failure can strand navigation.
+                }
+            }
 
             self::safeWrite($conn, "\033[2J\033[H");
             self::writeLine($conn, $title);

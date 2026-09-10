@@ -48,6 +48,27 @@ final class NavigationThemeConfig
     }
 
     /**
+     * Optional named surface theme beside the selected navigation theme.
+     * The application supplies the token; assets use the same trusted loader.
+     * Loaded once by the directory invocation, never by the input loop.
+     */
+    public static function loadSurface(string $surface): NavigationThemeLoadResult
+    {
+        if (!preg_match(self::TEMPLATE_TOKEN_RE, $surface)) {
+            return NavigationThemeLoadResult::invalid([
+                new ValidationError('surface', 'invalid presentation surface token'),
+            ]);
+        }
+        try {
+            return (new NavigationThemeLoader())->fromFile(
+                dirname(self::path()) . '/terminal_theme_' . $surface . '.json'
+            );
+        } catch (\Throwable $e) {
+            return NavigationThemeLoadResult::invalid([new ValidationError('load', $e->getMessage())]);
+        }
+    }
+
+    /**
      * Load + validate the configured theme. Cached, keyed on the file's
      * path/size/mtime so a replaced file is not served stale.
      */

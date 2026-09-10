@@ -304,8 +304,8 @@ final class NavigationScreenRenderer implements NavigationRenderer
         return $blocks;
     }
 
-    /** Fit encoded content without treating CP437 bytes as UTF-8 glyphs. */
-    private function fitSemanticBlock(
+    /** Shared semantic-region fitter; content is encoded for the supplied context. */
+    public function fitSemanticBlock(
         TerminalRenderContext $ctx,
         array $lines,
         NavigationThemeRegion $region,

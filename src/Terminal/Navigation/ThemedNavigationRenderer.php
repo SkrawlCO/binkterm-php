@@ -45,25 +45,49 @@ final class ThemedNavigationRenderer implements NavigationRenderer
 
     public function render(TerminalRenderContext $ctx, NavigationScreenModel $screen, array $opts = []): void
     {
-        $geoKey = $ctx->cols() . 'x' . $ctx->rows();
-        $plan   = $this->theme->rootOnly && !$screen->path->isRoot()
-            ? $this->cannot('theme applies only to the root screen') : $this->plan($ctx);
-
-        if (!$plan['ok']) {
-            $this->recordFallback($plan['reason'], $geoKey);
+        if ($this->theme->rootOnly && !$screen->path->isRoot()) {
+            $this->recordFallback('theme applies only to the root screen', $ctx->cols() . 'x' . $ctx->rows());
             $this->inner->render($ctx, $screen, $opts);
-
             return;
         }
+        if (!$this->tryRenderRegions($ctx, fn (NavigationThemeGeometry $geo): array =>
+            $this->navigationBlocks($ctx, $screen, $opts, $geo))) {
+            $this->inner->render($ctx, $screen, $opts);
+        }
+    }
 
+    /**
+     * Shared M2 painter for application-owned semantic content. No input or
+     * navigation is read here. False tells the caller to use its own fallback.
+     * The composer must return every fitted region, keyed by semantic name.
+     *
+     * @param callable(NavigationThemeGeometry):array<string,array<int,string>> $compose
+     */
+    public function tryRenderRegions(TerminalRenderContext $ctx, callable $compose): bool
+    {
+        $geoKey = $ctx->cols() . 'x' . $ctx->rows();
+        $plan = $this->plan($ctx);
+        if (!$plan['ok']) {
+            $this->recordFallback($plan['reason'], $geoKey);
+            return false;
+        }
         try {
-            $this->paint($ctx, $screen, $opts, $plan['geometry'], $plan['art']);
+            $blocks = $compose($plan['geometry']);
+            foreach ($plan['geometry']->regions as $name => $region) {
+                if (!isset($blocks[$name]) || count($blocks[$name]) !== $region->height) {
+                    throw new \LengthException("{$name} requires a complete fitted block");
+                }
+            }
+            if (count($blocks) !== count($plan['geometry']->regions)) {
+                throw new \UnexpectedValueException('Unexpected semantic region');
+            }
+            $this->paint($ctx, $plan['geometry'], $plan['art'], $blocks);
             $this->lastReport = ['mode' => self::MODE_THEMED, 'reason' => null, 'geometry' => $geoKey];
+            return true;
         } catch (\Throwable $e) {
             $this->recordFallback('themed render failed: ' . $e->getMessage(), $geoKey);
-            // Reset a possibly half-painted screen, then fall back cleanly.
             $ctx->write("\033[0m\033[2J\033[H");
-            $this->inner->render($ctx, $screen, $opts);
+            return false;
         }
     }
 
@@ -160,13 +184,12 @@ final class ThemedNavigationRenderer implements NavigationRenderer
     /**
      * @param array<string,mixed> $opts
      */
-    private function paint(
+    private function navigationBlocks(
         TerminalRenderContext $ctx,
         NavigationScreenModel $screen,
         array $opts,
-        NavigationThemeGeometry $geo,
-        string $art
-    ): void {
+        NavigationThemeGeometry $geo
+    ): array {
         $menu   = $geo->menu();
         $footer = $geo->footer();
 
@@ -188,6 +211,13 @@ final class ThemedNavigationRenderer implements NavigationRenderer
             );
         }
 
+        return $semantic ? $blocks : ['MENU' => $blocks['menu'], 'FOOTER' => $blocks['footer']];
+    }
+
+    /** Paint already-fitted blocks using the same trusted M2 template path. */
+    private function paint(TerminalRenderContext $ctx, NavigationThemeGeometry $geo, string $art, array $blocks): void
+    {
+        $semantic = $this->theme->schema === NavigationTheme::COMPOSITION_SCHEMA;
         $artLines = explode("\n", $art);
 
         $ctx->beginFrame();
@@ -206,13 +236,8 @@ final class ThemedNavigationRenderer implements NavigationRenderer
                 $ctx->write("\033[" . ($i + 1) . ';1H' . $line);
             }
 
-            if ($semantic) {
-                foreach ($blocks as $name => $lines) {
-                    $this->placeBlock($ctx, $lines, $geo->region($name));
-                }
-            } else {
-                $this->placeBlock($ctx, $blocks['menu'], $menu);
-                $this->placeBlock($ctx, $blocks['footer'], $footer);
+            foreach ($blocks as $name => $lines) {
+                $this->placeBlock($ctx, $lines, $geo->region($name));
             }
 
             // Park the cursor out of the way; the lightbar carries the selection.
