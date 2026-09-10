@@ -913,7 +913,8 @@ $statusLine = TelnetUtils::buildStatusBar($segments, $width);
 | Pre-built message list with compose/read actions | `TelnetUtils::runMessageList()` / `$shell->showMessageList()` |
 | Scrollable kludge/header overlay | `TelnetUtils::runKludgeViewer()` (called internally by message viewer) |
 | Sixel image viewer | `TelnetUtils::showSixelImageViewer()` |
-| Message header box (From/To/Date/Subj) | `TelnetUtils::buildMessageHeaderBox()` |
+| Compact 3-row message-reader header (identity line + subject + rule) | `TelnetUtils::buildCompactMessageHeader()` |
+| Framed message header box (From/To/Date/Subj) — profile viewer, legacy | `TelnetUtils::buildMessageHeaderBox()` |
 | Status bar from segments array | `TelnetUtils::buildStatusBar()` |
 | Centered confirmation / multi-option dialog | `TelnetUtils::showConfirmDialog()` / `$shell->showConfirmDialog()` |
 | Centered alert/notice dialog | `TelnetUtils::showAlertDialog()` / `$shell->showAlert()` |
@@ -974,8 +975,9 @@ DCS/answerback queries, etc.).
 
 Current call sites: `EchomailHandler` / `NetmailHandler` message viewers
 (`message_text` + combined kludge lines), `MailUtils::quoteMessage()` (reply and
-forward bodies), `TelnetUtils::formatMessageListEntry()` and
-`TelnetUtils::buildMessageHeaderBox()` (list rows and header fields), and
+forward bodies), `TelnetUtils::formatMessageListEntry()`,
+`TelnetUtils::buildMessageHeaderBox()` and
+`TelnetUtils::buildCompactMessageHeader()` (list rows and header fields), and
 `PacketBbs\PacketBbsTextRenderer` (which then also drops the SGR codes, since
 radio links are plain text). Any new surface that renders remote message content
 must call the sanitizer too.
@@ -988,6 +990,35 @@ The bottom status bar has limited width. Keep it to the **most-used primary acti
 ✅ Status bar:  U/D Scroll  L/R Prev/Next  R Reply  Ctrl-K Help  Q Quit
 ❌ Status bar:  U/D Scroll  PgUp/PgDn Page  L/R Prev/Next  R Reply  H Headers  X Delete  B Bookmark  T .txt  Q Quit
 ```
+
+### Compact message-reader header
+
+The echomail, netmail and newscan readers build their header with
+`TelnetUtils::buildCompactMessageHeader($width, $fields, $charset)`, which
+returns exactly **three** lines:
+
+1. **identity / context** — `From Name <addr>  ->  To     AREA@net      Wed 14:32`
+   (netmail passes `principal_label` = `From: ` / `To: ` and no `to`/`area`).
+2. **subject** — `Subject: <subject>`, the subject rendered bold.
+3. a full-width rule.
+
+`runMessageViewer()` derives `bodyHeight` from `count($headerLines)` alone, so
+the three-row header hands the body four more rows than the old seven-row
+`buildMessageHeaderBox()` (identity line + subject + rule vs. box border +
+five fields + box border). At 80x24 the body viewport goes from ~16 to ~20
+rows. Nothing else in the reader loop changes.
+
+Field hierarchy under width pressure: the subject line and the From name
+always survive; the sender address is dropped first, then the To / Area / Date
+group is trimmed and finally dropped. All values pass through
+`TerminalTextSanitizer::sanitize()`; clipping is a hard cut with **no ellipsis
+glyph** (an appended `…` transliterates to `...` on CP437/ASCII and can push a
+fitted line back over budget — the closed header-overflow regression). The
+identity-line date omits the timezone abbreviation for compactness; the full
+timezone-stamped date stays in the **H** headers overlay.
+
+`buildMessageHeaderBox()` is retained for the public-profile viewer and is no
+longer used by any message reader.
 
 ### Adding Actions to the Message Viewer
 

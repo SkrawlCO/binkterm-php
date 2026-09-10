@@ -812,7 +812,6 @@ class EchomailHandler
                 $cols     = $s['cols'] ?? 80;
                 $width    = max(10, $cols - 2);
                 $charset  = $this->server->getTerminalCharset();
-                $fromLine = $fromAddress ? "{$fromName} <{$fromAddress}>" : $fromName;
 
                 $segments = [
                     ['text' => 'U/D',          'color' => $keyColor],
@@ -845,12 +844,13 @@ class EchomailHandler
                 }
 
                 return [
-                    'headerLines'  => TelnetUtils::buildMessageHeaderBox($width, [
-                        ['label' => 'From: ', 'value' => $fromLine,                                                      'style' => 'normal'],
-                        ['label' => 'Subj: ', 'value' => $msg['subject'] ?? 'Message',                                  'style' => 'bold'],
-                        ['label' => 'To:   ', 'value' => $msg['to_name'] ?? 'All',                                      'style' => 'dim'],
-                        ['label' => 'Area: ', 'value' => $area,                                                         'style' => 'dim'],
-                        ['label' => 'Date: ', 'value' => TelnetUtils::formatUserDate($msg['date_written'] ?? '', $s),   'style' => 'dim'],
+                    'headerLines'  => TelnetUtils::buildCompactMessageHeader($width, [
+                        'from'         => $fromName,
+                        'from_address' => $fromAddress,
+                        'to'           => $msg['to_name'] ?? 'All',
+                        'area'         => $area,
+                        'date'         => TelnetUtils::formatUserDate($msg['date_written'] ?? '', $s, false),
+                        'subject'      => $msg['subject'] ?? 'Message',
                     ], $charset),
                     'wrappedLines' => $wrappedLines,
                     'statusLine'   => TelnetUtils::buildStatusBar($segments, $width),
@@ -2095,7 +2095,6 @@ class EchomailHandler
                 $cols     = $s['cols'] ?? 80;
                 $width    = max(10, $cols - 2);
                 $charset  = $this->server->getTerminalCharset();
-                $fromLine = $fromAddress ? "{$fromName} <{$fromAddress}>" : $fromName;
 
                 $segments = [
                     ['text' => 'U/D',          'color' => $keyColor],
@@ -2125,12 +2124,13 @@ class EchomailHandler
                 $wrappedLines = array_map(fn(string $line): string => $this->server->encodeForTerminal($line), $wrappedLines);
 
                 return [
-                    'headerLines'  => TelnetUtils::buildMessageHeaderBox($width, [
-                        ['label' => 'From: ', 'value' => $fromLine,                                                      'style' => 'normal'],
-                        ['label' => 'Subj: ', 'value' => $msg['subject'] ?? 'Message',                                  'style' => 'bold'],
-                        ['label' => 'To:   ', 'value' => $msg['to_name'] ?? 'All',                                      'style' => 'dim'],
-                        ['label' => 'Area: ', 'value' => $area,                                                         'style' => 'dim'],
-                        ['label' => 'Date: ', 'value' => TelnetUtils::formatUserDate($msg['date_written'] ?? '', $s),   'style' => 'dim'],
+                    'headerLines'  => TelnetUtils::buildCompactMessageHeader($width, [
+                        'from'         => $fromName,
+                        'from_address' => $fromAddress,
+                        'to'           => $msg['to_name'] ?? 'All',
+                        'area'         => $area,
+                        'date'         => TelnetUtils::formatUserDate($msg['date_written'] ?? '', $s, false),
+                        'subject'      => $msg['subject'] ?? 'Message',
                     ], $charset),
                     'wrappedLines' => $wrappedLines,
                     'statusLine'   => TelnetUtils::buildStatusBar($segments, $width),

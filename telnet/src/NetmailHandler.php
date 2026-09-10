@@ -790,7 +790,6 @@ class NetmailHandler
                     $nameValue   = $msg['from_name'] ?? 'Unknown';
                     $nameAddress = $msg['from_address'] ?? '';
                 }
-                $nameLine = $nameAddress ? "{$nameValue} <{$nameAddress}>" : $nameValue;
 
                 $segments = [
                     ['text' => 'U/D',          'color' => $keyColor],
@@ -820,10 +819,12 @@ class NetmailHandler
                 $wrappedLines = array_map(fn(string $line): string => $this->server->encodeForTerminal($line), $wrappedLines);
 
                 return [
-                    'headerLines'  => TelnetUtils::buildMessageHeaderBox($width, [
-                        ['label' => $nameLabel, 'value' => $nameLine,                                                     'style' => 'normal'],
-                        ['label' => 'Date: ',   'value' => TelnetUtils::formatUserDate($msg['date_written'] ?? '', $s),   'style' => 'dim'],
-                        ['label' => 'Subj: ',   'value' => $msg['subject'] ?? 'Message',                                 'style' => 'bold'],
+                    'headerLines'  => TelnetUtils::buildCompactMessageHeader($width, [
+                        'principal_label' => rtrim($nameLabel) . ' ',
+                        'from'            => $nameValue,
+                        'from_address'    => $nameAddress,
+                        'date'            => TelnetUtils::formatUserDate($msg['date_written'] ?? '', $s, false),
+                        'subject'         => $msg['subject'] ?? 'Message',
                     ], $charset),
                     'wrappedLines' => $wrappedLines,
                     'statusLine'   => TelnetUtils::buildStatusBar($segments, $width),

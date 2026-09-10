@@ -189,6 +189,7 @@ failure falls back to the existing flat message list. See
 - List netmail and echomail messages with pagination
 - Navigate between pages
 - View message details with headers
+- The message reader (echomail, netmail and newscan) uses a **compact three-row header** — one identity/context line (`From Name <addr>  ->  To    AREA@net    time`, or `From:` / `To:` and a name for netmail), the subject on its own line, and a rule — instead of the older seven-row framed box. This hands roughly four more rows to the message body (about 20 body rows at 80x24 instead of 16). Long names, subjects, areas and addresses are clipped cleanly with no ellipsis; the full timezone-stamped date and all other metadata remain in the **H** headers overlay.
 - Thread awareness and proper message display
 - ANSI color support for enhanced readability
 - Echomail/netmail bodies that are ANSI artwork (SGR colour + CP437 block glyphs, as sent by many door ads) are shown with their authored line structure intact: rows are kept one-to-one and clipped at the right edge on narrow terminals rather than reflowed like prose, so logos and boxed art are not sheared apart. Cursor-addressed ANSI art is still reduced to its colour/text layer for safety — the web viewer remains the place for pixel-exact art.

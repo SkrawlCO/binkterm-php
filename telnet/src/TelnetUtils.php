@@ -36,6 +36,7 @@ namespace BinktermPHP\TelnetServer;
  *
  *   - {@see buildStatusBar}         — assembles the bottom status bar from colored segments
  *   - {@see buildMessageHeaderBox}  — renders a framed header box with box-drawing characters
+ *   - {@see buildCompactMessageHeader} — restrained 3-row message-reader header (identity + subject + rule)
  *   - {@see renderFullScreen}       — clears the screen and draws header + body + status bar
  *   - {@see wrapTextLines}          — word-wraps a string into an array of display lines
  *   - {@see clipArtLines}           — lays out an ANSI-art body preserving authored rows (no reflow)
@@ -2091,6 +2092,10 @@ class TelnetUtils
         // not restored on exit — the next surface to become active will overwrite it.
         $state['repaint_fn'] = $render;
 
+        // Column of the list's input/prompt row. Declared before $repaintMove so
+        // the closure's by-value capture sees the real value, not null.
+        $inputColStart = 1;
+
         // Selection-move repaint. With no authored frame this is the historical
         // pair of in-place single-row updates; when an authored frame owns the
         // screen a whole-frame redraw is required so the themed viewport
@@ -2115,8 +2120,7 @@ class TelnetUtils
         $render();
 
         // --- Key loop ---
-        $buffer        = '';
-        $inputColStart = 1;
+        $buffer = '';
 
         while (true) {
             $key = $server->readKeyWithIdleCheck($conn, $state);
@@ -3140,6 +3144,148 @@ class TelnetUtils
 
         $lines[] = $frame . $bl . $hFill . $br . $rst;
         return $lines;
+    }
+
+    /**
+     * Truncate plain (pre-encode, no-ANSI) text to a visible column budget
+     * without appending an ellipsis glyph.
+     *
+     * A trailing ellipsis is deliberately avoided: on CP437/ASCII the "…"
+     * transliterates to "..." and can push a fitted line back over budget
+     * (the closed header-overflow regression). Callers that need a visible
+     * "clipped" cue rely on the hard cut instead.
+     */
+    private static function clipPlainToWidth(string $text, int $width): string
+    {
+        if ($width <= 0) {
+            return '';
+        }
+        if (mb_strlen($text, 'UTF-8') <= $width) {
+            return $text;
+        }
+        return rtrim(mb_substr($text, 0, $width, 'UTF-8'));
+    }
+
+    /**
+     * Build a restrained three-row message header: an identity/context line,
+     * the subject line, and a full-width rule.
+     *
+     * Reclaims four body rows versus {@see buildMessageHeaderBox()} (which
+     * frames five fields in a seven-row box) while keeping every metadata
+     * field a reader needs immediately visible. Deeper metadata stays in the
+     * H headers/kludge overlay.
+     *
+     * Field hierarchy when the row is tight: the subject line and the From
+     * name always survive; the sender address, then the To / Area / Date
+     * group on the identity line, are trimmed (and finally dropped) first.
+     *
+     * @param int    $width       Visible width (typically $cols - 2), matching the viewer.
+     * @param array  $fields      Associative metadata. All values optional / may be '':
+     *                             - 'principal_label' e.g. 'From: ' / 'To: ' (netmail); prepended to line 1
+     *                             - 'from', 'from_address'
+     *                             - 'to'    rendered as ' -> To' when set (echomail/newscan)
+     *                             - 'area'  omitted cleanly for netmail
+     *                             - 'date'  pre-formatted in the user's timezone
+     *                             - 'subject'
+     * @param string $charset     'utf8', 'cp437', or 'ascii'.
+     * @param array  $colorScheme Optional SGR overrides: 'context', 'label', 'subject', 'rule'.
+     * @return string[] Exactly three lines, ready to pass as $headerLines.
+     */
+    public static function buildCompactMessageHeader(int $width, array $fields, string $charset = 'ascii', array $colorScheme = []): array
+    {
+        $width = max(20, $width);
+
+        // Values may be untrusted remote metadata (subject / author from a
+        // foreign packet). Strip terminal control sequences before layout.
+        $get = static function (string $key) use ($fields): string {
+            $v = $fields[$key] ?? '';
+            return is_string($v) ? \BinktermPHP\TerminalTextSanitizer::sanitize($v) : '';
+        };
+
+        $label   = $get('principal_label');
+        $from    = $get('from') !== '' ? $get('from') : 'Unknown';
+        $addr    = $get('from_address');
+        $to      = $get('to');
+        $area    = $get('area');
+        $date    = $get('date');
+        $subject = $get('subject') !== '' ? $get('subject') : 'Message';
+
+        $arrow = $charset === 'utf8' ? "\u{2192}" : '->';
+
+        // --- right group: area + date, never more than half the row -----------
+        $right = trim(implode('  ', array_filter([$area, $date], static fn (string $s): bool => $s !== '')));
+        $rightMax = intdiv($width, 2);
+        if (mb_strlen($right, 'UTF-8') > $rightMax && $date !== '') {
+            $right = $date;
+        }
+        $right = self::clipPlainToWidth($right, $rightMax);
+
+        // --- left group: principal identity, then optional " -> To" ----------
+        $leftBudget = $width - ($right !== '' ? mb_strlen($right, 'UTF-8') + 2 : 0);
+
+        $fromLine = $label . ($addr !== '' ? "{$from} <{$addr}>" : $from);
+        if ($addr !== ''
+            && mb_strlen($fromLine, 'UTF-8') > $leftBudget
+            && mb_strlen($label . $from, 'UTF-8') <= $leftBudget) {
+            $fromLine = $label . $from;
+        }
+
+        $left = $fromLine;
+        if ($to !== '') {
+            $candidate = $fromLine . '  ' . $arrow . ' ' . $to;
+            if (mb_strlen($candidate, 'UTF-8') <= $leftBudget) {
+                $left = $candidate;
+            }
+        }
+        $left = self::clipPlainToWidth($left, $leftBudget);
+
+        // --- assemble the plain lines ---------------------------------------
+        if ($right !== '') {
+            $gap = max(1, $width - mb_strlen($left, 'UTF-8') - mb_strlen($right, 'UTF-8'));
+            $contextPlain = $left . str_repeat(' ', $gap) . $right;
+        } else {
+            $contextPlain = $left;
+        }
+        $contextPlain = self::clipPlainToWidth($contextPlain, $width);
+
+        $subjLabel = 'Subject: ';
+        $subjPlain = self::clipPlainToWidth($subjLabel . $subject, $width);
+
+        // Rule is built from raw charset bytes and never re-encoded.
+        $ruleChar = $charset === 'utf8' ? "\u{2500}" : ($charset === 'cp437' ? "\xc4" : '-');
+        $rule     = str_repeat($ruleChar, $width);
+
+        // Post-encode width guard: CP437/ASCII transliteration can widen text.
+        $fit = static function (string $plain) use ($charset, $width): string {
+            $enc = self::encodeHeaderTextForCharset($plain, $charset);
+            if ($charset === 'utf8') {
+                return mb_strlen($enc, 'UTF-8') > $width ? rtrim(mb_substr($enc, 0, $width, 'UTF-8')) : $enc;
+            }
+            return strlen($enc) > $width ? rtrim(substr($enc, 0, $width)) : $enc;
+        };
+
+        $contextEnc = $fit($contextPlain);
+        $subjEnc    = $fit($subjPlain);
+
+        if (!self::$ansiColorEnabled) {
+            return [$contextEnc, $subjEnc, $rule];
+        }
+
+        $contextClr = (string)($colorScheme['context'] ?? "\033[37m");
+        $labelClr   = (string)($colorScheme['label']   ?? self::ANSI_DIM);
+        $subjectClr = (string)($colorScheme['subject'] ?? (self::ANSI_BOLD . "\033[37m"));
+        $ruleClr    = (string)($colorScheme['rule']    ?? self::ANSI_DIM);
+
+        // 'Subject: ' is pure ASCII, so its byte length survives encoding intact.
+        $labelBytes = strlen($subjLabel);
+        $line2 = self::colorize(substr($subjEnc, 0, $labelBytes), $labelClr)
+               . self::colorize(substr($subjEnc, $labelBytes), $subjectClr);
+
+        return [
+            self::colorize($contextEnc, $contextClr),
+            $line2,
+            self::colorize($rule, $ruleClr),
+        ];
     }
 
     /**
