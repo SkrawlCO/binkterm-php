@@ -558,6 +558,15 @@ Transport keepalive: on an idle read the server sends `IAC NOP`
 `last_activity` / `idle_warned`, so the idle-warning and idle-disconnect timers
 are unchanged.
 
+Idle timeouts are seeded from `BbsSession::AUTH_IDLE_WARNING_DEFAULT` (300s) /
+`AUTH_IDLE_DISCONNECT_DEFAULT` (420s). `run()` narrows both to
+`preAuthIdleTimeoutSeconds()` (`TELNET_PREAUTH_IDLE_TIMEOUT`, default 90s) via
+`applyPreAuthIdleDefaults()` on the interactive-login branch only, then restores
+the authenticated values with `applyAuthenticatedIdleDefaults()` at the top of
+post-login setup — before the `session-init` response optionally overrides them.
+An SSH protocol-authenticated session skips the login branch and so never enters
+the short pre-auth window.
+
 One behaviour change in `readRawChar()`: after consuming a DO/DONT/WILL/WONT
 triple with nothing else buffered it now returns `"\x00"` (benign no-op),
 matching the existing SB branch, instead of `null` (which callers treat as a

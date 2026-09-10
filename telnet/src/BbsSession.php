@@ -79,6 +79,28 @@ class BbsSession
     private const ANSI_RED     = "\033[31m";
     private const ANSI_BG_BLUE = "\033[44m";
 
+    // ===== IDLE TIMEOUT CONSTANTS =====
+    /**
+     * Idle-timeout defaults, in seconds.
+     *
+     * An authenticated session uses {@see AUTH_IDLE_WARNING_DEFAULT} /
+     * {@see AUTH_IDLE_DISCONNECT_DEFAULT} (a server-side session-init response may
+     * still override these with sysop-configured values).
+     *
+     * The pre-authentication phase — the login / register / reset-password
+     * prompts — instead uses a deliberately short window
+     * ({@see PREAUTH_IDLE_TIMEOUT_DEFAULT}, tunable via the
+     * `TELNET_PREAUTH_IDLE_TIMEOUT` env var). Idle Telnet scanners routinely
+     * connect and then sit silent; each such socket pins a forked handler.
+     * Shortening only the pre-auth deadline releases those handlers in ~90s
+     * instead of ~7 minutes without affecting a human who is reading the login
+     * screen and typing — any keystroke before authentication refreshes the
+     * timer. This is idle-socket hygiene, not a claim of abuse prevention.
+     */
+    public const AUTH_IDLE_WARNING_DEFAULT = 300;
+    public const AUTH_IDLE_DISCONNECT_DEFAULT = 420;
+    public const PREAUTH_IDLE_TIMEOUT_DEFAULT = 90;
+
     /** @var resource */
     private $conn;
     private string $apiBase;
@@ -242,8 +264,8 @@ class BbsSession
             'terminal_info_logged' => false,
             'last_activity'          => time(),
             'idle_warned'            => false,
-            'idle_warning_timeout'   => 300,
-            'idle_disconnect_timeout'=> 420,
+            'idle_warning_timeout'   => self::AUTH_IDLE_WARNING_DEFAULT,
+            'idle_disconnect_timeout'=> self::AUTH_IDLE_DISCONNECT_DEFAULT,
             'pushback' => '',
             'locale'   => $this->systemLocale,
             'isTls'    => $this->isTls,
@@ -363,6 +385,12 @@ class BbsSession
             // SSH: already authenticated at the protocol layer
             $loginResult = $this->preAuthSession;
         } else {
+            // Shorten the idle deadline for the pre-auth prompts only. Applied
+            // here, inside the interactive-login branch, so an SSH session
+            // (already authenticated at the protocol layer, handled above) never
+            // enters this window.
+            $this->applyPreAuthIdleDefaults($state);
+
             $showQwkTransfer = BbsConfig::isFeatureEnabled('qwk');
             while ($loginResult === null) {
                 $this->writeLine($conn, $this->t('ui.terminalserver.server.login_menu.prompt', 'Would you like to:', [], $state['locale']));
@@ -469,6 +497,11 @@ class BbsSession
         }
 
         // ===== POST-LOGIN SETUP =====
+
+        // Restore normal authenticated idle semantics after the short pre-auth
+        // window (a no-op for SSH, which never shortened them). A server-side
+        // session-init response further below may still override these.
+        $this->applyAuthenticatedIdleDefaults($state);
 
         $session   = $loginResult['session'];
         $username  = $loginResult['username'];
@@ -3571,6 +3604,50 @@ class BbsSession
     }
 
     // ===== READ WITH IDLE TIMEOUT =====
+
+    /**
+     * Pre-authentication idle timeout, in seconds.
+     *
+     * {@see PREAUTH_IDLE_TIMEOUT_DEFAULT}, overridable via the
+     * `TELNET_PREAUTH_IDLE_TIMEOUT` env var. Values below 15s are rejected as a
+     * misconfiguration (they would cut off a human mid-login) and fall back to
+     * the default.
+     */
+    public static function preAuthIdleTimeoutSeconds(): int
+    {
+        $seconds = (int) Config::env(
+            'TELNET_PREAUTH_IDLE_TIMEOUT',
+            (string) self::PREAUTH_IDLE_TIMEOUT_DEFAULT
+        );
+
+        return $seconds >= 15 ? $seconds : self::PREAUTH_IDLE_TIMEOUT_DEFAULT;
+    }
+
+    /**
+     * Apply the short pre-auth idle window to the session state. Called only on
+     * the interactive-login path (never for an SSH protocol-authenticated
+     * session). Warning and disconnect deadlines are set equal so the pre-auth
+     * phase disconnects in one clean step with the existing idle message.
+     */
+    private function applyPreAuthIdleDefaults(array &$state): void
+    {
+        $seconds = self::preAuthIdleTimeoutSeconds();
+        $state['idle_warned']             = false;
+        $state['idle_warning_timeout']    = $seconds;
+        $state['idle_disconnect_timeout'] = $seconds;
+    }
+
+    /**
+     * Restore the normal authenticated-session idle deadlines. Called once at
+     * the start of post-login setup, before any idle-aware read; a server-side
+     * session-init response may subsequently override these values.
+     */
+    private function applyAuthenticatedIdleDefaults(array &$state): void
+    {
+        $state['idle_warned']             = false;
+        $state['idle_warning_timeout']    = self::AUTH_IDLE_WARNING_DEFAULT;
+        $state['idle_disconnect_timeout'] = self::AUTH_IDLE_DISCONNECT_DEFAULT;
+    }
 
     /**
      * Read a line from the socket with idle-timeout management.
