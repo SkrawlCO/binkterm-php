@@ -18,6 +18,17 @@ namespace BinktermPHP;
 
 class Auth
 {
+    /**
+     * Fixed bcrypt hash (cost 12 — the PASSWORD_DEFAULT cost on the PHP the
+     * project targets) verified against the supplied password whenever the
+     * submitted username does not resolve to an account. It equalizes the
+     * wall-clock cost of an unknown-username attempt with that of a
+     * wrong-password attempt for a real account, so login response time is not
+     * a user-enumeration oracle. It is deliberately not a valid credential for
+     * any account and is never stored or compared as one.
+     */
+    private const DUMMY_PASSWORD_HASH = '$2y$12$z0uT/KorOHPD6uVca/ak2eZdZ9VWNjFhjBVydlbMGkU9KUGe8VKpu';
+
     private $db;
 
     public function __construct()
@@ -146,6 +157,14 @@ class Auth
         if ($user && password_verify($password, $user['password_hash'])) {
             $this->updateLastLogin($user['id']);
             return $user;
+        }
+
+        // No such username: still perform one bcrypt verification against a
+        // fixed dummy hash so an unknown username costs the same wall-clock
+        // time as a wrong password for a real account. Result discarded — this
+        // is purely to close the login-timing user-enumeration oracle.
+        if (!$user) {
+            password_verify($password, self::DUMMY_PASSWORD_HASH);
         }
 
         return false;
