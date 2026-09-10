@@ -684,6 +684,17 @@ dim context line (`Areas you follow - N` / `All areas - N total` /
 lightbar, paging, `Q`, `Ctrl-K` help and `/` `s` `a` `u` `g` `i` `c` keys as
 before.
 
+Second consumer: the File Areas selector (`FileHandler::pickFileArea()`), which
+shows `Files ` + `File Areas` + a right-aligned `Page n/m`, a dim context line
+(`N areas - M files`), and a `tag / file count / description` grid — the
+right-aligned `count` column is fixed-width and placed before the flexible
+`description` column so it keeps a stable right edge. Lightbar, `L/R` + `n`/`p`
+paging, numeric jump, `Enter` and `Q` are unchanged; there are no extra keys and
+no `Ctrl-K` overlay (the selector has no secondary actions). The legacy flat
+`renderFileAreaSelectionLine()` row is kept only for the no-render-context
+(pre-auth / mono) pathway. No primitive change was needed — the M1 Crossroads
+and M2 Echomail output is byte-for-byte unchanged.
+
 ### Adding a New Shell
 
 For a custom shell plugin:

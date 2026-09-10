@@ -350,6 +350,10 @@ return [
     // --- File areas ---
     'ui.terminalserver.files.no_areas'                 => 'Nessuna area file disponibile.',
     'ui.terminalserver.files.areas_header'             => 'Aree file (pagina {page}/{total}):',
+    'ui.terminalserver.files.areas_crumb'              => 'File',
+    'ui.terminalserver.files.areas_location'           => 'Aree file',
+    'ui.terminalserver.files.areas_context'            => '{count} aree - {files} file',
+    'ui.terminalserver.files.areas_file_count'         => '{count} file',
     'ui.terminalserver.files.areas_nav'                => 'Inserisci #, n/p (succ/prec), q (esci)',
     'ui.terminalserver.files.area_header'              => 'File: {area} (pagina {page}/{total})',
     'ui.terminalserver.files.no_files'                 => 'Nessun file in questa area.',

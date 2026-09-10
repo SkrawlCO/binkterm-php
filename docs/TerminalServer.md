@@ -270,6 +270,13 @@ Stats are refreshed from the API after returning from netmail, echomail, or bull
   lightbar, number keys, paging, `Q`, `Ctrl-K` help and the `/` `s` `a` `u`
   `g` shortcuts are unchanged; the screen keeps essentially the same row count
   it had before.
+- The **File Areas** list uses the same treatment: an identity line (`Files ` +
+  `File Areas`) with the page position at the right edge, one dim context line
+  (`N areas - M files`), and a tag / file-count / description grid, one row per
+  area. The lightbar, number keys, `L/R` (or `n`/`p`) paging, `Enter` to open
+  and `Q` to go back all behave exactly as before, and the screen keeps the
+  same row count (~17 areas at 80x24). Wider terminals give the description
+  column more room and show more areas per page.
 - Selecting an experience from the menu opens an **experience detail screen**
   before anything launches. It shows the description, type, availability status,
   how many players are online (and the capacity limit when the experience has

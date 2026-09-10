@@ -350,6 +350,10 @@ return [
     // --- File areas ---
     'ui.terminalserver.files.no_areas' => 'Файловых областей нет.',
     'ui.terminalserver.files.areas_header' => 'Файловые области (страница {page}/{total}):',
+    'ui.terminalserver.files.areas_crumb' => 'Файлы',
+    'ui.terminalserver.files.areas_location' => 'Файловые области',
+    'ui.terminalserver.files.areas_context' => '{count} областей - {files} файлов',
+    'ui.terminalserver.files.areas_file_count' => '{count} файл(ов)',
     'ui.terminalserver.files.areas_nav' => 'Введите #: номер области, n/p (следующая/предыдущая), q (выход)',
     'ui.terminalserver.files.area_header' => 'Файлы: {area} (страница {page}/{total})',
     'ui.terminalserver.files.no_files' => 'В этой области файлов нет.',

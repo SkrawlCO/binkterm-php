@@ -4,6 +4,10 @@ namespace BinktermPHP\TelnetServer;
 
 use BinktermPHP\ActivityTracker;
 use BinktermPHP\FileAreaManager;
+use BinktermPHP\Terminal\Presentation\DenseList;
+use BinktermPHP\Terminal\Presentation\DenseListColumn;
+use BinktermPHP\Terminal\Presentation\DenseListRow;
+use BinktermPHP\Terminal\Presentation\DenseListView;
 
 /**
  * FileHandler - File areas, download (ZMODEM), and upload (ZMODEM) for BBS sessions.
@@ -326,49 +330,136 @@ class FileHandler
     }
 
     /**
-     * Render the file-area chooser using the shared selectable-list widget.
+     * Render the file-area chooser using the shared dense-list primitive.
+     *
+     * Terminal Experience Unification M3: File Areas is the second consumer of
+     * the M2 dense-list primitive (after Echomail Areas). The screen gains a
+     * location identity line (`Files > File Areas`) with a right-aligned page
+     * indicator, one compact context line, and a `tag / file-count /
+     * description` column grid — one screen row per area — while every
+     * selection, paging and back semantic is unchanged. The legacy flat-row
+     * rendering is retained for the no-render-context (pre-auth / mono) pathway.
      *
      * @return array{action:string,page:int,area?:array}
      */
     private function pickFileArea($conn, array &$state, array $areas, int $page, int $perPage, TerminalShellInterface $shell): array
     {
         $locale     = $state['locale'] ?? '';
-        $totalPages = max(1, (int)ceil(count($areas) / $perPage));
+        $allAreas   = array_values($areas);
+        $totalPages = max(1, (int)ceil(count($allAreas) / $perPage));
         $page       = max(1, min($page, $totalPages));
-        $pageAreas  = array_slice($areas, ($page - 1) * $perPage, $perPage);
-        $title      = $this->t('ui.terminalserver.files.areas_header', 'File Areas (page {page}/{total}):', [
-            'page' => $page,
-            'total' => $totalPages,
-        ], $locale);
+        $pageAreas  = array_slice($allAreas, ($page - 1) * $perPage, $perPage);
 
-        $rows = [];
-        foreach ($pageAreas as $idx => $area) {
-            $rows[] = $this->encodeForTerminal($this->renderFileAreaSelectionLine(
-                $idx + 1,
-                (string)($area['tag'] ?? ''),
-                (string)($area['description'] ?? ''),
-                (int)($area['file_count'] ?? 0)
-            ));
+        $ctx = $this->server->getRenderContext();
+
+        $statusBar = [
+            ['text' => 'U/D',   'color' => TelnetUtils::ANSI_RED],
+            ['text' => ' ' . $this->t('ui.terminalserver.files.status_move', 'Move', [], $locale) . '  ', 'color' => TelnetUtils::ANSI_BLUE],
+            ['text' => 'L/R',   'color' => TelnetUtils::ANSI_RED],
+            ['text' => ' ' . $this->t('ui.terminalserver.files.status_page', 'Page', [], $locale) . '  ', 'color' => TelnetUtils::ANSI_BLUE],
+            ['text' => 'Enter', 'color' => TelnetUtils::ANSI_RED],
+            ['text' => ' ' . $this->t('ui.terminalserver.files.status_open', 'Open', [], $locale) . '  ', 'color' => TelnetUtils::ANSI_BLUE],
+            ['text' => 'Q',     'color' => TelnetUtils::ANSI_RED],
+            ['text' => ' ' . $this->t('ui.terminalserver.files.status_quit', 'Quit', [], $locale), 'color' => TelnetUtils::ANSI_BLUE],
+        ];
+
+        // Location identity + one compact context line (dense-list primitive).
+        $location   = $this->t('ui.terminalserver.files.areas_location', 'File Areas', [], $locale);
+        $crumbs     = [$this->t('ui.terminalserver.files.areas_crumb', 'Files', [], $locale)];
+        $totalFiles = 0;
+        foreach ($allAreas as $a) {
+            $totalFiles += (int)($a['file_count'] ?? 0);
+        }
+        $context = $this->t(
+            'ui.terminalserver.files.areas_context',
+            '{count} areas - {files} files',
+            ['count' => count($allAreas), 'files' => $totalFiles],
+            $locale
+        );
+
+        // The flexible (description) column must come last so the fixed
+        // file-count column keeps a stable right edge across rows.
+        $columns = [
+            new DenseListColumn('tag', 16),
+            new DenseListColumn('count', 13, DenseListColumn::ALIGN_RIGHT),
+            new DenseListColumn('desc', 0),
+        ];
+
+        $buildList = function (array $slice, int $pageNum) use ($columns, $location, $crumbs, $context, $totalPages, $locale): DenseList {
+            $rows = [];
+            foreach ($slice as $area) {
+                $rows[] = new DenseListRow(
+                    [
+                        'tag'   => (string)($area['tag'] ?? ''),
+                        'desc'  => (string)($area['description'] ?? ''),
+                        'count' => $this->t(
+                            'ui.terminalserver.files.areas_file_count',
+                            '{count} file(s)',
+                            ['count' => (int)($area['file_count'] ?? 0)],
+                            $locale
+                        ),
+                    ],
+                    $area
+                );
+            }
+
+            return new DenseList($location, $crumbs, $context, $columns, $rows, $pageNum, $totalPages);
+        };
+
+        // Fallback used only when there is no render context (pre-auth paths);
+        // reproduces the historical flat row + plain cyan title.
+        $legacyRows = function (array $slice): array {
+            $out = [];
+            foreach ($slice as $idx => $area) {
+                $out[] = $this->encodeForTerminal($this->renderFileAreaSelectionLine(
+                    $idx + 1,
+                    (string)($area['tag'] ?? ''),
+                    (string)($area['description'] ?? ''),
+                    (int)($area['file_count'] ?? 0)
+                ));
+            }
+
+            return $out;
+        };
+
+        if ($ctx !== null) {
+            $composed    = DenseListView::compose($buildList($pageAreas, $page), $ctx);
+            $listTitle   = $composed['title'];
+            $listRows    = $composed['rows'];
+            $headerLines = $composed['headerLines'];
+
+            $rebuildFn = function (array &$s) use ($buildList, $pageAreas, $page): array {
+                $ctx = $this->server->getRenderContext();
+                $ctx->setGeometry((int)($s['cols'] ?? 80), (int)($s['rows'] ?? 24));
+                $c = DenseListView::compose($buildList($pageAreas, $page), $ctx);
+
+                return ['rows' => $c['rows'], 'title' => $c['title'], 'header_lines' => $c['headerLines']];
+            };
+        } else {
+            $title = $this->t('ui.terminalserver.files.areas_header', 'File Areas (page {page}/{total}):', [
+                'page'  => $page,
+                'total' => $totalPages,
+            ], $locale);
+            $listTitle   = $this->encodeForTerminal(TelnetUtils::colorize($title, TelnetUtils::ANSI_CYAN . TelnetUtils::ANSI_BOLD));
+            $listRows    = $legacyRows($pageAreas);
+            $headerLines = [];
+            $rebuildFn   = function (array &$s) use ($legacyRows, $pageAreas, $listTitle): array {
+                return ['rows' => $legacyRows($pageAreas), 'title' => $listTitle];
+            };
         }
 
         $result = $shell->showSelectableList(
             $conn,
             $state,
-            $this->encodeForTerminal(TelnetUtils::colorize($title, TelnetUtils::ANSI_CYAN . TelnetUtils::ANSI_BOLD)),
-            $rows,
+            $listTitle,
+            $listRows,
             $page,
             $totalPages,
             0,
-            [
-                ['text' => 'U/D',   'color' => TelnetUtils::ANSI_RED],
-                ['text' => ' ' . $this->t('ui.terminalserver.files.status_move', 'Move', [], $locale) . '  ', 'color' => TelnetUtils::ANSI_BLUE],
-                ['text' => 'L/R',   'color' => TelnetUtils::ANSI_RED],
-                ['text' => ' ' . $this->t('ui.terminalserver.files.status_page', 'Page', [], $locale) . '  ', 'color' => TelnetUtils::ANSI_BLUE],
-                ['text' => 'Enter', 'color' => TelnetUtils::ANSI_RED],
-                ['text' => ' ' . $this->t('ui.terminalserver.files.status_open', 'Open', [], $locale) . '  ', 'color' => TelnetUtils::ANSI_BLUE],
-                ['text' => 'Q',     'color' => TelnetUtils::ANSI_RED],
-                ['text' => ' ' . $this->t('ui.terminalserver.files.status_quit', 'Quit', [], $locale), 'color' => TelnetUtils::ANSI_BLUE],
-            ]
+            $statusBar,
+            [],
+            $rebuildFn,
+            ['header_lines' => $headerLines]
         );
 
         return match ($result['action']) {

@@ -347,6 +347,10 @@ return [
     // --- File areas ---
     'ui.terminalserver.files.no_areas'                 => 'No hay áreas de archivos disponibles.',
     'ui.terminalserver.files.areas_header'             => 'Áreas de archivos (página {page}/{total}):',
+    'ui.terminalserver.files.areas_crumb'              => 'Archivos',
+    'ui.terminalserver.files.areas_location'           => 'Áreas de archivos',
+    'ui.terminalserver.files.areas_context'            => '{count} áreas - {files} archivos',
+    'ui.terminalserver.files.areas_file_count'         => '{count} archivo(s)',
     'ui.terminalserver.files.areas_nav'                => 'Ingrese #, n/p (siguiente/anterior), q (salir)',
     'ui.terminalserver.files.area_header'              => 'Archivos: {area} (página {page}/{total})',
     'ui.terminalserver.files.no_files'                 => 'No hay archivos en esta área.',
