@@ -246,6 +246,13 @@ is shared across php-fpm workers and the terminal daemons. Non-positive or
 non-numeric values fall back to the defaults above rather than disabling the
 protection.
 
+The public QWK-over-HTTP Basic-auth endpoints (`/qwk/download`, `/qwk/upload`)
+authenticate outside `/api/auth/login`, so they apply the same counters,
+thresholds and `auth_login_attempts` table directly around their credential
+check. The FTP and NNTP transports are not throttled here — neither daemon is
+run or exposed in the default deployment; if you enable one, put a
+transport-level control in front of it.
+
 ### Gemini Capsule Daemon
 
 ```bash

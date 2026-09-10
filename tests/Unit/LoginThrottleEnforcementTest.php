@@ -89,14 +89,14 @@ final class LoginThrottleEnforcementTest extends TestCase
 
     public function testThrottleIsNotWiredIntoTheDeeperCredentialPrimitive(): void
     {
-        // FTP, NNTP and QWK Basic-auth call Auth::authenticateCredentials()
-        // directly, outside this HTTP route. The throttle must not have leaked
-        // into those paths.
+        // The throttle must never leak into Auth::authenticateCredentials()
+        // itself, nor into the FTP / NNTP transports (separate daemons, not
+        // externally exposed in this deployment — see docs/proposals for the
+        // direct-caller recon).
         foreach ([
             __DIR__ . '/../../src/Auth.php',
             __DIR__ . '/../../src/Ftp/FtpServer.php',
             __DIR__ . '/../../src/Nntp/NntpAuth.php',
-            __DIR__ . '/../../routes/web-routes.php',
         ] as $file) {
             $src = file_get_contents($file);
             self::assertIsString($src);
@@ -106,6 +106,43 @@ final class LoginThrottleEnforcementTest extends TestCase
                 basename($file) . ' must not reference the route-level LoginThrottle'
             );
         }
+    }
+
+    public function testQwkHttpBasicAuthIsThrottled(): void
+    {
+        // The public QWK-over-HTTP Basic-auth helper calls
+        // Auth::authenticateCredentials() directly, bypassing /api/auth/login.
+        // It must apply the same shared throttle around that call.
+        $src = file_get_contents(__DIR__ . '/../../routes/web-routes.php');
+        self::assertIsString($src);
+
+        $start = strpos($src, 'function requireBasicAuthUser(');
+        self::assertNotFalse($start);
+        $end = strpos($src, "\n    }\n}", $start);
+        self::assertNotFalse($end);
+        $fn = substr($src, $start, $end - $start);
+
+        $checkPos = strpos($fn, '$throttle->isAllowed(');
+        $authPos = strpos($fn, '$auth->authenticateCredentials(');
+        $failPos = strpos($fn, '$throttle->recordFailure(');
+        $successPos = strpos($fn, '$throttle->recordSuccess(');
+
+        self::assertNotFalse($checkPos, 'requireBasicAuthUser must consult the throttle');
+        self::assertNotFalse($authPos);
+        self::assertNotFalse($failPos, 'a failed Basic-auth attempt must be recorded');
+        self::assertNotFalse($successPos, 'a successful Basic-auth must clear the identifier counter');
+        self::assertLessThan($authPos, $checkPos, 'throttle check precedes the credential check');
+        self::assertGreaterThan($authPos, $failPos, 'failure recorded after the credential check returns false');
+
+        // recordSuccess clears only the identifier — the IP counter ages out.
+        self::assertMatchesRegularExpression(
+            '/recordSuccess\(\s*\$credentials\[.username.\]\s*\)/',
+            $fn
+        );
+        // Same generic 401 as a wrong password — no lockout / enumeration signal.
+        self::assertStringNotContainsString('locked', strtolower($fn));
+        self::assertStringNotContainsString('too many', strtolower($fn));
+        self::assertStringNotContainsString('429', $fn);
     }
 
     public function testSshServerPassesParsedPeerIpIntoSshSession(): void
