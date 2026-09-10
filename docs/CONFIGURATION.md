@@ -196,6 +196,35 @@ ADMIN_DAEMON_SCHEDULE_INTERVAL=60    # seconds between scheduler ticks
 
 See [docs/SSHServer.md](SSHServer.md) for full SSH daemon setup including key generation.
 
+### Failed-login throttle
+
+```bash
+# AUTH_LOGIN_USER_MAX=5
+# AUTH_LOGIN_IP_MAX=20
+# AUTH_LOGIN_WINDOW=900
+```
+
+`POST /api/auth/login` is the single credential-check boundary for every
+interactive transport — Web directly, and the Telnet, TLS-Telnet and SSH
+daemons by proxying the check through it. Two independent rolling-window
+failure counters guard it: one keyed on the normalized submitted username
+(`AUTH_LOGIN_USER_MAX`, tighter — limits targeted account brute force), one on
+the resolved client IP (`AUTH_LOGIN_IP_MAX`, more generous — limits broad
+username spraying without collaterally throttling NAT/shared sites). A login is
+allowed only while **both** counters are under their limit within
+`AUTH_LOGIN_WINDOW` seconds.
+
+A throttled attempt returns the identical generic `401` /
+`errors.auth.invalid_credentials` response as a wrong password: no distinct
+"account locked" status, no permanent lockout, no username-enumeration signal
+(unknown usernames and wrong passwords are counted identically). A successful
+login clears that username's counter but **not** the source-IP counter — the IP
+counter only ages out through the window, so holding one valid account cannot
+reset an IP spray counter. State lives in the `auth_login_attempts` table so it
+is shared across php-fpm workers and the terminal daemons. Non-positive or
+non-numeric values fall back to the defaults above rather than disabling the
+protection.
+
 ### Gemini Capsule Daemon
 
 ```bash

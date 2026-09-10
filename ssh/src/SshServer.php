@@ -300,8 +300,12 @@ class SshServer
 
     private function handleConnection($conn, bool $forked): void
     {
-        $peer   = @stream_socket_get_name($conn, true);
-        $peerIp = $peer ? explode(':', $peer)[0] : 'unknown';
+        $peer     = @stream_socket_get_name($conn, true);
+        $peerIp   = $peer ? explode(':', $peer)[0] : 'unknown';
+        // Validated bare IP (IPv4/IPv6-safe), or null — passed to SshSession so
+        // the initial password check can send the authenticated
+        // X-Binkterm-Client-IP header, matching Telnet/BbsSession.
+        $clientIp = $this->extractIp($peer);
 
         $sshSession = new SshSession(
             $conn,
@@ -309,7 +313,8 @@ class SshServer
             $this->debug,
             $this->insecure,
             $this->hostKeyFile,
-            $this->hostKeyFile . '.pub'
+            $this->hostKeyFile . '.pub',
+            $clientIp
         );
 
         $authResult = $sshSession->handshake();

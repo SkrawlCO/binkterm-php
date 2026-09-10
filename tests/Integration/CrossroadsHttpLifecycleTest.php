@@ -289,6 +289,14 @@ final class CrossroadsHttpLifecycleTest extends TestCase
                 name VARCHAR(255) UNIQUE NOT NULL,
                 is_active BOOLEAN NOT NULL DEFAULT TRUE
             );
+
+            CREATE TABLE auth_login_attempts (
+                id SERIAL PRIMARY KEY,
+                identifier_key VARCHAR(255) NOT NULL,
+                ip_key VARCHAR(45) NOT NULL,
+                success BOOLEAN NOT NULL DEFAULT FALSE,
+                attempted_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            );
         ");
 
         $insert = $db->prepare("
