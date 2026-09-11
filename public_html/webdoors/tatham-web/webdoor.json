@@ -7,7 +7,7 @@
     "author": "Simon Tatham and contributors; L33TEST frontend glue",
     "description": "Portable logic puzzles. Light Up is the initial curated puzzle.",
     "entry_point": "index.php",
-    "icon": "../../favicon.svg"
+    "icon": "lightup.png"
   },
   "requirements": {
     "min_host_version": "1.0"
