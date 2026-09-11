@@ -290,8 +290,8 @@
       "upstreamPath": "vite.config.ts",
       "localPath": "vite.config.ts",
       "upstreamSha256": "bb86efeb11e83afcc5bf8a83127418024746b107a60ba6c7ccc187dca9cd1b5d",
-      "localSha256": "bb86efeb11e83afcc5bf8a83127418024746b107a60ba6c7ccc187dca9cd1b5d",
-      "status": "unchanged"
+      "localSha256": "2921bbdfb4a1187e8655fe6e5b7d85c19712f339c941cb0faa5ebe6d4122ede7",
+      "status": "adapted"
     }
   ],
   "sharedForwarders": [
