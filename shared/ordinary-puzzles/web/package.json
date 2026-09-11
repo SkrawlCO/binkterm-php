@@ -1,0 +1,1 @@
+{"name":"ordinary-puzzles-local-web","private":true,"scripts":{"build":"node build.cjs"},"dependencies":{"react":"19.2.3","react-dom":"19.2.3"},"devDependencies":{"esbuild":"0.24.2"}}

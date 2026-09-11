@@ -665,12 +665,16 @@ To install a new WebDoor:
 
 ### Reserved leased progress namespaces
 
-`LeasedWebDoorStorage` defaults to `tatham` and additionally accepts `breaklock`.
+`LeasedWebDoorStorage` defaults to `tatham` and additionally accepts `breaklock` and `ordinary-puzzles`.
 Each namespace uses slot 0 independently within the existing caller-scoped storage
-key. Both namespaces reject generic SDK/controller writes; only their leased
+key. All three namespaces reject generic SDK/controller writes; only their leased
 facades may update them. BreakLock's persistence and handoff proof are documented in
 `shared/breaklock/persistence/README.md`. Its production WebDoor is
 `public_html/webdoors/breaklock`, paired with NativeDoor `breaklock-terminal`
 under the `breaklock` Experience. Both use the same shared core and leased state.
 The Web Save & Return uses the host's validated PP/direct return link; terminal
 return uses the existing NativeDoor/Curated-place launch flow.
+
+Ordinary Puzzles uses `public_html/webdoors/ordinary-puzzles` and NativeDoor
+`ordinary-puzzles-terminal`, backed by `shared/ordinary-puzzles/persistence/`.
+Its slot 0 contains the canonical replay snapshot, including unfinished drags.

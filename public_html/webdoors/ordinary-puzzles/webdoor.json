@@ -1,0 +1,23 @@
+{
+  "webdoor_version": "1.0",
+  "game": {
+    "id": "ordinary-puzzles",
+    "name": "Ordinary Puzzles",
+    "version": "1.0.0",
+    "author": "Michele Mazzarolo; Crossroads adapters",
+    "description": "Extend numbered lines to cover every dot.",
+    "entry_point": "index.php",
+    "icon": "icon.png"
+  },
+  "requirements": {
+    "min_host_version": "1.0"
+  },
+  "experience": {
+    "group": "ordinary-puzzles",
+    "surface": "web",
+    "primary": true
+  },
+  "multiplayer": {
+    "enabled": false
+  }
+}

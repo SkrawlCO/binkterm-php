@@ -13,7 +13,7 @@ final class CuratedPlaceCatalogTest extends TestCase
     private function catalog(): array
     {
         $rows = [];
-        foreach (['wordle', 'hangman', 'blackjack', 'klondike-solitaire', 'tatham-web', 'tatham-terminal', 'breaklock', 'breaklock-terminal'] as $id) {
+        foreach (['wordle', 'hangman', 'blackjack', 'klondike-solitaire', 'tatham-web', 'tatham-terminal', 'breaklock', 'breaklock-terminal', 'ordinary-puzzles', 'ordinary-puzzles-terminal'] as $id) {
             $native = str_ends_with($id, '-terminal');
             $rows[$id] = [
                 'id' => $id, 'name' => $id, 'description' => '',
@@ -23,7 +23,7 @@ final class CuratedPlaceCatalogTest extends TestCase
             ];
         }
         // Real manifests supply the capability and grouping, not a PP fixture.
-        foreach (['tatham-web', 'tatham-terminal', 'breaklock', 'breaklock-terminal'] as $id) {
+        foreach (['tatham-web', 'tatham-terminal', 'breaklock', 'breaklock-terminal', 'ordinary-puzzles', 'ordinary-puzzles-terminal'] as $id) {
             $path = str_ends_with($id, '-terminal')
                 ? '/native-doors/doors/' . $id . '/nativedoor.json'
                 : '/public_html/webdoors/' . $id . '/webdoor.json';
@@ -44,7 +44,7 @@ final class CuratedPlaceCatalogTest extends TestCase
         self::assertSame("Puzlmastr's Patch", $definition['name']);
         self::assertSame('place', $definition['kind']);
         self::assertSame('curated', $definition['parent']);
-        $order = ['wordle', 'hangman', 'blackjack', 'klondike-solitaire', 'tatham/lightup', 'breaklock'];
+        $order = ['wordle', 'hangman', 'blackjack', 'klondike-solitaire', 'tatham/lightup', 'breaklock', 'ordinary-puzzles'];
         self::assertSame($order, array_column($definition['members'], 'reference'));
         $place = $service->getPlace('puzlmastrs-patch', ['id' => 7]);
         self::assertSame($order, array_column($place['members'], 'reference'));
@@ -68,7 +68,11 @@ final class CuratedPlaceCatalogTest extends TestCase
         self::assertSame('tatham-terminal', CuratedPlaceCatalog::resolveReference('tatham/lightup', $catalog, 'telnet')['launch']['id']);
         self::assertSame('breaklock', CuratedPlaceCatalog::resolveReference('breaklock', $catalog, 'web')['launch']['id']);
         self::assertSame('breaklock-terminal', CuratedPlaceCatalog::resolveReference('breaklock', $catalog, 'telnet')['launch']['id']);
+        self::assertSame('ordinary-puzzles-terminal', CuratedPlaceCatalog::resolveReference('ordinary-puzzles', $catalog, 'telnet')['launch']['id']);
         self::assertSame($before, $catalog);
+        unset($catalog['ordinary-puzzles']);
+        self::assertNull(CuratedPlaceCatalog::resolveReference('ordinary-puzzles', $catalog, 'web'));
+
     }
 
     public function testUnsupportedAndMalformedReferencesFailClosed(): void
@@ -102,9 +106,9 @@ final class CuratedPlaceCatalogTest extends TestCase
             }
         );
         $service = new CuratedPlaceCatalog($source);
-        self::assertCount(6, $service->getPlace('puzlmastrs-patch', ['id' => 7, 'is_admin' => true])['members']);
+        self::assertCount(7, $service->getPlace('puzlmastrs-patch', ['id' => 7, 'is_admin' => true])['members']);
         $place = $service->getPlace('puzlmastrs-patch', ['id' => 8, 'is_admin' => false]);
-        self::assertSame(['wordle', 'hangman', 'blackjack', 'klondike-solitaire', 'breaklock'], array_column($place['members'], 'reference'));
+        self::assertSame(['wordle', 'hangman', 'blackjack', 'klondike-solitaire', 'breaklock', 'ordinary-puzzles'], array_column($place['members'], 'reference'));
     }
 
     public function testAnotherSurfaceRemainsVisibleWithoutInventedLaunch(): void
@@ -113,7 +117,7 @@ final class CuratedPlaceCatalogTest extends TestCase
         $source->expects(self::once())->method('getEnabledGames')
             ->with(['id' => 7], 'telnet')->willReturn($this->catalog());
         $place = (new CuratedPlaceCatalog($source))->getPlace('puzlmastrs-patch', ['id' => 7], 'terminal');
-        self::assertCount(6, $place['members']);
+        self::assertCount(7, $place['members']);
         self::assertNull($place['members'][0]['launch']);
         self::assertSame(['web' => 'full', 'telnet' => 'unavailable'], $place['members'][0]['surfaces']);
         self::assertSame(['web' => 'full', 'telnet' => 'full'], $place['members'][4]['surfaces']);

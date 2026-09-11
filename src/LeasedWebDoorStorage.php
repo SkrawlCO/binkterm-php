@@ -32,7 +32,7 @@ final class LeasedWebDoorStorage
 
     public static function isReserved(string $gameId): bool
     {
-        return in_array($gameId, [self::GAME_ID, 'breaklock'], true);
+        return in_array($gameId, [self::GAME_ID, 'breaklock', 'ordinary-puzzles'], true);
     }
 
     /** Read only this caller's data; never return lease credentials. */

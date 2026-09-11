@@ -1,0 +1,24 @@
+{
+  "repository": "https://github.com/mmazzarolo/ordinary-puzzles-app",
+  "revision": "ee4c9d169ec65a2aad34a3856529a542ff583508",
+  "files": {
+    "upstream/Tile.tsx": {
+      "upstreamPath": "src/op-board/Tile.tsx",
+      "sha256": "1ff8ffdc72959f3de52f4d69c637589166aa1f460e6d4d4208a4270bd16a77bd",
+      "modified": false
+    },
+    "assets/Inter-SemiBold.otf": {
+      "upstreamPath": "assets/fonts/Inter-SemiBold.otf",
+      "sha256": "5074efdbf6a9b2b7c406fb52c0ad71d8d26203a3a5c9a83288892128a3f8a06a",
+      "modified": false
+    }
+  },
+  "adaptedReferences": [
+    "src/op-board/Board.tsx",
+    "src/op-board/store.ts (pointer routing only)",
+    "src/op-design/colors.ts",
+    "scripts/prepare-fonts.mjs"
+  ],
+  "fontLicenseSource": "https://github.com/rsms/inter/blob/v3.19/LICENSE.txt",
+  "fontLicenseSha256": "4d7d9c95e7d7f2f0ebf76d5e0b344826b74e903a34028ee18ab54bb639e45906"
+}

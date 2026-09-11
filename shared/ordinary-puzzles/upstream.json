@@ -1,0 +1,27 @@
+{
+  "repository": "https://github.com/mmazzarolo/ordinary-puzzles-app",
+  "revision": "ee4c9d169ec65a2aad34a3856529a542ff583508",
+  "license": "MIT",
+  "files": [
+    {
+      "upstreamPath": "src/op-board/store.ts",
+      "localPath": "upstream/src/op-board/store.ts",
+      "sha256": "f92e0679db1702b3fa048d44ee8954fb27468f758b59f15d8dab0326ffcb8061"
+    },
+    {
+      "upstreamPath": "src/op-puzzle-pack/index.ts",
+      "localPath": "upstream/src/op-puzzle-pack/index.ts",
+      "sha256": "3d783775fcaeddd6812eff3ca1ab1c39110478cbacfd8e579dbe12fc436fb324"
+    },
+    {
+      "upstreamPath": "src/op-puzzle-pack/puzzle-pack.json",
+      "localPath": "upstream/src/op-puzzle-pack/puzzle-pack.json",
+      "sha256": "e5bf1d12e94d0b722a9daf4e71726166b19ec8fd9c0fe7c458d0fe0eedd166fc"
+    },
+    {
+      "upstreamPath": "LICENSE.md",
+      "localPath": "LICENSE.upstream",
+      "sha256": "f00c9529fb92ef633612975a4766b4f85de4de92f49fe2ed17aca295dc613055"
+    }
+  ]
+}

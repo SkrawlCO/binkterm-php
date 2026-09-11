@@ -16,7 +16,8 @@
       { "reference": "blackjack", "primary_presentation": true },
       { "reference": "klondike-solitaire", "title": "Solitaire", "primary_presentation": true },
       { "reference": "tatham/lightup", "title": "Light Up" },
-      { "reference": "breaklock", "title": "BreakLock" }
+      { "reference": "breaklock", "title": "BreakLock" },
+      { "reference": "ordinary-puzzles", "title": "Ordinary Puzzles" }
     ]
   }
 }

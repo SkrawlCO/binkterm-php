@@ -203,6 +203,32 @@ final class TathamProgressTest extends TestCase
         new LeasedWebDoorStorage($this->db, 1, 'ordinary');
     }
 
+    public function testOrdinaryPuzzlesIsolationAndReservedProtection(): void
+    {
+        $ordinary = new LeasedWebDoorStorage($this->db, 1, 'ordinary-puzzles');
+        $lease = $ordinary->acquire();
+        self::assertTrue($lease['success']);
+        self::assertTrue($ordinary->write($lease['owner_token'], $lease['attempt_id'], 0, ['puzzleId' => 'e9c2882a25e2'])['success']);
+        foreach (['tatham', 'breaklock'] as $namespace) {
+            $other = new LeasedWebDoorStorage($this->db, 1, $namespace);
+            self::assertNull($other->read());
+            $otherLease = $other->acquire();
+            self::assertFalse($other->write($lease['owner_token'], $otherLease['attempt_id'], 0, [])['success']);
+            self::assertFalse($ordinary->write($otherLease['owner_token'], $lease['attempt_id'], 1, [])['success']);
+            self::assertSame([], $other->read()['data']);
+        }
+        self::assertNull((new LeasedWebDoorStorage($this->db, 2, 'ordinary-puzzles'))->read());
+        self::assertTrue(LeasedWebDoorStorage::isReserved('ordinary-puzzles'));
+        self::assertSame(409, $this->finish($this->worker('sdk', 'ordinary-puzzles'))['status']);
+        $auth = $this->createMock(Auth::class);
+        $auth->method('getCurrentUser')->willReturn(['user_id' => 1, 'id' => 1]);
+        $controller = new WebDoorController($this->db, $auth, $this->createMock(GameCatalog::class));
+        $_GET['game_id'] = 'ordinary-puzzles';
+        self::assertFalse($controller->saveGame(0)['success']);
+        self::assertFalse($controller->deleteSave(0)['success']);
+        self::assertSame(['puzzleId' => 'e9c2882a25e2'], $ordinary->read()['data']);
+    }
+
     private function worker(string $mode, string $key = ''): array
     {
         $root = dirname(__DIR__, 2);
