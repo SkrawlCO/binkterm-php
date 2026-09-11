@@ -1,0 +1,17 @@
+{
+    "repository": "https://github.com/maxwellito/breaklock",
+    "revision": "a06fb28a3fa6072a089ca664c66a7bf08c0a3e99",
+    "license": "MIT",
+    "canonicalPath": "src/models/pattern.js",
+    "localPath": "upstream/pattern.js",
+    "sha256": "f1c4411b4a7ae3e15eb55d5310cde0821d464166e35483eb62768a4cdc26097b",
+    "orchestrationSources": [
+        "src/controllers/game/game.ctrl.js",
+        "src/controllers/lock/lock.ctrl.js",
+        "src/controllers/statusBar/statusBar.ctrl.js",
+        "src/controllers/countdown/countdown.ctrl.js",
+        "src/controllers/summary/summary.ctrl.js",
+        "src/controllers/history/history.ctrl.js",
+        "src/config.js"
+    ]
+}

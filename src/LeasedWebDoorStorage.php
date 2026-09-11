@@ -7,7 +7,7 @@ namespace BinktermPHP;
 use PDO;
 
 /**
- * Caller-bound opaque storage for the reserved Tatham slot.
+ * Caller-bound opaque storage for the reserved, namespaced WebDoor slot.
  * The caller ID must come from authenticated application/launcher context.
  * This class deliberately owns its transaction; do not call inside another one.
  * Owner secrets are returned only by acquire; only their hashes are persisted.
@@ -20,8 +20,11 @@ final class LeasedWebDoorStorage
     public const RENEW_SECONDS = 10;
     public const MAX_BYTES = 102400;
 
-    public function __construct(private PDO $db, private int $userId)
+    public function __construct(private PDO $db, private int $userId, private string $gameId = self::GAME_ID)
     {
+        if (!self::isReserved($gameId)) {
+            throw new \InvalidArgumentException('Unknown leased namespace');
+        }
         if ($userId <= 0) {
             throw new \InvalidArgumentException('An authenticated caller ID is required');
         }
@@ -29,7 +32,7 @@ final class LeasedWebDoorStorage
 
     public static function isReserved(string $gameId): bool
     {
-        return $gameId === self::GAME_ID;
+        return in_array($gameId, [self::GAME_ID, 'breaklock'], true);
     }
 
     /** Read only this caller's data; never return lease credentials. */
@@ -46,7 +49,7 @@ final class LeasedWebDoorStorage
             $metadata = ['attempt_id' => bin2hex(random_bytes(16)), 'revision' => 0];
             $insert = $this->db->prepare('INSERT INTO webdoor_storage (user_id, game_id, slot, data, metadata)
                 VALUES (?, ?, 0, \'{}\'::jsonb, ?::jsonb) ON CONFLICT (user_id, game_id, slot) DO NOTHING');
-            $insert->execute([$this->userId, self::GAME_ID, $this->encode($metadata)]);
+            $insert->execute([$this->userId, $this->gameId, $this->encode($metadata)]);
             $row = $this->row(true);
             $now = $this->now();
             if (($row['metadata']['lease_expires_at'] ?? 0) > $now) {
@@ -118,7 +121,7 @@ final class LeasedWebDoorStorage
     {
         $query = $this->db->prepare('SELECT data, metadata FROM webdoor_storage
             WHERE user_id = ? AND game_id = ? AND slot = 0' . ($lock ? ' FOR UPDATE' : ''));
-        $query->execute([$this->userId, self::GAME_ID]);
+        $query->execute([$this->userId, $this->gameId]);
         $row = $query->fetch(PDO::FETCH_ASSOC);
         if ($row === false) {
             return null;
@@ -138,7 +141,7 @@ final class LeasedWebDoorStorage
     {
         $query = $this->db->prepare('UPDATE webdoor_storage SET data = ?::jsonb, metadata = ?::jsonb,
             saved_at = clock_timestamp() WHERE user_id = ? AND game_id = ? AND slot = 0');
-        $query->execute([$this->encode($row['data']), $this->encode($row['metadata']), $this->userId, self::GAME_ID]);
+        $query->execute([$this->encode($row['data']), $this->encode($row['metadata']), $this->userId, $this->gameId]);
     }
 
     /** Read database time after acquiring the row lock, not transaction-start time. */

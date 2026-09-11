@@ -165,6 +165,8 @@ final class ExperienceReturnContractTest extends TestCase
     }
 
 
+    #[\PHPUnit\Framework\Attributes\RunInSeparateProcess]
+    #[\PHPUnit\Framework\Attributes\PreserveGlobalState(false)]
     public function testWebDoorWrapperReturnsToExperience(): void
     {
         $routes = file_get_contents(
@@ -177,20 +179,31 @@ final class ExperienceReturnContractTest extends TestCase
         self::assertIsString($routes);
         self::assertIsString($template);
 
-        // Regression (human acceptance): the WebDoor play route must resolve the
-        // launched backend id to its CANONICAL Experience id before building the
-        // Crossroads return. A grouped Experience's Web member is launched as
-        // /games/{backendId} but its "Back to Crossroads" must target the
-        // group's /experiences/{canonicalId}, not /experiences/{backendId}
-        // (which 404s -- the backend id is not a public Experience URL).
-        self::assertStringContainsString(
-            '\BinktermPHP\ExperienceComposition::canonicalId(',
-            $routes
-        );
-        self::assertStringContainsString(
-            "'return_url' => '/experiences/' . rawurlencode(\$returnExperienceId)",
-            $routes
-        );
+        // Execute the route's actual return/render block, with catalog and output
+        // collaborators isolated. Keep canonicalization and PP validation real.
+        // This intentionally excludes unrelated launch/session/database setup.
+        class_alias(ReturnFixtureCatalog::class, 'BinktermPHP\\GameCatalog');
+        class_alias(ReturnFixtureTemplate::class, 'BinktermPHP\\Template');
+        $start = strpos($routes, '    $returnExperienceId =');
+        self::assertNotFalse($start);
+        $end = strpos($routes, "\n});", $start);
+        self::assertNotFalse($end);
+        $block = substr($routes, $start, $end - $start);
+        $render = eval('use BinktermPHP\\Template; return static function ($game, $user) {'
+            . '$gameData = []; $gameUrl = "/unused";' . $block . '};');
+        try {
+            foreach (['tatham-web' => 'tatham', 'breaklock' => 'breaklock'] as $backend => $canonical) {
+                foreach ([null, 'puzlmastrs-patch', 'missing', 'https://evil.invalid', ['puzlmastrs-patch']] as $parent) {
+                    $_GET = $parent === null ? [] : ['parent_place_id' => $parent];
+                    $render($backend, ['id' => 7]);
+                    self::assertSame('webdoor_play.twig', ReturnFixtureTemplate::$name);
+                    self::assertSame($backend, ReturnFixtureTemplate::$data['game_id']);
+                    self::assertSame($parent === 'puzlmastrs-patch'
+                        ? '/places/puzlmastrs-patch' : '/experiences/' . $canonical,
+                        ReturnFixtureTemplate::$data['return_url']);
+                }
+            }
+        } finally { $_GET = []; }
 
         self::assertStringContainsString(
             'href="{{ return_url|default(\'/games\') }}"',
@@ -393,4 +406,37 @@ final class ExperienceReturnContractTest extends TestCase
     }
 
 
+}
+
+/** Caller-authorized catalog fixture built from the actual grouped manifests. */
+final class ReturnFixtureCatalog
+{
+    public function getEnabledGames(?array $user, string $surface): array
+    {
+        if ($user !== ['id' => 7] || $surface !== 'web') {
+            throw new \RuntimeException('Unexpected return resolver caller/surface');
+        }
+        $rows = [];
+        foreach (['tatham-web', 'tatham-terminal', 'breaklock', 'breaklock-terminal'] as $id) {
+            $native = str_ends_with($id, '-terminal');
+            $path = $native ? '/native-doors/doors/' . $id . '/nativedoor.json'
+                : '/public_html/webdoors/' . $id . '/webdoor.json';
+            $manifest = json_decode(file_get_contents(dirname(__DIR__, 2) . $path), true, 512, JSON_THROW_ON_ERROR);
+            $rows[$id] = ['id' => $id, 'name' => $id,
+                'backend' => ['type' => $native ? 'native' : 'web', 'id' => $id],
+                'surfaces' => ['web' => 'full', 'telnet' => $native ? 'full' : 'unavailable'],
+                'policy' => ['enabled' => true], 'grouping' => $manifest['experience'],
+                'source' => ['manifest' => $manifest]];
+        }
+        return \BinktermPHP\ExperienceComposition::compose($rows);
+    }
+}
+final class ReturnFixtureTemplate
+{
+    public static string $name = '';
+    public static array $data = [];
+    public function renderResponse(string $name, array $data): void
+    {
+        self::$name = $name; self::$data = $data;
+    }
 }

@@ -20,15 +20,16 @@ final class PlaceWebFixtureCatalog
     public static function rows(): array
     {
         $rows = [];
-        foreach (['wordle', 'hangman', 'blackjack', 'klondike-solitaire', 'tatham'] as $id) {
+        foreach (['wordle', 'hangman', 'blackjack', 'klondike-solitaire', 'tatham', 'breaklock'] as $id) {
             $rows[$id] = [
                 'id' => $id, 'name' => $id, 'description' => '', 'category' => 'game',
                 'backend' => ['type' => 'web', 'id' => $id === 'tatham' ? 'tatham-web' : $id],
-                'surfaces' => ['web' => 'full', 'telnet' => $id === 'tatham' ? 'full' : 'planned'],
+                'surfaces' => ['web' => 'full', 'telnet' => in_array($id, ['tatham', 'breaklock'], true) ? 'full' : 'planned'],
                 'source' => ['manifest' => ['experience' => ['default_entry' => $id === 'tatham' ? 'lightup' : null]]],
             ];
         }
         $rows['tatham']['surface_backends']['telnet'] = ['type' => 'native', 'id' => 'tatham-terminal'];
+        $rows['breaklock']['surface_backends']['telnet'] = ['type' => 'native', 'id' => 'breaklock-terminal'];
         return $rows;
     }
 
@@ -76,6 +77,7 @@ final class CuratedPlaceWebTest extends TestCase
         $place = (new CuratedPlaceCatalog())->getDefinition('puzlmastrs-patch');
         $place['members'] = array_map(static function (array $member): array {
             $resolved = CuratedPlaceCatalog::resolveReference($member['reference'], PlaceWebFixtureCatalog::rows(), 'web');
+            self::assertNotNull($resolved, 'Fixture must resolve member ' . $member['reference']);
             $resolved['title'] = $member['title'] ?? $resolved['title'];
             return $resolved;
         }, $place['members']);
@@ -107,14 +109,18 @@ final class CuratedPlaceWebTest extends TestCase
     {
         $place = $this->place();
         $cards = CuratedPlacePresentation::members($place);
-        self::assertSame(['wordle', 'hangman', 'blackjack', 'klondike-solitaire', 'tatham/lightup'], array_column($cards, 'reference'));
+        self::assertSame(['wordle', 'hangman', 'blackjack', 'klondike-solitaire', 'tatham/lightup', 'breaklock'], array_column($cards, 'reference'));
         self::assertSame('Light Up', $cards[4]['experience_presentation']['name']);
         self::assertSame('tatham', $cards[4]['experience_presentation']['id']);
         self::assertSame('unavailable', $cards[0]['experience_presentation']['surfaces']['telnet']);
         self::assertSame('full', $cards[4]['experience_presentation']['surfaces']['telnet']);
+        self::assertSame('BreakLock', $cards[5]['experience_presentation']['name']);
+        self::assertSame('breaklock', $cards[5]['experience_presentation']['id']);
+        self::assertSame('full', $cards[5]['experience_presentation']['surfaces']['web']);
+        self::assertSame('full', $cards[5]['experience_presentation']['surfaces']['telnet']);
         $html = $this->twig()->render('curated_place.twig', ['place' => $place, 'member_cards' => $cards]);
         $previous = -1;
-        foreach (['wordle', 'hangman', 'blackjack', 'klondike-solitaire', 'tatham-web'] as $id) {
+        foreach (['wordle', 'hangman', 'blackjack', 'klondike-solitaire', 'tatham-web', 'breaklock'] as $id) {
             $position = strpos($html, 'href="/games/' . $id . '?parent_place_id=puzlmastrs-patch"');
             self::assertNotFalse($position);
             self::assertGreaterThan($previous, $position);
@@ -134,7 +140,7 @@ final class CuratedPlaceWebTest extends TestCase
             $games[] = ['experience_presentation' => ExperiencePresentation::build($row, 'web')];
         }
         $shelves = CrossroadsShelves::compose(array_merge($games, CuratedPlacePresentation::cards((new CuratedPlaceCatalog())->getDefinitions())));
-        self::assertSame(6, array_sum(array_column($shelves, 'count')));
+        self::assertSame(count($games) + 1, array_sum(array_column($shelves, 'count')));
         foreach ($games as $game) {
             $html = $this->twig()->render('partials/experience_library_card.twig', ['game' => $game]);
             self::assertStringContainsString('href="/experiences/' . $game['experience_presentation']['id'] . '"', $html);
@@ -153,7 +159,8 @@ final class CuratedPlaceWebTest extends TestCase
         $route = PlaceWebFixtureRouter::$routes['get']['/places/{placeId}'];
         $route('puzlmastrs-patch');
         self::assertSame('curated_place.twig', PlaceWebFixtureTemplate::$rendered[0]);
-        self::assertCount(5, PlaceWebFixtureTemplate::$rendered[1]['member_cards']);
+        self::assertSame(['wordle', 'hangman', 'blackjack', 'klondike-solitaire', 'tatham/lightup', 'breaklock'],
+            array_column(PlaceWebFixtureTemplate::$rendered[1]['member_cards'], 'reference'));
         foreach (['missing', '../puzlmastrs-patch', 'puzlmastrs-patch/extra'] as $id) {
             $route($id);
             self::assertSame(404, http_response_code());

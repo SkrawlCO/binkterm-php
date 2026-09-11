@@ -1,0 +1,149 @@
+{
+  "revision": "a06fb28a3fa6072a089ca664c66a7bf08c0a3e99",
+  "files": [
+    {
+      "path": "index.html",
+      "sha256": "8cdcd9d62db7d5998018ebd3b460df7fde6f2fbf382164b86d4fa44ba47320cc"
+    },
+    {
+      "path": "src/config.js",
+      "sha256": "7b1f3e22659722e6f8f84fb87690f3a0f14c15f3ec0aba2c2cb99b8650636ed3"
+    },
+    {
+      "path": "src/style.scss",
+      "sha256": "069da1e64af408d0c9a5853b79cc44db50d7f96bc3eb6a6233fe9613e83a14e0"
+    },
+    {
+      "path": "src/_variables.scss",
+      "sha256": "f33ff00aa9476cadc37ec2ada432d9ef63291fd9f9a4f1c8c248142124b30812"
+    },
+    {
+      "path": "src/l10n/en.yml",
+      "sha256": "d779291326081843edd66c50e93c4adc5157212a7773484832784de88ac46b02"
+    },
+    {
+      "path": "assets/intro.svg",
+      "sha256": "4c34cdde07565c654bf58c37d8fd6a0eafd3a1e9964a65e95a93bb624a7c4dd4"
+    },
+    {
+      "path": "src/controllers/menu/menu.scss",
+      "sha256": "57c1586281e41b159b3c614300240f558ffa8d551e091c0c38d0ef4c67cfd353"
+    },
+    {
+      "path": "src/controllers/menu/menu.ctrl.js",
+      "sha256": "521335891bf9e9d849fd215d40423445f968659720f46b7450664a2108e88f65"
+    },
+    {
+      "path": "src/controllers/option/option.scss",
+      "sha256": "eb146cb0090a12963d638ead280d626ea476d836a72f478a31c3464c7c047e75"
+    },
+    {
+      "path": "src/controllers/option/option.ctrl.js",
+      "sha256": "f57080416739ec3df7b1ef63f9d87cc54bd9c3d3eff9696d1e98e56591442714"
+    },
+    {
+      "path": "src/controllers/selector/selector.ctrl.js",
+      "sha256": "5a23cb9fa94be5b868bdbf1dab911ad25cb1460e65e8e4937fc88e5b50e80191"
+    },
+    {
+      "path": "src/controllers/selector/selector.scss",
+      "sha256": "cf181efe81cdf436b312367cc772bea1b3cdc18909748aeae6627c18d691166a"
+    },
+    {
+      "path": "src/controllers/extender/extender.ctrl.js",
+      "sha256": "1483a2a694c2bbb16fe79a87889b1fba41348f7db604a9bc6214292bd9b9ee46"
+    },
+    {
+      "path": "src/controllers/extender/extender.scss",
+      "sha256": "67c8dd723f8b78ef21eb3436b216766961434cd25ea87032c72e1e70a3b821d2"
+    },
+    {
+      "path": "src/controllers/langselector/langselector.ctrl.js",
+      "sha256": "d50b8c3a9ac9ea436ac4942e82554c420645d1787fafef969f27b4c46e6df7b7"
+    },
+    {
+      "path": "src/controllers/langselector/langselector.scss",
+      "sha256": "3a6964801bc4151964521a940487d9c5559771287001e774a8986012f9f77e77"
+    },
+    {
+      "path": "src/controllers/summary/summary.ctrl.js",
+      "sha256": "b82fc88bcf857649e584b898591e6ebec17fc3cb6a41e04a1caca2a324bfcb78"
+    },
+    {
+      "path": "src/controllers/summary/summaryFeedback.js",
+      "sha256": "0b161fe09817468bcba72209e3763858fb54c2c63822101cf351a8113cf9d8bf"
+    },
+    {
+      "path": "src/controllers/summary/summary.scss",
+      "sha256": "9414951ececaaaa2947b678c24592d9f8fd9bfdca69c8153bc96fbe43bd04072"
+    },
+    {
+      "path": "src/controllers/history/history.ctrl.js",
+      "sha256": "7b2544bb806e303d153b019fc53ad14079aaae48d2bcc5e2c20e8843a194f43a"
+    },
+    {
+      "path": "src/controllers/history/history.scss",
+      "sha256": "2ef1ecb4aa2719d79b9459a6b41422f9f1105e974bb583afd6220c92349a2403"
+    },
+    {
+      "path": "src/controllers/lock/lock.scss",
+      "sha256": "2c0b1290ac1d69816eb010a15b54664f68ae38c294558a7b2b71df237fea0697"
+    },
+    {
+      "path": "src/controllers/lock/lock.ctrl.js",
+      "sha256": "e59991c29cfca9be3a7cd2ec27f12b6c6e8e9075678bde0a98f2a448f47fe89d"
+    },
+    {
+      "path": "src/controllers/statusBar/statusBar.ctrl.js",
+      "sha256": "8950dbd3b74f01d615366bc3d95f5e723005fd60d9a1dca85d217838253c2a16"
+    },
+    {
+      "path": "src/controllers/statusBar/statusBar.scss",
+      "sha256": "adaae28043f7ff535f81ecdabb9a23ee250be74c9e09d367aad603ad0a76b889"
+    },
+    {
+      "path": "src/controllers/countdown/countdown.scss",
+      "sha256": "cd772c0d8c2ceaf59a69b24964e1136684c5f664c0f4c861328eac2f69265679"
+    },
+    {
+      "path": "src/controllers/countdown/countdown.ctrl.js",
+      "sha256": "2cf5745c62dd9e980a95ee0a7376f2dde16eb2dd4b46d69a6483bc06e5285d16"
+    },
+    {
+      "path": "src/utils/airportText.js",
+      "sha256": "af29df6a1717559c624959f1df0b8b445094161594f0c5edccdfb162891df97f"
+    },
+    {
+      "path": "src/utils/share.js",
+      "sha256": "5c9ba1104d6c3384b2c203ae5a30016622081d18961f4cbef1a1dfd4382db7de"
+    },
+    {
+      "path": "src/utils/leftPadNum.js",
+      "sha256": "3202a7bd697e6121c63dfbfb982faaf003802d8307c421682d60e44f16f6a9a9"
+    },
+    {
+      "path": "src/utils/dom.js",
+      "sha256": "da0d7b5e8587e2a82deecd703192b932f60f5bfc40e212d261b3a442ab2f8399"
+    },
+    {
+      "path": "src/utils/polyfill.js",
+      "sha256": "faaf3cbe94f836318d7293df6cadb05e91cb739616d0d081fd3ce9111708c9a0"
+    },
+    {
+      "path": "src/utils/color.js",
+      "sha256": "0d68810de9e0e073a406f9bde9d4e5605431ace31a09441e6056eb96f9ba2bba"
+    },
+    {
+      "path": "src/utils/patternSVG.js",
+      "sha256": "7afe3ae835d26ce0250f41d3f8e0e26149d6de2529c81cf70eab261cfa899832"
+    },
+    {
+      "path": "src/utils/pluralize.js",
+      "sha256": "0d82130758e76ae2df2bc0494f4f4c1ebb0177211469e89de0d16236896a0013"
+    },
+    {
+      "path": "src/controllers/game/game.scss",
+      "sha256": "75109d4a55dea246d0e74fe0e6dbe5f7e581d85a7f13e885655984cb9add1de1"
+    }
+  ]
+}

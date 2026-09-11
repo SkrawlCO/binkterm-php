@@ -178,6 +178,31 @@ final class TathamProgressTest extends TestCase
         self::assertSame($before, $this->raw());
     }
 
+    public function testBreakLockNamespaceIsReservedAndIsolated(): void
+    {
+        $tatham = new LeasedWebDoorStorage($this->db, 1);
+        $breaklock = new LeasedWebDoorStorage($this->db, 1, 'breaklock');
+        $a = $tatham->acquire(); $b = $breaklock->acquire();
+        self::assertTrue($a['success']); self::assertTrue($b['success']);
+        self::assertTrue($breaklock->write($b['owner_token'], $b['attempt_id'], 0, ['snapshot' => 'breaklock'])['success']);
+        self::assertSame([], $tatham->read()['data']);
+        self::assertFalse($breaklock->write($a['owner_token'], $b['attempt_id'], 1, [])['success']);
+        self::assertTrue(LeasedWebDoorStorage::isReserved('tatham'));
+        self::assertTrue(LeasedWebDoorStorage::isReserved('breaklock'));
+        self::assertFalse(LeasedWebDoorStorage::isReserved('ordinary'));
+        $auth = $this->createMock(Auth::class);
+        $auth->method('getCurrentUser')->willReturn(['user_id' => 1, 'id' => 1]);
+        $controller = new WebDoorController($this->db, $auth, $this->createMock(GameCatalog::class));
+        $_GET['game_id'] = 'breaklock';
+        self::assertFalse($controller->saveGame(0)['success']);
+        self::assertFalse($controller->deleteSave(0)['success']);
+        self::assertSame(409, $this->finish($this->worker('sdk', 'breaklock'))['status']);
+        self::assertSame(['snapshot' => 'breaklock'], $breaklock->read()['data']);
+        self::assertSame([0, 0], array_map('intval', array_column($this->raw(), 'slot')));
+        $this->expectException(InvalidArgumentException::class);
+        new LeasedWebDoorStorage($this->db, 1, 'ordinary');
+    }
+
     private function worker(string $mode, string $key = ''): array
     {
         $root = dirname(__DIR__, 2);

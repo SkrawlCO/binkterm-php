@@ -1,0 +1,23 @@
+{
+  "webdoor_version": "1.0",
+  "game": {
+    "id": "breaklock",
+    "name": "BreakLock",
+    "version": "1.0.0",
+    "author": "maxwellito; Crossroads adapters",
+    "description": "Discover a hidden pattern of dots using exact and misplaced-dot clues.",
+    "entry_point": "index.php",
+    "icon": "icon.svg"
+  },
+  "requirements": {
+    "min_host_version": "1.0"
+  },
+  "experience": {
+    "group": "breaklock",
+    "surface": "web",
+    "primary": true
+  },
+  "multiplayer": {
+    "enabled": false
+  }
+}

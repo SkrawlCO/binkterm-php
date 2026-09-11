@@ -1,0 +1,651 @@
+{
+  "inputs": {
+    "../upstream/pattern.js": {
+      "bytes": 2733,
+      "imports": [],
+      "format": "esm"
+    },
+    "../round.js": {
+      "bytes": 10214,
+      "imports": [
+        {
+          "path": "../upstream/pattern.js",
+          "kind": "import-statement",
+          "original": "./upstream/pattern.js"
+        }
+      ],
+      "format": "esm"
+    },
+    "../persistence/session.js": {
+      "bytes": 3574,
+      "imports": [
+        {
+          "path": "../round.js",
+          "kind": "import-statement",
+          "original": "../round.js"
+        }
+      ],
+      "format": "esm"
+    },
+    "../persistence/web.js": {
+      "bytes": 1315,
+      "imports": [
+        {
+          "path": "../persistence/session.js",
+          "kind": "import-statement",
+          "original": "./session.js"
+        }
+      ],
+      "format": "esm"
+    },
+    "../persistence/scheduler.js": {
+      "bytes": 2740,
+      "imports": [],
+      "format": "esm"
+    },
+    "upstream/src/utils/dom.js": {
+      "bytes": 1926,
+      "imports": [],
+      "format": "esm"
+    },
+    "upstream/src/controllers/extender/extender.scss": {
+      "bytes": 611,
+      "imports": []
+    },
+    "upstream/src/controllers/extender/extender.ctrl.js": {
+      "bytes": 1728,
+      "imports": [
+        {
+          "path": "upstream/src/utils/dom.js",
+          "kind": "import-statement",
+          "original": "../../utils/dom"
+        },
+        {
+          "path": "upstream/src/controllers/extender/extender.scss",
+          "kind": "require-call",
+          "original": "./extender.scss"
+        }
+      ],
+      "format": "esm"
+    },
+    "upstream/src/controllers/option/option.scss": {
+      "bytes": 849,
+      "imports": []
+    },
+    "upstream/src/controllers/option/option.ctrl.js": {
+      "bytes": 2518,
+      "imports": [
+        {
+          "path": "upstream/src/utils/dom.js",
+          "kind": "import-statement",
+          "original": "../../utils/dom"
+        },
+        {
+          "path": "upstream/src/controllers/option/option.scss",
+          "kind": "require-call",
+          "original": "./option.scss"
+        }
+      ],
+      "format": "esm"
+    },
+    "upstream/src/controllers/selector/selector.scss": {
+      "bytes": 212,
+      "imports": []
+    },
+    "upstream/src/controllers/selector/selector.ctrl.js": {
+      "bytes": 3430,
+      "imports": [
+        {
+          "path": "upstream/src/utils/dom.js",
+          "kind": "import-statement",
+          "original": "../../utils/dom"
+        },
+        {
+          "path": "upstream/src/controllers/selector/selector.scss",
+          "kind": "require-call",
+          "original": "./selector.scss"
+        }
+      ],
+      "format": "esm"
+    },
+    "upstream/src/controllers/langselector/langselector.scss": {
+      "bytes": 414,
+      "imports": []
+    },
+    "upstream/src/controllers/langselector/langselector.ctrl.js": {
+      "bytes": 1130,
+      "imports": [
+        {
+          "path": "upstream/src/utils/dom.js",
+          "kind": "import-statement",
+          "original": "../../utils/dom"
+        },
+        {
+          "path": "upstream/src/controllers/langselector/langselector.scss",
+          "kind": "require-call",
+          "original": "./langselector.scss"
+        }
+      ],
+      "format": "esm"
+    },
+    "upstream/src/config.js": {
+      "bytes": 1204,
+      "imports": [],
+      "format": "esm"
+    },
+    "upstream/src/utils/airportText.js": {
+      "bytes": 2588,
+      "imports": [],
+      "format": "esm"
+    },
+    "upstream/src/controllers/menu/menu.scss": {
+      "bytes": 443,
+      "imports": []
+    },
+    "upstream/src/controllers/menu/menu.ctrl.js": {
+      "bytes": 3690,
+      "imports": [
+        {
+          "path": "upstream/src/controllers/extender/extender.ctrl.js",
+          "kind": "import-statement",
+          "original": "../extender/extender.ctrl"
+        },
+        {
+          "path": "upstream/src/controllers/option/option.ctrl.js",
+          "kind": "import-statement",
+          "original": "../option/option.ctrl"
+        },
+        {
+          "path": "upstream/src/controllers/selector/selector.ctrl.js",
+          "kind": "import-statement",
+          "original": "../selector/selector.ctrl"
+        },
+        {
+          "path": "upstream/src/controllers/langselector/langselector.ctrl.js",
+          "kind": "import-statement",
+          "original": "../langselector/langselector.ctrl"
+        },
+        {
+          "path": "upstream/src/config.js",
+          "kind": "import-statement",
+          "original": "../../config"
+        },
+        {
+          "path": "upstream/src/utils/dom.js",
+          "kind": "import-statement",
+          "original": "../../utils/dom"
+        },
+        {
+          "path": "upstream/src/utils/airportText.js",
+          "kind": "import-statement",
+          "original": "../../utils/airportText"
+        },
+        {
+          "path": "upstream/src/controllers/menu/menu.scss",
+          "kind": "require-call",
+          "original": "./menu.scss"
+        }
+      ],
+      "format": "esm"
+    },
+    "upstream/src/utils/patternSVG.js": {
+      "bytes": 4678,
+      "imports": [
+        {
+          "path": "upstream/src/utils/dom.js",
+          "kind": "import-statement",
+          "original": "./dom"
+        }
+      ],
+      "format": "esm"
+    },
+    "upstream/src/controllers/lock/lock.scss": {
+      "bytes": 254,
+      "imports": []
+    },
+    "upstream/src/controllers/lock/lock.ctrl.js": {
+      "bytes": 8679,
+      "imports": [
+        {
+          "path": "../upstream/pattern.js",
+          "kind": "import-statement",
+          "original": "../../models/pattern"
+        },
+        {
+          "path": "upstream/src/utils/patternSVG.js",
+          "kind": "import-statement",
+          "original": "../../utils/patternSVG"
+        },
+        {
+          "path": "upstream/src/utils/dom.js",
+          "kind": "import-statement",
+          "original": "../../utils/dom"
+        },
+        {
+          "path": "upstream/src/config.js",
+          "kind": "import-statement",
+          "original": "../../config"
+        },
+        {
+          "path": "upstream/src/controllers/lock/lock.scss",
+          "kind": "require-call",
+          "original": "./lock.scss"
+        }
+      ],
+      "format": "esm"
+    },
+    "upstream/src/utils/leftPadNum.js": {
+      "bytes": 406,
+      "imports": [],
+      "format": "esm"
+    },
+    "upstream/src/controllers/countdown/countdown.scss": {
+      "bytes": 432,
+      "imports": []
+    },
+    "upstream/src/controllers/countdown/countdown.ctrl.js": {
+      "bytes": 2077,
+      "imports": [
+        {
+          "path": "upstream/src/utils/leftPadNum.js",
+          "kind": "import-statement",
+          "original": "../../utils/leftPadNum"
+        },
+        {
+          "path": "upstream/src/utils/dom.js",
+          "kind": "import-statement",
+          "original": "../../utils/dom"
+        },
+        {
+          "path": "upstream/src/controllers/countdown/countdown.scss",
+          "kind": "require-call",
+          "original": "./countdown.scss"
+        }
+      ],
+      "format": "esm"
+    },
+    "upstream/src/controllers/statusBar/statusBar.scss": {
+      "bytes": 244,
+      "imports": []
+    },
+    "upstream/src/controllers/statusBar/statusBar.ctrl.js": {
+      "bytes": 2959,
+      "imports": [
+        {
+          "path": "upstream/src/controllers/countdown/countdown.ctrl.js",
+          "kind": "import-statement",
+          "original": "../countdown/countdown.ctrl"
+        },
+        {
+          "path": "upstream/src/utils/leftPadNum.js",
+          "kind": "import-statement",
+          "original": "../../utils/leftPadNum"
+        },
+        {
+          "path": "upstream/src/utils/dom.js",
+          "kind": "import-statement",
+          "original": "../../utils/dom"
+        },
+        {
+          "path": "upstream/src/controllers/statusBar/statusBar.scss",
+          "kind": "require-call",
+          "original": "./statusBar.scss"
+        }
+      ],
+      "format": "esm"
+    },
+    "upstream/src/controllers/history/history.scss": {
+      "bytes": 1587,
+      "imports": []
+    },
+    "upstream/src/controllers/history/history.ctrl.js": {
+      "bytes": 1845,
+      "imports": [
+        {
+          "path": "upstream/src/utils/dom.js",
+          "kind": "import-statement",
+          "original": "../../utils/dom"
+        },
+        {
+          "path": "upstream/src/controllers/history/history.scss",
+          "kind": "require-call",
+          "original": "./history.scss"
+        }
+      ],
+      "format": "esm"
+    },
+    "upstream/src/utils/pluralize.js": {
+      "bytes": 1108,
+      "imports": [],
+      "format": "esm"
+    },
+    "upstream/src/controllers/summary/summaryFeedback.js": {
+      "bytes": 1949,
+      "imports": [
+        {
+          "path": "upstream/src/utils/pluralize.js",
+          "kind": "import-statement",
+          "original": "../../utils/pluralize"
+        }
+      ],
+      "format": "esm"
+    },
+    "upstream/src/utils/share.js": {
+      "bytes": 662,
+      "imports": [],
+      "format": "esm"
+    },
+    "upstream/src/controllers/summary/summary.scss": {
+      "bytes": 1090,
+      "imports": []
+    },
+    "upstream/src/controllers/summary/summary.ctrl.js": {
+      "bytes": 3892,
+      "imports": [
+        {
+          "path": "upstream/src/controllers/summary/summaryFeedback.js",
+          "kind": "import-statement",
+          "original": "./summaryFeedback"
+        },
+        {
+          "path": "upstream/src/config.js",
+          "kind": "import-statement",
+          "original": "../../config"
+        },
+        {
+          "path": "upstream/src/utils/dom.js",
+          "kind": "import-statement",
+          "original": "../../utils/dom"
+        },
+        {
+          "path": "upstream/src/utils/airportText.js",
+          "kind": "import-statement",
+          "original": "../../utils/airportText"
+        },
+        {
+          "path": "upstream/src/utils/share.js",
+          "kind": "import-statement",
+          "original": "../../utils/share"
+        },
+        {
+          "path": "upstream/src/controllers/summary/summary.scss",
+          "kind": "require-call",
+          "original": "./summary.scss"
+        }
+      ],
+      "format": "esm"
+    },
+    "upstream/src/utils/color.js": {
+      "bytes": 1359,
+      "imports": [],
+      "format": "esm"
+    },
+    "upstream/src/style.scss": {
+      "bytes": 3163,
+      "imports": []
+    },
+    "upstream/src/controllers/game/game.scss": {
+      "bytes": 312,
+      "imports": []
+    },
+    "adapter.js": {
+      "bytes": 9212,
+      "imports": [
+        {
+          "path": "../persistence/scheduler.js",
+          "kind": "import-statement",
+          "original": "../persistence/scheduler.js"
+        },
+        {
+          "path": "../round.js",
+          "kind": "import-statement",
+          "original": "../round.js"
+        },
+        {
+          "path": "upstream/src/controllers/menu/menu.ctrl.js",
+          "kind": "import-statement",
+          "original": "./upstream/src/controllers/menu/menu.ctrl"
+        },
+        {
+          "path": "upstream/src/controllers/lock/lock.ctrl.js",
+          "kind": "import-statement",
+          "original": "./upstream/src/controllers/lock/lock.ctrl"
+        },
+        {
+          "path": "upstream/src/controllers/statusBar/statusBar.ctrl.js",
+          "kind": "import-statement",
+          "original": "./upstream/src/controllers/statusBar/statusBar.ctrl"
+        },
+        {
+          "path": "upstream/src/controllers/history/history.ctrl.js",
+          "kind": "import-statement",
+          "original": "./upstream/src/controllers/history/history.ctrl"
+        },
+        {
+          "path": "upstream/src/controllers/summary/summary.ctrl.js",
+          "kind": "import-statement",
+          "original": "./upstream/src/controllers/summary/summary.ctrl"
+        },
+        {
+          "path": "upstream/src/utils/patternSVG.js",
+          "kind": "import-statement",
+          "original": "./upstream/src/utils/patternSVG"
+        },
+        {
+          "path": "upstream/src/utils/dom.js",
+          "kind": "import-statement",
+          "original": "./upstream/src/utils/dom"
+        },
+        {
+          "path": "upstream/src/utils/color.js",
+          "kind": "import-statement",
+          "original": "./upstream/src/utils/color"
+        },
+        {
+          "path": "upstream/src/utils/leftPadNum.js",
+          "kind": "import-statement",
+          "original": "./upstream/src/utils/leftPadNum"
+        },
+        {
+          "path": "upstream/src/config.js",
+          "kind": "import-statement",
+          "original": "./upstream/src/config"
+        },
+        {
+          "path": "upstream/src/style.scss",
+          "kind": "import-statement",
+          "original": "./upstream/src/style.scss"
+        },
+        {
+          "path": "upstream/src/controllers/game/game.scss",
+          "kind": "import-statement",
+          "original": "./upstream/src/controllers/game/game.scss"
+        }
+      ],
+      "format": "esm"
+    },
+    "app.js": {
+      "bytes": 1363,
+      "imports": [
+        {
+          "path": "../persistence/web.js",
+          "kind": "import-statement",
+          "original": "../persistence/web.js"
+        },
+        {
+          "path": "adapter.js",
+          "kind": "import-statement",
+          "original": "./adapter.js"
+        }
+      ],
+      "format": "esm"
+    }
+  },
+  "outputs": {
+    "../../../public_html/webdoors/breaklock/assets/app.js": {
+      "imports": [],
+      "exports": [],
+      "entryPoint": "app.js",
+      "cssBundle": "../../../public_html/webdoors/breaklock/assets/app.css",
+      "inputs": {
+        "upstream/src/controllers/extender/extender.scss": {
+          "bytesInOutput": 150
+        },
+        "upstream/src/controllers/option/option.scss": {
+          "bytesInOutput": 144
+        },
+        "upstream/src/controllers/selector/selector.scss": {
+          "bytesInOutput": 150
+        },
+        "upstream/src/controllers/langselector/langselector.scss": {
+          "bytesInOutput": 162
+        },
+        "upstream/src/controllers/menu/menu.scss": {
+          "bytesInOutput": 138
+        },
+        "upstream/src/controllers/lock/lock.scss": {
+          "bytesInOutput": 138
+        },
+        "upstream/src/controllers/countdown/countdown.scss": {
+          "bytesInOutput": 153
+        },
+        "upstream/src/controllers/statusBar/statusBar.scss": {
+          "bytesInOutput": 153
+        },
+        "upstream/src/controllers/history/history.scss": {
+          "bytesInOutput": 147
+        },
+        "upstream/src/controllers/summary/summary.scss": {
+          "bytesInOutput": 147
+        },
+        "../upstream/pattern.js": {
+          "bytesInOutput": 2572
+        },
+        "../round.js": {
+          "bytesInOutput": 9629
+        },
+        "../persistence/session.js": {
+          "bytesInOutput": 3458
+        },
+        "../persistence/web.js": {
+          "bytesInOutput": 1102
+        },
+        "../persistence/scheduler.js": {
+          "bytesInOutput": 2485
+        },
+        "upstream/src/utils/dom.js": {
+          "bytesInOutput": 1902
+        },
+        "upstream/src/controllers/extender/extender.ctrl.js": {
+          "bytesInOutput": 1733
+        },
+        "upstream/src/controllers/option/option.ctrl.js": {
+          "bytesInOutput": 2490
+        },
+        "upstream/src/controllers/selector/selector.ctrl.js": {
+          "bytesInOutput": 3466
+        },
+        "upstream/src/controllers/langselector/langselector.ctrl.js": {
+          "bytesInOutput": 1210
+        },
+        "upstream/src/config.js": {
+          "bytesInOutput": 1246
+        },
+        "upstream/src/utils/airportText.js": {
+          "bytesInOutput": 1678
+        },
+        "upstream/src/controllers/menu/menu.ctrl.js": {
+          "bytesInOutput": 3561
+        },
+        "upstream/src/utils/patternSVG.js": {
+          "bytesInOutput": 4720
+        },
+        "upstream/src/controllers/lock/lock.ctrl.js": {
+          "bytesInOutput": 8394
+        },
+        "upstream/src/utils/leftPadNum.js": {
+          "bytesInOutput": 255
+        },
+        "upstream/src/controllers/countdown/countdown.ctrl.js": {
+          "bytesInOutput": 2073
+        },
+        "upstream/src/controllers/statusBar/statusBar.ctrl.js": {
+          "bytesInOutput": 2751
+        },
+        "upstream/src/controllers/history/history.ctrl.js": {
+          "bytesInOutput": 1624
+        },
+        "upstream/src/utils/pluralize.js": {
+          "bytesInOutput": 764
+        },
+        "upstream/src/controllers/summary/summaryFeedback.js": {
+          "bytesInOutput": 1756
+        },
+        "upstream/src/utils/share.js": {
+          "bytesInOutput": 534
+        },
+        "upstream/src/controllers/summary/summary.ctrl.js": {
+          "bytesInOutput": 3830
+        },
+        "upstream/src/utils/color.js": {
+          "bytesInOutput": 1289
+        },
+        "upstream/src/style.scss": {
+          "bytesInOutput": 0
+        },
+        "upstream/src/controllers/game/game.scss": {
+          "bytesInOutput": 0
+        },
+        "adapter.js": {
+          "bytesInOutput": 8088
+        },
+        "app.js": {
+          "bytesInOutput": 1062
+        }
+      },
+      "bytes": 76987
+    },
+    "../../../public_html/webdoors/breaklock/assets/app.css": {
+      "imports": [],
+      "inputs": {
+        "upstream/src/controllers/extender/extender.scss": {
+          "bytesInOutput": 596
+        },
+        "upstream/src/controllers/option/option.scss": {
+          "bytesInOutput": 743
+        },
+        "upstream/src/controllers/selector/selector.scss": {
+          "bytesInOutput": 209
+        },
+        "upstream/src/controllers/langselector/langselector.scss": {
+          "bytesInOutput": 413
+        },
+        "upstream/src/controllers/menu/menu.scss": {
+          "bytesInOutput": 440
+        },
+        "upstream/src/controllers/lock/lock.scss": {
+          "bytesInOutput": 255
+        },
+        "upstream/src/controllers/countdown/countdown.scss": {
+          "bytesInOutput": 431
+        },
+        "upstream/src/controllers/statusBar/statusBar.scss": {
+          "bytesInOutput": 228
+        },
+        "upstream/src/controllers/history/history.scss": {
+          "bytesInOutput": 1584
+        },
+        "upstream/src/controllers/summary/summary.scss": {
+          "bytesInOutput": 1086
+        },
+        "upstream/src/style.scss": {
+          "bytesInOutput": 3042
+        },
+        "upstream/src/controllers/game/game.scss": {
+          "bytesInOutput": 313
+        }
+      },
+      "bytes": 9974
+    }
+  }
+}

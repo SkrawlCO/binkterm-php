@@ -53,7 +53,7 @@ default-launch alias, not arbitrary subentry selection. Supporting non-default
 entries later requires an explicit runtime selection contract; listing
 membership alone cannot enable them.
 
-PP's configured order is Wordle, Hangman, Blackjack, Solitaire, then Tatham Light Up.
+PP's configured order is Wordle, Hangman, Blackjack, Solitaire, Tatham Light Up, then BreakLock.
 Association with Puzlmastr does not imply personal endorsement; L33TEST curates
 the place. Runtime IDs, direct URLs, saves, presence and enablement remain
 independent of membership. A member's boolean `primary_presentation` opts its
@@ -662,3 +662,15 @@ To install a new WebDoor:
 - [API Reference](API.md) — authenticated platform APIs used by browser features
 - [BinkStream Back-Channel](BinkStreamChannel.md) — realtime events for live browser updates
 - [Credit System](CreditSystem.md) — credits and economy integration
+
+### Reserved leased progress namespaces
+
+`LeasedWebDoorStorage` defaults to `tatham` and additionally accepts `breaklock`.
+Each namespace uses slot 0 independently within the existing caller-scoped storage
+key. Both namespaces reject generic SDK/controller writes; only their leased
+facades may update them. BreakLock's persistence and handoff proof are documented in
+`shared/breaklock/persistence/README.md`. Its production WebDoor is
+`public_html/webdoors/breaklock`, paired with NativeDoor `breaklock-terminal`
+under the `breaklock` Experience. Both use the same shared core and leased state.
+The Web Save & Return uses the host's validated PP/direct return link; terminal
+return uses the existing NativeDoor/Curated-place launch flow.
