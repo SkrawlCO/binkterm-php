@@ -287,7 +287,11 @@ SimpleRouter::get('/games', function() {
     // Curated Catalog: partition the (already name-sorted) catalog into the
     // Curated Experiences / Game Hall / Gateways shelves. Cards still carry
     // their own presentation + launch data; this only groups and orders them.
-    $catalogShelves = \BinktermPHP\CrossroadsShelves::compose($games);
+    // Places are presentation-only: do not feed them to runtime/activity counts.
+    $shelfEntries = \BinktermPHP\CuratedPlacePresentation::shelfEntries(
+        $games, (new \BinktermPHP\CuratedPlaceCatalog())->getDefinitions()
+    );
+    $catalogShelves = \BinktermPHP\CrossroadsShelves::compose($shelfEntries);
 
     $template = new Template();
     $template->renderResponse('webdoors.twig', [
@@ -304,6 +308,26 @@ SimpleRouter::get('/games', function() {
         'leaderboard_month_label' => $leaderboardMonthLabel,
         'leaderboard_month_offset' => $monthOffset,
         'scoreboard_expanded' => $scoreboardExpanded,
+    ]);
+});
+
+// Board-owned places share authorized discovery, but create no game session.
+SimpleRouter::get('/places/{placeId}', function(string $placeId) {
+    $user = (new Auth())->getCurrentUser();
+    if (!$user) {
+        return SimpleRouter::response()->redirect('/login');
+    }
+    $place = (new \BinktermPHP\CuratedPlaceCatalog())->getPlace($placeId, $user, 'web');
+    if ($place === null) {
+        http_response_code(404);
+        (new Template())->renderResponse('404.twig', [
+            'requested_url' => '/places/' . rawurlencode($placeId),
+        ]);
+        return;
+    }
+    (new Template())->renderResponse('curated_place.twig', [
+        'place' => $place,
+        'member_cards' => \BinktermPHP\CuratedPlacePresentation::members($place),
     ]);
 });
 
@@ -1079,13 +1103,16 @@ SimpleRouter::get('/games/{game}', function($game) {
         (new \BinktermPHP\GameCatalog())->getEnabledGames($user, 'web'),
         (string)$game
     );
+    $returnUrl = (new \BinktermPHP\CuratedPlaceCatalog())->returnTarget(
+        $_GET['parent_place_id'] ?? null, $user, (string)$game, 'web'
+    ) ?? '/experiences/' . rawurlencode($returnExperienceId);
 
     $template = new Template();
     $template->renderResponse('webdoor_play.twig', [
         'game' => $gameData,
         'game_url' => $gameUrl,
         'game_id' => $game,
-        'return_url' => '/experiences/' . rawurlencode($returnExperienceId)
+        'return_url' => $returnUrl
     ]);
 });
 

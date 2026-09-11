@@ -781,3 +781,19 @@ The authenticated front door shows a compact Recent Callers line with at most tw
 Genuine normal logins record a durable arrival. Debug auto-login does not. Logout does not remove the caller. Online now retains the existing session-presence definition. The last seven days are eligible; this is not a behavioral feed.
 
 M1 requires migration `v20260910141945_add_last_caller_visit_at.sql`. After applying it through the normal upgrade workflow, Telnet and SSH daemon code requires human-present activation (restart both daemons). Existing caller rows start NULL; the list populates naturally.
+
+### Curated places on the terminal
+
+Enabled Curated places appear in the Crossroads directory. The terminal uses
+`CuratedPlaceCatalog` and `config/crossroads/places.json`, including configured
+member order and access filtering. Web-only members remain visible; selecting
+one shows availability information without launching a session. Terminal-capable
+members use their existing Experience and NativeDoor identities.
+
+`DoorHandler::showPlace()` keeps the parent place ID on the navigation call
+stack and revalidates the selected reference before launch. The existing door
+launcher returns directly to that place loop. Direct Experience launches retain
+their detail-screen return. PP has no runtime, session, or persistence identity.
+
+Place descriptions use the directory context area, wrapped at 72 columns, so
+PP's full welcome sentence and five members remain readable at 80x24.

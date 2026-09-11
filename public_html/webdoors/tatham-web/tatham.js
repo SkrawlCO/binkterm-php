@@ -141,7 +141,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         ready = false;
                         stopped = true;
                         await request('release');
-                        parent.location.assign('/experiences/tatham');
+                        const hostReturn = parent.document.getElementById('webdoor-return');
+                        parent.location.assign(hostReturn ? hostReturn.href : '/experiences/tatham');
                     }
                 } catch (error) { fail(error); }
             };

@@ -16,7 +16,8 @@
   "experience": {
     "group": "tatham",
     "surface": "web",
-    "primary": true
+    "primary": true,
+    "default_entry": "lightup"
   },
   "multiplayer": {
     "enabled": false

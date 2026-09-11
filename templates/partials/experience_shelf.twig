@@ -31,6 +31,7 @@
 {% set shelf_title = t(shelf_titles[shelf.key]|default('ui.webdoors.experiences'), {}, locale, ['common']) %}
 {% set shelf_caption = shelf_captions[shelf.key] is defined ? t(shelf_captions[shelf.key], {}, locale, ['common']) : '' %}
 <section class="experience-shelf experience-shelf--{{ shelf.key }}"
+         {% if shelf.key == 'curated' %}id="curated-experiences"{% endif %}
          data-experience-shelf="{{ shelf.key }}"
          data-shelf-default-expanded="{{ shelf.default_expanded ? '1' : '0' }}">
     {% if shelf.collapsible %}

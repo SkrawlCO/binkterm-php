@@ -25,6 +25,86 @@ WebDoors are displayed to users through the `/games` interface and can integrate
 
 The key idea is that a WebDoor is not just an isolated browser game in an iframe. It runs as part of the platform, reusing BinktermPHP identity, session, and API services so it can behave like a real BBS subsystem instead of a disconnected sidecar.
 
+## Curated places and playable references
+
+`src/CuratedPlaceCatalog.php` reads board-owned definitions from
+`config/crossroads/places.json`. Each definition has an `id`, `kind: place`,
+`name`, `description`, boolean `enabled`, and ordered `members` containing
+`reference` strings. Optional `icon`, `association` context and per-member
+`title`/`description` provide presentation metadata. `parent: curated` records
+placement. Enabled Curated places appear after ordered runtime destinations by
+default; an optional numeric `order` supplies an explicit shelf ordering value.
+Place definitions with equal ordering retain their configured file order.
+There is currently no admin editor for this definition file.
+
+References are an Experience ID with an optional entry ID (`tatham/lightup`).
+The resolver consumes `GameCatalog::getEnabledGames()` for the trusted caller
+and delegates surface launch resolution to `ExperienceLaunch`. It never merges
+member metadata into runtime authorization or launch configuration. Missing,
+unauthorized, disabled and unsupported members are hidden consistently, matching
+catalog discovery's access boundary. Authorized members playable only on another
+surface remain present with a null launch target on the selected surface.
+
+The generic manifest field `experience.default_entry` names the runtime's
+existing default playable entry on every supported surface. For grouped
+Experiences, the primary manifest owns this contract. Tatham advertises only
+`lightup`; Slant, Unequal and Solo references are rejected. This is a named
+default-launch alias, not arbitrary subentry selection. Supporting non-default
+entries later requires an explicit runtime selection contract; listing
+membership alone cannot enable them.
+
+PP's configured order is Wordle, Hangman, Blackjack, Solitaire, then Tatham Light Up.
+Association with Puzlmastr does not imply personal endorsement; L33TEST curates
+the place. Runtime IDs, direct URLs, saves, presence and enablement remain
+independent of membership. A member's boolean `primary_presentation` opts its
+existing default runtime card out of the authenticated Web root shelves while
+an enabled Curated place contains that resolvable member. PP enables this for
+Wordle, Hangman, Blackjack and Klondike Solitaire only. Light Up membership does not suppress Tatham.
+Disabled places and unsupported/unresolvable references cannot suppress cards.
+This filters shelf input only: discovery, authorization, direct access, admin
+listings, activity, session totals and Telnet presentation stay unchanged.
+
+Solitaire uses the existing `klondike-solitaire` runtime and
+`/games/klondike-solitaire` route; its PP-only title is "Solitaire". Its legacy
+save/load API calls are unchanged. These endpoints currently return 404, so PP
+does not promise durable Solitaire resume or introduce a replacement save path.
+
+Root search filters the rendered shelf cards. PP remains searchable by its name
+and description; searches for a hidden member name do not currently produce an
+"inside this place" result. Member-aware search is deferred polish. Clearing a
+filter cannot restore suppressed cards.
+
+PP uses the approved 512x512 garden-gnome-and-sunflower PNG at
+`public_html/img/places/puzlmastrs-patch.png`, configured through the generic
+place `icon` field and visually checked at 48x48. Its caller-facing description
+is "A little corner of Crossroads for puzzles, casual games, and things worth
+puzzling over." Hangman and Solitaire legacy save endpoint failures remain
+separate future maintenance items; this place does not change their storage.
+
+The authenticated `/places/{placeId}` route uses `CuratedPlaceCatalog` and a
+fixed `curated_place.twig` template. Missing, invalid and disabled places return
+404. `CuratedPlacePresentation` adapts both place destinations and members to
+the existing `experience_library_card.twig` partial. Member links use existing
+launch URLs; the local Light Up title retains the `tatham` runtime identity.
+Surface labels report availability without promising save/resume capabilities.
+
+The `/games` route adds place cards only to shelf composition, after runtime
+counts, activity and leaderboard reads. Places never enter the runtime catalog
+or create game sessions. The landing returns to `/games#curated-experiences`;
+PP member links carry `parent_place_id`. The wrapper resolves this ID through
+`CuratedPlaceCatalog::returnTarget()` only when an enabled place contains an
+authorized member whose launch backend matches the requested game. Invalid,
+disabled, unknown and URL-shaped context falls back to the normal Experience
+return. No arbitrary return URL or session-global last-place value is accepted.
+The iframe path, backend ID, storage and presence identities remain unchanged.
+
+Both wrapper return controls use the validated destination. Tatham reads the
+host's `webdoor-return` link only after acknowledged save and successful lease
+release; direct launches retain their usual Experience return. Other members
+use the wrapper control without persistence changes. The conceptual contract
+is navigation-scoped `parent_place_id`; a future Telnet presenter can resolve
+the same parent identity without adopting browser URLs as runtime identity.
+
 ## Directory Structure
 
 WebDoors are installed in the `public_html/webdoors/` directory. Each WebDoor resides in its own subdirectory:

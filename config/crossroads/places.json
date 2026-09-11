@@ -1,0 +1,21 @@
+{
+  "puzlmastrs-patch": {
+    "id": "puzlmastrs-patch",
+    "kind": "place",
+    "parent": "curated",
+    "name": "Puzlmastr's Patch",
+    "description": "A little corner of Crossroads for puzzles, casual games, and things worth puzzling over.",
+    "enabled": true,
+    "icon": "/img/places/puzlmastrs-patch.png",
+    "association": {
+      "caller": "Puzlmastr"
+    },
+    "members": [
+      { "reference": "wordle", "primary_presentation": true },
+      { "reference": "hangman", "primary_presentation": true },
+      { "reference": "blackjack", "primary_presentation": true },
+      { "reference": "klondike-solitaire", "title": "Solitaire", "primary_presentation": true },
+      { "reference": "tatham/lightup", "title": "Light Up" }
+    ]
+  }
+}

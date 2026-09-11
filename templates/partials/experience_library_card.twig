@@ -18,7 +18,7 @@
 #}
 {% set public_mode = public_mode|default(false) %}
 {% set view = game.experience_presentation %}
-{% set status = view.status.code %}
+{% set status = game.kind|default('') == 'place' ? 'available' : view.status.code %}
 {% set card_muted = status == 'planned' or status == 'unavailable' %}
 {% set has_metadata = view.capacity.at_capacity
     or view.runtime.player_count > 0
@@ -37,9 +37,9 @@
             <div class="experience-card-identity d-flex gap-2">
                 <img class="experience-card-icon flex-shrink-0" width="40" height="40" src="{{ view.presentation.icon_url|default('/favicon.svg') }}" alt="" onerror="this.src='/favicon.svg'">
                 <div class="min-w-0 flex-grow-1">
-                    <h3 class="h5 mb-0">{% if public_mode %}{{ view.name }}{% else %}<a href="/experiences/{{ view.id }}" class="experience-title-link{% if status == 'available' or status == 'participating' %} stretched-link{% endif %}">{{ view.name }}</a>{% endif %}</h3>
+                    <h3 class="h5 mb-0">{% if public_mode %}{{ view.name }}{% else %}<a href="{{ game.destination_url|default('/experiences/' ~ view.id) }}" class="experience-title-link{% if status == 'available' or status == 'participating' %} stretched-link{% endif %}">{{ view.name }}</a>{% endif %}</h3>
                     <div class="experience-card-taxonomy small text-muted">
-                        {% if view.category == 'game' %}{{ t('ui.webdoors.category_game', {}, locale, ['common']) }}{% elseif view.category == 'gateway' %}{{ t('ui.webdoors.category_gateway', {}, locale, ['common']) }}{% elseif view.category == 'utility' %}{{ t('ui.webdoors.category_utility', {}, locale, ['common']) }}{% elseif view.category == 'chat' %}{{ t('ui.webdoors.category_chat', {}, locale, ['common']) }}{% else %}{{ view.category|capitalize }}{% endif %}{% if view.capabilities.player_mode == 'multiplayer' %} · {{ t('ui.webdoors.multiplayer', {}, locale, ['common']) }}{% elseif view.capabilities.player_mode == 'single_player' %} · {{ t('ui.webdoors.single_player', {}, locale, ['common']) }}{% endif %}
+                        {% if game.kind|default('') == 'place' %}{{ t('ui.webdoors.shelf_curated_title', {}, locale, ['common']) }}{% elseif view.category == 'game' %}{{ t('ui.webdoors.category_game', {}, locale, ['common']) }}{% elseif view.category == 'gateway' %}{{ t('ui.webdoors.category_gateway', {}, locale, ['common']) }}{% elseif view.category == 'utility' %}{{ t('ui.webdoors.category_utility', {}, locale, ['common']) }}{% elseif view.category == 'chat' %}{{ t('ui.webdoors.category_chat', {}, locale, ['common']) }}{% else %}{{ view.category|capitalize }}{% endif %}{% if view.capabilities.player_mode == 'multiplayer' %} · {{ t('ui.webdoors.multiplayer', {}, locale, ['common']) }}{% elseif view.capabilities.player_mode == 'single_player' %} · {{ t('ui.webdoors.single_player', {}, locale, ['common']) }}{% endif %}
                     </div>
                 </div>
                 <div class="experience-card-action-slot flex-shrink-0">
@@ -72,6 +72,14 @@
             </div>
 
             <p class="experience-card-description text-muted small mb-0">{{ view.description }}</p>
+            {% if game.show_surfaces|default(false) %}
+            <p class="small text-muted mb-0">
+                {{ t('ui.webdoors.surface_web', {}, locale, ['common']) }}:
+                {{ t(view.surfaces.web == 'full' ? 'ui.webdoors.surface_full' : 'ui.webdoors.surface_unavailable', {}, locale, ['common']) }}
+                · {{ t('ui.webdoors.surface_telnet', {}, locale, ['common']) }}:
+                {{ t(view.surfaces.telnet == 'full' ? 'ui.webdoors.surface_full' : 'ui.webdoors.surface_unavailable', {}, locale, ['common']) }}
+            </p>
+            {% endif %}
 
             {% if has_metadata %}
             <div class="experience-metadata-cluster small">

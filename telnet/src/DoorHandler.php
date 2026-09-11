@@ -91,7 +91,17 @@ class DoorHandler
                 $doorList[] = ['id' => (string)$experienceId, 'data' => $experience];
             }
 
-            if ($experienceStates === []) {
+            foreach ((new \BinktermPHP\CuratedPlaceCatalog())->getDefinitions() as $place) {
+                if (($place['parent'] ?? null) === 'curated') {
+                    $doorList[] = ['id' => $place['id'], 'data' => [
+                        'kind' => 'place', 'name' => $place['name'],
+                        'description' => $place['description'],
+                        'curation' => ['curated' => true, 'order' => $place['order'] ?? PHP_INT_MAX],
+                    ]];
+                }
+            }
+
+            if ($experienceStates === [] && $doorList === []) {
                 $shell->showText(
                     $conn,
                     $state,
@@ -232,6 +242,10 @@ class DoorHandler
             }
 
             $entry = $doorList[$selected - 2];
+            if (($entry['data']['kind'] ?? null) === 'place') {
+                $this->showPlace($conn, $state, $session, (string)$entry['id'], $shell);
+                continue;
+            }
 
             // Selecting an experience now opens a terminal-native detail
             // screen instead of launching immediately. Play/Return happens
@@ -244,6 +258,67 @@ class DoorHandler
                 $shell
             );
             continue;
+        }
+    }
+
+    /** Navigation-scoped parent place; no session-global return state. */
+    private function showPlace($conn, array &$state, string $session, string $parentPlaceId, TerminalShellInterface $shell): void
+    {
+        $user = ['id' => (int)($state['user_id'] ?? 0), 'user_id' => (int)($state['user_id'] ?? 0),
+            'is_admin' => !empty($state['is_admin'])];
+        $catalog = new \BinktermPHP\CuratedPlaceCatalog();
+        $locale = $state['locale'] ?? 'en';
+        $translator = new \BinktermPHP\I18n\Translator();
+        $t = fn (string $key): string => $this->server->t($key, $translator->translate($key, [], $locale, ['common', 'terminalserver']), [], $locale);
+        while (($place = $catalog->getPlace($parentPlaceId, $user, 'telnet')) !== null) {
+            $rows = [];
+            foreach ($place['members'] as $member) {
+                $labels = [];
+                if ($member['surfaces']['web'] === 'full') { $labels[] = $t('ui.webdoors.surface_web'); }
+                if ($member['surfaces']['telnet'] === 'full') { $labels[] = $t('ui.webdoors.surface_telnet'); }
+                $label = implode(' + ', $labels);
+                $rows[] = new DirectoryRow($member['title'], null, $label, $member['reference']);
+            }
+            $result = $shell->showDirectory($conn, $state,
+                new Directory($place['name'], null, [new DirectorySection('', $rows, true)],
+                    explode("\n", wordwrap($place['description'], 72, "\n", true))),
+                ['prompt' => $t('ui.terminalserver.doors.enter_choice')]);
+            if (($result['action'] ?? '') !== 'select') {
+                return;
+            }
+            $member = $place['members'][(int)$result['index']] ?? null;
+            if ($member === null) {
+                continue;
+            }
+            if ($member['launch'] === null) {
+                $shell->showText($conn, $state, $member['title'], [
+                    $t('ui.webdoors.surface_web') . ': ' . $t('ui.webdoors.surface_full'),
+                    $t('ui.webdoors.surface_telnet') . ': ' . $t('ui.webdoors.surface_unavailable'),
+                ]);
+                continue;
+            }
+            // Re-resolve the SAME reference immediately before launch. Disabled
+            // or withdrawn membership must not fall through to a direct launch.
+            $latest = $catalog->getPlace($parentPlaceId, $user, 'telnet');
+            $current = null;
+            foreach ($latest['members'] ?? [] as $candidate) {
+                if ($candidate['reference'] === $member['reference']) {
+                    $current = $candidate;
+                    break;
+                }
+            }
+            if ($current === null || $current['launch'] === null) {
+                continue;
+            }
+            $experience = $current['experience'];
+            $mode = self::resolveTerminalMode($experience);
+            if ($mode === 'line') {
+                $this->launchLineRelayDoor($conn, $state, $session, $current['experience_id'], $experience['name'], $experience);
+            } else {
+                $this->launchDoor($conn, $state, $session, $current['experience_id'], $experience['name'], $mode, $current['launch']['type']);
+            }
+            // The existing synchronous launcher returns here on the same BBS
+            // connection, so reload the place, not the Experience detail loop.
         }
     }
 
@@ -1729,7 +1804,9 @@ class DoorHandler
                 }
                 $entry = $byId[$id];
                 $orderedDoorList[] = $entry;
-                $rows[] = self::buildExperienceDirectoryRow($id, $entry['data'], $t);
+                $rows[] = ($entry['data']['kind'] ?? null) === 'place'
+                    ? new DirectoryRow($entry['data']['name'], $entry['data']['description'], null, $id)
+                    : self::buildExperienceDirectoryRow($id, $entry['data'], $t);
             }
             if ($rows !== []) {
                 $sections[] = new DirectorySection($shelfTitles[$shelfKey], $rows);

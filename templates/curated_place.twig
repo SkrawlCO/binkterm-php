@@ -1,0 +1,21 @@
+{% extends 'base.twig' %}
+
+{% block title %}{{ place.name }} - {{ system_name }}{% endblock %}
+{% block head %}<link href="/css/experiences.css" rel="stylesheet">{% endblock %}
+{% block content %}
+<div class="container experiences-library py-3 py-md-4">
+    <a href="/games#curated-experiences">{{ t('ui.webdoors.shelf_curated_title', {}, locale, ['common']) }}</a>
+    <header class="my-4">
+        <h1>{{ place.name }}</h1>
+        <p class="text-muted">{{ place.description }}</p>
+        {% if place.association.context|default('') %}<p class="small text-muted">{{ place.association.context }}</p>{% endif %}
+    </header>
+    <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-2">
+        {% for game in member_cards %}
+            {% include 'partials/experience_library_card.twig' with {game: game} %}
+        {% else %}
+            <p>{{ t('ui.webdoors.no_games_available', {}, locale, ['common']) }}</p>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

@@ -1387,3 +1387,19 @@ The daemon proxies every user's API traffic through the server, so without help 
 `BbsSession::recentCallersLine()` shares a 30-second query snapshot for a two-caller ambient line. `DeclarativeMenuBridge` injects a root-only authenticated ambient resolver into `NavigationScreenBuilder`. `NavigationScreenRenderer` uses its existing header spacer or the themed ambient footer line; menu badges remain available and key hints keep their own line. The built-in menu's existing second row and the LineShell preamble provide the fallback presentation. No additional input reader or login screen is added. Telnet and SSH use the same classes; no daemon include changes are needed.
 
 The additive migration starts all existing rows NULL. Column availability is checked before reads/writes so bind-mounted Web code remains compatible during a pending upgrade. The migration and terminal daemon activation belong to the human-supervised upgrade; do not treat copying daemon source as activation.
+
+### Curated places on the terminal
+
+Enabled Curated places appear in the Crossroads directory. The terminal uses
+`CuratedPlaceCatalog` and `config/crossroads/places.json`, including configured
+member order and access filtering. Web-only members remain visible; selecting
+one shows availability information without launching a session. Terminal-capable
+members use their existing Experience and NativeDoor identities.
+
+`DoorHandler::showPlace()` keeps the parent place ID on the navigation call
+stack and revalidates the selected reference before launch. The existing door
+launcher returns directly to that place loop. Direct Experience launches retain
+their detail-screen return. PP has no runtime, session, or persistence identity.
+
+Place descriptions use the directory context area, wrapped at 72 columns, so
+PP's full welcome sentence and five members remain readable at 80x24.
