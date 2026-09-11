@@ -14,7 +14,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     header('Allow: POST');
     $respondError(405, 'method');
 }
-if (!\BinktermPHP\GameConfig::isEnabled('tatham-web') || empty($user['is_admin'])) {
+if (!\BinktermPHP\GameConfig::isEnabled('tatham-web')) {
     $respondError(403, 'unavailable');
 }
 try {
