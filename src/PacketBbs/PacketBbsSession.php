@@ -107,6 +107,16 @@ class PacketBbsSession
             $params[] = $val;
         }
 
+        if (array_key_exists('user_id', $changes)) {
+            $this->withSessionLock($nodeId, function () use ($nodeId, $setClauses, $params): void {
+                $this->db->prepare('DELETE FROM packet_bbs_outbound_queue WHERE node_id = ? AND sent_at IS NULL')
+                    ->execute([$nodeId]);
+                $sql = 'UPDATE packet_bbs_sessions SET ' . implode(', ', $setClauses) . ' WHERE node_id = ?';
+                $this->db->prepare($sql)->execute(array_merge($params, [$nodeId]));
+            });
+            return;
+        }
+
         $params[] = $nodeId;
         $sql = 'UPDATE packet_bbs_sessions SET ' . implode(', ', $setClauses) . ' WHERE node_id = ?';
         $this->db->prepare($sql)->execute($params);
@@ -152,17 +162,43 @@ class PacketBbsSession
      */
     public function destroy(string $nodeId): void
     {
-        $stmt = $this->db->prepare(
-            'SELECT bbs_session_id FROM packet_bbs_sessions WHERE node_id = ?'
-        );
-        $stmt->execute([$nodeId]);
-        $bbsSessionId = $stmt->fetchColumn();
-        if ($bbsSessionId) {
-            $this->db->prepare('DELETE FROM user_sessions WHERE session_id = ?')
-                ->execute([$bbsSessionId]);
-        }
+        $this->withSessionLock($nodeId, function () use ($nodeId): void {
+            $this->db->prepare(
+                "WITH retired AS (
+                    DELETE FROM packet_bbs_sessions WHERE node_id = ?
+                    RETURNING node_id, bbs_session_id
+                 ), discarded AS (
+                    DELETE FROM packet_bbs_outbound_queue q USING retired r
+                    WHERE q.node_id = r.node_id AND q.sent_at IS NULL
+                 ) DELETE FROM user_sessions WHERE session_id IN (SELECT bbs_session_id FROM retired)"
+            )->execute([$nodeId]);
+        });
+    }
 
-        $this->db->prepare('DELETE FROM packet_bbs_sessions WHERE node_id = ?')->execute([$nodeId]);
+    /**
+     * Coordinate identity transitions with chat producers holding FOR SHARE.
+     * Purge in a separate statement after locking: its fresh READ COMMITTED
+     * snapshot must include notifications committed while we waited for the lock.
+     */
+    private function withSessionLock(string $nodeId, callable $operation): void
+    {
+        $ownsTransaction = !$this->db->inTransaction();
+        if ($ownsTransaction) {
+            $this->db->beginTransaction();
+        }
+        try {
+            $this->db->prepare('SELECT node_id FROM packet_bbs_sessions WHERE node_id = ? FOR UPDATE')
+                ->execute([$nodeId]);
+            $operation();
+            if ($ownsTransaction) {
+                $this->db->commit();
+            }
+        } catch (\Throwable $e) {
+            if ($ownsTransaction && $this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            throw $e;
+        }
     }
 
     /**

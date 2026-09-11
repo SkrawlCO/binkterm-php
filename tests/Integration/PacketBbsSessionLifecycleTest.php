@@ -95,6 +95,33 @@ SQL);
         return $this->gateway->handleCommand('sender', 'meshcore', $command, 'bridge');
     }
 
+    public function testQuitDiscardsPendingPrivateContentButKeepsDeliveredHistory(): void
+    {
+        $this->seed(600);
+        $this->db->exec("INSERT INTO packet_bbs_outbound_queue (node_id, payload, sent_at) VALUES
+            ('sender', 'private A', NULL), ('sender', 'delivered', NOW()), ('another', 'unrelated', NULL)");
+        $this->repo->destroy('sender');
+        $this->assertNull($this->repo->load('sender'));
+        $this->assertSame(0, (int)$this->db->query('SELECT COUNT(*) FROM user_sessions')->fetchColumn());
+        $this->assertSame(['delivered', 'unrelated'], $this->db->query('SELECT payload FROM packet_bbs_outbound_queue ORDER BY id')->fetchAll(PDO::FETCH_COLUMN));
+        $this->assertSame([], $this->gateway->getPendingMessages('sender'));
+    }
+
+    public function testLoginAsAnotherUserCannotReceivePriorUsersQueuedContent(): void
+    {
+        $this->seed(600);
+        $this->db->exec("UPDATE packet_bbs_sessions SET menu_state = 'main', session_state = '{}'");
+        $this->db->exec("INSERT INTO packet_bbs_outbound_queue (node_id, payload) VALUES ('sender', 'private A')");
+        $this->db->exec("INSERT INTO users VALUES (2, 'bob', TRUE)");
+        $stmt = $this->db->prepare('INSERT INTO users_meta VALUES (2, ?, ?)');
+        $stmt->execute(['packet_bbs_totp_enabled', '1']);
+        $stmt->execute(['packet_bbs_totp_secret', 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ']);
+        $code = (new ReflectionMethod(PacketBbsTotp::class, 'computeHotp'))->invoke(null, '12345678901234567890', (int)floor(time() / 30));
+        $this->assertStringContainsString('Hi bob.', $this->command('L bob ' . $code));
+        $this->assertSame(2, $this->raw()['user_id']);
+        $this->assertSame([], $this->gateway->getPendingMessages('sender'));
+    }
+
     public function testLegacyBindingIsClaimedByFirstCommandWithoutRefreshingActivity(): void
     {
         $before = $this->seed(600);

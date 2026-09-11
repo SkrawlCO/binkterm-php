@@ -43,27 +43,15 @@ class PacketBbsChatNotifier
             $body     = str_replace(["\r\n", "\r", "\n"], ' ', trim($body));
             $payload  = mb_substr($username . ': ' . $body, 0, 200);
 
-            // Find sessions that are currently in this chat room.
-            // The JSONB cast is NULL-safe: missing key → NULL → NULL = ? → false.
-            $stmt = $db->prepare(
-                "SELECT node_id
-                 FROM packet_bbs_sessions
-                 WHERE menu_state = 'chat'
-                   AND (session_state->'current_chat_room'->>'id')::int = ?"
-            );
-            $stmt->execute([$roomId]);
-            $sessions = $stmt->fetchAll(\PDO::FETCH_ASSOC);
-
-            if (empty($sessions)) {
-                return;
-            }
-
-            $insert = $db->prepare(
-                'INSERT INTO packet_bbs_outbound_queue (node_id, payload) VALUES (?, ?)'
-            );
-            foreach ($sessions as $session) {
-                $insert->execute([(string)$session['node_id'], $payload]);
-            }
+            // Hold session locks through insertion so identity transitions cannot
+            // discard a queue and then receive a late notification for the old user.
+            $db->prepare(
+                "INSERT INTO packet_bbs_outbound_queue (node_id, payload)
+                 SELECT node_id, ? FROM packet_bbs_sessions
+                 WHERE menu_state = 'chat' AND user_id IS NOT NULL
+                   AND (session_state->'current_chat_room'->>'id')::int = ?
+                 FOR SHARE"
+            )->execute([$payload, $roomId]);
         } catch (\Throwable $e) {
             // Never let notification failures surface to the caller.
         }
@@ -91,29 +79,14 @@ class PacketBbsChatNotifier
             $body     = str_replace(["\r\n", "\r", "\n"], ' ', trim($body));
             $payload  = mb_substr($username . ': ' . $body, 0, 200);
 
-            // Find sessions belonging to the recipient that are in DM mode with
-            // the sender. Both conditions must match so we only deliver when the
-            // recipient is actively viewing this conversation.
-            $stmt = $db->prepare(
-                "SELECT node_id
-                 FROM packet_bbs_sessions
+            $db->prepare(
+                "INSERT INTO packet_bbs_outbound_queue (node_id, payload)
+                 SELECT node_id, ? FROM packet_bbs_sessions
                  WHERE menu_state = 'chat'
                    AND user_id = ?
-                   AND (session_state->'current_chat_dm'->>'user_id')::int = ?"
-            );
-            $stmt->execute([$toUserId, $fromUserId]);
-            $sessions = $stmt->fetchAll(\PDO::FETCH_ASSOC);
-
-            if (empty($sessions)) {
-                return;
-            }
-
-            $insert = $db->prepare(
-                'INSERT INTO packet_bbs_outbound_queue (node_id, payload) VALUES (?, ?)'
-            );
-            foreach ($sessions as $session) {
-                $insert->execute([(string)$session['node_id'], $payload]);
-            }
+                   AND (session_state->'current_chat_dm'->>'user_id')::int = ?
+                 FOR SHARE"
+            )->execute([$payload, $toUserId, $fromUserId]);
         } catch (\Throwable $e) {
             // Never let notification failures surface to the caller.
         }
