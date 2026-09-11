@@ -10,8 +10,7 @@
     "icon": "../../favicon.svg"
   },
   "requirements": {
-    "min_host_version": "1.0",
-    "admin_only": true
+    "min_host_version": "1.0"
   },
   "experience": {
     "group": "tatham",

@@ -22,7 +22,6 @@
     "time_per_day": 60
   },
   "requirements": {
-    "admin_only": true,
     "platform": [
       "linux"
     ]
