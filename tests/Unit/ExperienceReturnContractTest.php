@@ -192,7 +192,7 @@ final class ExperienceReturnContractTest extends TestCase
         $render = eval('use BinktermPHP\\Template; return static function ($game, $user) {'
             . '$gameData = []; $gameUrl = "/unused";' . $block . '};');
         try {
-            foreach (['tatham-web' => 'tatham', 'breaklock' => 'breaklock', 'ordinary-puzzles' => 'ordinary-puzzles'] as $backend => $canonical) {
+            foreach (['wordwright' => 'wordwright', 'tatham-web' => 'tatham', 'breaklock' => 'breaklock', 'ordinary-puzzles' => 'ordinary-puzzles'] as $backend => $canonical) {
                 foreach ([null, 'puzlmastrs-patch', 'missing', 'https://evil.invalid', ['puzlmastrs-patch']] as $parent) {
                     $_GET = $parent === null ? [] : ['parent_place_id' => $parent];
                     $render($backend, ['id' => 7]);
@@ -417,7 +417,7 @@ final class ReturnFixtureCatalog
             throw new \RuntimeException('Unexpected return resolver caller/surface');
         }
         $rows = [];
-        foreach (['tatham-web', 'tatham-terminal', 'breaklock', 'breaklock-terminal', 'ordinary-puzzles', 'ordinary-puzzles-terminal'] as $id) {
+        foreach (['wordwright', 'wordwright-terminal', 'tatham-web', 'tatham-terminal', 'breaklock', 'breaklock-terminal', 'ordinary-puzzles', 'ordinary-puzzles-terminal'] as $id) {
             $native = str_ends_with($id, '-terminal');
             $path = $native ? '/native-doors/doors/' . $id . '/nativedoor.json'
                 : '/public_html/webdoors/' . $id . '/webdoor.json';

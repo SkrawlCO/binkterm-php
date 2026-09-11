@@ -1,0 +1,39 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "skipLibCheck": true,
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "paths": {
+      "@/*": [
+        "./src/*"
+      ],
+      "@shared/*": [
+        "../upstream/src/*"
+      ],
+      "@/engine": [
+        "../upstream/src/engine/index.ts"
+      ],
+      "@/engine/*": [
+        "../upstream/src/engine/*"
+      ],
+      "@/lib/result": [
+        "../upstream/src/lib/result.ts"
+      ]
+    },
+    "types": [
+      "vite/client"
+    ]
+  },
+  "include": [
+    "src",
+    "../session.ts"
+  ]
+}

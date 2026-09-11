@@ -11,7 +11,7 @@
       "caller": "Puzlmastr"
     },
     "members": [
-      { "reference": "wordle", "primary_presentation": true },
+      { "reference": "wordwright", "primary_presentation": true },
       { "reference": "hangman", "primary_presentation": true },
       { "reference": "blackjack", "primary_presentation": true },
       { "reference": "klondike-solitaire", "title": "Solitaire", "primary_presentation": true },

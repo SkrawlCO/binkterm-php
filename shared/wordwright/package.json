@@ -1,0 +1,16 @@
+{
+  "name": "@l33test/wordwright-shared",
+  "private": true,
+  "type": "module",
+  "exports": "./dist/session.js",
+  "scripts": {
+    "build": "tsc && node build.mjs",
+    "test": "npm run build && node session.test.mjs"
+  },
+  "devDependencies": {
+    "typescript": "6.0.3"
+  },
+  "engines": {
+    "node": ">=20.19"
+  }
+}

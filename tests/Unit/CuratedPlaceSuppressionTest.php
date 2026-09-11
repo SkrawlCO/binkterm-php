@@ -14,7 +14,7 @@ final class CuratedPlaceSuppressionTest extends TestCase
     private function games(): array
     {
         $games = [];
-        foreach (['wordle', 'hangman', 'blackjack', 'klondike-solitaire', 'tatham'] as $id) {
+        foreach (['wordwright', 'hangman', 'blackjack', 'klondike-solitaire', 'tatham'] as $id) {
             $row = ['id' => $id, 'name' => $id, 'category' => 'game',
                 'backend' => ['type' => 'web', 'id' => $id === 'tatham' ? 'tatham-web' : $id],
                 'surfaces' => ['web' => 'full', 'telnet' => 'planned'],
@@ -42,7 +42,7 @@ final class CuratedPlaceSuppressionTest extends TestCase
             self::assertSame('/games/' . $game['id'], ExperienceLaunch::resolve($game, 'web')['url']);
         }
         self::assertNull($entries[1]['experience_presentation']['runtime']['active']);
-        self::assertSame(['wordle', 'hangman', 'blackjack', 'klondike-solitaire', 'tatham/lightup', 'breaklock'], array_column($definitions[0]['members'], 'reference'));
+        self::assertSame(['wordwright', 'hangman', 'blackjack', 'klondike-solitaire', 'tatham/lightup', 'breaklock', 'ordinary-puzzles'], array_column($definitions[0]['members'], 'reference'));
     }
 
     public function testDisabledOrNonCuratedPlaceCannotHideAnything(): void
@@ -62,15 +62,15 @@ final class CuratedPlaceSuppressionTest extends TestCase
             ['reference' => 'tatham/slant', 'primary_presentation' => true],
             ['reference' => 'missing', 'primary_presentation' => true],
             ['reference' => 'hangman', 'primary_presentation' => true],
-            ['reference' => 'wordle', 'primary_presentation' => false],
+            ['reference' => 'wordwright', 'primary_presentation' => false],
         ];
         $games = $this->games();
         unset($games[1]); // Authorization/discovery omitted Hangman.
         $result = CuratedPlacePresentation::shelfEntries($games, $definitions);
-        self::assertSame(['wordle', 'blackjack', 'klondike-solitaire', 'tatham'], array_column($result, 'id'));
+        self::assertSame(['wordwright', 'blackjack', 'klondike-solitaire', 'tatham'], array_column($result, 'id'));
         self::assertCount(5, $result);
         $games[0]['policy']['enabled'] = false;
-        $definitions[0]['members'] = [['reference' => 'wordle', 'primary_presentation' => true]];
-        self::assertSame('wordle', CuratedPlacePresentation::shelfEntries($games, $definitions)[0]['id']);
+        $definitions[0]['members'] = [['reference' => 'wordwright', 'primary_presentation' => true]];
+        self::assertSame('wordwright', CuratedPlacePresentation::shelfEntries($games, $definitions)[0]['id']);
     }
 }

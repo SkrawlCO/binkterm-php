@@ -10,10 +10,19 @@ use PHPUnit\Framework\TestCase;
 
 final class CuratedPlaceCatalogTest extends TestCase
 {
+    public function testLegacyWordleRemainsIndependent(): void
+    {
+        $catalog = $this->catalog();
+        self::assertArrayHasKey('wordle', $catalog);
+        self::assertSame('/games/wordle', ExperienceLaunch::resolve($catalog['wordle'], 'web')['url']);
+        self::assertNotContains('wordle', array_column((new CuratedPlaceCatalog())->getDefinition('puzlmastrs-patch')['members'], 'reference'));
+        self::assertSame('Wordle', json_decode(file_get_contents(dirname(__DIR__, 2) . '/public_html/webdoors/wordle/webdoor.json'), true)['game']['name']);
+    }
+
     private function catalog(): array
     {
         $rows = [];
-        foreach (['wordle', 'hangman', 'blackjack', 'klondike-solitaire', 'tatham-web', 'tatham-terminal', 'breaklock', 'breaklock-terminal', 'ordinary-puzzles', 'ordinary-puzzles-terminal'] as $id) {
+        foreach (['wordle', 'wordwright', 'hangman', 'blackjack', 'klondike-solitaire', 'tatham-web', 'tatham-terminal', 'breaklock', 'breaklock-terminal', 'ordinary-puzzles', 'ordinary-puzzles-terminal', 'wordwright-terminal'] as $id) {
             $native = str_ends_with($id, '-terminal');
             $rows[$id] = [
                 'id' => $id, 'name' => $id, 'description' => '',
@@ -23,7 +32,7 @@ final class CuratedPlaceCatalogTest extends TestCase
             ];
         }
         // Real manifests supply the capability and grouping, not a PP fixture.
-        foreach (['tatham-web', 'tatham-terminal', 'breaklock', 'breaklock-terminal', 'ordinary-puzzles', 'ordinary-puzzles-terminal'] as $id) {
+        foreach (['wordwright', 'wordwright-terminal', 'tatham-web', 'tatham-terminal', 'breaklock', 'breaklock-terminal', 'ordinary-puzzles', 'ordinary-puzzles-terminal'] as $id) {
             $path = str_ends_with($id, '-terminal')
                 ? '/native-doors/doors/' . $id . '/nativedoor.json'
                 : '/public_html/webdoors/' . $id . '/webdoor.json';
@@ -44,7 +53,7 @@ final class CuratedPlaceCatalogTest extends TestCase
         self::assertSame("Puzlmastr's Patch", $definition['name']);
         self::assertSame('place', $definition['kind']);
         self::assertSame('curated', $definition['parent']);
-        $order = ['wordle', 'hangman', 'blackjack', 'klondike-solitaire', 'tatham/lightup', 'breaklock', 'ordinary-puzzles'];
+        $order = ['wordwright', 'hangman', 'blackjack', 'klondike-solitaire', 'tatham/lightup', 'breaklock', 'ordinary-puzzles'];
         self::assertSame($order, array_column($definition['members'], 'reference'));
         $place = $service->getPlace('puzlmastrs-patch', ['id' => 7]);
         self::assertSame($order, array_column($place['members'], 'reference'));
@@ -55,7 +64,7 @@ final class CuratedPlaceCatalogTest extends TestCase
     {
         $catalog = $this->catalog();
         $before = $catalog;
-        foreach (['wordle', 'hangman', 'blackjack', 'klondike-solitaire', 'tatham/lightup'] as $ref) {
+        foreach (['wordwright', 'hangman', 'blackjack', 'klondike-solitaire', 'tatham/lightup'] as $ref) {
             $id = explode('/', $ref)[0];
             foreach (['web', 'telnet'] as $surface) {
                 $resolved = CuratedPlaceCatalog::resolveReference($ref, $catalog, $surface);
@@ -78,10 +87,10 @@ final class CuratedPlaceCatalogTest extends TestCase
     public function testUnsupportedAndMalformedReferencesFailClosed(): void
     {
         foreach (['tatham/slant', 'tatham/unequal', 'tatham/solo', 'missing',
-            'wordle/extra', '', '../wordle', 'tatham/', 'tatham/lightup/extra', 'tatham%2Flightup'] as $ref) {
+            'wordwright/extra', '', '../wordwright', 'tatham/', 'tatham/lightup/extra', 'tatham%2Flightup'] as $ref) {
             self::assertNull(CuratedPlaceCatalog::resolveReference($ref, $this->catalog(), 'web'));
         }
-        self::assertNull(CuratedPlaceCatalog::resolveReference('wordle', $this->catalog(), 'bogus'));
+        self::assertNull(CuratedPlaceCatalog::resolveReference('wordwright', $this->catalog(), 'bogus'));
     }
 
     public function testDisabledAndUnavailableRuntimesAreHidden(): void
@@ -89,8 +98,8 @@ final class CuratedPlaceCatalogTest extends TestCase
         $catalog = $this->catalog();
         $catalog['tatham']['policy']['enabled'] = false;
         self::assertNull(CuratedPlaceCatalog::resolveReference('tatham/lightup', $catalog, 'web'));
-        $catalog['wordle']['surfaces'] = ['web' => 'unavailable', 'telnet' => 'planned'];
-        self::assertNull(CuratedPlaceCatalog::resolveReference('wordle', $catalog, 'web'));
+        $catalog['wordwright']['surfaces'] = ['web' => 'unavailable', 'telnet' => 'planned'];
+        self::assertNull(CuratedPlaceCatalog::resolveReference('wordwright', $catalog, 'web'));
     }
 
     public function testCallerAuthorizationRemainsOwnedByGameCatalog(): void
@@ -108,7 +117,7 @@ final class CuratedPlaceCatalogTest extends TestCase
         $service = new CuratedPlaceCatalog($source);
         self::assertCount(7, $service->getPlace('puzlmastrs-patch', ['id' => 7, 'is_admin' => true])['members']);
         $place = $service->getPlace('puzlmastrs-patch', ['id' => 8, 'is_admin' => false]);
-        self::assertSame(['wordle', 'hangman', 'blackjack', 'klondike-solitaire', 'breaklock', 'ordinary-puzzles'], array_column($place['members'], 'reference'));
+        self::assertSame(['wordwright', 'hangman', 'blackjack', 'klondike-solitaire', 'breaklock', 'ordinary-puzzles'], array_column($place['members'], 'reference'));
     }
 
     public function testAnotherSurfaceRemainsVisibleWithoutInventedLaunch(): void
@@ -118,8 +127,9 @@ final class CuratedPlaceCatalogTest extends TestCase
             ->with(['id' => 7], 'telnet')->willReturn($this->catalog());
         $place = (new CuratedPlaceCatalog($source))->getPlace('puzlmastrs-patch', ['id' => 7], 'terminal');
         self::assertCount(7, $place['members']);
-        self::assertNull($place['members'][0]['launch']);
-        self::assertSame(['web' => 'full', 'telnet' => 'unavailable'], $place['members'][0]['surfaces']);
+        self::assertSame('wordwright-terminal', $place['members'][0]['launch']['id']);
+        self::assertNull($place['members'][1]['launch']);
+        self::assertSame(['web' => 'full', 'telnet' => 'unavailable'], $place['members'][1]['surfaces']);
         self::assertSame(['web' => 'full', 'telnet' => 'full'], $place['members'][4]['surfaces']);
     }
 
@@ -157,22 +167,22 @@ final class CuratedPlaceCatalogTest extends TestCase
         $source = $this->createMock(GameCatalog::class);
         $source->method('getEnabledGames')->willReturn($this->catalog());
         $service = new CuratedPlaceCatalog($source);
-        foreach (['wordle', 'hangman', 'blackjack', 'klondike-solitaire', 'tatham-web'] as $backend) {
+        foreach (['wordwright', 'hangman', 'blackjack', 'klondike-solitaire', 'tatham-web'] as $backend) {
             self::assertSame('/places/puzlmastrs-patch', $service->returnTarget('puzlmastrs-patch', ['id' => 7], $backend));
         }
         foreach ([null, '', 'missing', 'https://evil.invalid', '//evil.invalid', '../puzlmastrs-patch', ['puzlmastrs-patch']] as $id) {
-            self::assertNull($service->returnTarget($id, ['id' => 7], 'wordle'));
+            self::assertNull($service->returnTarget($id, ['id' => 7], 'wordwright'));
         }
         self::assertNull($service->returnTarget('puzlmastrs-patch', ['id' => 7], 'unrelated'));
         $denied = $this->createMock(GameCatalog::class);
         $denied->method('getEnabledGames')->willReturn([]);
-        self::assertNull((new CuratedPlaceCatalog($denied))->returnTarget('puzlmastrs-patch', ['id' => 8], 'wordle'));
+        self::assertNull((new CuratedPlaceCatalog($denied))->returnTarget('puzlmastrs-patch', ['id' => 8], 'wordwright'));
         $path = tempnam(sys_get_temp_dir(), 'pp-disabled-');
         try {
             $place = $service->getDefinition('puzlmastrs-patch');
             $place['enabled'] = false;
             file_put_contents($path, json_encode(['puzlmastrs-patch' => $place]));
-            self::assertNull((new CuratedPlaceCatalog($source, $path))->returnTarget('puzlmastrs-patch', ['id' => 7], 'wordle'));
+            self::assertNull((new CuratedPlaceCatalog($source, $path))->returnTarget('puzlmastrs-patch', ['id' => 7], 'wordwright'));
         } finally { unlink($path); }
     }
 }

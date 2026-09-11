@@ -1,0 +1,23 @@
+{
+  "webdoor_version": "1.0",
+  "game": {
+    "id": "wordwright",
+    "name": "Wordwright",
+    "version": "1.0.0",
+    "author": "Libin Samkutty; Crossroads adapters",
+    "description": "Unlimited word puzzles in four, five and six letters.",
+    "entry_point": "index.php",
+    "icon": "icon.png"
+  },
+  "requirements": {
+    "min_host_version": "1.0"
+  },
+  "experience": {
+    "group": "wordwright",
+    "surface": "web",
+    "primary": true
+  },
+  "multiplayer": {
+    "enabled": false
+  }
+}

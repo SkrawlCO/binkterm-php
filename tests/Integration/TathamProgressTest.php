@@ -229,6 +229,33 @@ final class TathamProgressTest extends TestCase
         self::assertSame(['puzzleId' => 'e9c2882a25e2'], $ordinary->read()['data']);
     }
 
+    public function testWordwrightAtomicNamespaceIsolationAndReservedProtection(): void
+    {
+        self::assertFalse(LeasedWebDoorStorage::isReserved('wordle'));
+        $ordinary = new LeasedWebDoorStorage($this->db, 1, 'wordwright');
+        $lease = $ordinary->acquire();
+        self::assertTrue($lease['success']);
+        self::assertTrue($ordinary->write($lease['owner_token'], $lease['attempt_id'], 0, ['game' => ['id' => 'fixture'], 'meta' => ['recentAnswers' => []], 'stats' => ['played' => 1]])['success']);
+        foreach (['tatham', 'breaklock', 'ordinary-puzzles'] as $namespace) {
+            $other = new LeasedWebDoorStorage($this->db, 1, $namespace);
+            self::assertNull($other->read());
+            $otherLease = $other->acquire();
+            self::assertFalse($other->write($lease['owner_token'], $otherLease['attempt_id'], 0, [])['success']);
+            self::assertFalse($ordinary->write($otherLease['owner_token'], $lease['attempt_id'], 1, [])['success']);
+            self::assertSame([], $other->read()['data']);
+        }
+        self::assertNull((new LeasedWebDoorStorage($this->db, 2, 'wordwright'))->read());
+        self::assertTrue(LeasedWebDoorStorage::isReserved('wordwright'));
+        self::assertSame(409, $this->finish($this->worker('sdk', 'wordwright'))['status']);
+        $auth = $this->createMock(Auth::class);
+        $auth->method('getCurrentUser')->willReturn(['user_id' => 1, 'id' => 1]);
+        $controller = new WebDoorController($this->db, $auth, $this->createMock(GameCatalog::class));
+        $_GET['game_id'] = 'wordwright';
+        self::assertFalse($controller->saveGame(0)['success']);
+        self::assertFalse($controller->deleteSave(0)['success']);
+        self::assertSame(['game' => ['id' => 'fixture'], 'meta' => ['recentAnswers' => []], 'stats' => ['played' => 1]], $ordinary->read()['data']);
+    }
+
     private function worker(string $mode, string $key = ''): array
     {
         $root = dirname(__DIR__, 2);

@@ -1,0 +1,133 @@
+/*
+ * Keyframes for board and keyboard feedback.
+ * Everything animates `transform` / `opacity` only, so the compositor can
+ * handle it without layout work (NFR-3).
+ *
+ * Reduced motion (A11Y-9) is handled at the bottom of this file. The
+ * `useRevealTimeline` hook collapses its stagger to zero under the same
+ * conditions, so the CSS and the logic always agree.
+ */
+
+@keyframes ww-pop {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.08);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* Tile flip: colour is swapped at the midpoint, while the face is edge-on. */
+@keyframes ww-flip {
+  0% {
+    transform: rotateX(0deg);
+  }
+  50% {
+    transform: rotateX(90deg);
+  }
+  100% {
+    transform: rotateX(0deg);
+  }
+}
+
+@keyframes ww-shake {
+  10%,
+  90% {
+    transform: translateX(-2px);
+  }
+  20%,
+  80% {
+    transform: translateX(4px);
+  }
+  30%,
+  50%,
+  70% {
+    transform: translateX(-8px);
+  }
+  40%,
+  60% {
+    transform: translateX(8px);
+  }
+}
+
+@keyframes ww-bounce {
+  0%,
+  20% {
+    transform: translateY(0);
+  }
+  40% {
+    transform: translateY(-30px);
+  }
+  50% {
+    transform: translateY(5px);
+  }
+  60% {
+    transform: translateY(-15px);
+  }
+  80% {
+    transform: translateY(2px);
+  }
+  100% {
+    transform: translateY(0);
+  }
+}
+
+@keyframes ww-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@utility animate-pop {
+  animation: ww-pop var(--duration-pop) ease-in-out;
+}
+
+@utility animate-flip {
+  animation: ww-flip var(--duration-flip) ease-in-out both;
+}
+
+@utility animate-shake {
+  animation: ww-shake var(--duration-shake) ease-in-out;
+}
+
+@utility animate-bounce-in {
+  animation: ww-bounce var(--duration-bounce) ease-in-out;
+}
+
+@utility animate-fade-in {
+  animation: ww-fade-in 150ms ease-out;
+}
+
+/*
+ * A11Y-9 / FR-45.
+ * Two triggers, one outcome: the OS preference, and the in-app override
+ * (`data-motion="reduced"`). `data-motion="full"` lets a user opt back in
+ * even when the OS asks for reduced motion.
+ */
+@media (prefers-reduced-motion: reduce) {
+  html:not([data-motion='full']) *,
+  html:not([data-motion='full']) *::before,
+  html:not([data-motion='full']) *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+html[data-motion='reduced'] *,
+html[data-motion='reduced'] *::before,
+html[data-motion='reduced'] *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  scroll-behavior: auto !important;
+}

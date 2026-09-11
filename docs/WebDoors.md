@@ -678,3 +678,14 @@ return uses the existing NativeDoor/Curated-place launch flow.
 Ordinary Puzzles uses `public_html/webdoors/ordinary-puzzles` and NativeDoor
 `ordinary-puzzles-terminal`, backed by `shared/ordinary-puzzles/persistence/`.
 Its slot 0 contains the canonical replay snapshot, including unfinished drags.
+
+### Wordwright mixed-surface Experience
+
+Wordwright uses `shared/wordwright` for its pinned canonical engine and adapters,
+`public_html/webdoors/wordwright` for authenticated Web packaging, and
+`native-doors/doors/wordwright-terminal` for the trusted terminal launcher. Its
+reserved leased storage namespace is `wordwright`, slot 0: session, metadata and
+statistics are saved atomically. Build instructions and provenance are in
+`shared/wordwright/README.md`. Configure runtime enablement through the normal BBS
+administration interfaces. It replaces only Wordle's PP membership; legacy Wordle
+remains independently available, with its existing daily puzzle, saves and leaderboard.

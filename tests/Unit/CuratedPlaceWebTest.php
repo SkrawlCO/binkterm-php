@@ -20,15 +20,16 @@ final class PlaceWebFixtureCatalog
     public static function rows(): array
     {
         $rows = [];
-        foreach (['wordle', 'hangman', 'blackjack', 'klondike-solitaire', 'tatham', 'breaklock', 'ordinary-puzzles'] as $id) {
+        foreach (['wordwright', 'hangman', 'blackjack', 'klondike-solitaire', 'tatham', 'breaklock', 'ordinary-puzzles'] as $id) {
             $rows[$id] = [
                 'id' => $id, 'name' => $id, 'description' => '', 'category' => 'game',
                 'backend' => ['type' => 'web', 'id' => $id === 'tatham' ? 'tatham-web' : $id],
-                'surfaces' => ['web' => 'full', 'telnet' => in_array($id, ['tatham', 'breaklock', 'ordinary-puzzles'], true) ? 'full' : 'planned'],
+                'surfaces' => ['web' => 'full', 'telnet' => in_array($id, ['wordwright', 'tatham', 'breaklock', 'ordinary-puzzles'], true) ? 'full' : 'planned'],
                 'source' => ['manifest' => ['experience' => ['default_entry' => $id === 'tatham' ? 'lightup' : null]]],
             ];
         }
         $rows['tatham']['surface_backends']['telnet'] = ['type' => 'native', 'id' => 'tatham-terminal'];
+        $rows['wordwright']['surface_backends']['telnet'] = ['type' => 'native', 'id' => 'wordwright-terminal'];
         $rows['breaklock']['surface_backends']['telnet'] = ['type' => 'native', 'id' => 'breaklock-terminal'];
         $rows['ordinary-puzzles']['surface_backends']['telnet'] = ['type' => 'native', 'id' => 'ordinary-puzzles-terminal'];
         return $rows;
@@ -110,10 +111,10 @@ final class CuratedPlaceWebTest extends TestCase
     {
         $place = $this->place();
         $cards = CuratedPlacePresentation::members($place);
-        self::assertSame(['wordle', 'hangman', 'blackjack', 'klondike-solitaire', 'tatham/lightup', 'breaklock', 'ordinary-puzzles'], array_column($cards, 'reference'));
+        self::assertSame(['wordwright', 'hangman', 'blackjack', 'klondike-solitaire', 'tatham/lightup', 'breaklock', 'ordinary-puzzles'], array_column($cards, 'reference'));
         self::assertSame('Light Up', $cards[4]['experience_presentation']['name']);
         self::assertSame('tatham', $cards[4]['experience_presentation']['id']);
-        self::assertSame('unavailable', $cards[0]['experience_presentation']['surfaces']['telnet']);
+        self::assertSame('full', $cards[0]['experience_presentation']['surfaces']['telnet']);
         self::assertSame('full', $cards[4]['experience_presentation']['surfaces']['telnet']);
         self::assertSame('BreakLock', $cards[5]['experience_presentation']['name']);
         self::assertSame('breaklock', $cards[5]['experience_presentation']['id']);
@@ -123,7 +124,7 @@ final class CuratedPlaceWebTest extends TestCase
         self::assertSame('full', $cards[6]['experience_presentation']['surfaces']['telnet']);
         $html = $this->twig()->render('curated_place.twig', ['place' => $place, 'member_cards' => $cards]);
         $previous = -1;
-        foreach (['wordle', 'hangman', 'blackjack', 'klondike-solitaire', 'tatham-web', 'breaklock', 'ordinary-puzzles'] as $id) {
+        foreach (['wordwright', 'hangman', 'blackjack', 'klondike-solitaire', 'tatham-web', 'breaklock', 'ordinary-puzzles'] as $id) {
             $position = strpos($html, 'href="/games/' . $id . '?parent_place_id=puzlmastrs-patch"');
             self::assertNotFalse($position);
             self::assertGreaterThan($previous, $position);
@@ -162,7 +163,7 @@ final class CuratedPlaceWebTest extends TestCase
         $route = PlaceWebFixtureRouter::$routes['get']['/places/{placeId}'];
         $route('puzlmastrs-patch');
         self::assertSame('curated_place.twig', PlaceWebFixtureTemplate::$rendered[0]);
-        self::assertSame(['wordle', 'hangman', 'blackjack', 'klondike-solitaire', 'tatham/lightup', 'breaklock', 'ordinary-puzzles'],
+        self::assertSame(['wordwright', 'hangman', 'blackjack', 'klondike-solitaire', 'tatham/lightup', 'breaklock', 'ordinary-puzzles'],
             array_column(PlaceWebFixtureTemplate::$rendered[1]['member_cards'], 'reference'));
         foreach (['missing', '../puzlmastrs-patch', 'puzlmastrs-patch/extra'] as $id) {
             $route($id);

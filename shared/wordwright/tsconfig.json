@@ -1,0 +1,25 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "declaration": true,
+    "rootDir": ".",
+    "outDir": "dist",
+    "paths": {
+      "@/*": [
+        "./upstream/src/*"
+      ]
+    },
+    "lib": [
+      "ES2022",
+      "DOM"
+    ]
+  },
+  "include": [
+    "session.ts",
+    "upstream/src/**/*.ts",
+    "persistence/*.ts"
+  ]
+}

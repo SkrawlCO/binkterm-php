@@ -1,0 +1,185 @@
+@import 'tailwindcss';
+@import './animations.css';
+
+/*
+ * Scope the class scan to our own source.
+ *
+ * Tailwind v4 auto-detects sources from the project root. In this container
+ * that means crawling a 264 MB node_modules, which exhausts memory and gets
+ * the build OOM-killed. Our classes only ever live in src/ and index.html.
+ */
+@source not '../../node_modules';
+@source not '../../.npm';
+@source not '../../.cache';
+@source '../../index.html';
+@source '../**/*.{ts,tsx}';
+
+/*
+ * Design tokens (ADR-008).
+ * Every colour in the app resolves through one of these semantic names.
+ * Components never reference a palette utility such as `bg-green-500` — the
+ * ESLint config rejects it. Themes are attribute switches on <html>:
+ *   .dark                  -> dark mode
+ *   [data-palette="cb"]    -> colourblind-friendly palette
+ *   [data-motion="reduced"]-> motion overrides (see animations.css)
+ */
+
+@theme {
+  /* Surfaces & text */
+  --color-surface: #ffffff;
+  --color-surface-raised: #f7f7f8;
+  --color-surface-sunken: #edeff1;
+  --color-overlay: rgb(0 0 0 / 0.55);
+  --color-text: #14161a;
+  --color-text-muted: #5c6470;
+  --color-text-inverse: #ffffff;
+  --color-border: #8d9296;
+  --color-border-strong: #6c7176;
+  --color-focus: #1d4ed8;
+
+  /* Tiles */
+  --color-tile-empty-border: #8d9296;
+  --color-tile-filled-border: #5f6469;
+  --color-tile-text: #14161a;
+  --color-tile-text-revealed: #ffffff;
+  --color-tile-correct: #4a8b3f;
+  --color-tile-present: #a3841c;
+  --color-tile-absent: #787c7e;
+
+  /* Keyboard */
+  --color-key: #d3d6da;
+  --color-key-text: #14161a;
+  --color-key-correct: #4a8b3f;
+  --color-key-present: #a3841c;
+  --color-key-absent: #787c7e;
+  --color-key-text-revealed: #ffffff;
+
+  /* Feedback */
+  --color-toast: #14161a;
+  --color-toast-text: #ffffff;
+  --color-danger: #b3261e;
+  --color-danger-text: #ffffff;
+
+  /* Motion (overridden by the reduced-motion rules) */
+  --duration-flip: 500ms;
+  --duration-flip-stagger: 250ms;
+  --duration-pop: 100ms;
+  --duration-shake: 600ms;
+  --duration-bounce: 800ms;
+
+  /* Board sizing — keeps 4/5/6 columns legible from 320px up (FR-59) */
+  --size-tile: clamp(2.75rem, 14vmin, 4rem);
+  /* Keyboard row height, shrunk alongside the board on short viewports. */
+  --size-key-height: 3.5rem;
+}
+
+.dark {
+  --color-surface: #121213;
+  --color-surface-raised: #1a1a1b;
+  --color-surface-sunken: #0c0c0d;
+  --color-overlay: rgb(0 0 0 / 0.7);
+  --color-text: #f5f6f7;
+  --color-text-muted: #a2a8b0;
+  --color-text-inverse: #121213;
+  --color-border: #626266;
+  --color-border-strong: #7a7a80;
+  --color-focus: #7aa2ff;
+
+  --color-tile-empty-border: #626266;
+  --color-tile-filled-border: #7a7a80;
+  --color-tile-text: #f5f6f7;
+  --color-tile-text-revealed: #ffffff;
+  --color-tile-correct: #538d4e;
+  --color-tile-present: #8f7a1c;
+  --color-tile-absent: #3a3a3c;
+
+  --color-key: #6e7071;
+  --color-key-text: #f5f6f7;
+  --color-key-correct: #538d4e;
+  --color-key-present: #8f7a1c;
+  --color-key-absent: #3a3a3c;
+
+  --color-toast: #f5f6f7;
+  --color-toast-text: #121213;
+  --color-danger: #f2b8b5;
+  --color-danger-text: #121213;
+}
+
+/*
+ * Colourblind palette (FR-44, A11Y-8).
+ * Blue/orange replaces green/yellow — distinguishable under all common forms
+ * of colour vision deficiency. Tiles additionally carry non-colour markers,
+ * so colour is never the only signal.
+ */
+[data-palette='cb'] {
+  --color-tile-correct: #0a5ca8;
+  --color-tile-present: #c25708;
+  --color-key-correct: #0a5ca8;
+  --color-key-present: #c25708;
+}
+
+.dark[data-palette='cb'] {
+  --color-tile-correct: #2f6fc0;
+  --color-tile-present: #c2610f;
+  --color-key-correct: #2f6fc0;
+  --color-key-present: #c2610f;
+}
+
+/*
+ * Short viewports — landscape phones (EC-18).
+ *
+ * Six tile rows plus three keyboard rows cannot fit in ~360px of height at
+ * full size. Both shrink together so the whole game stays on screen without
+ * scrolling, which matters more here than the 44px touch target: a player in
+ * landscape can see and reach everything, just smaller.
+ */
+@media (max-height: 560px) {
+  :root {
+    --size-tile: clamp(1.5rem, 7.5dvh, 2.5rem);
+    --size-key-height: clamp(1.75rem, 8dvh, 2.75rem);
+  }
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    margin: 0;
+    min-height: 100dvh;
+    background-color: var(--color-surface);
+    color: var(--color-text);
+    font-family:
+      ui-sans-serif,
+      system-ui,
+      -apple-system,
+      'Segoe UI',
+      Roboto,
+      Helvetica,
+      Arial,
+      sans-serif;
+    font-synthesis-weight: none;
+    text-rendering: optimizeLegibility;
+    overscroll-behavior: none;
+  }
+
+  /* A11Y-6: a visible focus indicator on everything, never removed. */
+  :focus-visible {
+    outline: 3px solid var(--color-focus);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  /* Only suppress the default ring where :focus-visible takes over. */
+  :focus:not(:focus-visible) {
+    outline: none;
+  }
+
+  button {
+    font: inherit;
+    color: inherit;
+    touch-action: manipulation;
+  }
+}
