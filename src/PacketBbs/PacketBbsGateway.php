@@ -40,18 +40,12 @@ class PacketBbsGateway
     private PacketBbsSession $sessionRepo;
     private MessageHandler $messageHandler;
 
-    /** Inactivity before a session is considered expired (minutes). */
-    private int $sessionTimeout;
-
     public function __construct()
     {
         $this->db             = Database::getInstance()->getPdo();
         $this->logger         = new Logger(Config::getLogPath('packetbbs.log'), Logger::LEVEL_INFO, false);
         $this->sessionRepo    = new PacketBbsSession();
         $this->messageHandler = new MessageHandler();
-
-        $cfg = BbsConfig::getConfig()['packet_bbs'] ?? [];
-        $this->sessionTimeout = (int)($cfg['session_timeout_minutes'] ?? 15);
     }
 
     // -------------------------------------------------------------------------
@@ -87,7 +81,7 @@ class PacketBbsGateway
 
         // Opportunistic cleanup (5% of requests): sessions and login attempt records.
         if (rand(1, 100) <= 5) {
-            $this->sessionRepo->cleanExpired($this->sessionTimeout);
+            $this->sessionRepo->cleanExpired();
             (new PacketBbsLoginRateLimit())->cleanOld();
         }
 
@@ -103,27 +97,15 @@ class PacketBbsGateway
         $renderer = new PacketBbsTextRenderer($interface);
         $state = $this->getSessionState($session);
 
-        // Check session expiry: if last_activity is older than timeout and user_id is set,
-        // clear auth state so they must re-login (but keep session row so context is preserved)
-        if ($session['user_id'] && $this->isExpired($session)) {
-            $expiredBbsSessionId = (string)($session['bbs_session_id'] ?? '');
-            if ($expiredBbsSessionId !== '') {
-                (new Auth())->logout($expiredBbsSessionId);
-            }
-            $this->sessionRepo->update($nodeId, [
-                'user_id'            => null,
-                'bbs_session_id'     => null,
-                'menu_state'         => 'main',
-                'pagination_cursor'  => 1,
-                'pagination_context' => null,
-                'compose_buffer'     => null,
-                'compose_type'       => null,
-                'compose_meta'       => null,
-                'session_state'      => [],
-            ]);
-            $session = $this->sessionRepo->load($nodeId);
+        // Retrieval has already revoked idle authentication and cleared drafts/context.
+        // Consume the retained notice without executing the requested command.
+        if (!empty($state['auth_expired'])) {
+            $this->sessionRepo->update($nodeId, ['session_state' => []]);
             return 'Session expired. LOGIN again.';
         }
+
+        // Only refresh activity after expiry evaluation (including ordinary guest input).
+        $this->sessionRepo->update($nodeId, []);
 
         // Keep the user's online presence fresh on every command.
         $activeBbsSessionId = (string)($session['bbs_session_id'] ?? '');
@@ -406,21 +388,6 @@ class PacketBbsGateway
     // -------------------------------------------------------------------------
     // Command handlers
     // -------------------------------------------------------------------------
-
-    private function isExpired(array $session): bool
-    {
-        if (empty($session['last_activity_at'])) {
-            return false;
-        }
-        try {
-            $last    = new \DateTime($session['last_activity_at']);
-            $now     = new \DateTime('now', new \DateTimeZone('UTC'));
-            $diffMin = ($now->getTimestamp() - $last->getTimestamp()) / 60;
-            return $diffMin > $this->sessionTimeout;
-        } catch (\Exception $e) {
-            return false;
-        }
-    }
 
     /**
      * Handle a line of input while in compose mode.
@@ -2297,6 +2264,11 @@ class PacketBbsGateway
      */
     public function getPendingMessages(string $nodeId): array
     {
+        $session = $this->sessionRepo->load($nodeId);
+        if (empty($session['user_id'])) {
+            return [];
+        }
+
         $stmt = $this->db->prepare(
             "SELECT id, payload FROM packet_bbs_outbound_queue
              WHERE node_id = ? AND sent_at IS NULL

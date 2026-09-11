@@ -139,8 +139,12 @@ Options:
 
 | Option | Default | Meaning |
 |---|---:|---|
-| `session_timeout_minutes` | `15` | Inactive authenticated sessions are cleared after this many minutes. The next command returns `Session expired. LOGIN again.` |
+| `session_timeout_minutes` | `15` | Inactive authenticated sessions are cleared after this many minutes. While the sender row is retained, the next command returns `Session expired. LOGIN again.` without executing the requested action. |
 | `allow_guest_who` | `true` | Allows unauthenticated users to run `WHO`. If false, `WHO` requires login. |
+
+Authentication expiry clears the user identity, linked online session, navigation context, drafts, and pending chat notifications. Drafts and context do not survive TOTP re-authentication. Session retrieval and bridge polling never refresh activity. Commands refresh activity only after expiry has been checked; the expired command consumes the notice and leaves the sender in clean guest state.
+
+Stale sender-row cleanup is separate from authentication expiry. `PACKETBBS_SESSION_RETENTION_SECONDS` in `.env` defaults to `86400` (24 hours); nonpositive values fall back to that default. There is no admin UI for this retention setting. Cleanup runs opportunistically during commands and may remove rows after that much inactivity. Expiry itself preserves the sender/bridge binding and inactivity timestamp, with a pending notice in the existing session state. Once cleanup has removed a stale row, the next contact creates a fresh guest session and no expiry notice is required. Radio contact records are independent of this session cleanup.
 
 Login failures are rate-limited per sender node: 5 failed attempts in 10 minutes blocks further attempts briefly. Successful login clears prior failures.
 

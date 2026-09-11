@@ -31,6 +31,7 @@ class PacketBbsChatNotifier
     public static function enqueueForRoom(\PDO $db, int $roomId, int $fromUserId, string $body): void
     {
         try {
+            (new PacketBbsSession($db))->expireIdleAuthentication();
             $userStmt = $db->prepare('SELECT username FROM users WHERE id = ? LIMIT 1');
             $userStmt->execute([$fromUserId]);
             $user = $userStmt->fetch(\PDO::FETCH_ASSOC);
@@ -78,6 +79,7 @@ class PacketBbsChatNotifier
     public static function enqueueForDm(\PDO $db, int $toUserId, int $fromUserId, string $body): void
     {
         try {
+            (new PacketBbsSession($db))->expireIdleAuthentication();
             $userStmt = $db->prepare('SELECT username FROM users WHERE id = ? LIMIT 1');
             $userStmt->execute([$fromUserId]);
             $user = $userStmt->fetch(\PDO::FETCH_ASSOC);

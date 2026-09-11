@@ -104,6 +104,10 @@ Suggested fields for new entries:
 
 ## SQL Dialect Dependencies
 
+### PacketBBS lifecycle data-modifying CTEs
+
+`src/PacketBbs/PacketBbsSession.php` uses PostgreSQL data-modifying CTEs and `FOR UPDATE` to revoke idle authentication, discard pending chat, and remove linked online sessions atomically. Separate stale-row cleanup uses the same pattern. The retained expiry notice uses the existing JSONB session state. A future backend would need equivalent transactional row locking and coordinated updates/deletes (medium migration difficulty).
+
 ### `RETURNING id`
 
 - Why PostgreSQL-specific:
