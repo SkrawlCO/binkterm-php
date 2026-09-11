@@ -1,0 +1,315 @@
+{
+  "repository": "https://github.com/adrienbrault/dokuel",
+  "revision": "6aad7ccaccb7d354fb7ed88472e48ba2b2cb2f8e",
+  "license": "MIT",
+  "licensePath": "../upstream/LICENSE",
+  "copyright": "Copyright (c) 2026 Adrien Brault",
+  "canonicalGameLogicModifications": false,
+  "files": [
+    {
+      "upstreamPath": "src/components/AssistLevelPicker.tsx",
+      "localPath": "src/components/AssistLevelPicker.tsx",
+      "upstreamSha256": "0d7a2e59f4b50bedc6b7165a1d6b0583b3b5ce208e9afdee1663ca2202f65504",
+      "localSha256": "0d7a2e59f4b50bedc6b7165a1d6b0583b3b5ce208e9afdee1663ca2202f65504",
+      "status": "unchanged"
+    },
+    {
+      "upstreamPath": "src/components/Board.tsx",
+      "localPath": "src/components/Board.tsx",
+      "upstreamSha256": "85dd1cbeb797b0718a01a10d2f3bd2ce89deb4721b8cea0db9e92fe476b7e709",
+      "localSha256": "85dd1cbeb797b0718a01a10d2f3bd2ce89deb4721b8cea0db9e92fe476b7e709",
+      "status": "unchanged"
+    },
+    {
+      "upstreamPath": "src/components/Cell.tsx",
+      "localPath": "src/components/Cell.tsx",
+      "upstreamSha256": "2579d17702d15daa2f98c9880e1c0e3f27b2d69388d65b3aef39504de467c455",
+      "localSha256": "2579d17702d15daa2f98c9880e1c0e3f27b2d69388d65b3aef39504de467c455",
+      "status": "unchanged"
+    },
+    {
+      "upstreamPath": "src/components/DarkModeToggle.tsx",
+      "localPath": "src/components/DarkModeToggle.tsx",
+      "upstreamSha256": "30ed3641865fc4e3fee2159d0c17b3b4a8704adf373dc681593914a48f9925d3",
+      "localSha256": "30ed3641865fc4e3fee2159d0c17b3b4a8704adf373dc681593914a48f9925d3",
+      "status": "unchanged"
+    },
+    {
+      "upstreamPath": "src/components/DifficultyPicker.tsx",
+      "localPath": "src/components/DifficultyPicker.tsx",
+      "upstreamSha256": "e30ec57dd11409453fe9b33635b6617122db189e9c3ebb734748c658787891b8",
+      "localSha256": "e30ec57dd11409453fe9b33635b6617122db189e9c3ebb734748c658787891b8",
+      "status": "unchanged"
+    },
+    {
+      "upstreamPath": "src/components/DigitDragIndicator.tsx",
+      "localPath": "src/components/DigitDragIndicator.tsx",
+      "upstreamSha256": "ef00a12f82b5f6d29e15d8e25405a64f5bc3f1479fa3b27b3a7d107381b9d189",
+      "localSha256": "ef00a12f82b5f6d29e15d8e25405a64f5bc3f1479fa3b27b3a7d107381b9d189",
+      "status": "unchanged"
+    },
+    {
+      "upstreamPath": "src/components/GameControls.tsx",
+      "localPath": "src/components/GameControls.tsx",
+      "upstreamSha256": "8e151524970d4993cb663d26b4132f2cb0c035a23f7fcc1df243e41bb91fc3ea",
+      "localSha256": "8e151524970d4993cb663d26b4132f2cb0c035a23f7fcc1df243e41bb91fc3ea",
+      "status": "unchanged"
+    },
+    {
+      "upstreamPath": "src/components/GameLayout.tsx",
+      "localPath": "src/components/GameLayout.tsx",
+      "upstreamSha256": "b51f7d4cfdd1ef724b879f89e82bb4091ac6da9a8783bf27f9e6cd6357743de0",
+      "localSha256": "b51f7d4cfdd1ef724b879f89e82bb4091ac6da9a8783bf27f9e6cd6357743de0",
+      "status": "unchanged"
+    },
+    {
+      "upstreamPath": "src/components/GameResult.tsx",
+      "localPath": "src/components/GameResult.tsx",
+      "upstreamSha256": "57ec327037b0cc80a1ba0ce70901776659f3217d70a203406a7799fdb5f0090a",
+      "localSha256": "9a4d8b69d4cd67fa7a36690343809e92a3dae174b28c0f8ca9414db1f0a87ae4",
+      "status": "adapted"
+    },
+    {
+      "upstreamPath": "src/components/HintBanner.tsx",
+      "localPath": "src/components/HintBanner.tsx",
+      "upstreamSha256": "891ce53a4877d0e3196c73bba1735c3c0c05e1c35776574ba69ec1bcf84ec67d",
+      "localSha256": "891ce53a4877d0e3196c73bba1735c3c0c05e1c35776574ba69ec1bcf84ec67d",
+      "status": "unchanged"
+    },
+    {
+      "upstreamPath": "src/components/NumPad.tsx",
+      "localPath": "src/components/NumPad.tsx",
+      "upstreamSha256": "b28bc54707a153540d515683bf65b55c576354453d819198cb53f971e6aec3e8",
+      "localSha256": "b28bc54707a153540d515683bf65b55c576354453d819198cb53f971e6aec3e8",
+      "status": "unchanged"
+    },
+    {
+      "upstreamPath": "src/components/NumPadKeyFace.tsx",
+      "localPath": "src/components/NumPadKeyFace.tsx",
+      "upstreamSha256": "efdc4bb83f23bdadbe94fc6c8de2a9cd4913ab7601ebdc1b6f054db639a332bf",
+      "localSha256": "efdc4bb83f23bdadbe94fc6c8de2a9cd4913ab7601ebdc1b6f054db639a332bf",
+      "status": "unchanged"
+    },
+    {
+      "upstreamPath": "src/components/NumPadLegend.tsx",
+      "localPath": "src/components/NumPadLegend.tsx",
+      "upstreamSha256": "83243a2e462eb4ff0072018a7a685969f11acf086be56723685389bbb96edc9b",
+      "localSha256": "83243a2e462eb4ff0072018a7a685969f11acf086be56723685389bbb96edc9b",
+      "status": "unchanged"
+    },
+    {
+      "upstreamPath": "src/components/NumPadNotePreview.tsx",
+      "localPath": "src/components/NumPadNotePreview.tsx",
+      "upstreamSha256": "fcb62c7150add78093bd648db04fefcbd7c6409fab1490d295ee99f02ea66dbf",
+      "localSha256": "fcb62c7150add78093bd648db04fefcbd7c6409fab1490d295ee99f02ea66dbf",
+      "status": "unchanged"
+    },
+    {
+      "upstreamPath": "src/components/NumPadPositionToggle.tsx",
+      "localPath": "src/components/NumPadPositionToggle.tsx",
+      "upstreamSha256": "d40300f2ae0ffecab033c6ac7e17b66d574efea5f042f0902f1b89c0953f3650",
+      "localSha256": "d40300f2ae0ffecab033c6ac7e17b66d574efea5f042f0902f1b89c0953f3650",
+      "status": "unchanged"
+    },
+    {
+      "upstreamPath": "src/components/SlidingRadioGroup.tsx",
+      "localPath": "src/components/SlidingRadioGroup.tsx",
+      "upstreamSha256": "f85b5922345ba74f0167edf6fe33af512adc6bd6b6a198e29ea4e84a292f1615",
+      "localSha256": "f85b5922345ba74f0167edf6fe33af512adc6bd6b6a198e29ea4e84a292f1615",
+      "status": "unchanged"
+    },
+    {
+      "upstreamPath": "src/components/SoloGame.tsx",
+      "localPath": "src/components/SoloGame.tsx",
+      "upstreamSha256": "5284f5d561d531e2e9379db3649011aaf7434e2a9e5a102f758eea515ac7bdbe",
+      "localSha256": "a35600e9490f6248fed33c26ccc6851634b9a40c69c7d31ccf235ced399d62fd",
+      "status": "adapted"
+    },
+    {
+      "upstreamPath": "src/components/SoundToggle.tsx",
+      "localPath": "src/components/SoundToggle.tsx",
+      "upstreamSha256": "c9811433cddde228015ad8fa8fbc02135a577be1c5eadb778fb2f5537ea27c77",
+      "localSha256": "c9811433cddde228015ad8fa8fbc02135a577be1c5eadb778fb2f5537ea27c77",
+      "status": "unchanged"
+    },
+    {
+      "upstreamPath": "src/components/TimerPill.tsx",
+      "localPath": "src/components/TimerPill.tsx",
+      "upstreamSha256": "2415cfb1daec74e05f7cd154c4ad25ba4df4b7922c5378625ae8e497d42f54ff",
+      "localSha256": "2a9c0ecb0f73c25a00b5d98f78fa03fef976cb84d3ce720e8f6cc5a85f7d6170",
+      "status": "adapted"
+    },
+    {
+      "upstreamPath": "src/hooks/useAssistLevel.ts",
+      "localPath": "src/hooks/useAssistLevel.ts",
+      "upstreamSha256": "6f0420b93943511c61f49f3aa4e1e22708538c86d4b13b198c3b83cb2a3a2092",
+      "localSha256": "6f0420b93943511c61f49f3aa4e1e22708538c86d4b13b198c3b83cb2a3a2092",
+      "status": "unchanged"
+    },
+    {
+      "upstreamPath": "src/hooks/useDarkMode.ts",
+      "localPath": "src/hooks/useDarkMode.ts",
+      "upstreamSha256": "bd5f896f4a0d3817ed1cdc72230bde1bd915db185b58f2c4f9e79d5dfc021943",
+      "localSha256": "34629bb29232b50330e7f136db3d3a7eb3a996c664c2e1ec9d26d34ed36708c9",
+      "status": "adapted"
+    },
+    {
+      "upstreamPath": "src/hooks/useDelayedFlag.ts",
+      "localPath": "src/hooks/useDelayedFlag.ts",
+      "upstreamSha256": "28b23502fbfc24645a32b97134881cfe591882b6ae106295fedf71f03020cd0c",
+      "localSha256": "28b23502fbfc24645a32b97134881cfe591882b6ae106295fedf71f03020cd0c",
+      "status": "unchanged"
+    },
+    {
+      "upstreamPath": "src/hooks/useDigitDrag.ts",
+      "localPath": "src/hooks/useDigitDrag.ts",
+      "upstreamSha256": "b913568a8c49d158939a1cb33fbdbbef63c940008015b411ed8292e2ab5a9eda",
+      "localSha256": "b913568a8c49d158939a1cb33fbdbbef63c940008015b411ed8292e2ab5a9eda",
+      "status": "unchanged"
+    },
+    {
+      "upstreamPath": "src/hooks/useDigitHighlight.ts",
+      "localPath": "src/hooks/useDigitHighlight.ts",
+      "upstreamSha256": "bb5b6f9158c911c7b33e642c35a258e3b0a642a3713cdb35aa4d04855015ecdb",
+      "localSha256": "bb5b6f9158c911c7b33e642c35a258e3b0a642a3713cdb35aa4d04855015ecdb",
+      "status": "unchanged"
+    },
+    {
+      "upstreamPath": "src/hooks/useDragSelect.ts",
+      "localPath": "src/hooks/useDragSelect.ts",
+      "upstreamSha256": "7166857678f5942893b9ee6f76c74ee9241fabb5995ae81a3a2129cdc9487388",
+      "localSha256": "7166857678f5942893b9ee6f76c74ee9241fabb5995ae81a3a2129cdc9487388",
+      "status": "unchanged"
+    },
+    {
+      "upstreamPath": "src/hooks/useGameDigitDrag.ts",
+      "localPath": "src/hooks/useGameDigitDrag.ts",
+      "upstreamSha256": "33bee0af9e7958af664a97c989200dd1e9d8e9da8bd9ad44444279b8a2236aef",
+      "localSha256": "33bee0af9e7958af664a97c989200dd1e9d8e9da8bd9ad44444279b8a2236aef",
+      "status": "unchanged"
+    },
+    {
+      "upstreamPath": "src/hooks/useKeyboard.ts",
+      "localPath": "src/hooks/useKeyboard.ts",
+      "upstreamSha256": "c87d4fcfbc8af664948e0bcd613bbd19c81ab1c3d745840befb4519ace9a581f",
+      "localSha256": "672fc05d46ef17cf5fffae815f6e39a3c12e368403d7c4fd7a08134fc7c2c050",
+      "status": "adapted"
+    },
+    {
+      "upstreamPath": "src/hooks/useLocalStorage.ts",
+      "localPath": "src/hooks/useLocalStorage.ts",
+      "upstreamSha256": "ba104077ad68e9434899a7452473e31774a4c0e1e15e045fb3d8960e87e1fdc0",
+      "localSha256": "f837aa4bf5ecf319355a34eadb51e8e88ef9a76d88ce0ab24a9db126c4391549",
+      "status": "adapted"
+    },
+    {
+      "upstreamPath": "src/hooks/useNumPadGesture.ts",
+      "localPath": "src/hooks/useNumPadGesture.ts",
+      "upstreamSha256": "3214452f44ee9526d3307f039ee2eae850c09937d8b8c3c0d3c402612d577736",
+      "localSha256": "3214452f44ee9526d3307f039ee2eae850c09937d8b8c3c0d3c402612d577736",
+      "status": "unchanged"
+    },
+    {
+      "upstreamPath": "src/hooks/useNumPadPosition.ts",
+      "localPath": "src/hooks/useNumPadPosition.ts",
+      "upstreamSha256": "d1a5138244a10a6e2da523fb8be33a765806e560a2be5a3f681711727c74325f",
+      "localSha256": "d1a5138244a10a6e2da523fb8be33a765806e560a2be5a3f681711727c74325f",
+      "status": "unchanged"
+    },
+    {
+      "upstreamPath": "src/hooks/useNumpadInteractions.ts",
+      "localPath": "src/hooks/useNumpadInteractions.ts",
+      "upstreamSha256": "bb313afddeea6650a595a3e2b98b40110a372722310b355e82b836b191f858e4",
+      "localSha256": "bb313afddeea6650a595a3e2b98b40110a372722310b355e82b836b191f858e4",
+      "status": "unchanged"
+    },
+    {
+      "upstreamPath": "src/hooks/useSudoku.ts",
+      "localPath": "src/hooks/useSudoku.ts",
+      "upstreamSha256": "ca0bfc5938981e67789a39405131d280fbe37622d6c7311eb4985594c079c744",
+      "localSha256": "504be5faa8ba6c6ffeb43f1451d17656b050ddcff983ac01e48303f2074edac0",
+      "status": "adapted"
+    },
+    {
+      "upstreamPath": "src/index.css",
+      "localPath": "src/index.css",
+      "upstreamSha256": "5d63c6a7b7d79023291fddf37237785c9b379491f070b7e23de216973b2d28e3",
+      "localSha256": "5d63c6a7b7d79023291fddf37237785c9b379491f070b7e23de216973b2d28e3",
+      "status": "unchanged"
+    },
+    {
+      "upstreamPath": "src/lib/constants.ts",
+      "localPath": "src/lib/constants.ts",
+      "upstreamSha256": "fc701504c402570b6f4641d9c56bd3fd5d9a6bd7769285c25254c0b617251af2",
+      "localSha256": "fc701504c402570b6f4641d9c56bd3fd5d9a6bd7769285c25254c0b617251af2",
+      "status": "unchanged"
+    },
+    {
+      "upstreamPath": "src/lib/digit-intent.ts",
+      "localPath": "src/lib/digit-intent.ts",
+      "upstreamSha256": "a9fe96c04c14c9ad63e39c0b0c0c336541de67b8cd2a6e3ab5b53b104456ebaa",
+      "localSha256": "a9fe96c04c14c9ad63e39c0b0c0c336541de67b8cd2a6e3ab5b53b104456ebaa",
+      "status": "unchanged"
+    },
+    {
+      "upstreamPath": "src/lib/format.ts",
+      "localPath": "src/lib/format.ts",
+      "upstreamSha256": "4b4ec7e4b524c4ecbae5fca53e3d729994c3cfb298c3725407dbde307253f3db",
+      "localSha256": "4b4ec7e4b524c4ecbae5fca53e3d729994c3cfb298c3725407dbde307253f3db",
+      "status": "unchanged"
+    },
+    {
+      "upstreamPath": "src/lib/game-feedback.ts",
+      "localPath": "src/lib/game-feedback.ts",
+      "upstreamSha256": "d6c81ea1c7cbf580fefca01f328df3a0b03641d3f72b97a3bcf52f882032a011",
+      "localSha256": "d6c81ea1c7cbf580fefca01f328df3a0b03641d3f72b97a3bcf52f882032a011",
+      "status": "unchanged"
+    },
+    {
+      "upstreamPath": "src/lib/haptics.ts",
+      "localPath": "src/lib/haptics.ts",
+      "upstreamSha256": "4f620ef77cfbf76fc04e3a449968d2042ee7c51c31c909138ac975593d08eb43",
+      "localSha256": "4f620ef77cfbf76fc04e3a449968d2042ee7c51c31c909138ac975593d08eb43",
+      "status": "unchanged"
+    },
+    {
+      "upstreamPath": "src/lib/numpad-gesture.ts",
+      "localPath": "src/lib/numpad-gesture.ts",
+      "upstreamSha256": "2a36e4ad6736960476d1decc681e78eae79e8591b19d73075ccf32249de9945c",
+      "localSha256": "2a36e4ad6736960476d1decc681e78eae79e8591b19d73075ccf32249de9945c",
+      "status": "unchanged"
+    },
+    {
+      "upstreamPath": "src/lib/sounds.ts",
+      "localPath": "src/lib/sounds.ts",
+      "upstreamSha256": "e84cd5e2f09ffd5d1f735d8cb92e4c02da748fe91bf45511318d4962877a6da3",
+      "localSha256": "3a6ad9b9a7a73fb1e052bd69bc202a5c684033f068a3ef652c897551d6f452c7",
+      "status": "adapted"
+    },
+    {
+      "upstreamPath": "vite.config.ts",
+      "localPath": "vite.config.ts",
+      "upstreamSha256": "bb86efeb11e83afcc5bf8a83127418024746b107a60ba6c7ccc187dca9cd1b5d",
+      "localSha256": "bb86efeb11e83afcc5bf8a83127418024746b107a60ba6c7ccc187dca9cd1b5d",
+      "status": "unchanged"
+    }
+  ],
+  "sharedForwarders": [
+    {
+      "localPath": "src/lib/sudoku.ts",
+      "sharedPath": "../upstream/src/lib/sudoku.ts",
+      "sha256": "dca086ee39cd958821a1007f08262ae2f6a57445bb5ce69b00761585e206ed84"
+    },
+    {
+      "localPath": "src/lib/types.ts",
+      "sharedPath": "../upstream/src/lib/types.ts",
+      "sha256": "17bafa13bd733dbfecfd21da4db797cdca99fc8f362b569c43736864bad40622"
+    }
+  ],
+  "toolchain": {
+    "upstreamLockfile": "bun.lock",
+    "upstreamSha256": "04cd1f5292fcfa822f66b5246e5209eab47669b7067d156e0fcfaf9a06d78cf8",
+    "localLockSha256": "c4a75d69c72a30de001db7a0e25980170c2b8b98667d7ca5779c8d11aeea390e",
+    "strategy": "Exact upstream direct versions and unchanged upstream package resolution metadata; signaling workspace entry excluded. Unused lock records do not install multiplayer dependencies."
+  }
+}

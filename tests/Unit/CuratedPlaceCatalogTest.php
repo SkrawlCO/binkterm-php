@@ -22,7 +22,7 @@ final class CuratedPlaceCatalogTest extends TestCase
     private function catalog(): array
     {
         $rows = [];
-        foreach (['wordle', 'wordwright', 'hangman', 'blackjack', 'klondike-solitaire', 'tatham-web', 'tatham-terminal', 'breaklock', 'breaklock-terminal', 'ordinary-puzzles', 'ordinary-puzzles-terminal', 'wordwright-terminal'] as $id) {
+        foreach (['wordle', 'wordwright', 'hangman', 'blackjack', 'klondike-solitaire', 'tatham-web', 'tatham-terminal', 'breaklock', 'breaklock-terminal', 'ordinary-puzzles', 'ordinary-puzzles-terminal', 'wordwright-terminal', 'dokuel', 'dokuel-terminal'] as $id) {
             $native = str_ends_with($id, '-terminal');
             $rows[$id] = [
                 'id' => $id, 'name' => $id, 'description' => '',
@@ -32,7 +32,7 @@ final class CuratedPlaceCatalogTest extends TestCase
             ];
         }
         // Real manifests supply the capability and grouping, not a PP fixture.
-        foreach (['wordwright', 'wordwright-terminal', 'tatham-web', 'tatham-terminal', 'breaklock', 'breaklock-terminal', 'ordinary-puzzles', 'ordinary-puzzles-terminal'] as $id) {
+        foreach (['wordwright', 'wordwright-terminal', 'tatham-web', 'tatham-terminal', 'breaklock', 'breaklock-terminal', 'ordinary-puzzles', 'ordinary-puzzles-terminal', 'dokuel', 'dokuel-terminal'] as $id) {
             $path = str_ends_with($id, '-terminal')
                 ? '/native-doors/doors/' . $id . '/nativedoor.json'
                 : '/public_html/webdoors/' . $id . '/webdoor.json';
@@ -53,7 +53,7 @@ final class CuratedPlaceCatalogTest extends TestCase
         self::assertSame("Puzlmastr's Patch", $definition['name']);
         self::assertSame('place', $definition['kind']);
         self::assertSame('curated', $definition['parent']);
-        $order = ['wordwright', 'hangman', 'blackjack', 'klondike-solitaire', 'tatham/lightup', 'breaklock', 'ordinary-puzzles'];
+        $order = ['wordwright', 'hangman', 'blackjack', 'klondike-solitaire', 'tatham/lightup', 'breaklock', 'ordinary-puzzles', 'dokuel'];
         self::assertSame($order, array_column($definition['members'], 'reference'));
         $place = $service->getPlace('puzlmastrs-patch', ['id' => 7]);
         self::assertSame($order, array_column($place['members'], 'reference'));
@@ -115,9 +115,9 @@ final class CuratedPlaceCatalogTest extends TestCase
             }
         );
         $service = new CuratedPlaceCatalog($source);
-        self::assertCount(7, $service->getPlace('puzlmastrs-patch', ['id' => 7, 'is_admin' => true])['members']);
+        self::assertCount(8, $service->getPlace('puzlmastrs-patch', ['id' => 7, 'is_admin' => true])['members']);
         $place = $service->getPlace('puzlmastrs-patch', ['id' => 8, 'is_admin' => false]);
-        self::assertSame(['wordwright', 'hangman', 'blackjack', 'klondike-solitaire', 'breaklock', 'ordinary-puzzles'], array_column($place['members'], 'reference'));
+        self::assertSame(['wordwright', 'hangman', 'blackjack', 'klondike-solitaire', 'breaklock', 'ordinary-puzzles', 'dokuel'], array_column($place['members'], 'reference'));
     }
 
     public function testAnotherSurfaceRemainsVisibleWithoutInventedLaunch(): void
@@ -126,7 +126,7 @@ final class CuratedPlaceCatalogTest extends TestCase
         $source->expects(self::once())->method('getEnabledGames')
             ->with(['id' => 7], 'telnet')->willReturn($this->catalog());
         $place = (new CuratedPlaceCatalog($source))->getPlace('puzlmastrs-patch', ['id' => 7], 'terminal');
-        self::assertCount(7, $place['members']);
+        self::assertCount(8, $place['members']);
         self::assertSame('wordwright-terminal', $place['members'][0]['launch']['id']);
         self::assertNull($place['members'][1]['launch']);
         self::assertSame(['web' => 'full', 'telnet' => 'unavailable'], $place['members'][1]['surfaces']);

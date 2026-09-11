@@ -91,7 +91,14 @@ class DoorHandler
                 $doorList[] = ['id' => (string)$experienceId, 'data' => $experience];
             }
 
-            foreach ((new \BinktermPHP\CuratedPlaceCatalog())->getDefinitions() as $place) {
+            $placeDefinitions = (new \BinktermPHP\CuratedPlaceCatalog())->getDefinitions();
+            $shelfRuntimes = \BinktermPHP\CuratedPlacePresentation::runtimeEntries(
+                array_map(static fn (array $row): array => ['id' => $row['id']] + $row['data'], $doorList),
+                $placeDefinitions
+            );
+            $visibleIds = array_column($shelfRuntimes, 'id');
+            $doorList = array_values(array_filter($doorList, static fn (array $row): bool => in_array($row['id'], $visibleIds, true)));
+            foreach ($placeDefinitions as $place) {
                 if (($place['parent'] ?? null) === 'curated') {
                     $doorList[] = ['id' => $place['id'], 'data' => [
                         'kind' => 'place', 'name' => $place['name'],

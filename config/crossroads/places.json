@@ -11,13 +11,43 @@
       "caller": "Puzlmastr"
     },
     "members": [
-      { "reference": "wordwright", "primary_presentation": true },
-      { "reference": "hangman", "primary_presentation": true },
-      { "reference": "blackjack", "primary_presentation": true },
-      { "reference": "klondike-solitaire", "title": "Solitaire", "primary_presentation": true },
-      { "reference": "tatham/lightup", "title": "Light Up" },
-      { "reference": "breaklock", "title": "BreakLock" },
-      { "reference": "ordinary-puzzles", "title": "Ordinary Puzzles" }
+      {
+        "reference": "wordwright",
+        "primary_presentation": true
+      },
+      {
+        "reference": "hangman",
+        "primary_presentation": true
+      },
+      {
+        "reference": "blackjack",
+        "primary_presentation": true
+      },
+      {
+        "reference": "klondike-solitaire",
+        "title": "Solitaire",
+        "primary_presentation": true
+      },
+      {
+        "reference": "tatham/lightup",
+        "title": "Light Up",
+        "primary_presentation": true
+      },
+      {
+        "reference": "breaklock",
+        "title": "BreakLock",
+        "primary_presentation": true
+      },
+      {
+        "reference": "ordinary-puzzles",
+        "title": "Ordinary Puzzles",
+        "primary_presentation": true
+      },
+      {
+        "reference": "dokuel",
+        "title": "Dokuel",
+        "primary_presentation": true
+      }
     ]
   }
 }

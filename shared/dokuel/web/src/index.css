@@ -1,0 +1,684 @@
+@import "tailwindcss";
+/* Self-hosted DM Sans (variable, opsz+wght axes) — no request to Google
+   Fonts, so first paint never blocks on a third party and the app works
+   offline. The "Variable" family name comes from @fontsource. */
+@import "@fontsource-variable/dm-sans/opsz.css";
+@import "@fontsource-variable/dm-sans/opsz-italic.css";
+
+/* Short viewports: iPhone SE class and landscape phones. Used to
+   tighten vertical rhythm so primary actions stay above the fold. */
+@custom-variant short (@media (max-height: 700px));
+
+@theme {
+  /* Board & cell */
+  --color-board-bg: oklch(0.97 0.005 80);
+  --color-board-border: oklch(0.35 0.01 80);
+  --color-cell-bg: oklch(0.995 0.003 80);
+  --color-cell-selected: oklch(0.92 0.04 168);
+  --color-cell-highlight: oklch(0.95 0.015 168);
+  --color-cell-same-number: oklch(0.9 0.05 168);
+  --color-cell-match-row-col: oklch(0.965 0.012 168);
+  --color-cell-given: oklch(0.25 0.01 80);
+  --color-cell-user: oklch(0.42 0.12 168);
+  --color-cell-conflict: oklch(0.6 0.2 25);
+  --color-cell-conflict-bg: oklch(0.95 0.04 25);
+  --color-success: oklch(0.65 0.18 155);
+  --color-accent: oklch(0.52 0.12 168);
+  --color-accent-bright: oklch(0.61 0.13 168);
+  --color-accent-deep: oklch(0.45 0.12 168);
+  --color-accent-light: oklch(0.92 0.04 168);
+
+  /* Semantic surfaces */
+  --color-bg-primary: oklch(0.99 0.004 80);
+  --color-bg-inset: oklch(0.96 0.006 80);
+  --color-bg-raised: oklch(0.95 0.008 80);
+  --color-bg-overlay: oklch(0.99 0.004 80);
+  --color-border-default: oklch(0.9 0.01 80);
+
+  /* Elevated surface — cards, buttons, popovers, sit above the page */
+  --color-surface: oklch(1 0 0);
+  --color-surface-hover: oklch(0.975 0.005 80);
+
+  /* Ambient glow washed behind menu screens */
+  --color-screen-glow: oklch(0.88 0.06 168 / 0.5);
+
+  /* Semantic text */
+  --color-text-primary: oklch(0.18 0.01 80);
+  --color-text-secondary: oklch(0.45 0.01 80);
+  --color-text-muted: oklch(0.58 0.01 80);
+  --color-text-on-accent: oklch(0.99 0 0);
+
+  /* Semantic interactive */
+  --color-bg-disabled: oklch(0.88 0.008 80);
+  --color-text-disabled: oklch(0.55 0.01 80);
+
+  /* Difficulty colors — dot indicators */
+  --color-difficulty-easy: oklch(0.7 0.18 155);
+  --color-difficulty-medium: oklch(0.75 0.17 80);
+  --color-difficulty-hard: oklch(0.7 0.17 50);
+  --color-difficulty-expert: oklch(0.65 0.2 15);
+
+  /* Difficulty colors — badge backgrounds */
+  --color-difficulty-easy-bg: oklch(0.93 0.06 155);
+  --color-difficulty-medium-bg: oklch(0.93 0.06 80);
+  --color-difficulty-hard-bg: oklch(0.93 0.06 50);
+  --color-difficulty-expert-bg: oklch(0.93 0.06 15);
+
+  /* Difficulty colors — badge text */
+  --color-difficulty-easy-text: oklch(0.4 0.12 155);
+  --color-difficulty-medium-text: oklch(0.4 0.12 80);
+  --color-difficulty-hard-text: oklch(0.4 0.12 50);
+  --color-difficulty-expert-text: oklch(0.4 0.12 15);
+
+  /* Hint surfaces — banner + highlighted cell (warm amber family) */
+  --color-hint-bg: oklch(0.97 0.035 85);
+  --color-hint-border: oklch(0.89 0.08 85);
+  --color-hint-title: oklch(0.55 0.13 70);
+  --color-hint-text: oklch(0.35 0.08 70);
+  --color-hint-muted: oklch(0.75 0.09 85);
+  --color-cell-hint: oklch(0.93 0.07 85);
+
+  /* Outcomes & opponent accent */
+  --color-danger: oklch(0.6 0.21 20);
+  --color-positive-text: oklch(0.5 0.13 155);
+  --color-negative-text: oklch(0.55 0.19 20);
+  --color-opponent: oklch(0.7 0.19 15);
+}
+
+/* Dark mode overrides */
+.dark {
+  /* Board & cell */
+  --color-board-bg: oklch(0.2 0.008 80);
+  --color-board-border: oklch(0.6 0.01 80);
+  --color-cell-bg: oklch(0.18 0.006 80);
+  --color-cell-selected: oklch(0.42 0.1 168);
+  --color-cell-highlight: oklch(0.27 0.03 168);
+  --color-cell-same-number: oklch(0.4 0.11 168);
+  --color-cell-match-row-col: oklch(0.24 0.025 168);
+  --color-cell-given: oklch(0.78 0.005 80);
+  --color-cell-user: oklch(0.7 0.13 168);
+  --color-cell-conflict: oklch(0.7 0.18 25);
+  --color-cell-conflict-bg: oklch(0.25 0.05 25);
+  --color-accent-light: oklch(0.28 0.05 168);
+
+  /* Semantic surfaces */
+  --color-bg-primary: oklch(0.14 0.008 80);
+  --color-bg-inset: oklch(0.16 0.008 80);
+  --color-bg-raised: oklch(0.21 0.008 80);
+  --color-bg-overlay: oklch(0.16 0.008 80);
+  --color-border-default: oklch(0.32 0.008 80);
+
+  /* Elevated surface — lighter than the page so it reads as raised */
+  --color-surface: oklch(0.2 0.01 80);
+  --color-surface-hover: oklch(0.24 0.012 80);
+
+  /* Ambient glow washed behind menu screens */
+  --color-screen-glow: oklch(0.55 0.07 168 / 0.14);
+
+  /* Semantic text */
+  --color-text-primary: oklch(0.78 0.005 80);
+  --color-text-secondary: oklch(0.7 0.008 80);
+  --color-text-muted: oklch(0.5 0.008 80);
+
+  /* Semantic interactive */
+  --color-bg-disabled: oklch(0.25 0.008 80);
+  --color-text-disabled: oklch(0.45 0.008 80);
+
+  /* Difficulty colors — badge backgrounds */
+  --color-difficulty-easy-bg: oklch(0.25 0.06 155);
+  --color-difficulty-medium-bg: oklch(0.25 0.06 80);
+  --color-difficulty-hard-bg: oklch(0.25 0.06 50);
+  --color-difficulty-expert-bg: oklch(0.25 0.06 15);
+
+  /* Difficulty colors — badge text */
+  --color-difficulty-easy-text: oklch(0.75 0.15 155);
+  --color-difficulty-medium-text: oklch(0.75 0.15 80);
+  --color-difficulty-hard-text: oklch(0.75 0.15 50);
+  --color-difficulty-expert-text: oklch(0.75 0.15 15);
+
+  /* Hint surfaces */
+  --color-hint-bg: oklch(0.25 0.045 75);
+  --color-hint-border: oklch(0.35 0.07 75);
+  --color-hint-title: oklch(0.78 0.12 85);
+  --color-hint-text: oklch(0.9 0.05 90);
+  --color-hint-muted: oklch(0.55 0.08 75);
+  --color-cell-hint: oklch(0.32 0.07 75);
+
+  /* Outcomes & opponent accent */
+  --color-danger: oklch(0.55 0.19 20);
+  --color-positive-text: oklch(0.75 0.14 155);
+  --color-negative-text: oklch(0.72 0.16 20);
+  --color-opponent: oklch(0.65 0.17 15);
+}
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+html,
+body {
+  /* Stop iOS Safari from interpreting in-game drag gestures as
+   * pull-to-refresh and reloading the page mid-game. */
+  overscroll-behavior: none;
+  /* Match the app surface so iOS Safari's overscroll bounce, safe-area
+   * inset regions, and address-bar collapse blend with the page rather
+   * than flashing browser default white. Paired with <meta name="theme-color">
+   * in index.html (kept in sync by useDarkMode for manual toggles). */
+  background-color: var(--color-bg-primary);
+  /* Feel like a native game, not a web page: no accidental text
+   * selection when long-pressing or dragging cells, no iOS callout
+   * menu, no blue tap highlight. Inputs override this below so users
+   * can still edit/copy room codes and names. */
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+input,
+textarea {
+  user-select: text;
+  -webkit-user-select: text;
+  -webkit-touch-callout: default;
+}
+
+html {
+  touch-action: manipulation;
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  font-family:
+    "DM Sans Variable", "DM Sans", system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right)
+    env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+@keyframes pop-in {
+  0% {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.1);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes celebration {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  25% {
+    transform: scale(1.05) rotate(-1deg);
+  }
+  75% {
+    transform: scale(1.05) rotate(1deg);
+  }
+}
+
+.animate-pop-in {
+  animation: pop-in 0.15s ease-out;
+}
+
+.animate-celebration {
+  animation: celebration 0.5s ease-in-out 2;
+}
+
+@property --cell-glow-opacity {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0.4;
+}
+
+@keyframes cell-glow-pulse {
+  0%,
+  100% {
+    --cell-glow-opacity: 0.4;
+  }
+  50% {
+    --cell-glow-opacity: 0.7;
+  }
+}
+
+/* Animate the shared variable once on the board container so every
+   selected cell reads from the same source — they pulse in unison
+   regardless of when each one becomes selected. On the board, NOT
+   :root: an infinite animation on the root keeps the style pipeline
+   awake on every screen of the app (menus included) forever, for a
+   glow only a selected cell can show. */
+[data-board-glow] {
+  animation: cell-glow-pulse 2s ease-in-out infinite;
+}
+
+.cell-selected-glow {
+  box-shadow: inset 0 0 0 2px oklch(0.52 0.12 168 / var(--cell-glow-opacity));
+}
+
+.press-spring {
+  transition:
+    transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1),
+    box-shadow 0.15s ease;
+}
+.press-spring:active {
+  transform: scale(0.95);
+}
+
+.press-spring-soft {
+  transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.press-spring-soft:active {
+  transform: scale(0.98);
+}
+
+@media (hover: hover) {
+  .press-spring:hover,
+  .press-spring-soft:hover {
+    transform: translateY(-1px);
+  }
+}
+
+@keyframes modal-backdrop-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes modal-content-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+.animate-modal-backdrop {
+  animation: modal-backdrop-in 0.2s ease-out;
+}
+.animate-modal-content {
+  animation: modal-content-in 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes screen-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-screen-enter {
+  animation: screen-enter 0.2s ease-out;
+}
+
+@keyframes cell-reveal {
+  from {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.animate-cell-reveal {
+  animation: cell-reveal 0.15s ease-out both;
+}
+
+/* In-cell hold feedback: when a hold commits a pencil note, the glyph
+   flourishes — it lands value-size at the cell center, then collapses
+   into its note-grid sub-cell (corner/edge/center based on digit) at
+   note size over the same 200ms hold threshold used by NumPad.
+   --charge-dx / --charge-dy are the offset from cell center to the
+   digit's sub-cell center, supplied inline by Cell.
+
+   Timing curve: a quick settle from a slight overshoot (~40% of the
+   duration), then a glide down into the sub-cell. Keyframe percentages
+   do the work — animation-timing-function is linear so the spacing
+   dictates speed. */
+@keyframes note-charge {
+  0% {
+    transform: translate(0%, 0%) scale(1.2);
+    opacity: 1;
+  }
+  40% {
+    transform: translate(0%, 0%) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(var(--charge-dx, 0%), var(--charge-dy, 0%)) scale(0.4);
+    opacity: 1;
+  }
+}
+.animate-note-charge {
+  animation: note-charge 200ms linear forwards;
+}
+
+@keyframes emoji-bounce {
+  0% {
+    transform: scale(0.3) rotate(-15deg);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.3) rotate(5deg);
+    opacity: 1;
+  }
+  70% {
+    transform: scale(0.9) rotate(-2deg);
+  }
+  100% {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
+}
+.animate-emoji-bounce {
+  animation: emoji-bounce 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) 0.15s both;
+}
+
+@keyframes confetti-piece {
+  0% {
+    transform: translateY(0) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(calc(100vh)) rotate(720deg);
+    opacity: 0;
+  }
+}
+.confetti-container {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.confetti-container span {
+  position: absolute;
+  top: -10px;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  animation: confetti-piece linear forwards;
+}
+.confetti-container span:nth-child(1) {
+  left: 10%;
+  background: oklch(0.7 0.15 168);
+  animation-duration: 2.2s;
+  animation-delay: 0s;
+}
+.confetti-container span:nth-child(2) {
+  left: 25%;
+  background: oklch(0.75 0.15 80);
+  animation-duration: 2.5s;
+  animation-delay: 0.1s;
+}
+.confetti-container span:nth-child(3) {
+  left: 40%;
+  background: oklch(0.7 0.18 155);
+  animation-duration: 2s;
+  animation-delay: 0.05s;
+}
+.confetti-container span:nth-child(4) {
+  left: 55%;
+  background: oklch(0.75 0.18 65);
+  animation-duration: 2.8s;
+  animation-delay: 0.15s;
+}
+.confetti-container span:nth-child(5) {
+  left: 70%;
+  background: oklch(0.65 0.15 25);
+  animation-duration: 2.1s;
+  animation-delay: 0.08s;
+}
+.confetti-container span:nth-child(6) {
+  left: 85%;
+  background: oklch(0.6 0.12 168);
+  animation-duration: 2.4s;
+  animation-delay: 0.2s;
+}
+.confetti-container span:nth-child(7) {
+  left: 15%;
+  background: oklch(0.72 0.16 155);
+  animation-duration: 2.6s;
+  animation-delay: 0.12s;
+  width: 6px;
+  height: 6px;
+}
+.confetti-container span:nth-child(8) {
+  left: 50%;
+  background: oklch(0.78 0.16 80);
+  animation-duration: 2.3s;
+  animation-delay: 0.18s;
+  width: 6px;
+  height: 6px;
+}
+.confetti-container span:nth-child(9) {
+  left: 80%;
+  background: oklch(0.68 0.18 65);
+  animation-duration: 2.7s;
+  animation-delay: 0.07s;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+.confetti-container span:nth-child(10) {
+  left: 35%;
+  background: oklch(0.62 0.14 25);
+  animation-duration: 2s;
+  animation-delay: 0.25s;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-fade-in {
+  animation: fade-in 0.15s ease-out;
+}
+
+/* ─── Drag-and-drop digit ─── */
+
+/* Hovered drop target — a calm, static accent ring. The cell's
+   background is left to the active-half band (rendered in Cell) so
+   the tinted half clearly reads as the zone the pointer is in;
+   washing the whole cell would flatten that contrast. */
+[data-drop-target="valid"] {
+  box-shadow: inset 0 0 0 2px oklch(0.52 0.12 168 / 0.55);
+}
+[data-drop-target="invalid"] {
+  box-shadow: inset 0 0 0 3px oklch(0.6 0.2 25 / 0.7);
+  background-color: var(--color-cell-conflict-bg);
+}
+
+/* The single landing preview morphs between its value pose (fills
+   the cell) and its note pose (the digit's own sub-cell) as the
+   pointer crosses the cell's midline — one digit gliding and
+   resizing, so the user sees the exact outcome of releasing now. */
+.animate-drop-preview {
+  transition:
+    left 0.19s cubic-bezier(0.22, 1, 0.36, 1),
+    top 0.19s cubic-bezier(0.22, 1, 0.36, 1),
+    width 0.19s cubic-bezier(0.22, 1, 0.36, 1),
+    height 0.19s cubic-bezier(0.22, 1, 0.36, 1),
+    font-size 0.19s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Source cell while it's being dragged from — fades the in-place
+   digit so the user understands the digit is "lifted". */
+@keyframes drop-source-fade {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0.3;
+  }
+}
+[data-drag-source="true"] {
+  animation: drop-source-fade 0.15s ease-out forwards;
+}
+
+/* Drop landing: the receiving cell's digit gets the existing
+   .animate-pop-in via the Cell render path; nothing extra needed. */
+
+/* ─── Design System: Component Classes ─── */
+
+/* Buttons */
+.btn {
+  @apply rounded-2xl font-semibold select-none touch-manipulation;
+  transition:
+    transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1),
+    box-shadow 0.2s ease,
+    filter 0.2s ease,
+    background-color 0.2s ease;
+}
+.btn:active {
+  transform: scale(0.97);
+}
+@media (hover: hover) {
+  .btn:hover {
+    transform: translateY(-1px);
+  }
+}
+.btn-lg {
+  @apply py-4 text-lg;
+}
+.btn-md {
+  @apply px-4 py-2.5 text-sm font-semibold;
+}
+.btn-primary {
+  @apply text-text-on-accent;
+  background-image: linear-gradient(
+    180deg,
+    var(--color-accent-bright),
+    var(--color-accent-deep)
+  );
+  box-shadow:
+    0 1px 2px oklch(0.4 0.1 168 / 0.3),
+    0 10px 24px -10px oklch(0.52 0.12 168 / 0.55);
+}
+@media (hover: hover) {
+  .btn-primary:hover {
+    filter: brightness(1.05);
+  }
+}
+.btn-primary:active {
+  box-shadow: 0 1px 3px oklch(0.4 0.1 168 / 0.35);
+}
+.btn-secondary {
+  @apply bg-surface text-text-primary border border-border-default;
+  box-shadow: 0 1px 2px oklch(0 0 0 / 0.05);
+}
+@media (hover: hover) {
+  .btn-secondary:hover {
+    background-color: var(--color-surface-hover);
+  }
+}
+.btn-ghost {
+  @apply text-sm font-medium text-text-muted;
+}
+
+/* Surfaces */
+.card {
+  @apply rounded-2xl bg-surface border border-border-default;
+  box-shadow:
+    0 1px 2px oklch(0 0 0 / 0.03),
+    0 8px 24px -14px oklch(0 0 0 / 0.18);
+}
+.modal-overlay {
+  @apply fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-md;
+  animation: modal-backdrop-in 0.2s ease-out;
+}
+.modal-panel {
+  @apply flex flex-col items-center gap-6 bg-surface border border-border-default rounded-3xl p-8;
+  box-shadow: 0 24px 60px -16px oklch(0 0 0 / 0.4);
+  animation: modal-content-in 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.screen {
+  @apply flex min-h-dvh items-center justify-center;
+  background-color: var(--color-bg-primary);
+  background-image: radial-gradient(
+    125% 60% at 50% -12%,
+    var(--color-screen-glow),
+    transparent 62%
+  );
+  animation: screen-enter 0.2s ease-out;
+}
+.screen-content {
+  @apply flex flex-col items-center w-full max-w-sm px-6;
+}
+
+/* Icon chip — rounded square that holds an icon inside menu rows */
+.icon-chip {
+  @apply flex items-center justify-center rounded-xl shrink-0;
+}
+
+/* Circular icon button — used for header controls (back, settings) */
+.icon-btn {
+  @apply flex items-center justify-center rounded-full bg-surface border border-border-default text-text-secondary;
+  box-shadow: 0 1px 2px oklch(0 0 0 / 0.05);
+  transition:
+    transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1),
+    background-color 0.2s ease;
+}
+.icon-btn:active {
+  transform: scale(0.92);
+}
+@media (hover: hover) {
+  .icon-btn:hover {
+    background-color: var(--color-surface-hover);
+  }
+}
+
+/* Typography */
+.heading-xl {
+  @apply text-5xl font-extrabold tracking-tight text-text-primary;
+}
+.heading {
+  @apply text-2xl font-bold tracking-tight text-text-primary;
+}
+.label {
+  @apply text-xs font-semibold text-text-muted uppercase tracking-wider;
+}
+.caption {
+  @apply text-sm text-text-secondary;
+}
+.text-mono {
+  @apply font-mono text-sm text-text-secondary tabular-nums;
+}
+
+/* Respect prefers-reduced-motion: the app leans on confetti, board
+   shakes, staggered cell reveals, spring presses, and screen
+   transitions — all decorative. Vestibular-disorder users get the
+   same UI with instant state changes instead. The glow pulse and
+   loading pulses are covered by the wildcard. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .confetti-container {
+    display: none;
+  }
+}

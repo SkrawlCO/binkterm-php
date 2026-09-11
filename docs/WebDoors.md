@@ -53,16 +53,17 @@ default-launch alias, not arbitrary subentry selection. Supporting non-default
 entries later requires an explicit runtime selection contract; listing
 membership alone cannot enable them.
 
-PP's configured order is Wordle, Hangman, Blackjack, Solitaire, Tatham Light Up, then BreakLock.
-Association with Puzlmastr does not imply personal endorsement; L33TEST curates
-the place. Runtime IDs, direct URLs, saves, presence and enablement remain
-independent of membership. A member's boolean `primary_presentation` opts its
-existing default runtime card out of the authenticated Web root shelves while
-an enabled Curated place contains that resolvable member. PP enables this for
-Wordle, Hangman, Blackjack and Klondike Solitaire only. Light Up membership does not suppress Tatham.
+PP's configured order is Wordwright, Hangman, Blackjack, Solitaire, Light Up,
+BreakLock, Ordinary Puzzles, Dokuel. All eight declare `primary_presentation: true`.
+This existing member flag assigns their standalone shelf presentation to PP on
+both Web and terminal. Direct Experience routes, runtime discovery, authorization,
+saves and PP launch resolution remain unchanged. Set the flag false (or omit it)
+for an explicit future cross-listing. It does not change the Experience category.
 Disabled places and unsupported/unresolvable references cannot suppress cards.
-This filters shelf input only: discovery, authorization, direct access, admin
-listings, activity, session totals and Telnet presentation stay unchanged.
+Legacy Wordle is independent and retains its existing Game Hall visibility.
+Intentional Game Hall entries such as Doom, Duke3D, Galactic Bloodshed, LORD and
+Usurper remain unaffected. Shelf filtering uses CuratedPlacePresentation.runtimeEntries;
+never use that filtered list as the runtime authorization catalog.
 
 Solitaire uses the existing `klondike-solitaire` runtime and
 `/games/klondike-solitaire` route; its PP-only title is "Solitaire". Its legacy

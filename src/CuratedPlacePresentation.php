@@ -8,11 +8,17 @@ namespace BinktermPHP;
 final class CuratedPlacePresentation
 {
     /**
-     * Web shelves only. $games is the existing caller-authorized catalog with
+     * Destination shelves only. $games is the existing caller-authorized catalog with
      * presentation attached; never replace the runtime catalog with this result.
      * Only a resolvable default entry can own a runtime's standalone card.
      */
     public static function shelfEntries(array $games, array $definitions): array
+    {
+        return array_merge(self::runtimeEntries($games, $definitions), self::cards($definitions));
+    }
+
+    /** Filter only standalone shelf cards; the authorized runtime catalog is unchanged. */
+    public static function runtimeEntries(array $games, array $definitions): array
     {
         $definitions = array_values(array_filter($definitions, static fn (array $place): bool =>
             ($place['enabled'] ?? false) === true
@@ -36,7 +42,7 @@ final class CuratedPlacePresentation
         $visible = array_values(array_filter($games, static fn (array $game): bool =>
             !isset($hidden[$game['id']])
         ));
-        return array_merge($visible, self::cards($definitions));
+        return $visible;
     }
 
     /** Place cards are shelf-only destinations, never runtime catalog rows. */
@@ -44,7 +50,7 @@ final class CuratedPlacePresentation
     {
         $cards = [];
         foreach ($definitions as $place) {
-            if (($place['parent'] ?? null) !== 'curated') {
+            if (($place['parent'] ?? null) !== 'curated' || ($place['enabled'] ?? false) !== true || ($place['kind'] ?? null) !== 'place') {
                 continue;
             }
             $view = ExperiencePresentation::build([

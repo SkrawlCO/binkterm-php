@@ -1,0 +1,86 @@
+{
+  "repository": "https://github.com/adrienbrault/dokuel",
+  "revision": "6aad7ccaccb7d354fb7ed88472e48ba2b2cb2f8e",
+  "license": "MIT",
+  "copyright": "2026 Adrien Brault",
+  "canonicalSourceModifications": false,
+  "files": [
+    {
+      "upstreamPath": "LICENSE",
+      "localPath": "upstream/LICENSE",
+      "sha256": "a44e793e372e040434bd38b7624100fd5f1bf62ca8135e19217cb7f6b3d0e728"
+    },
+    {
+      "upstreamPath": "src/lib/types.ts",
+      "localPath": "upstream/src/lib/types.ts",
+      "sha256": "e3bf3eed262582e4bf882fc9ae9d06bec4c77a510d1a65661063d0aac9f5cf77"
+    },
+    {
+      "upstreamPath": "src/lib/board-geometry.ts",
+      "localPath": "upstream/src/lib/board-geometry.ts",
+      "sha256": "fcb9d75111796dc06697ca6c82d8aaab09cb882b7be1b55dceda7ab316193ec2"
+    },
+    {
+      "upstreamPath": "src/lib/candidates.ts",
+      "localPath": "upstream/src/lib/candidates.ts",
+      "sha256": "97b6bf857a2f3c06e7882ca293f190796e49ba9e863f47f9a54c27662633dd20"
+    },
+    {
+      "upstreamPath": "src/lib/solver.ts",
+      "localPath": "upstream/src/lib/solver.ts",
+      "sha256": "913e0c88cc7d6a1034bf020e44cfd5535b514962bbf25024d10502017e198839"
+    },
+    {
+      "upstreamPath": "src/lib/grader.ts",
+      "localPath": "upstream/src/lib/grader.ts",
+      "sha256": "d59820bd2ab869b048efbaa1ff36f42593e49e60bea07e4093e52f4e3af48fa1"
+    },
+    {
+      "upstreamPath": "src/lib/sudoku.ts",
+      "localPath": "upstream/src/lib/sudoku.ts",
+      "sha256": "1ccd261eb5fb855373cbfe8ea3f944316d7fe9a310b877e0b8b2b74d79e6e63d"
+    },
+    {
+      "upstreamPath": "src/lib/board-engine.ts",
+      "localPath": "upstream/src/lib/board-engine.ts",
+      "sha256": "2c356d9d00be23c9a157700325759f69a5792d88a54632b2bb2086aff8579448"
+    },
+    {
+      "upstreamPath": "src/lib/hint-engine.ts",
+      "localPath": "upstream/src/lib/hint-engine.ts",
+      "sha256": "d182b31370743b803a696dd88129a6f3c87e3f211e1babf5f04f4991891d5595"
+    },
+    {
+      "upstreamPath": "src/lib/technique-hint.ts",
+      "localPath": "upstream/src/lib/technique-hint.ts",
+      "sha256": "25c92dbb381c23765cecca5e33a5470a244a61297cc9efd21b973b03226b8b41"
+    },
+    {
+      "upstreamPath": "src/lib/techniques.ts",
+      "localPath": "upstream/src/lib/techniques.ts",
+      "sha256": "6be79a5196cf993a8147025623cb62b0735c665d5ba2428b1d42afa8f1848410"
+    },
+    {
+      "upstreamPath": "src/lib/wings.ts",
+      "localPath": "upstream/src/lib/wings.ts",
+      "sha256": "9b63a95e739a104acc370d5e3a90395b4320960a8ed1b31613ba388353c2cbad"
+    },
+    {
+      "upstreamPath": "src/lib/daily.ts",
+      "localPath": "upstream/src/lib/daily.ts",
+      "sha256": "24d5d54d548df70be128bfa486a36422149fc6050dc0748c74764295e0b3624c"
+    },
+    {
+      "upstreamPath": "src/lib/date.ts",
+      "localPath": "upstream/src/lib/date.ts",
+      "sha256": "b28b9fe2dbb3ed26e98edc62c318a48a16c6f6e887f276c44f7ff90ca54156c7"
+    }
+  ],
+  "integrationReferences": [
+    {
+      "upstreamPath": "src/hooks/useResumableSudoku.ts",
+      "sha256": "43126eff574334b96a3b15801320be9068c561c7e0c489a5711122d0d0a1df9d",
+      "purpose": "Canonical solo key seed expression; hook not vendored (React and localStorage side effects)."
+    }
+  ]
+}

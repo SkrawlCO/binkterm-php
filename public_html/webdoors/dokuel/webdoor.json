@@ -1,0 +1,23 @@
+{
+  "webdoor_version": "1.0",
+  "game": {
+    "id": "dokuel",
+    "name": "Dokuel",
+    "version": "1.0.0",
+    "author": "Adrien Brault; Crossroads adapters",
+    "description": "Sudoku with pencil notes, logical hints and a daily challenge.",
+    "entry_point": "index.php",
+    "icon": "icon.png"
+  },
+  "requirements": {
+    "min_host_version": "1.0"
+  },
+  "experience": {
+    "group": "dokuel",
+    "surface": "web",
+    "primary": true
+  },
+  "multiplayer": {
+    "enabled": false
+  }
+}

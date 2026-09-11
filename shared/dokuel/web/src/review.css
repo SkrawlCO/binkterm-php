@@ -1,0 +1,9 @@
+.review-link { display: flex; justify-content: center; padding: 1rem; }
+#snapshot { width: 100%; min-height: 12rem; padding: .75rem; border: 1px solid var(--color-border-default); border-radius: .75rem; background: var(--color-surface); color: var(--color-text-primary); font: 12px monospace; }
+/* Keep the additional review action reachable on short result screens. */
+.modal-overlay { overflow-y: auto; }
+.modal-panel { max-height: calc(100dvh - 3rem); overflow-y: auto; }
+
+/* Caller controls wrap without squeezing the canonical phone board. */
+[aria-label="Caller save"] { flex-wrap: wrap; gap: .5rem; }
+[aria-label="Caller save"] [role="status"] { flex-basis: 100%; text-align: center; overflow-wrap: anywhere; }

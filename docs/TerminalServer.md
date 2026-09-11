@@ -797,3 +797,9 @@ their detail-screen return. PP has no runtime, session, or persistence identity.
 
 Place descriptions use the directory context area, wrapped at 72 columns, so
 PP's full welcome sentence and five members remain readable at 80x24.
+
+Puzlmastr's Patch owns the standalone shelf presentation of members declaring
+`primary_presentation: true`. Terminal destination shelves use the same
+`CuratedPlacePresentation::runtimeEntries` filter as Web; the full authorized
+Experience state collection remains intact for direct access and PP launch.
+Dokuel is member eight and runs the shared canonical Sudoku session at 80x24.
