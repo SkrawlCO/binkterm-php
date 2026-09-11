@@ -124,6 +124,19 @@ final class ExperienceCompositionTest extends TestCase
         self::assertSame('/games/nativedoors/sg-term?experience=1', $telnet['url']);
     }
 
+    public function testTerminalTransportComesFromTelnetMemberNotPrimaryWebCard(): void
+    {
+        $input = $this->sharedGameInput();
+        $input['sg-web']['terminal'] = ['mode' => 'doorway'];
+        $input['sg-term']['terminal'] = ['mode' => 'raw', 'min_cols' => 80, 'min_rows' => 24];
+        $group = ExperienceComposition::compose($input)['shared-game'];
+
+        self::assertSame($input['sg-term']['terminal'], $group['terminal']);
+        self::assertSame('Shared Game', $group['name']);
+        self::assertSame('web', $group['backend']['type']);
+        self::assertSame('native', ExperienceLaunch::resolve($group, 'terminal')['type']);
+    }
+
     public function testMembersListRecordsEveryContributingBackend(): void
     {
         $exp = ExperienceComposition::compose($this->sharedGameInput())['shared-game'];

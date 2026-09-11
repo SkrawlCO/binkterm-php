@@ -1,0 +1,24 @@
+{
+  "webdoor_version": "1.0",
+  "game": {
+    "id": "tatham-web",
+    "name": "Tatham Puzzles",
+    "version": "0.1.0-20260911.428913c",
+    "author": "Simon Tatham and contributors; L33TEST frontend glue",
+    "description": "Portable logic puzzles. Light Up is the initial curated puzzle.",
+    "entry_point": "index.php",
+    "icon": "../../favicon.svg"
+  },
+  "requirements": {
+    "min_host_version": "1.0",
+    "admin_only": true
+  },
+  "experience": {
+    "group": "tatham",
+    "surface": "web",
+    "primary": true
+  },
+  "multiplayer": {
+    "enabled": false
+  }
+}

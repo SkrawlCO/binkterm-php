@@ -1,0 +1,11 @@
+{
+  "revision": "428913c6a58b60802fe5d734d9a44c34159f4e0f",
+  "release": "20260911.428913c",
+  "upstream": "https://git.tartarus.org/simon/puzzles.git",
+  "source_archive_sha256": "fc48b74b0bf8eec26ffdf0cc019ffdb929b249986b294bafacdecfebfb4e190d",
+  "artifacts": {
+    "lightup.html": "08c02acb00e058a83a738105a0444e9feffeb4c6f83523d834799d31e011989d",
+    "lightup.js": "f58f11e86e08fb1d813b9e6ff092c73be8901a629a611ef0c544f948fe7400d6",
+    "lightup.wasm": "257d4989450659f9964b91c861ec31314aecc72967bfde003818d9f1ea7009e2"
+  }
+}

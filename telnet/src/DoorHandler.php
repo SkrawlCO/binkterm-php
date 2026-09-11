@@ -872,7 +872,7 @@ class DoorHandler
                 $experienceId,
                 $view['name'],
                 $terminalMode,
-                (string)($experience['backend']['type'] ?? '')
+                (string)(\BinktermPHP\ExperienceLaunch::resolve($experience, 'telnet')['type'] ?? '')
             );
         };
 

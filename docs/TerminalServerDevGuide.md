@@ -52,6 +52,13 @@ display metadata and launch behavior. Managed doors publish `terminal.mode` as
 either `doorway` or `raw`; `DoorHandler` must use that field so raw native
 terminal sessions bypass legacy Doorway key and CP437 conversion.
 
+Grouped Experiences take `terminal` settings from their Telnet member through
+`ExperienceComposition`. `DoorHandler` resolves that surface's backend type
+through `ExperienceLaunch`; the launch API separately resolves its backend ID.
+The logical group ID remains the presence/detail identity. This allows a primary
+WebDoor card and a raw NativeDoor to share one Crossroads entry without falling
+back to the Web member's transport or attempting to launch the group ID as a door.
+
 `GameCatalog` discovery includes authorized WebDoor and JS-DOS Experiences on
 the terminal surface with their normalized `planned` state. The current
 launch-only `DoorHandler` chooser filters on `actions.launch`, so those entries

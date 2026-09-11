@@ -247,6 +247,14 @@ function storageSave(string $doorId, array $data, int $slot = 0): void
         jsonError('Not authenticated', 401);
     }
 
+    if (\BinktermPHP\LeasedWebDoorStorage::isReserved($doorId)) {
+        jsonResponse([
+            'success' => false,
+            'error_code' => 'errors.webdoor.game_unavailable',
+            'error' => 'Experience is not available'
+        ], 409);
+    }
+
     $userId = (int)($user['user_id'] ?? $user['id'] ?? 0);
     $db = getDatabase();
     $stmt = $db->prepare('

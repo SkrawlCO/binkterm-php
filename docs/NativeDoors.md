@@ -58,6 +58,12 @@ For full setup instructions including production service configuration, environm
 4. A DOOR.SYS drop file is written to `native-doors/drops/NODE{n}/DOOR.SYS` and user data is injected as environment variables.
 5. When the door exits (or the user disconnects), the PTY is killed and the session is cleaned up.
 
+For a grouped Experience, the launch API resolves the requested surface with
+`ExperienceLaunch::resolve()`. Presence retains the logical Experience ID,
+while admission, resume, drop files and runtime sessions use the resolved
+backend ID. The primary member's card metadata does not select the terminal
+runtime; the Telnet member supplies its terminal settings.
+
 Session admission — checking the door's `max_nodes` against the current
 active-session count, picking a free node number from the global pool
 (`1..DOSDOOR_MAX_SESSIONS`), and writing the `door_sessions` row — happens in a

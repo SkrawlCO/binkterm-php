@@ -294,6 +294,10 @@ class WebDoorController
         }
 
         $gameId = $_GET['game_id'] ?? $this->detectGameIdFromReferer() ?? 'unknown';
+
+        if (LeasedWebDoorStorage::isReserved($gameId)) {
+            return $this->errorResponse('errors.webdoor.game_unavailable', 'Experience is not available', 409);
+        }
         $input = $this->getJsonInput();
 
         $data = $input['data'] ?? [];
@@ -337,6 +341,10 @@ class WebDoorController
         }
 
         $gameId = $_GET['game_id'] ?? $this->detectGameIdFromReferer() ?? 'unknown';
+
+        if (LeasedWebDoorStorage::isReserved($gameId)) {
+            return $this->errorResponse('errors.webdoor.game_unavailable', 'Experience is not available', 409);
+        }
 
         $stmt = $this->db->prepare('
             DELETE FROM webdoor_storage

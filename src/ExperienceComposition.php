@@ -163,6 +163,12 @@ final class ExperienceComposition
             }
         }
 
+        // Terminal transport settings belong to the Telnet member, not the
+        // primary member that supplies the product card's presentation.
+        if (isset($bySurface['telnet']['member']['terminal'])) {
+            $normalized['terminal'] = $bySurface['telnet']['member']['terminal'];
+        }
+
         $normalized['surfaces'] = $status;
         $normalized['surface_backends'] = $surfaceBackends;
         $normalized['members'] = $memberBackends;

@@ -157,9 +157,10 @@ SimpleRouter::post('/api/door/launch', function() {
         return;
     }
 
-    $launchBackend = is_array($launchExperience)
-        ? (string)($launchExperience['backend']['type'] ?? '')
-        : '';
+    $launchTarget = is_array($launchExperience)
+        ? ExperienceLaunch::resolve($launchExperience, $surface)
+        : null;
+    $launchBackend = $launchTarget['type'] ?? '';
 
     if (
         !is_array($launchExperience)
@@ -180,6 +181,10 @@ SimpleRouter::post('/api/door/launch', function() {
         $surface,
         $_COOKIE['binktermphp_session'] ?? null
     );
+
+    // Presence keeps the logical Experience ID; runtime/session operations use
+    // the backend selected by the existing surface-aware resolver.
+    $doorName = $launchTarget['id'];
 
     try {
         // Get BBS configuration for system name and sysop

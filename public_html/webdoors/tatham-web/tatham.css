@@ -1,0 +1,15 @@
+html { color-scheme: light; background: white; color: black; }
+body { margin: 8px; font-family: system-ui, sans-serif; }
+h1 { font-size: 1.4rem; margin: .4rem; }
+h2 { font-size: .9rem; margin: .4rem; }
+#resizable { max-width: 100%; }
+#puzzlecanvas { max-width: 100%; height: auto; touch-action: none; }
+#gamemenu button { min-height: 44px; padding: .4rem .6rem; }
+/* Slice 2 exposes the selected 7x7 challenge, undo, redo and restart. */
+#gamemenu > ul > li:first-child,
+#gamemenu li:has(#gametype), #gamemenu li:has(#new),
+#gamemenu li:has(#solve), #gamemenu li[role="separator"], #resizehandle { display: none; }
+#tatham-touch { display: flex; justify-content: center; gap: 12px; margin: 8px; }
+#tatham-touch button { min-width: 52px; min-height: 44px; font-size: 1.5rem; background: white; color: black; border: 2px solid #777; border-radius: 4px; }
+#tatham-touch button[aria-pressed="true"] { background: #fff18c; border-color: black; }
+@media (hover: hover) and (pointer: fine) { #tatham-touch { display: none; } }
