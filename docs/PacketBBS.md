@@ -99,6 +99,8 @@ PacketBBS supports a bridge device serving more than one radio sender.
 
 If `bridge_node_id` is omitted, PacketBBS uses `node_id` for both authorization and the user session.
 
+A retained session is bound to its bridge. The first authorized command or pending-message poll claims a legacy session with no bridge binding; subsequent access through another bridge is denied without refreshing activity.
+
 Sessions are keyed by `node_id`, so multiple radio users behind one bridge can have separate login and compose state as long as the bridge sends their distinct sender IDs.
 
 ## Workflow: how PacketBBS fits into low-bandwidth access

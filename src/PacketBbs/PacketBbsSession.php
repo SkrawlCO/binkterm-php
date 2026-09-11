@@ -66,18 +66,12 @@ class PacketBbsSession
         );
         $stmt->execute([$nodeId, $bridgeNodeId]);
         $created = $stmt->fetch(\PDO::FETCH_ASSOC);
-        $row = $created ? $this->normalizeRow($created) : $this->load($nodeId);
-        if ($row === null) {
+        // Claim legacy rows and check binding before loading/expiring any state.
+        if ($bridgeNodeId !== null && $bridgeNodeId !== ''
+            && !$this->isBridgeAuthorized($nodeId, $bridgeNodeId)) {
             return null;
         }
-
-        // Reject if the session is owned by a different bridge.
-        if ($bridgeNodeId !== null && $bridgeNodeId !== '') {
-            $existing = $row['bridge_node_id'] ?? null;
-            if ($existing !== null && $existing !== '' && $existing !== $bridgeNodeId) {
-                return null;
-            }
-        }
+        $row = $created ? $this->normalizeRow($created) : $this->load($nodeId);
 
         return $row;
     }
@@ -123,11 +117,21 @@ class PacketBbsSession
      *
      * Returns true when:
      * - no session exists yet (first contact — bridge will own it on getOrCreate), or
-     * - the session has no recorded bridge (legacy row), or
+     * - a legacy row is atomically claimed by this bridge, or
      * - the session's bridge_node_id matches $bridgeNodeId.
      */
     public function isBridgeAuthorized(string $nodeId, string $bridgeNodeId): bool
     {
+        if ($bridgeNodeId === '') {
+            return false;
+        }
+        // Only the first authorized caller can claim a legacy row. A competing
+        // UPDATE rechecks the predicate after the first claimant releases its lock.
+        $this->db->prepare(
+            "UPDATE packet_bbs_sessions SET bridge_node_id = ?
+             WHERE node_id = ? AND (bridge_node_id IS NULL OR bridge_node_id = '')"
+        )->execute([$bridgeNodeId, $nodeId]);
+
         $stmt = $this->db->prepare(
             'SELECT bridge_node_id FROM packet_bbs_sessions WHERE node_id = ?'
         );
@@ -139,7 +143,7 @@ class PacketBbsSession
         }
 
         $existing = $row['bridge_node_id'] ?? null;
-        return $existing === null || $existing === '' || $existing === $bridgeNodeId;
+        return $existing === $bridgeNodeId;
     }
 
     /**

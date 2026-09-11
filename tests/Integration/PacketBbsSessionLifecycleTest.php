@@ -95,6 +95,30 @@ SQL);
         return $this->gateway->handleCommand('sender', 'meshcore', $command, 'bridge');
     }
 
+    public function testLegacyBindingIsClaimedByFirstCommandWithoutRefreshingActivity(): void
+    {
+        $before = $this->seed(600);
+        $this->db->exec("UPDATE packet_bbs_sessions SET bridge_node_id = NULL");
+        $session = $this->repo->getOrCreate('sender', 'bridge');
+        $this->assertSame('bridge', $session['bridge_node_id']);
+        $this->assertSame($before, $session['last_activity_at']);
+        $this->assertNull($this->repo->getOrCreate('sender', 'other-bridge'));
+        $this->assertFalse($this->repo->isBridgeAuthorized('sender', 'other-bridge'));
+        $this->assertSame($before, $this->raw()['last_activity_at']);
+    }
+
+    public function testLegacyBindingIsClaimedByFirstPollAndRejectsOtherBridges(): void
+    {
+        $before = $this->seed(600);
+        $this->db->exec("UPDATE packet_bbs_sessions SET bridge_node_id = ''");
+        $this->assertTrue($this->repo->isBridgeAuthorized('sender', 'bridge'));
+        $this->assertSame('bridge', $this->raw()['bridge_node_id']);
+        $this->assertFalse($this->repo->isBridgeAuthorized('sender', 'other-bridge'));
+        $this->assertNull($this->repo->getOrCreate('sender', 'other-bridge'));
+        $this->assertSame($before, $this->raw()['last_activity_at']);
+        $this->assertTrue($this->repo->isBridgeAuthorized('fresh-sender', 'other-bridge'));
+    }
+
     public function testExpiredLookupRevokesIdentityAndDraftWithoutRefreshingOrLosingNotice(): void
     {
         $before = $this->seed(960);
