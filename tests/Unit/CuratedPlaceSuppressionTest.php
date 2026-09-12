@@ -41,7 +41,7 @@ final class CuratedPlaceSuppressionTest extends TestCase
             self::assertSame('/games/' . $game['id'], ExperienceLaunch::resolve($game, 'web')['url']);
         }
         self::assertNull($entries[0]['experience_presentation']['runtime']['active']);
-        self::assertSame(['wordwright', 'hangman', 'blackjack', 'parlour', 'tatham/lightup', 'breaklock', 'ordinary-puzzles', 'dokuel'], array_column($definitions[0]['members'], 'reference'));
+        self::assertSame(['wordwright', 'hangman', 'blackjack', 'parlour', 'tatham/lightup', 'breaklock', 'ordinary-puzzles', 'dokuel', 'everest'], array_column($definitions[0]['members'], 'reference'));
     }
 
     public function testDisabledOrNonCuratedPlaceCannotHideAnything(): void

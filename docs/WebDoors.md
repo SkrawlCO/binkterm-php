@@ -54,7 +54,10 @@ entries later requires an explicit runtime selection contract; listing
 membership alone cannot enable them.
 
 PP's configured order is Wordwright, Hangman, Blackjack, Parlour, Light Up,
-BreakLock, Ordinary Puzzles, Dokuel. All eight declare `primary_presentation: true`.
+BreakLock, Ordinary Puzzles, Dokuel, Everest. All nine declare `primary_presentation: true`.
+Everest is Web/mobile-only (no terminal companion); its canonical single-player
+puzzle state and save progress are owned entirely by its own unmodified
+client-side code, not bridged into any BinkTerm-side persistence.
 This existing member flag assigns their standalone shelf presentation to PP on
 both Web and terminal. Direct Experience routes, runtime discovery, authorization,
 saves and PP launch resolution remain unchanged. Set the flag false (or omit it)

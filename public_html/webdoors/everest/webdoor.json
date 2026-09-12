@@ -1,0 +1,23 @@
+{
+  "webdoor_version": "1.0",
+  "game": {
+    "id": "everest",
+    "name": "Everest",
+    "version": "1.1.6",
+    "author": "Markus Wageringel; Crossroads adapters",
+    "description": "A mathematical puzzle game of modular arithmetic equations.",
+    "entry_point": "index.php",
+    "icon": "icon.png"
+  },
+  "requirements": {
+    "min_host_version": "1.0"
+  },
+  "experience": {
+    "group": "everest",
+    "surface": "web",
+    "primary": true
+  },
+  "multiplayer": {
+    "enabled": false
+  }
+}
