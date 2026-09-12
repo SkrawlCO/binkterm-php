@@ -181,10 +181,30 @@ live Doot bridge endpoint, confirming real cross-system compatibility; the
 unauthenticated gate still fails closed (403); the self-hosted CLASP relay
 and the Curated catalog placement are both unaffected.
 
-**Known cleanup item**: this verification pass created a handful of synthetic
-`l33test+<test-id>@bridge.doot.invalid` accounts in Doot's SQLite (test ids
-301, 302, 501, 999001) — harmless (fake ids), but worth pruning before or
-during the next real Doot maintenance pass.
+**Human acceptance (2026-09-12)**: PASSED. Matt (Skrawl) confirmed through the
+real L33TEST Curated launch that Doot's own navbar correctly shows the
+authenticated account state (Log in / Sign up gone; Your Games, Saved, and
+the mapped avatar/account all present) — not just a server-side session, the
+visible UI. All synthetic diagnostic bridge accounts created during
+verification were removed; the two remaining `l33test+<id>@bridge.doot.invalid`
+accounts are real mapped callers (Skrawl and a second real tester), not test
+data.
+
+**Follow-up fix required for human acceptance — client auth base path**: the
+server-side bridge (mint → verify → `createSession` → `Set-Cookie`) worked
+correctly from the first deploy, proven with real HTTP down to Skrawl's own
+browser/cookie — but the visible navbar still showed Log in / Sign up. Root
+cause: `apps/web/app/utils/auth-client.ts`'s `createAuthClient()` had no
+`basePath` configured, so the client's own `useSession()` composable called
+`/api/auth/get-session` at the site **root** instead of under `/doot-app/`,
+404ing every time regardless of a perfectly valid session cookie. This is a
+**general subpath-deployment bug in Doot's own client**, not bridge-specific —
+it would affect native email/password sign-in identically under this
+same-origin-subpath deployment. Fix: one line,
+`basePath: '/doot-app/api/auth'`, kept in sync with `NUXT_APP_BASE_URL`. Not
+vendored/committed here (canonical Doot source lives only in the built
+artifact per this file's "not vendored" discipline above); recorded here as
+the provenance/reasoning for that line in the deployed build.
 
 ## Terminal outlook (recorded, not built)
 
