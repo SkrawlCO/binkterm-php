@@ -126,6 +126,66 @@ game hosting/joining/playing unaffected); cover-image upload and very large
 drawing galleries would fail until MinIO (or DO Spaces) is wired. Documented
 here as a disclosed gap, not silently patched around.
 
+## L33TEST identity bridge
+
+An authenticated L33TEST caller reaches Doot without a second signup/login
+and keeps every account-scoped feature (decks, saved custom games, playlists,
+bookmarks, profile). Additive on both sides — no existing Doot sign-up/sign-in
+path or BinkTerm auth route was touched.
+
+**PHP side** (`src/Crossroads/DootIdentityBridge.php`): mints a short-lived
+(60s), single-use, HMAC-SHA256-signed launch assertion —
+`{ sub: "l33test:<immutable user id>", name, iat, exp, jti }` — using
+`DOOT_BRIDGE_SECRET` (BinkTermPHP `.env`). The WebDoor gate
+(`public_html/webdoors/doot/index.php`) mints this only after its existing
+fail-closed authentication check, then serves a tiny bootstrap page that
+`fetch()`s the token to Doot same-origin before navigating into `/doot-app/`.
+On any minting failure it falls back to a plain redirect — the caller still
+reaches Doot as a full-featured guest (hosting/joining/playing never require
+an account), just without persistent-account features until fixed.
+
+**Doot side** (`apps/web/server/utils/l33test-bridge-plugin.ts`, wired into
+`server/utils/auth.ts`'s `plugins` array only when `L33TEST_BRIDGE_SECRET` is
+set): a better-auth plugin adding one endpoint,
+`POST /api/auth/l33test/bridge`, built on the same primitives better-auth's
+own shipped `admin` plugin uses for `impersonateUser`
+(`internalAdapter.createSession` + `setSessionCookie` — see
+`better-auth/dist/plugins/admin/routes.mjs`), not undocumented internals. It
+verifies the signature + expiry + single-use `jti`, derives a synthetic email
+`l33test+<id>@bridge.doot.invalid` (never the display name), and
+auto-provisions/looks up the mapped user on first launch.
+
+**Bounded session lifetime**: `BRIDGE_SESSION_TTL_SECONDS` (12h) is wired into
+`authOptions.session.expiresIn` globally (only when the bridge is enabled) —
+a per-call `expiresAt` override on `createSession` did not reliably stick
+(observed directly: the session still came back at better-auth's 7-day
+default even with `overrideAll=true`), so the bound lives at the supported
+top-level config option instead. A caller who stops relaunching through
+L33TEST (e.g. logged out) ages out of Doot on this clock rather than staying
+signed in for better-auth's normal multi-day default.
+
+**Both secrets must match exactly**: `DOOT_BRIDGE_SECRET` (BinkTermPHP `.env`)
+and `L33TEST_BRIDGE_SECRET` (`data/doot/app/.env`) are the same value —
+generated once (`openssl rand -hex 32`) and copied to both files. A mismatch
+fails closed (401 from the bridge endpoint, guest fallback), never partial
+trust.
+
+**Verified** (production container, real HTTP, both directly and through the
+Cloudflare→Apache→Caddy path): first launch auto-provisions; repeat launch by
+the same caller maps to the same Doot user; a distinct L33TEST id maps to a
+distinct Doot user; a forged-signature token and an expired token are both
+rejected (401); a replayed already-consumed token is rejected (401); an
+account-scoped route (`/api/me/bookmarks`) resolves under the bridged
+session; a PHP-minted token (not a test harness token) is accepted by the
+live Doot bridge endpoint, confirming real cross-system compatibility; the
+unauthenticated gate still fails closed (403); the self-hosted CLASP relay
+and the Curated catalog placement are both unaffected.
+
+**Known cleanup item**: this verification pass created a handful of synthetic
+`l33test+<test-id>@bridge.doot.invalid` accounts in Doot's SQLite (test ids
+301, 302, 501, 999001) — harmless (fake ids), but worth pruning before or
+during the next real Doot maintenance pass.
+
 ## Terminal outlook (recorded, not built)
 
 A future Telnet bridge would need, at minimum: (1) a CLASP client

@@ -27,6 +27,7 @@ require_once __DIR__ . '/../_doorsdk/php/helpers.php';
 
 use BinktermPHP\Auth;
 use BinktermPHP\GameConfig;
+use BinktermPHP\Crossroads\DootIdentityBridge;
 
 const DOOT_GAME_ID = 'doot';
 
@@ -65,8 +66,46 @@ if (!empty($manifest['requirements']['admin_only']) && empty($user['is_admin']))
 
 \WebDoorSDK\log('doot', 'launch by user ' . $userId, 'INFO');
 
-// Hand off to the self-hosted Doot app. A plain redirect (not a further
-// iframe) -- the outer webdoor_play.twig iframe already provides the one
-// L33TEST chrome layer this Experience needs.
-header('Location: /doot-app/');
+// Identity convergence: mint a short-lived, single-use, signed launch
+// assertion (see DootIdentityBridge) and hand it to the browser, which
+// POSTs it same-origin to Doot's bridge endpoint BEFORE navigating into
+// /doot-app/. Doot verifies the signature server-side and creates a normal
+// better-auth session for the mapped account -- so by the time the SPA
+// mounts, the caller is already signed in and never sees Doot's own
+// Log in / Sign up UI. If minting fails (misconfigured secret), fall back
+// to a plain redirect: the caller still reaches Doot as a full-featured
+// guest (hosting/joining/playing never require an account), just without
+// the persistent-account features until the misconfiguration is fixed.
+try {
+    $displayName = (string)($user['username'] ?? 'L33TEST caller');
+    $launchToken = DootIdentityBridge::mintLaunchToken($userId, $displayName);
+} catch (\Throwable $e) {
+    \WebDoorSDK\log('doot', 'bridge token mint failed, falling back to guest launch: ' . $e->getMessage(), 'WARNING');
+    header('Location: /doot-app/');
+    exit;
+}
+
+header('Content-Type: text/html; charset=utf-8');
+header('Cache-Control: no-store');
+?><!doctype html>
+<html><head><meta charset="utf-8"><title>Doot Games</title></head>
+<body style="background:#241910;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;">
+<p>Loading Doot Games&hellip;</p>
+<script>
+(function () {
+  var token = <?= json_encode($launchToken, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
+  fetch('/doot-app/api/auth/l33test/bridge', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify({ token: token })
+  }).then(function () {
+    location.replace('/doot-app/');
+  }).catch(function () {
+    location.replace('/doot-app/');
+  });
+})();
+</script>
+</body></html>
+<?php
 exit;
