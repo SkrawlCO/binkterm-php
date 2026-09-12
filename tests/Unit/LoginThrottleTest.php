@@ -11,7 +11,8 @@ use PHPUnit\Framework\TestCase;
  * ({@see \BinktermPHP\Security\LoginThrottle}) that guards POST /api/auth/login.
  *
  * Uses the real auth_login_attempts table with a per-run unique identifier and
- * IP so parallel/repeat runs never collide; tearDown removes the rows.
+ * IP so parallel/repeat runs never collide; setUp/tearDown wrap every write in
+ * a transaction that is always rolled back, so nothing is ever committed.
  */
 final class LoginThrottleTest extends TestCase
 {
@@ -24,6 +25,7 @@ final class LoginThrottleTest extends TestCase
     protected function setUp(): void
     {
         $this->db = Database::getInstance()->getPdo();
+        $this->db->beginTransaction();
         $suffix = bin2hex(random_bytes(5));
         $this->user = 'throttle-test-' . $suffix;
         // Deterministic documentation-range test IP, made unique by the low octets.
@@ -36,12 +38,9 @@ final class LoginThrottleTest extends TestCase
 
     protected function tearDown(): void
     {
-        // Remove everything this test could have written: its identifier, plus
-        // any identifier that shared its test IP (the spray cases).
-        $this->db->prepare('DELETE FROM auth_login_attempts WHERE ip_key = ? OR identifier_key = ?')
-            ->execute([$this->ip, mb_strtolower($this->user)]);
-        $this->db->prepare("DELETE FROM auth_login_attempts WHERE identifier_key LIKE 'throttle-test-%'")
-            ->execute();
+        if (isset($this->db) && $this->db->inTransaction()) {
+            $this->db->rollBack();
+        }
 
         foreach ($this->savedEnv as $key => $value) {
             if ($value === null) {

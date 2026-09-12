@@ -19,14 +19,14 @@ final class GalacticBloodshedIdentityTest extends TestCase
     protected function setUp(): void
     {
         $this->db = Database::getInstance()->getPdo();
+        $this->db->beginTransaction();
         $this->box = new GalacticBloodshedSecretBox(random_bytes(SODIUM_CRYPTO_SECRETBOX_KEYBYTES));
     }
 
     protected function tearDown(): void
     {
-        foreach ($this->testUserIds as $id) {
-            $this->db->prepare('DELETE FROM galactic_bloodshed_identities WHERE binkterm_user_id = ?')->execute([$id]);
-            $this->db->prepare('DELETE FROM users WHERE id = ?')->execute([$id]);
+        if (isset($this->db) && $this->db->inTransaction()) {
+            $this->db->rollBack();
         }
     }
 

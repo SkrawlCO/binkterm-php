@@ -22,6 +22,7 @@ final class MultiZorkAccessRateLimitTest extends TestCase
     protected function setUp(): void
     {
         $this->db = Database::getInstance()->getPdo();
+        $this->db->beginTransaction();
 
         $ids = $this->db->query('SELECT id FROM users ORDER BY id ASC LIMIT 2')->fetchAll(PDO::FETCH_COLUMN);
         if (count($ids) < 2) {
@@ -34,8 +35,9 @@ final class MultiZorkAccessRateLimitTest extends TestCase
 
     protected function tearDown(): void
     {
-        $this->db->prepare('DELETE FROM multizork_access_attempts WHERE expedition_id = ?')
-            ->execute([$this->expeditionId]);
+        if (isset($this->db) && $this->db->inTransaction()) {
+            $this->db->rollBack();
+        }
     }
 
     public function testAllowsSubmissionWithNoPriorAttempts(): void

@@ -21,7 +21,12 @@ final class MultiZorkAccessMappingTest extends TestCase
     protected function setUp(): void
     {
         $this->db = Database::getInstance()->getPdo();
+        $this->db->beginTransaction();
 
+        // NOTE (P3/WATCH, not fixed by this transaction): this still depends on
+        // at least two real existing users as its fixture basis, read here.
+        // Transaction isolation only guarantees this test can never COMMIT a
+        // mutation against them -- it does not remove the data dependency.
         $ids = $this->db->query('SELECT id FROM users ORDER BY id ASC LIMIT 2')->fetchAll(PDO::FETCH_COLUMN);
         if (count($ids) < 2) {
             $this->markTestSkipped('Need at least two existing users to test mapping isolation.');
@@ -33,8 +38,9 @@ final class MultiZorkAccessMappingTest extends TestCase
 
     protected function tearDown(): void
     {
-        $this->db->prepare('DELETE FROM multizork_expedition_credentials WHERE expedition_id = ?')
-            ->execute([$this->expeditionId]);
+        if (isset($this->db) && $this->db->inTransaction()) {
+            $this->db->rollBack();
+        }
     }
 
     public function testGetReturnsNullWhenNothingStored(): void
