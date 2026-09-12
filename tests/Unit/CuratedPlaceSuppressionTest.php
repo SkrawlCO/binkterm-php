@@ -72,6 +72,33 @@ final class CuratedPlaceSuppressionTest extends TestCase
         $definitions[0]['members'] = [['reference' => 'wordwright', 'primary_presentation' => true]];
         self::assertSame('wordwright', CuratedPlacePresentation::shelfEntries($games, $definitions)[0]['id']);
     }
+    /**
+     * A place matches a surface filter when at least one of its members is
+     * genuinely available on that surface -- any-member, not all-member --
+     * and its primary_presentation members still never duplicate into the
+     * top-level runtime catalog.
+     */
+    public function testPlaceCardSurfacesAggregateAnyMemberAvailability(): void
+    {
+        $games = $this->games();
+        $games[0]['surfaces']['telnet'] = 'full'; // wordwright: genuinely Telnet-capable
+        $games[0]['experience_presentation'] = ExperiencePresentation::build($games[0], 'web');
+        // hangman ($games[1]) stays web-only (telnet 'planned', not 'full').
+        $definitions = (new CuratedPlaceCatalog())->getDefinitions();
+        $definitions[0]['members'] = [
+            ['reference' => 'wordwright', 'primary_presentation' => true],
+            ['reference' => 'hangman', 'primary_presentation' => true],
+        ];
+        $entries = CuratedPlacePresentation::shelfEntries($games, $definitions);
+        self::assertNotContains('wordwright', array_column($entries, 'id'));
+        self::assertNotContains('hangman', array_column($entries, 'id'));
+        self::assertSame(['blackjack', 'parlour', 'tatham'], array_column($entries, 'id'));
+        $placeCards = array_values(array_filter($entries, static fn (array $e): bool => ($e['kind'] ?? null) === 'place'));
+        self::assertCount(1, $placeCards);
+        self::assertSame('full', $placeCards[0]['experience_presentation']['surfaces']['web']);
+        self::assertSame('full', $placeCards[0]['experience_presentation']['surfaces']['telnet']);
+    }
+
     public function testExplicitOwnershipKeepsIntentionalGameHallAndDirectLaunches(): void
     {
         $ids = ['doom', 'duke3d', 'galacticbloodshed', 'lord', 'usurper-reborn', 'wordle', 'breaklock', 'ordinary-puzzles', 'tatham', 'dokuel'];

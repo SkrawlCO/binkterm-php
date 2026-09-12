@@ -89,7 +89,7 @@ final class CuratedPlaceWebTest extends TestCase
 
     public function testPlaceIsOneCuratedDestinationWithoutRuntimeOrPresence(): void
     {
-        $cards = CuratedPlacePresentation::cards((new CuratedPlaceCatalog())->getDefinitions());
+        $cards = CuratedPlacePresentation::cards(array_values(PlaceWebFixtureCatalog::rows()), (new CuratedPlaceCatalog())->getDefinitions());
         self::assertCount(1, $cards);
         $view = $cards[0]['experience_presentation'];
         self::assertSame('/img/places/puzlmastrs-patch.png', $view['presentation']['icon_url']);
@@ -144,7 +144,7 @@ final class CuratedPlaceWebTest extends TestCase
         foreach (PlaceWebFixtureCatalog::rows() as $row) {
             $games[] = ['experience_presentation' => ExperiencePresentation::build($row, 'web')];
         }
-        $shelves = CrossroadsShelves::compose(array_merge($games, CuratedPlacePresentation::cards((new CuratedPlaceCatalog())->getDefinitions())));
+        $shelves = CrossroadsShelves::compose(array_merge($games, CuratedPlacePresentation::cards(array_values(PlaceWebFixtureCatalog::rows()), (new CuratedPlaceCatalog())->getDefinitions())));
         self::assertSame(count($games) + 1, array_sum(array_column($shelves, 'count')));
         foreach ($games as $game) {
             $html = $this->twig()->render('partials/experience_library_card.twig', ['game' => $game]);

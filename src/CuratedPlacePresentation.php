@@ -14,7 +14,7 @@ final class CuratedPlacePresentation
      */
     public static function shelfEntries(array $games, array $definitions): array
     {
-        return array_merge(self::runtimeEntries($games, $definitions), self::cards($definitions));
+        return array_merge(self::runtimeEntries($games, $definitions), self::cards($games, $definitions));
     }
 
     /** Filter only standalone shelf cards; the authorized runtime catalog is unchanged. */
@@ -46,8 +46,9 @@ final class CuratedPlacePresentation
     }
 
     /** Place cards are shelf-only destinations, never runtime catalog rows. */
-    public static function cards(array $definitions): array
+    public static function cards(array $games, array $definitions): array
     {
+        $catalog = array_column($games, null, 'id');
         $cards = [];
         foreach ($definitions as $place) {
             if (($place['parent'] ?? null) !== 'curated' || ($place['enabled'] ?? false) !== true || ($place['kind'] ?? null) !== 'place') {
@@ -59,7 +60,7 @@ final class CuratedPlacePresentation
                 'description' => $place['description'],
                 'category' => 'place',
                 'curation' => ['curated' => true, 'order' => $place['order'] ?? PHP_INT_MAX],
-                'surfaces' => ['web' => 'full', 'telnet' => 'unavailable'],
+                'surfaces' => self::memberSurfaces($place, $catalog),
                 'presentation' => ['icon_url' => $place['icon'] ?? '/favicon.svg'],
             ], 'web');
             $cards[] = [
@@ -69,6 +70,36 @@ final class CuratedPlacePresentation
             ];
         }
         return $cards;
+    }
+
+    /**
+     * A place matches a surface filter when at least one of its members is
+     * genuinely available on that surface (any-member aggregation, not
+     * all-member) -- resolved through the same CuratedPlaceCatalog truth the
+     * place's own /places/<id> page uses per member, never inferred from
+     * membership or game type alone.
+     * @param array<string,mixed> $place
+     * @param array<string,array<string,mixed>> $catalog Authorized catalog, keyed by id
+     * @return array{web:string,telnet:string}
+     */
+    private static function memberSurfaces(array $place, array $catalog): array
+    {
+        $surfaces = ['web' => 'unavailable', 'telnet' => 'unavailable'];
+        foreach ($place['members'] ?? [] as $member) {
+            if (!is_array($member) || !is_string($member['reference'] ?? null)) {
+                continue;
+            }
+            $resolved = CuratedPlaceCatalog::resolveReference($member['reference'], $catalog, 'web');
+            if ($resolved === null) {
+                continue;
+            }
+            foreach (['web', 'telnet'] as $targetSurface) {
+                if (($resolved['surfaces'][$targetSurface] ?? null) === 'full') {
+                    $surfaces[$targetSurface] = 'full';
+                }
+            }
+        }
+        return $surfaces;
     }
 
     /** Use the authorized runtime's presentation and unchanged launch target. */
