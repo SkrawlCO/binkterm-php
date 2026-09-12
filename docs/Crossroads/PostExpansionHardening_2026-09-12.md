@@ -307,6 +307,120 @@ order are now documented above.
 Separate, standing limitation: **REAL RESTORE DRILL: UNPROVEN / NOT
 AUTHORIZED.**
 
+## PEH-P2 item 2 — Incomplete lifecycle sweep — CLOSED 2026-09-12
+
+Bounded lifecycle recon (no broad crawl; already-closed lifecycle/security
+work was not reopened). Found one concrete P2 code defect, and — during its
+remediation preflight — one intervening P1 production defect. Both fixed,
+activated, and verified live. Remaining concerns are explicitly classified
+P3/WATCH or N/A below.
+
+### echomail_robots.php overlap — CONFIRMED P2, now CLOSED
+
+Static inspection of `scripts/echomail_robots.php` /
+`src/Robots/EchomailRobotRunner.php` (scheduled every 5 minutes) established:
+no flock/lockfile/PID guard, no DB advisory lock, no atomic work claiming, no
+processor-level idempotency. `EchomailRobotRunner` reads
+`last_processed_echomail_id`, selects up to 500 messages after that cursor,
+processes the batch, and only then updates the cursor — so two overlapping
+executions could select/process the same batch and produce duplicate
+externally-visible robot replies/posts.
+
+### Intervening cron log-directory permission defect — CONFIRMED P1, now RESOLVED
+
+Discovered during flock remediation preflight, not part of the original
+sweep target. Production cron had only recently been added to the **real**
+deployment source (starting with deploy commit `b7984ad`, 2026-09-12) — the
+real production build never had cron installed/supervised before that.
+`rss_poster.php`, `echomail_robots.php`, and `logrotate.php` run as
+`www-data` and redirect output into `/var/www/html/data/logs` (host bind
+mount `/root/binktermphp/app/data/logs`), which was `root:root 0755` —
+`www-data` had no directory write access. A direct disposable write test as
+the exact cron identity confirmed `WRITE_FAIL` / `Permission denied`: shell
+redirection aborted before PHP ever executed for any newly-created log
+target. **Historical clarification:** an Aug-25 `rss_poster.php` PHP fatal
+error found in `php_errors.log` came from some other execution context (real
+production cron did not exist yet on that date) — it is not evidence that
+real-production cron ever worked previously. This was a newly introduced
+production defect from adding cron, not weeks of silent failure.
+
+**Fix (host runtime only, no tracked source change):** identity mapping was
+verified first (container `www-data` UID/GID `33:33`, host `www-data` GID
+`33`, no user-namespace remapping), then
+`/root/binktermphp/app/data/logs` — directory only, non-recursive, parent
+`data/` and existing log-file ownership untouched — was corrected from
+`root:root 0755` to **`root:www-data 0775`**. Post-fix disposable write test:
+`WRITE_OK`, no residue. This is persistent host filesystem metadata on
+Drive A and survived the later `binkterm-app` recreate.
+
+**Durability caveat (documentation/deployment-hardening follow-up, P3/WATCH
+unless evidence shows a more immediate need):** the real deployment source
+still contains no deterministic fresh-host initialization step that
+creates/sets `/root/binktermphp/app/data/logs` to `root:www-data 0775`. A
+genuinely fresh host or new filesystem deployment would need this permission
+re-established manually unless a future narrowly-scoped deployment
+initialization mechanism is added. This does **not** reopen backup/recovery
+P2 — that closure concerned storage-location coverage, not this specific
+directory-permission determinism.
+
+### Echomail flock remediation — activated and verified live
+
+Real deploy source modified: `/root/binktermphp/docker/binkterm.cron`.
+Deploy commit `4d485b1dc5943795621d0068446ad7f593948421` "Prevent
+overlapping echomail robot cron runs". Live cron now:
+
+```
+*/5 * * * * www-data cd /var/www/html && flock -n /var/www/html/data/logs/.echomail_robots.lock php scripts/echomail_robots.php --quiet >> /var/www/html/data/logs/echomail_robots.log 2>&1
+```
+
+Schedule remains every 5 minutes, identity remains `www-data`, flock uses
+nonblocking `-n`, lock path is
+`/var/www/html/data/logs/.echomail_robots.lock`, original PHP
+command/arguments/redirection preserved, `rss_poster`/`logrotate` lines
+untouched. Activated by rebuilding and recreating only `binkterm-app` via the
+existing `docker compose build`/`up -d --no-deps` path — no sibling service
+rebuilt or recreated.
+
+**Live acceptance:** BUILD PASS; RECREATE PASS; SUPERVISOR 16/16 RUNNING;
+CRON RUNNING; HTTP `/crossroads`→200, `/bbs-directory`→200, `/doot-app/`→200;
+live cron confirmed to contain the intended flock line;
+`data/logs` confirmed `root:www-data 0775` after recreate (survived);
+`www-data` write retest `WRITE_OK`; nonblocking-flock proof PASS (a harmless
+`www-data` process briefly held the real lockfile while a concurrent
+`flock -n` attempt against the same path correctly failed/skipped — no
+PHP/application code invoked for this proof; the resulting empty
+`.echomail_robots.lock` file is expected normal flock state, not disposable
+residue). No production regression observed.
+
+**echomail_robots.php overlap — P2: CLOSED.**
+
+### Remaining lifecycle items — reclassified, not further investigated
+
+- **Doot/CLASP restart/shutdown** — P3/WATCH. `supervisord.conf` uses
+  `autorestart=true`, `stopsignal=TERM`, `stopwaitsecs=10`; no concrete
+  orphan/stale-resource defect found.
+- **WebDoor/game-service lifecycle leftovers** — P3/WATCH. Prior checkpoint
+  language was too general to establish a concrete P2 defect; no specific
+  production defect identified during this bounded sweep.
+- **`binkterm-modern-postgres`** — P3/WATCH. Running `postgres:18`,
+  dev/experimental-looking container; not referenced by current production
+  compose; live app uses `binkterm-db`. No current production
+  lifecycle/recovery dependency identified. Do not remove merely as part of
+  PEH closeout.
+- **Disabled IBBS/geo sync jobs** — NOT APPLICABLE while unscheduled;
+  reconsider overlap/locking readiness only if activated later.
+- **rss_poster/logrotate overlap** — P3/WATCH. Same absence of locking as
+  echomail_robots, but interval (hourly / weekly) is sufficiently long
+  relative to expected runtime that no current P2 overlap defect was
+  established.
+
+### PEH-P2 ITEM 2 — INCOMPLETE LIFECYCLE SWEEP: CLOSED
+
+Basis: bounded lifecycle sweep completed; one concrete P2 defect found and
+remediated/activated/verified; one intervening P1 cron-execution defect found
+and resolved; no other concrete P2 lifecycle defect established; remaining
+concerns explicitly classified P3/WATCH or N/A above.
+
 ## Remaining PEH work
 
 All P0: **CLOSED**. All P1: **CLOSED**.
@@ -320,18 +434,20 @@ privilege drop.
 1. ~~**Backup/recovery closeout**~~ — **CLOSED 2026-09-12**, see "PEH-P2 —
    Backup/recovery coverage closeout" above. Restore drill remains
    UNPROVEN/not authorized (unchanged, not required for this closure).
-2. **Incomplete lifecycle sweep** — revisit only unresolved/partially-covered
-   P2 lifecycle items from the broader audit (Doot/CLASP cleanup leftovers,
-   WebDoor lifecycle leftovers, game-service lifecycle leftovers, unattended
-   cron-job safety, disabled IBBS/geo job overlap/locking readiness, minor
-   DB/index/migration findings). Do not reassay already-proven rebuild
-   persistence.
+2. ~~**Incomplete lifecycle sweep**~~ — **CLOSED 2026-09-12**, see
+   "PEH-P2 item 2 — Incomplete lifecycle sweep" above (echomail_robots.php
+   overlap fixed/activated/verified; intervening cron log-directory P1
+   fixed; remaining items reclassified P3/WATCH or N/A).
 3. **Test-safety survey** — assess the 17 other Unit tests using
    `Database::getInstance()`; fix only actual production-mutating risks.
+   **This is now the only remaining substantive P2 investigation.**
 4. **P3/WATCH** — Docker json-file stdout growth; dead
    `DoorSessionManager::startBridge()`/`startDosBox()` cleanup; optional real
    DOS-door human/functional privilege acceptance; low-risk documentation
-   polish.
+   polish; Doot/CLASP restart/shutdown; WebDoor/game-service lifecycle
+   leftovers; `binkterm-modern-postgres` orphaned container;
+   rss_poster/logrotate overlap; fresh-host `data/logs` permission
+   initialization determinism.
 5. **PEH final closeout** — classify remaining items FIXED / ACCEPTED /
    PARKED and create the final durable PEH completion checkpoint.
 
