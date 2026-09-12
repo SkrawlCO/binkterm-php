@@ -406,6 +406,9 @@ final class MessagesLandingCompositionTest extends TestCase
 
         $empty = TerminalNewscanLanding::project(NewscanPlan::empty(), $t);
         self::assertSame(["You're all caught up.", ''], $empty['summary']);
+        // At zero, BADGE_SUMMARY is omitted entirely (like every other
+        // per-destination badge) — a permanent "All caught up" line was tried
+        // and rejected as clutter in human acceptance testing.
         self::assertSame([], $empty['badges']);
 
         $mixed = TerminalNewscanLanding::project(new NewscanPlan([1], $this->areas(), 2, false), $t);
@@ -418,6 +421,8 @@ final class MessagesLandingCompositionTest extends TestCase
             TerminalNewscanLanding::BADGE_NETMAIL   => '1 unread',
             TerminalNewscanLanding::BADGE_ECHOMAIL  => '5 new, 2 area(s)',
             TerminalNewscanLanding::BADGE_BULLETINS => '2 new',
+            // netmail(1) + bulletins(2) = 3 waiting; echomail(5) stays separate.
+            TerminalNewscanLanding::BADGE_SUMMARY   => "3 waiting \u{00B7} 5 new echo",
         ], $mixed['badges']);
 
         $trunc = TerminalNewscanLanding::project(new NewscanPlan([1], [], 0, true), $t);

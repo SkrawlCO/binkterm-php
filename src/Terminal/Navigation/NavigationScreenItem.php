@@ -26,6 +26,7 @@ final class NavigationScreenItem
         public readonly ?string $glyph = null,
         public readonly ?string $group = null,
         public readonly ?string $annotation = null,
+        public readonly bool $annotationInline = false,
     ) {
     }
 

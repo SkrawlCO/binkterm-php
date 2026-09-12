@@ -10,6 +10,13 @@ namespace BinktermPHP\Terminal\Navigation;
  * how to draw it. Coordinates, raw ANSI, border geometry, and cursor
  * choreography are explicitly not representable here — BinktermPHP's renderer
  * decides the actual layout for the caller's geometry / charset / colour.
+ *
+ * `badge_inline` is a narrow exception to the Front Door's usual rule that
+ * root-item badges roll into the ambient activity line: it says "this
+ * particular item's badge belongs on its own menu row instead" (the caller
+ * reads it as actionable navigation state, not ambient board activity).
+ * Default false preserves the existing ambient behaviour for every other
+ * root item (Crossroads/People) untouched.
  */
 final class PresentationHints
 {
@@ -23,12 +30,13 @@ final class PresentationHints
         public readonly ?string $descriptionMode,
         public readonly ?string $art,
         public readonly ?string $badge = null,
+        public readonly bool $badgeInline = false,
     ) {
     }
 
     public static function none(): self
     {
-        return new self('normal', null, null, null, null, null);
+        return new self('normal', null, null, null, null, null, false);
     }
 
     /**
@@ -52,7 +60,7 @@ final class PresentationHints
             throw new NavigationSchemaException('presentation hints must be an object', $path);
         }
 
-        $allowed = ['emphasis', 'group', 'glyph', 'description_mode', 'art', 'badge'];
+        $allowed = ['emphasis', 'group', 'glyph', 'description_mode', 'art', 'badge', 'badge_inline'];
         foreach (array_keys($raw) as $key) {
             if (!in_array($key, $allowed, true)) {
                 throw new NavigationSchemaException("unknown presentation hint \"{$key}\"", $path);
@@ -80,6 +88,9 @@ final class PresentationHints
                 throw new NavigationSchemaException("\"{$strKey}\" must be a string", "{$path}.{$strKey}");
             }
         }
+        if (isset($raw['badge_inline']) && !is_bool($raw['badge_inline'])) {
+            throw new NavigationSchemaException('"badge_inline" must be a boolean', "{$path}.badge_inline");
+        }
 
         return new self(
             (string) $emphasis,
@@ -88,6 +99,7 @@ final class PresentationHints
             $descMode !== null ? (string) $descMode : null,
             isset($raw['art']) ? (string) $raw['art'] : null,
             isset($raw['badge']) ? (string) $raw['badge'] : null,
+            (bool) ($raw['badge_inline'] ?? false),
         );
     }
 }

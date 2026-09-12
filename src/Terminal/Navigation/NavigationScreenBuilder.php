@@ -131,6 +131,7 @@ final class NavigationScreenBuilder
             glyph: $item->presentation->glyph,
             group: $item->presentation->group,
             annotation: $this->resolveBadge($item->presentation->badge, $enabled),
+            annotationInline: $item->presentation->badgeInline,
         );
     }
 

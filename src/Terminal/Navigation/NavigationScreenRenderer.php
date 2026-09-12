@@ -462,18 +462,33 @@ final class NavigationScreenRenderer implements NavigationRenderer
             if (mb_strlen($text, 'UTF-8') > $width) {
                 throw new \LengthException('MENU cannot fit a navigation label');
             }
-            // Restrained live annotation, right-aligned within the row. Only on
-            // an authored state-forward screen, only for a selectable item, only
-            // when non-empty (zero-value annotations are already suppressed
-            // upstream), and only when it fits after the label with at least one
-            // space of separation — otherwise the label wins and the annotation
-            // is silently dropped.
-            $ann = ($withAnnotations && $it->isSelectable() && $it->annotation !== null && trim($it->annotation) !== '')
+            // Restrained live annotation. Shown on an authored state-forward
+            // screen ($withAnnotations), OR on any item whose own presentation
+            // explicitly opts into an inline badge ($it->annotationInline — the
+            // Front Door Messages exception; every other root item stays
+            // ambient-only). Only for a selectable item, only when non-empty
+            // (zero-value annotations are already suppressed upstream).
+            $ann = (($withAnnotations || $it->annotationInline) && $it->isSelectable()
+                    && $it->annotation !== null && trim($it->annotation) !== '')
                 ? trim($it->annotation) : '';
             if ($ann !== '') {
-                $gap = $width - mb_strlen($text, 'UTF-8') - mb_strlen($ann, 'UTF-8');
-                if ($gap >= 1) {
-                    $text .= str_repeat(' ', $gap) . $ann;
+                if ($it->annotationInline) {
+                    // Inline placement reads as metadata belonging to THIS
+                    // item, so it sits immediately after the label — a small
+                    // fixed gap and a dim middot marker, not a right-aligned
+                    // second column — and is clipped (never wrapped/scrolled)
+                    // if the row is too narrow to hold it.
+                    $text = $this->clipVisible($text . '  ' . "\u{00B7} " . $ann, $width);
+                } else {
+                    // A state-forward screen's own annotations (Messages
+                    // landing's netmail/echomail/bulletins children) stay a
+                    // right-aligned column: only when it fits after the label
+                    // with at least one space of separation, else silently
+                    // dropped in favour of the label.
+                    $gap = $width - mb_strlen($text, 'UTF-8') - mb_strlen($ann, 'UTF-8');
+                    if ($gap >= 1) {
+                        $text .= str_repeat(' ', $gap) . $ann;
+                    }
                 }
             }
             return $ctx->colorize(
@@ -509,12 +524,17 @@ final class NavigationScreenRenderer implements NavigationRenderer
     /**
      * "3 people online · 2 in experiences" — assembled only from badge
      * annotations already on the screen model, so it costs nothing. Empty when
-     * the front door is quiet.
+     * the front door is quiet. An item flagged `annotationInline` (the Front
+     * Door Messages exception) is deliberately skipped here — its badge is
+     * already shown on its own menu row, and must never appear twice.
      */
     private function ambientActivityLine(NavigationScreenModel $screen): string
     {
         $parts = [];
         foreach ($screen->items as $it) {
+            if ($it->annotationInline) {
+                continue;
+            }
             if ($it->annotation !== null && trim($it->annotation) !== '') {
                 $parts[] = trim($it->label) . ' ' . trim($it->annotation);
             }

@@ -13,7 +13,7 @@
           "label_fallback": "Messages",
           "hotkey": "m",
           "submenu": "messages",
-          "presentation": { "emphasis": "primary", "group": "messaging" }
+          "presentation": { "emphasis": "primary", "group": "messaging", "badge": "messages.summary_badge", "badge_inline": true }
         },
         {
           "id": "files",

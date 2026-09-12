@@ -539,6 +539,51 @@ the three `messages` items in `config/terminal_navigation.json` reference the
 signals. Compact MENU rows render an annotation **only** on a node that has a
 summary, so the front door's menu rows stay clean.
 
+A fourth signal, `messages.summary_badge` (`TerminalNewscanLanding::BADGE_SUMMARY`),
+gives the Front Door an honest at-a-glance read without opening Messages. It is
+the root `[M] Messages` item's badge, dispatched through the same generic
+`'messages.'`-prefixed badge resolver (no separate wiring, no new query) —
+but unlike Crossroads/People, this one item's `presentation.badge_inline: true`
+hint (see {@see PresentationHints}) renders it **inline on the `[M] Messages`
+menu row itself**, not swept into the root's ambient activity line
+(`ambientActivityLine()`, the "AROUND THE BOARD" STATUS block). Message state
+is actionable navigation state the caller reads as belonging to the Messages
+destination, not ambient board activity — `ambientActivityLine()` explicitly
+skips any item flagged `annotationInline` so it is never shown twice.
+`badge_inline` is item-scoped and defaults false: Crossroads/People keep their
+existing ambient-only behaviour untouched.
+
+`badge_inline` also changes HOW the badge sits on the row, not just whether it
+does: a state-forward screen's own annotations (Messages landing's netmail /
+echomail / bulletins children) stay a right-aligned column filled to the row's
+edge, but an inline-flagged item's badge sits immediately after its label —
+a small fixed gap, a dim middot marker, then the text (`directoryRow()`) —
+clipped, never wrapped or scrolled, if the row is too narrow. The two
+placements read differently on purpose: a column of data next to several
+peer rows vs. one destination's own metadata.
+
+It is **not** a flat sum of all three Newscan counts. Netmail (private, addressed
+to the caller) and bulletins (sysop announcements) are genuinely personal and
+are combined into one `waiting` figure; echomail is public network volume that
+scales with subscribed-area traffic, not a personal backlog, so it is reported
+separately as `new echo` and never folded into `waiting` — merging it in would
+let a large, normal amount of board traffic misrepresent itself as a personal
+backlog. Three positive states, each one fully translated sentence (never
+assembled from translated fragments plus a hardcoded separator), plus a zero
+state:
+
+| personal waiting (netmail unread + bulletins unread) | new echo | `[M]` row reads |
+|---|---|---|
+| > 0 | > 0 | `MESSAGES ▸  · N waiting · M new echo` |
+| > 0 | 0 | `MESSAGES ▸  · N waiting` |
+| 0 | > 0 | `MESSAGES ▸  · M new echo` |
+| 0 | 0 | `MESSAGES ▸` (no annotation) |
+
+Like the three per-destination badges above, this signal is **omitted entirely
+at zero** — a permanent "All caught up" on every quiet visit was tried and
+rejected as clutter (human acceptance testing, 2026-09-12); the row simply
+carries no annotation.
+
 `DeclarativeMenuBridge::messagesLanding()` wires both seams from ONE
 `NewscanSnapshot` over `UnifiedNewscanService::plan()` (a write-free SELECT-only
 projection — nothing here marks a message read or advances a watermark). The

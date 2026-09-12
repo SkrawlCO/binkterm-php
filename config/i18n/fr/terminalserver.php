@@ -799,6 +799,9 @@ return [
     'ui.terminalserver.messages.badge.netmail'        => '{count} unread',
     'ui.terminalserver.messages.badge.echomail'       => '{count} new, {areas} area(s)',
     'ui.terminalserver.messages.badge.bulletins'      => '{count} new',
+    'ui.terminalserver.messages.badge.front_door_waiting_and_echo' => '{waiting} waiting · {echo} new echo',
+    'ui.terminalserver.messages.badge.front_door_waiting'          => '{waiting} waiting',
+    'ui.terminalserver.messages.badge.front_door_echo'             => '{echo} new echo',
     // People M2 landing (state-forward authored screen)
     'ui.terminalserver.people.landing.quiet'          => 'The board is quiet right now.',
     'ui.terminalserver.people.landing.online'         => 'Online now: {names}',
