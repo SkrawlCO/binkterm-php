@@ -86,4 +86,54 @@ class TerminalTextSanitizerTest extends TestCase
             TerminalTextSanitizer::sanitize("\x1b[1m\x1b[31mHI\x1b[0m\x1b[2J\x1b]0;x\x07")
         );
     }
+
+    /**
+     * The default policy is unaffected by adding POLICY_POSITIONING: calling
+     * sanitize() with no explicit policy argument must behave exactly as
+     * before -- cursor/erase sequences still stripped.
+     */
+    public function testDefaultPolicyUnchangedAfterAddingPositioningPolicy(): void
+    {
+        $this->assertSame('abc', TerminalTextSanitizer::sanitize("a\x1b[2Jb\x1b[10;10Hc"));
+        $this->assertSame('ab', TerminalTextSanitizer::sanitize("a\x1b[1;1H\x1b[Kb"));
+        $this->assertSame(
+            'abc',
+            TerminalTextSanitizer::sanitize("a\x1b[2Jb\x1b[10;10Hc", TerminalTextSanitizer::POLICY_STRIP)
+        );
+    }
+
+    public function testPositioningPolicyPreservesCursorAndEraseSequences(): void
+    {
+        $this->assertSame(
+            "a\x1b[2Jb\x1b[10;10Hc",
+            TerminalTextSanitizer::sanitize("a\x1b[2Jb\x1b[10;10Hc", TerminalTextSanitizer::POLICY_POSITIONING)
+        );
+        $this->assertSame(
+            "a\x1b[1;1H\x1b[Kb",
+            TerminalTextSanitizer::sanitize("a\x1b[1;1H\x1b[Kb", TerminalTextSanitizer::POLICY_POSITIONING)
+        );
+    }
+
+    public function testPositioningPolicyStillStripsInjectionVectors(): void
+    {
+        // OSC (title/clipboard), DCS, private-mode/device-status queries and
+        // C0/C1 controls stay closed even under the permissive policy -- only
+        // in-screen cursor movement and erase are additionally allowed.
+        $this->assertSame(
+            'ab',
+            TerminalTextSanitizer::sanitize("a\x1b]0;pwned\x07b", TerminalTextSanitizer::POLICY_POSITIONING)
+        );
+        $this->assertSame(
+            'ab',
+            TerminalTextSanitizer::sanitize("a\x1bP\$q\"p\x1b\\b", TerminalTextSanitizer::POLICY_POSITIONING)
+        );
+        $this->assertSame(
+            'a',
+            TerminalTextSanitizer::sanitize("a\x1b[6n", TerminalTextSanitizer::POLICY_POSITIONING)
+        );
+        $this->assertSame(
+            "\x1b[31mred\x1b[0m",
+            TerminalTextSanitizer::sanitize("\x1b[31mred\x1b[0m", TerminalTextSanitizer::POLICY_POSITIONING)
+        );
+    }
 }
