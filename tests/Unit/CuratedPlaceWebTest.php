@@ -97,8 +97,12 @@ final class CuratedPlaceWebTest extends TestCase
         self::assertSame([512, 512, IMAGETYPE_PNG], array_slice($icon, 0, 3));
         self::assertSame('', $view['backend']['type']);
         self::assertFalse($view['surfaces']['static_launchable']);
-        self::assertNull($view['runtime']['active']);
-        self::assertNull($view['runtime']['session_count']);
+        // No fixture row carries any real state, so the aggregate is a
+        // truthful "nobody's active" rather than "unknown" -- runtime is
+        // always supplied for a place card now (curated-place presence
+        // aggregation).
+        self::assertFalse($view['runtime']['active']);
+        self::assertSame(0, $view['runtime']['session_count']);
         $shelves = CrossroadsShelves::compose($cards);
         self::assertSame($shelves, CrossroadsShelves::compose($cards));
         $html = $this->twig()->render('partials/experience_shelf.twig', ['shelf' => $shelves[0]]);

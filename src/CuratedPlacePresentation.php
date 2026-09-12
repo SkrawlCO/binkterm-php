@@ -62,7 +62,7 @@ final class CuratedPlacePresentation
                 'curation' => ['curated' => true, 'order' => $place['order'] ?? PHP_INT_MAX],
                 'surfaces' => self::memberSurfaces($place, $catalog),
                 'presentation' => ['icon_url' => $place['icon'] ?? '/favicon.svg'],
-            ], 'web');
+            ], 'web', self::memberRuntimeState($place, $catalog));
             $cards[] = [
                 'kind' => 'place',
                 'destination_url' => '/places/' . rawurlencode($place['id']),
@@ -100,6 +100,35 @@ final class CuratedPlacePresentation
             }
         }
         return $surfaces;
+    }
+
+    /**
+     * A place is live when at least one of its members has active callers
+     * (any-member, not all-member) -- player_count is the SUM across members,
+     * not just a boolean. Reads the already-computed runtime state each
+     * member's own catalog entry carries (built once, upstream, from the real
+     * ExperienceState snapshot); this never re-queries presence itself.
+     * @param array<string,mixed> $place
+     * @param array<string,array<string,mixed>> $catalog Authorized catalog, keyed by id
+     * @return array{active:bool,player_count:int}
+     */
+    private static function memberRuntimeState(array $place, array $catalog): array
+    {
+        $playerCount = 0;
+        foreach ($place['members'] ?? [] as $member) {
+            if (!is_array($member) || !is_string($member['reference'] ?? null)) {
+                continue;
+            }
+            $resolved = CuratedPlaceCatalog::resolveReference($member['reference'], $catalog, 'web');
+            if ($resolved === null) {
+                continue;
+            }
+            $runtime = $catalog[$resolved['experience_id']]['experience_presentation']['runtime'] ?? null;
+            if (is_array($runtime)) {
+                $playerCount += max(0, (int)($runtime['player_count'] ?? 0));
+            }
+        }
+        return ['active' => $playerCount > 0, 'player_count' => $playerCount];
     }
 
     /** Use the authorized runtime's presentation and unchanged launch target. */

@@ -40,7 +40,11 @@ final class CuratedPlaceSuppressionTest extends TestCase
         foreach (array_slice($games, 0, 4) as $game) {
             self::assertSame('/games/' . $game['id'], ExperienceLaunch::resolve($game, 'web')['url']);
         }
-        self::assertNull($entries[0]['experience_presentation']['runtime']['active']);
+        // No member carries any real state in this fixture, so the aggregate
+        // is a truthful "nobody's active" rather than "unknown" -- runtime is
+        // always supplied for a place card now (see testPlaceCardAggregatesLivePresence).
+        self::assertFalse($entries[0]['experience_presentation']['runtime']['active']);
+        self::assertSame(0, $entries[0]['experience_presentation']['runtime']['player_count']);
         self::assertSame(['wordwright', 'hangman', 'blackjack', 'parlour', 'tatham/lightup', 'breaklock', 'ordinary-puzzles', 'dokuel', 'everest'], array_column($definitions[0]['members'], 'reference'));
     }
 
@@ -97,6 +101,65 @@ final class CuratedPlaceSuppressionTest extends TestCase
         self::assertCount(1, $placeCards);
         self::assertSame('full', $placeCards[0]['experience_presentation']['surfaces']['web']);
         self::assertSame('full', $placeCards[0]['experience_presentation']['surfaces']['telnet']);
+    }
+
+    /**
+     * A place is live when at least one member has active callers, and
+     * player_count is the SUM across members (not just a boolean) -- reusing
+     * each member's own already-computed runtime state, never a second
+     * presence query. Surface aggregation from the earlier fix must remain
+     * correct alongside this.
+     */
+    public function testPlaceCardAggregatesLivePresence(): void
+    {
+        $games = $this->games();
+        // wordwright: 1 active player, telnet-capable (surface aggregation still exercised).
+        $games[0]['surfaces']['telnet'] = 'full';
+        $games[0]['experience_presentation'] = ExperiencePresentation::build($games[0], 'web', ['active' => true, 'player_count' => 1]);
+        // hangman: 2 active players.
+        $games[1]['experience_presentation'] = ExperiencePresentation::build($games[1], 'web', ['active' => true, 'player_count' => 2]);
+        // blackjack: present but nobody active (explicit zero state).
+        $games[2]['experience_presentation'] = ExperiencePresentation::build($games[2], 'web', ['active' => false, 'player_count' => 0]);
+
+        $definitions = (new CuratedPlaceCatalog())->getDefinitions();
+        $definitions[0]['members'] = [
+            ['reference' => 'wordwright', 'primary_presentation' => true],
+            ['reference' => 'hangman', 'primary_presentation' => true],
+            ['reference' => 'blackjack', 'primary_presentation' => true],
+        ];
+
+        $entries = CuratedPlacePresentation::shelfEntries($games, $definitions);
+
+        // Members stay suppressed top-level -- no duplication.
+        self::assertNotContains('wordwright', array_column($entries, 'id'));
+        self::assertNotContains('hangman', array_column($entries, 'id'));
+        self::assertNotContains('blackjack', array_column($entries, 'id'));
+        self::assertSame(['parlour', 'tatham'], array_column($entries, 'id'));
+
+        $placeCards = array_values(array_filter($entries, static fn (array $e): bool => ($e['kind'] ?? null) === 'place'));
+        self::assertCount(1, $placeCards);
+        $runtime = $placeCards[0]['experience_presentation']['runtime'];
+        self::assertTrue($runtime['active']);
+        self::assertSame(3, $runtime['player_count']);
+
+        // Surface aggregation (prior fix) is unaffected by this change.
+        self::assertSame('full', $placeCards[0]['experience_presentation']['surfaces']['telnet']);
+    }
+
+    public function testPlaceCardReportsQuietWhenNoMemberIsActive(): void
+    {
+        $games = $this->games();
+        $definitions = (new CuratedPlaceCatalog())->getDefinitions();
+        $definitions[0]['members'] = [
+            ['reference' => 'wordwright', 'primary_presentation' => true],
+            ['reference' => 'hangman', 'primary_presentation' => true],
+        ];
+
+        $entries = CuratedPlacePresentation::shelfEntries($games, $definitions);
+        $placeCards = array_values(array_filter($entries, static fn (array $e): bool => ($e['kind'] ?? null) === 'place'));
+        $runtime = $placeCards[0]['experience_presentation']['runtime'];
+        self::assertFalse($runtime['active']);
+        self::assertSame(0, $runtime['player_count']);
     }
 
     public function testExplicitOwnershipKeepsIntentionalGameHallAndDirectLaunches(): void
