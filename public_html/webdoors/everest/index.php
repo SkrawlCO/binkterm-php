@@ -26,5 +26,20 @@ if (!\BinktermPHP\GameConfig::isEnabled('everest')) {
     exit;
 }
 
+// Everest's compiled engine (main.dart.js) has a hardcoded default
+// canvasKitBaseUrl pointing at https://www.gstatic.com/flutter-canvaskit/...
+// -- an external CDN fetch that is unreachable from this deployment and
+// leaves the Flutter canvas blank/dark while the surrounding host shell
+// still renders fine. The canonical build already bundles CanvasKit locally
+// under assets/canvaskit/; only the loader config -- glue we own, not
+// upstream game code -- needs to point at it, the same class of fix as the
+// already-accepted pinned-font substitution during the reproducible build.
+$shell = (string)file_get_contents(__DIR__ . '/assets/index.html');
+$shell = str_replace(
+    'let config = {};  // auto-choose renderer',
+    'let config = {canvasKitBaseUrl: "canvaskit/"};  // auto-choose renderer; local CanvasKit, no external CDN fetch',
+    $shell
+);
+
 header('Content-Type: text/html; charset=UTF-8');
-readfile(__DIR__ . '/assets/index.html');
+echo $shell;
