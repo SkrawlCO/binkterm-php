@@ -42,8 +42,20 @@ class BbsDirectoryGeocoder
         $url = rtrim($endpoint, '?') . '?' . http_build_query($query);
 
         $response = $this->httpGetJson($url);
-        if (!is_array($response) || empty($response[0]['lat']) || empty($response[0]['lon'])) {
-            $this->storeCachedResult($cacheKey, $location, null);
+        if ($response === null) {
+            // PROVIDER_ERROR (network/timeout/non-2xx/malformed JSON --
+            // see httpGetJson()). Deliberately NOT cached: this must stay
+            // retryable on the next run rather than becoming a permanent
+            // false "no result". Do not overwrite any existing cache row
+            // (there is none to overwrite here -- we only reach this branch
+            // after a cache miss above).
+            return null;
+        }
+
+        if (empty($response[0]['lat']) || empty($response[0]['lon'])) {
+            // NO_RESULT: the provider answered successfully (valid JSON) but
+            // found no match. This is a genuine, cacheable answer.
+            $this->storeCachedResult($cacheKey, $location, null, 'no_result');
             return null;
         }
 
@@ -52,7 +64,7 @@ class BbsDirectoryGeocoder
             'longitude' => round((float)$response[0]['lon'], 6),
         ];
 
-        $this->storeCachedResult($cacheKey, $location, $result);
+        $this->storeCachedResult($cacheKey, $location, $result, 'success');
 
         return $result;
     }
@@ -91,17 +103,25 @@ class BbsDirectoryGeocoder
         }
     }
 
-    private function storeCachedResult(string $cacheKey, string $location, ?array $result): void
+    /**
+     * Persists a SUCCESS or NO_RESULT outcome. PROVIDER_ERROR is never
+     * passed here -- geocodeLocation() returns early for that case, so a
+     * transient provider failure can never overwrite (or create) a cache
+     * row, and an existing success/no_result entry is never at risk of
+     * being clobbered by a later failed refresh attempt.
+     */
+    private function storeCachedResult(string $cacheKey, string $location, ?array $result, string $status): void
     {
         try {
             $db = Database::getInstance()->getPdo();
             $stmt = $db->prepare("
-                INSERT INTO geocode_cache (location_key, normalized_location, latitude, longitude, cached_at)
-                VALUES (:location_key, :normalized_location, :latitude, :longitude, NOW())
+                INSERT INTO geocode_cache (location_key, normalized_location, latitude, longitude, status, cached_at)
+                VALUES (:location_key, :normalized_location, :latitude, :longitude, :status, NOW())
                 ON CONFLICT (location_key) DO UPDATE
                 SET normalized_location = EXCLUDED.normalized_location,
                     latitude = EXCLUDED.latitude,
                     longitude = EXCLUDED.longitude,
+                    status = EXCLUDED.status,
                     cached_at = NOW()
             ");
             $stmt->execute([
@@ -109,6 +129,7 @@ class BbsDirectoryGeocoder
                 ':normalized_location' => $location,
                 ':latitude' => $result['latitude'] ?? null,
                 ':longitude' => $result['longitude'] ?? null,
+                ':status' => $status,
             ]);
         } catch (\Throwable $e) {
             // Ignore cache failures and allow live geocoding to continue.
