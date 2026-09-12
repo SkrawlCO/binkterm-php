@@ -66,6 +66,7 @@ return [
     'ui.terminalserver.server.menu.shoutbox' => 'S) Shoutbox',
     'ui.terminalserver.server.menu.polls' => 'P) Sondages',
     'ui.terminalserver.server.menu.doors' => 'D) Jeux de portes',
+    'ui.terminalserver.server.menu.mrc_test' => 'R) MRC Test',
     'ui.terminalserver.server.menu.quit' => 'Q) Quitter',
     'ui.terminalserver.server.farewell' => 'Merci de votre visite, bonne journée !',
     'ui.terminalserver.qwk.action_logout' => 'Q) Se deconnecter',

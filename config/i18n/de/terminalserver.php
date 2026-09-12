@@ -83,6 +83,7 @@ return [
     'ui.terminalserver.server.menu.shoutbox'           => 'S) Shoutbox',
     'ui.terminalserver.server.menu.polls'              => 'P) Umfragen',
     'ui.terminalserver.server.menu.doors'              => 'D) Türspiele',
+    'ui.terminalserver.server.menu.mrc_test'           => 'R) MRC Test',
     'ui.terminalserver.server.menu.quit'               => 'Q) Beenden',
     'ui.terminalserver.server.menu.files'              => 'F) Dateien',
     'ui.terminalserver.server.menu.freqrequests'       => 'R) Dateianfragen',

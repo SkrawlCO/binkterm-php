@@ -25,6 +25,7 @@ require_once __DIR__ . '/src/TerminalBoxRenderer.php';
 require_once __DIR__ . '/src/DeclarativeMenuBridge.php';
 require_once __DIR__ . '/src/TerminalSplitScreen.php';
 require_once __DIR__ . '/src/ChatHandler.php';
+require_once __DIR__ . '/src/MrcChatHandler.php';
 require_once __DIR__. '/src/MailUtils.php';
 require_once __DIR__ . '/src/TerminalMessageService.php';
 require_once __DIR__ . '/src/NetmailHandler.php';
