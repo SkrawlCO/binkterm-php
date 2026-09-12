@@ -79,8 +79,7 @@ if ($configuredRealtimeTransportMode === 'auto') {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MRC Chat</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="/vendor/bootstrap-5.3.0/css/bootstrap.min.css" rel="stylesheet">
     <!-- User's selected BBS theme (provides CSS variable overrides) -->
     <link href="<?php echo htmlspecialchars($stylesheet); ?>" rel="stylesheet">
     <link href="/css/ansisys.css" rel="stylesheet">
@@ -194,9 +193,9 @@ if ($configuredRealtimeTransportMode === 'auto') {
     </div>
 
     <!-- Bootstrap JS -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="/vendor/bootstrap-5.3.0/js/bootstrap.bundle.min.js"></script>
     <!-- jQuery -->
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="/vendor/jquery-3.7.1/jquery-3.7.1.min.js"></script>
     <!-- Pipe/ANSI color code parser -->
     <script src="/js/ansisys.js"></script>
     <script>
