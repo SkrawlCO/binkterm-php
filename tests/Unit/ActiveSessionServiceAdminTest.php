@@ -2,10 +2,12 @@
 
 declare(strict_types=1);
 
-use BinktermPHP\Database;
+require_once __DIR__ . '/Support/TestDatabase.php';
+
 use BinktermPHP\DoorBridgeControlClient;
 use BinktermPHP\DoorSessionManager;
 use BinktermPHP\Security\ActiveSessionService;
+use BinktermPHP\Tests\Support\TestDatabase;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -23,15 +25,9 @@ final class ActiveSessionServiceAdminTest extends TestCase
     protected function setUp(): void
     {
         try {
-            $this->pdo = Database::getInstance()->getPdo();
-            $this->pdo->query('SELECT 1');
+            $this->pdo = TestDatabase::pdo();
         } catch (\Throwable $e) {
-            try {
-                $this->pdo = Database::reconnect()->getPdo();
-                $this->pdo->query('SELECT 1');
-            } catch (\Throwable $e2) {
-                self::markTestSkipped('database not available: ' . $e2->getMessage());
-            }
+            self::markTestSkipped('database not available: ' . $e->getMessage());
         }
         $this->pdo->beginTransaction();
         $this->userA = $this->newUser();

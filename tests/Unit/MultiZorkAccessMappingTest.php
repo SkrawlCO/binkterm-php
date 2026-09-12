@@ -2,8 +2,10 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/Support/TestDatabase.php';
+
 use BinktermPHP\Crossroads\MultiZorkAccessMapping;
-use BinktermPHP\Database;
+use BinktermPHP\Tests\Support\TestDatabase;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -20,13 +22,14 @@ final class MultiZorkAccessMappingTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->db = Database::getInstance()->getPdo();
+        $this->db = TestDatabase::pdo();
         $this->db->beginTransaction();
 
         // NOTE (P3/WATCH, not fixed by this transaction): this still depends on
-        // at least two real existing users as its fixture basis, read here.
-        // Transaction isolation only guarantees this test can never COMMIT a
-        // mutation against them -- it does not remove the data dependency.
+        // at least two existing users as its fixture basis, read here -- now
+        // from the isolated binktermphp_test database rather than production,
+        // but the dependency itself (and the possibility this SKIPs if the
+        // test database has fewer than two users) is unchanged.
         $ids = $this->db->query('SELECT id FROM users ORDER BY id ASC LIMIT 2')->fetchAll(PDO::FETCH_COLUMN);
         if (count($ids) < 2) {
             $this->markTestSkipped('Need at least two existing users to test mapping isolation.');

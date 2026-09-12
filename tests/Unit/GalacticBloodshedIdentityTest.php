@@ -2,11 +2,13 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/Support/TestDatabase.php';
+
 use BinktermPHP\Crossroads\GalacticBloodshedIdentity;
 use BinktermPHP\Crossroads\GalacticBloodshedIdentityException;
 use BinktermPHP\Crossroads\GalacticBloodshedProvisioningInProgress;
 use BinktermPHP\Crossroads\GalacticBloodshedSecretBox;
-use BinktermPHP\Database;
+use BinktermPHP\Tests\Support\TestDatabase;
 use PHPUnit\Framework\TestCase;
 
 final class GalacticBloodshedIdentityTest extends TestCase
@@ -18,7 +20,7 @@ final class GalacticBloodshedIdentityTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->db = Database::getInstance()->getPdo();
+        $this->db = TestDatabase::pdo();
         $this->db->beginTransaction();
         $this->box = new GalacticBloodshedSecretBox(random_bytes(SODIUM_CRYPTO_SECRETBOX_KEYBYTES));
     }

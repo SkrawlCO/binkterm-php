@@ -2,8 +2,10 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/Support/TestDatabase.php';
+
 use BinktermPHP\Crossroads\MultiZorkAccessRateLimit;
-use BinktermPHP\Database;
+use BinktermPHP\Tests\Support\TestDatabase;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -21,9 +23,13 @@ final class MultiZorkAccessRateLimitTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->db = Database::getInstance()->getPdo();
+        $this->db = TestDatabase::pdo();
         $this->db->beginTransaction();
 
+        // P3/WATCH (unchanged, not fixed by this transaction): still depends
+        // on at least two existing users, now read from the isolated
+        // binktermphp_test database rather than production -- may SKIP if
+        // that database has fewer than two users.
         $ids = $this->db->query('SELECT id FROM users ORDER BY id ASC LIMIT 2')->fetchAll(PDO::FETCH_COLUMN);
         if (count($ids) < 2) {
             $this->markTestSkipped('Need at least two existing users to test limiter isolation.');

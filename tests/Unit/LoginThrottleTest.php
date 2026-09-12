@@ -2,8 +2,10 @@
 
 declare(strict_types=1);
 
-use BinktermPHP\Database;
+require_once __DIR__ . '/Support/TestDatabase.php';
+
 use BinktermPHP\Security\LoginThrottle;
+use BinktermPHP\Tests\Support\TestDatabase;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -24,7 +26,7 @@ final class LoginThrottleTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->db = Database::getInstance()->getPdo();
+        $this->db = TestDatabase::pdo();
         $this->db->beginTransaction();
         $suffix = bin2hex(random_bytes(5));
         $this->user = 'throttle-test-' . $suffix;
