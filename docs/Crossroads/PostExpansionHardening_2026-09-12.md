@@ -628,3 +628,154 @@ test-safety survey) are all now **CLOSED**. No substantive P2 investigation
 remains. Next candidates are item 4 (classify/finalize the accumulated
 P3/WATCH items) or item 5 (PEH final closeout) — pick whichever Matt
 prioritizes; both are bounded, narrow, low-risk.
+
+## FINAL PEH CLOSEOUT — 2026-09-12
+
+**POST-EXPANSION HARDENING: COMPLETE / CLOSED.**
+
+```
+P0:           CLOSED
+P1:           CLOSED
+Substantive P2: CLOSED — none remaining
+P3/WATCH:     CLASSIFIED / DISPOSITIONED (14 items, none blocking)
+Blockers remaining: NONE
+```
+
+Everything below this heading is a closeout summary of work already recorded
+in full detail earlier in this document — it does not introduce new
+findings, fixes, or evidence. Future watch/cleanup work described here is
+**ordinary maintenance debt, not unfinished PEH** (see "Future work
+boundary" below).
+
+### Final repository checkpoints
+
+**APP** — `/root/binktermphp/app`, branch `experience-lobby-v2`, pre-final-doc
+HEAD `0c8fa1726255b8be314f13470d0cb67f458cb0c6` ("docs(PEH): close database
+test-safety P2"). Final PEH documentation commit: **pending this closeout
+commit** (not yet created at the time this section was written).
+
+**DEPLOY** — `/root/binktermphp`, branch `master`, HEAD
+`4d485b1dc5943795621d0068446ad7f593948421` ("Prevent overlapping echomail
+robot cron runs").
+
+Neither repository has been pushed as part of this closeout sequence.
+**PUSH STATUS: NOT PUSHED.**
+
+### Summary of closed PEH work (see detailed sections above for evidence)
+
+- Two-repository architecture and source-of-truth established; real
+  production build source confirmed as `/root/binktermphp/docker/` (the app
+  repo's own `docker/` is documented as not production).
+- Rebuild/recreate survivability proven (persistent state survives
+  destroy/recreate from committed source).
+- Cron installed/restored in real production, and a later-discovered
+  runtime permission defect (`data/logs` not writable by `www-data`)
+  resolved.
+- NativeDoor child privilege drop / lifecycle hardening (PEH-3).
+- `realtime_server`, `binkp_scheduler`, `binkp_server` privilege drop to
+  `www-data` (PEH-P2C).
+- `admin_daemon` dedicated privilege drop to `binkterm-admin` (PEH-P2D).
+- IBBS test isolation (PEH-5) — the original template for isolated test-DB
+  work.
+- Geocoder failure-semantics/retryability hardening (PEH-6).
+- Log rotation / disk-growth hardening (PEH-P2A).
+- Backup/recovery coverage mapping and recovery order (PEH-P2).
+- Incomplete lifecycle sweep, including echomail-robot cron overlap
+  protection via nonblocking `flock` (PEH-P2 item 2).
+- `Database::getInstance()` Unit-test safety survey, corrected from a
+  miscounted "17" to the reconciled **18** actual files; 18/18 given
+  explicit isolation to `binktermphp_test`; canonical test-DB schema/
+  migrations established; the seven confirmed mutation-risk tests
+  remediated; complete 18-file runtime acceptance performed with zero
+  production DB touch (PEH-P2 item 3).
+
+Individual acceptance results are not restated beyond what their own
+sections already record — see "PEH-P2 item 3" above for the full test
+numbers, and no result described there is overstated here.
+
+### Backup/recovery — final wording
+
+**BACKUP/RECOVERY COVERAGE: CLOSED.** Evidence: all identified
+recovery-critical state resides on the single 200 GB root disk, which
+corresponds by topology/size to the human-verified RackGenius Drive A —
+backups enabled, 11 restore points visible, multiple AVAILABLE restore
+points Sep 5–11, retention "1 week, minimum 3 retained", Restore function
+available.
+
+**REAL RESTORE DRILL: UNPROVEN / NOT PERFORMED / NOT AUTHORIZED.** This is
+an accepted, documented limitation, not an unfinished PEH blocker — backup
+*coverage* and an application-consistent *restore drill* are different
+claims, and only the former has been established.
+
+### Final P3/WATCH disposition (14 items, from the completed classification pass)
+
+| # | Item | Final disposition | Future trigger / condition |
+|---|---|---|---|
+| 1 | Docker json-file stdout growth (php-fpm, caddy, dosdoor_bridge, telnet, ssh_daemon) | PARKED / WATCH | Revisit if any of these 5 logs shows material/unbounded growth |
+| 2 | Dead `DoorSessionManager::startBridge()`/`startDosBox()` cleanup | PARKED / FUTURE CLEANUP | None required — safe to do whenever convenient |
+| 3 | Optional real DOS-door human/functional privilege acceptance | PARKED / WATCH | Revisit only when a real DOS door is next actually enabled/used |
+| 4 | Low-risk documentation polish | PARKED / FUTURE CLEANUP | Opportunistic, never blocking |
+| 5 | Doot/CLASP restart/shutdown lifecycle | PARKED / WATCH | Revisit only if an actual orphaned-process/stale-socket incident is observed |
+| 6 | WebDoor/game-service lifecycle leftovers (general) | ACCEPTED / NO ACTION | Too general to name a concrete defect; only actionable if a specific service + symptom is named |
+| 7 | `binkterm-modern-postgres` orphan/dev-looking container | PARKED / WATCH | Revisit if disk/resource use, port conflict, startup dependency, or operator confusion emerges |
+| 8 | rss_poster/logrotate overlap-locking | PARKED / WATCH | Revisit only if runtime grows materially or overlap is actually observed |
+| 9 | Fresh-host deterministic initialization of `/root/binktermphp/app/data/logs` → `root:www-data 0775` | PARKED / FUTURE CLEANUP | Do before/if a genuinely fresh host or new-filesystem deployment is next performed |
+| 10 | MultiZork (`MultiZorkAccessMappingTest`/`MultiZorkAccessRateLimitTest`) isolated-test-DB existing-user dependency | PARKED / WATCH | Revisit only if these tests need to become independent of incidental schema-seed row counts |
+| 11 | `TerminalMenuDataDirectFetchTest.php` hardcoded UID 3 dependency | ACCEPTED / DOCUMENTED LIMITATION | Revisit only if this file needs to run/assert meaningfully under CI/isolated-DB conditions |
+| 12 | `TerminalMessageListDirectFetchTest.php` hardcoded UID 3/populated-data dependency | ACCEPTED / DOCUMENTED LIMITATION | Same trigger as #11 |
+| 13 | Disabled IBBS/geo sync job overlap/locking readiness | ACCEPTED / DOCUMENTED LIMITATION | Reconsider only if/when the jobs are actually enabled |
+| 14 | Real restore drill | ACCEPTED / DOCUMENTED LIMITATION | Only becomes an action item if a restore drill is explicitly authorized later |
+
+None of the 14 items blocks PEH closure. No new production-impact evidence
+was found for any of them; nothing was promoted back to P2.
+
+### Final test-safety wording (preserved, not restated with different numbers)
+
+Corrected scope: **18** actual Unit files with code-level
+`Database::getInstance()` usage (not 17). Final static state: 18/18
+explicitly isolated to `binktermphp_test`; remaining production-DB test
+paths: 0; uncertain: 0.
+
+Seven-file acceptance (the originally risky files): 75 tests / 252
+assertions / 73 passed / 0 failed / 0 errors / 2 known environment skips;
+zero fixture residue; production DB untouched.
+
+Complete 18-file acceptance: 183 tests / 539 assertions / 161 passed / 0
+failed / 1 error / 21 skipped. **Not all 183 tests passed outright** — the
+one error and the relevant skips were classified as isolated-test-DB
+fixture/data-dependency limitations (P3/WATCH items 10–12 above), not
+isolation failures, schema failures, functional regressions, or production
+DB touches (all confirmed zero for each of those categories).
+
+**PEH TEST-SAFETY P2: CLOSED.**
+
+### Production health baseline (last established, not re-verified in this transaction)
+
+16/16 supervisor programs RUNNING; cron RUNNING; `/crossroads` → 200;
+`/bbs-directory` → 200; `/doot-app/` → 200. This is the last recorded
+health baseline from the PEH-P2 item 2 activation transaction — no new
+health check was run as part of this documentation-only closeout.
+
+### Future work boundary
+
+**PEH SHOULD NOT BE RESUMED AUTOMATICALLY.** Future work on any P3/WATCH
+item above is ordinary maintenance / targeted follow-up, and should occur
+only when: its stated future trigger occurs, the user deliberately chooses
+that cleanup, or new evidence establishes real production impact. PARKED
+items are not an implicit next-work queue. Any future hardening campaign
+should begin from new evidence/scope rather than reopening this PEH
+checklist.
+
+### Final disposition
+
+```
+POST-EXPANSION HARDENING — COMPLETE / CLOSED
+
+P0:                 CLOSED
+P1:                 CLOSED
+P2:                 CLOSED
+P3/WATCH:           CLASSIFIED / ACCEPTED / PARKED (14 items, none blocking)
+PRODUCTION BLOCKERS: NONE
+RESTORE DRILL:      UNPROVEN / NOT AUTHORIZED
+PUSH STATUS:        NOT PUSHED
+```
