@@ -1,0 +1,29 @@
+.stage {
+  position: fixed;
+  /* Insets cover the viewport as the browser sees it; the min-height covers the
+     window as JS measures it. Over-constraining drops `bottom`, so the scene
+     spills past the fold rather than leaving a bare strip under it. */
+  inset: 0;
+  min-height: var(--app-height);
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  background: #0a161e;
+  contain: strict;
+}
+
+.canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  /* Own a compositor texture so a parallax present does not discard the
+     HTML tiles sitting above this bitmap (Windows DComp flashes those black). */
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  /* One constant vibrancy pass over the painted scene. Constant matters: the
+     layer never gains or loses its filter, so Windows DComp has nothing to
+     flash, and the diorama's dusk palette stops reading as murk behind cards. */
+  filter: saturate(1.04) contrast(1.04);
+}

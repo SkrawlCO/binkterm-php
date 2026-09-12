@@ -1,0 +1,82 @@
+import { defineGameCatalog } from '@parlour/engine';
+import { orderSpiteHand } from './cards';
+import { spiteConfig } from './config';
+import { spiteHowToPlay } from './howto';
+
+/**
+ * Spite & Malice's entry on the parlour shelf. The app's game picker and mode
+ * picker are generated from this, so presentation lives beside the rules it
+ * describes — the mode ids here are the config presets in {@link spiteConfig}.
+ */
+export const spiteCatalog = defineGameCatalog({
+  id: 'spite',
+  gameId: 'spite',
+  name: 'Spite & Malice',
+  subtitle: 'the payoff pile race',
+  tagline: 'Pay them back in spades',
+  description:
+    'Build the centre piles 1 to 12, dump your payoff stack, and ruin everyone else’s plans with well-timed wilds. The name is the rules.',
+  facts: ['2–4 players', 'classic · quick · cutthroat', 'solo or friends'],
+  accent: '#7f6bd0',
+  shade: '#402f7a',
+  art: [
+    { label: 'A', tint: ['#8f7fe0', '#4a3a95'] },
+    { label: 'K★', tint: ['#4ba1ba', '#25586e'] },
+    { label: 'Q', tint: ['#c8566b', '#7c2c3e'] },
+    { label: '★', tint: ['#e29349', '#96471c'] },
+  ],
+  href: '/spite',
+  howToPlay: spiteHowToPlay,
+  seats: [2, 3, 4],
+  configSchema: spiteConfig,
+  handOrder: orderSpiteHand,
+  modes: [
+    {
+      id: 'classic',
+      preset: 'classic',
+      name: 'Classic',
+      tagline: 'The full race',
+      description:
+        'Thirty cards buried in every payoff pile and all eighteen wilds in the deck. The full boxed game, nursed along.',
+      facts: ['30-card payoff', 'all 18 wilds', '~20 min'],
+      accent: '#7f6bd0',
+      shade: '#402f7a',
+      art: [
+        { label: 'A', tint: ['#8f7fe0', '#4a3a95'] },
+        { label: 'Q', tint: ['#c8566b', '#7c2c3e'] },
+        { label: 'K★', tint: ['#4ba1ba', '#25586e'] },
+      ],
+    },
+    {
+      id: 'quick',
+      preset: 'quick',
+      name: 'Quick',
+      tagline: 'Shorter grudge',
+      description:
+        'Twelve-card payoff piles keep everything else intact — same wilds, same malice, a third of the wait for your revenge.',
+      facts: ['12-card payoff', 'all wilds', '~6–9 min'],
+      accent: '#4ba1ba',
+      shade: '#25586e',
+      art: [
+        { label: 'A', tint: ['#4ba1ba', '#25586e'] },
+        { label: '★', tint: ['#e29349', '#96471c'] },
+      ],
+    },
+    {
+      id: 'cutthroat',
+      preset: 'cutthroat',
+      name: 'Cutthroat',
+      tagline: 'No mercy, no refills',
+      description:
+        'Twenty cards deep and no mid-turn refill: empty your hand at the wrong moment and you play short-handed while someone else wins.',
+      facts: ['20-card payoff', 'no mid-turn refill', 'harsh'],
+      accent: '#c8566b',
+      shade: '#7c2c3e',
+      art: [
+        { label: 'Q', tint: ['#c8566b', '#7c2c3e'] },
+        { label: 'K★', tint: ['#8f7fe0', '#4a3a95'] },
+        { label: '✗', tint: ['#96471c', '#5c2b10'] },
+      ],
+    },
+  ],
+});

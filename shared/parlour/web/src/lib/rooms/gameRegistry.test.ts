@@ -1,0 +1,154 @@
+import { describe, expect, it } from 'vitest';
+import { createSession } from '@parlour/engine';
+import { wildpileConfig, wildpileGame } from '@parlour/game-wildpile';
+import { MULTIPLAYER_GAME_IDS } from './gameIds';
+import { hasValidSeatCount, seatRangeFor } from './seatRange';
+import { TABLE_ROUTES } from './tableRoute';
+import { ALL_ROOM_GAMES, findRoomGame, roomGame, ROOM_GAMES, seatRefusal } from './gameRegistry';
+
+/**
+ * The registry exists to make "forgot to add game N to one of the tables" a
+ * compile error rather than a silent Blitz. Most of that guarantee is the type
+ * system's job; these cover the parts it cannot express — that nothing falls
+ * back, and that the separate tables still agree with each other.
+ */
+describe('room game registry', () => {
+  it('covers every multiplayer game id exactly once', () => {
+    expect(Object.keys(ROOM_GAMES).sort()).toEqual([...MULTIPLAYER_GAME_IDS].sort());
+    expect(ALL_ROOM_GAMES).toHaveLength(MULTIPLAYER_GAME_IDS.length);
+  });
+
+  it('refuses an unknown game instead of falling back to Blitz', () => {
+    // The bug this replaces: `return createBlitzDef()` at the end of a chain,
+    // which loaded Blitz's rules into a room announced as something else.
+    expect(() => roomGame('bridge')).toThrow(/unsupported room game: bridge/);
+    expect(() => roomGame('')).toThrow(/unsupported room game/);
+    // Solitaire is single-seat and deliberately has no room at all; it must be
+    // refused here rather than quietly seated at a Blitz table.
+    expect(() => roomGame('klondike')).toThrow(/unsupported room game: klondike/);
+    expect(() => roomGame('golf')).toThrow(/unsupported room game: golf/);
+    expect(() => roomGame('freecell')).toThrow(/unsupported room game: freecell/);
+    expect(() => roomGame('spider')).toThrow(/unsupported room game: spider/);
+    expect(() => roomGame('pyramid')).toThrow(/unsupported room game: pyramid/);
+    expect(() => roomGame('spite')).not.toThrow();
+    expect(() => roomGame('scopa')).not.toThrow();
+    expect(findRoomGame('bridge')).toBeNull();
+    expect(findRoomGame(null)).toBeNull();
+    expect(findRoomGame(undefined)).toBeNull();
+  });
+
+  it('never resolves one game to another game', () => {
+    for (const id of MULTIPLAYER_GAME_IDS) expect(roomGame(id).id).toBe(id);
+  });
+
+  /*
+   * The seam a Draw Four challenge rides under Veil: the pack names the cards
+   * behind the accusation, the room peels them in public and injects the
+   * answer. Unwired, the rule silently disappears from every online game —
+   * which is exactly how it was found missing.
+   */
+  it('asks a Wild room to turn over the hand behind a called bluff', () => {
+    const dealt = createSession(wildpileGame, {
+      seed: 91,
+      config: wildpileConfig.defaults(),
+      seats: 3,
+    });
+    expect(roomGame('wildpile').publicOpenPending(dealt.state)).toBeNull();
+
+    const called = {
+      ...dealt.state,
+      veiled: true,
+      challenge: {
+        accused: 0,
+        challenger: 1,
+        colorAtPlay: 'red' as const,
+        handAtPlay: ['v#40', 'v#41'],
+        called: true,
+        amount: 4,
+      },
+    };
+    expect(roomGame('wildpile').publicOpenPending(called)).toEqual({
+      handles: ['v#40', 'v#41'],
+      move: 'settleChallenge',
+    });
+  });
+
+  it('agrees with the seat-range and route tables', () => {
+    for (const pack of ALL_ROOM_GAMES) {
+      expect(pack.seats).toEqual(seatRangeFor(pack.id));
+      expect(pack.route).toBe(TABLE_ROUTES[pack.id]);
+    }
+  });
+
+  it('declares a seat ring the game can actually seat', () => {
+    for (const pack of ALL_ROOM_GAMES) {
+      const { min, max } = pack.seats;
+      expect(min).toBeGreaterThanOrEqual(2);
+      expect(max).toBeGreaterThanOrEqual(min);
+      expect(hasValidSeatCount(pack.id, min)).toBe(true);
+      expect(hasValidSeatCount(pack.id, max)).toBe(true);
+      expect(hasValidSeatCount(pack.id, min - 1)).toBe(false);
+      expect(hasValidSeatCount(pack.id, max + 1)).toBe(false);
+      if (pack.seats.allowed) {
+        for (let count = pack.seats.min; count <= pack.seats.max; count++) {
+          expect(hasValidSeatCount(pack.id, count)).toBe(pack.seats.allowed.includes(count));
+        }
+      }
+    }
+  });
+
+  it('refuses the five-seat Scopa ring the rules do not deal', () => {
+    expect(hasValidSeatCount('scopa', 5)).toBe(false);
+    expect(seatRefusal(ROOM_GAMES.scopa)).toMatch(/2, 3, 4 or 6/);
+  });
+
+  it('resolves a config for every game, and resolving is a fixed point', () => {
+    for (const pack of ALL_ROOM_GAMES) {
+      const config = pack.resolveConfig({});
+      expect(config).toBeTypeOf('object');
+      // A non-idempotent resolve would make the authority reject the room's own
+      // settings on snapshot import.
+      expect(pack.resolveConfig(config)).toEqual(config);
+    }
+  });
+
+  it('names itself in its own refusal messages', () => {
+    for (const pack of ALL_ROOM_GAMES) {
+      expect(seatRefusal(pack)).toContain(pack.name);
+    }
+  });
+
+  it('can run Veil in every room, because every pack supports it', () => {
+    // Veil is on everywhere and mentioned nowhere, so a pack without engine-side
+    // support would be a room that deals a hand it cannot hide and says nothing
+    // about it. There is no refusal to fall back on any more — this is the check
+    // that replaced it.
+    for (const pack of ALL_ROOM_GAMES) {
+      expect(pack.veilSupport()).not.toBeNull();
+    }
+  });
+
+  it('reports recyclable stock only for the games that re-veil a discard', () => {
+    const spent = { stock: [], discard: ['S1', 'S2', 'S3'] };
+    // Blitz rooms run the whole match as one session, so its pile lives inside
+    // the live round rather than at the top of the state.
+    expect(ROOM_GAMES.blitz.recyclableStock({ round: spent }, 'draw.stock')).toEqual(['S2', 'S3']);
+    expect(ROOM_GAMES.blitz.recyclableStock({ round: spent }, 'knock')).toBeNull();
+    expect(ROOM_GAMES.wildpile.recyclableStock(spent, 'draw')).toEqual(['S2', 'S3']);
+    expect(ROOM_GAMES.hearts.recyclableStock(spent, 'playCard')).toBeNull();
+    expect(ROOM_GAMES.spades.recyclableStock(spent, 'playCard')).toBeNull();
+  });
+
+  it('does not recycle a stock with cards left, or one already hidden', () => {
+    const blitz = ROOM_GAMES.blitz;
+    expect(
+      blitz.recyclableStock({ round: { stock: ['S4'], discard: ['S1', 'S2'] } }, 'draw.stock'),
+    ).toBeNull();
+    expect(
+      blitz.recyclableStock({ round: { stock: [], discard: ['S1'] } }, 'draw.stock'),
+    ).toBeNull();
+    expect(
+      blitz.recyclableStock({ round: { stock: [], discard: ['S1', 'v#7', 'v#8'] } }, 'draw.stock'),
+    ).toBeNull();
+  });
+});

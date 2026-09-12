@@ -1,0 +1,264 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Standalone iOS disagrees with itself about how tall the window is: the
+     viewport units can stop above the home indicator while `window.innerHeight`
+     reports the whole screen, and which one is short varies by version. JS
+     publishes its measurement here and every consumer takes the taller of the
+     two, so a full-bleed layer can never end up shorter than the real window. */
+  --app-window-height: 0px;
+  --app-height: max(100dvh, var(--app-window-height));
+  --parlour-bg: #152833;
+  --parlour-amber: #e29349;
+  --parlour-teal: #2f86a1;
+
+  --sky-top: #14222f;
+  --sky-mid: #244a5c;
+  --sky-low: #4d5a63;
+  --sky-horizon: #b8724a;
+  --hearth-glow: #f2b06a;
+  --hearth-core: #ffd9a0;
+  --felt-deep: #1d4c52;
+  --felt-lit: #2f7d7a;
+  --ink: #fdf6ec;
+  --ink-dim: #d7edf2;
+
+  --radius-chunky: 1.25rem;
+  --radius-fat: 1.75rem;
+  --radius-pill: 999px;
+
+  --bevel-light: rgba(255, 244, 226, 0.55);
+  --bevel-dark: rgba(48, 21, 8, 0.45);
+
+  --shadow-ambient: 0 18px 40px -18px rgba(6, 16, 22, 0.75);
+  --shadow-lift: 0 26px 60px -22px rgba(6, 16, 22, 0.9);
+  --shadow-glow: 0 0 48px -6px rgba(242, 176, 106, 0.45);
+
+  /*
+   * "This card cannot be played / cannot go here."
+   *
+   * The hand rail has used this recipe since Wild shipped, and it is the single
+   * clearest thing the table does: legal cards keep their colour and lift,
+   * everything else falls back. Solitaire needs the same language for its
+   * destinations, so it is a token rather than a number copied into a second
+   * stylesheet where the two could drift.
+   */
+  --unplayable-filter: grayscale(0.28) saturate(0.66) brightness(0.86);
+  --unplayable-opacity: 1;
+  --playable-filter: saturate(1.2) brightness(1.09);
+
+  --ease-pop: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-settle: cubic-bezier(0.2, 0.8, 0.3, 1);
+  --dur-tap: 140ms;
+  --dur-feedback: 240ms;
+  --dur-flight: 200ms;
+}
+
+/* Keep the root compositor layer stable at its identity value in `Original`;
+   creating and dropping a full-screen filter during comparison can flash on
+   Windows DComp. Richer changes that one root-level pass, so it reaches canvas
+   scenes, cards, avatars, HUD, menus, setup, and the game shelf together. */
+html {
+  filter: saturate(1);
+}
+
+html[data-color-mode='richer'] {
+  filter: saturate(1.26);
+  --unplayable-filter: grayscale(0.14) saturate(0.72) brightness(0.88);
+  --unplayable-opacity: 1;
+}
+
+@media (display-mode: standalone), (display-mode: fullscreen) {
+  :root {
+    /* Installed apps have no collapsing browser chrome, so the large viewport is
+       the honest floor; `dvh` is the one that shrinks under iOS's status bar. */
+    --app-height: max(100lvh, var(--app-window-height));
+  }
+}
+
+@layer base {
+  html,
+  body {
+    height: 100%;
+    min-height: var(--app-height);
+    background: var(--parlour-bg);
+    color: var(--ink);
+    overscroll-behavior: none;
+    font-family: var(--font-body), ui-sans-serif, system-ui, sans-serif;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    text-rendering: optimizeLegibility;
+  }
+
+  button {
+    font-family: var(--font-display), var(--font-body), sans-serif;
+  }
+
+  ::selection {
+    background: var(--hearth-glow);
+    color: #3a1c07;
+  }
+}
+
+@layer components {
+  .btn-fat {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.75rem;
+    border-radius: var(--radius-fat);
+    border: 2px solid rgba(120, 57, 29, 0.55);
+    background: linear-gradient(180deg, #f6bd7a 0%, #e29349 46%, #c76a26 100%);
+    color: #43200a;
+    font-family: var(--font-display), sans-serif;
+    font-weight: 800;
+    letter-spacing: 0.01em;
+    text-shadow: 0 1px 0 rgba(255, 240, 218, 0.6);
+    box-shadow:
+      inset 0 2px 0 var(--bevel-light),
+      inset 0 -4px 0 var(--bevel-dark),
+      var(--shadow-ambient);
+    transition:
+      transform var(--dur-tap) var(--ease-pop),
+      box-shadow var(--dur-tap) ease;
+  }
+
+  .btn-fat:hover {
+    transform: translate3d(0, -2px, 0) scale(1.03);
+    box-shadow:
+      inset 0 2px 0 var(--bevel-light),
+      inset 0 -4px 0 var(--bevel-dark),
+      var(--shadow-lift);
+  }
+
+  .btn-fat:active {
+    transform: translate3d(0, 2px, 0) scale(0.97);
+  }
+
+  .btn-fat:focus-visible {
+    outline: 3px solid var(--hearth-core);
+    outline-offset: 3px;
+  }
+
+  .btn-fat--teal {
+    border-color: rgba(21, 40, 51, 0.6);
+    background: linear-gradient(180deg, #7fc0d1 0%, #2f86a1 48%, #25586e 100%);
+    color: #06222d;
+    text-shadow: 0 1px 0 rgba(215, 237, 242, 0.5);
+  }
+
+  .btn-fat--ghost {
+    border-color: rgba(175, 218, 228, 0.35);
+    background: linear-gradient(180deg, rgba(36, 74, 92, 0.9), rgba(21, 40, 51, 0.9));
+    color: var(--ink-dim);
+    text-shadow: none;
+  }
+
+  .btn-fat--danger {
+    border-color: rgba(94, 22, 22, 0.7);
+    background: linear-gradient(180deg, #f07167 0%, #c62828 48%, #8a1616 100%);
+    color: #3c0d05;
+    text-shadow: 0 1px 0 rgba(255, 226, 214, 0.55);
+  }
+
+  .panel-soft {
+    border-radius: var(--radius-chunky);
+    border: 1px solid rgba(175, 218, 228, 0.16);
+    background: linear-gradient(180deg, rgba(36, 74, 92, 0.72), rgba(21, 40, 51, 0.78));
+    box-shadow:
+      inset 0 1px 0 rgba(215, 237, 242, 0.14),
+      var(--shadow-ambient);
+  }
+
+  .pill-soft {
+    border-radius: var(--radius-pill);
+    padding: 0.25rem 0.85rem;
+    background: rgba(21, 40, 51, 0.62);
+    border: 1px solid rgba(175, 218, 228, 0.2);
+  }
+
+  .text-warm-glow {
+    text-shadow:
+      0 0 24px rgba(242, 176, 106, 0.55),
+      0 3px 0 rgba(120, 57, 29, 0.5);
+  }
+}
+
+@layer utilities {
+  .min-h-dvh {
+    min-height: var(--app-height);
+  }
+
+  .chrome-nw {
+    top: max(1.25rem, env(safe-area-inset-top));
+    left: max(1.25rem, env(safe-area-inset-left));
+  }
+
+  .chrome-ne {
+    top: max(1.25rem, env(safe-area-inset-top));
+    right: max(1.25rem, env(safe-area-inset-right));
+  }
+
+  .chrome-sw {
+    bottom: max(1.25rem, env(safe-area-inset-bottom));
+    left: max(1.25rem, env(safe-area-inset-left));
+  }
+
+  .safe-page {
+    padding-top: max(2rem, env(safe-area-inset-top));
+    padding-right: max(1.5rem, env(safe-area-inset-right));
+    padding-bottom: max(2rem, env(safe-area-inset-bottom));
+    padding-left: max(1.5rem, env(safe-area-inset-left));
+  }
+
+  @media (min-width: 640px) {
+    .chrome-nw {
+      top: max(2rem, env(safe-area-inset-top));
+      left: max(2rem, env(safe-area-inset-left));
+    }
+
+    .chrome-ne {
+      top: max(2rem, env(safe-area-inset-top));
+      right: max(2rem, env(safe-area-inset-right));
+    }
+  }
+
+  .ease-pop {
+    transition-timing-function: var(--ease-pop);
+  }
+
+  .gpu {
+    transform: translate3d(0, 0, 0);
+    backface-visibility: hidden;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* Profile comfort toggle — same contract as the media query above (spec §10/§7.6). */
+html.reduce-motion *,
+html.reduce-motion *::before,
+html.reduce-motion *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+}
+
+/* Table controls own the scarce mobile edges; playback continues without the global transport pill. */
+body:has([data-table-screen]) [data-testid='music-player'] {
+  display: none;
+}

@@ -1,0 +1,1 @@
+(globalThis.TURBOPACK||(globalThis.TURBOPACK=[])).push(["object"==typeof document?document.currentScript:void 0,49810,e=>{"use strict";var t=e.i(34902),a=e.i(60171),i=e.i(88700);e.s(["default",0,function(){return(0,t.jsx)(a.GameTablePage,{pack:i.presidentTablePack})}])}]);

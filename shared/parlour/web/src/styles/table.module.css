@@ -1,0 +1,1485 @@
+.screen {
+  position: relative;
+  width: 100%;
+  height: 100dvh;
+  height: var(--app-height, 100dvh);
+  min-height: min(420px, 100dvh);
+  /* `clip`, not `hidden`: tapping a card that pokes below the fold must never
+     let the browser scroll this box to the focused button — that shifted the
+     whole felt up and cropped the HUD off the top. */
+  overflow: clip;
+}
+
+.hud {
+  position: absolute;
+  inset: max(1rem, env(safe-area-inset-top)) 1.25rem auto;
+  z-index: 20;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  pointer-events: none;
+}
+
+.hud > * {
+  pointer-events: auto;
+}
+.hud div {
+  display: grid;
+  gap: 0;
+}
+.eyebrow {
+  color: var(--hearth-core);
+  font-size: 0.68rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+.menuButton {
+  min-width: 3.25rem;
+  padding-inline: 1rem;
+}
+
+.playfield {
+  position: absolute;
+  inset: 0;
+}
+
+.feltMark {
+  position: absolute;
+  left: 50%;
+  top: 46%;
+  transform: translate(-50%, -50%) rotate(-8deg) scaleY(0.7);
+  font:
+    800 clamp(4rem, 9vw, 9rem)/1 var(--font-display),
+    sans-serif;
+  color: rgba(255, 235, 201, 0.055);
+  text-shadow: 0 3px 0 rgba(10, 34, 36, 0.2);
+}
+
+.seat {
+  --seat-accent: #e29349;
+  --seat-shade: #96471c;
+  position: absolute;
+  z-index: 4;
+  display: grid;
+  justify-items: center;
+  width: clamp(7rem, 12vw, 10rem);
+  opacity: 0.95;
+  /* Kept, even though a still seat does not need promoting. Dropping it saved
+     six layers at most — Motion promotes the plate anyway for its turn scale —
+     and it changed how the overlapping opponent fan rasterised, which measured
+     as a visible difference across the whole upper arc. Not a trade worth
+     making; the layer win is elsewhere. */
+  will-change: transform;
+}
+
+.seat0 {
+  left: 50%;
+  bottom: 1.2rem;
+  translate: -50% 0;
+  visibility: hidden;
+}
+.seat1 {
+  left: 2.5%;
+  top: 47%;
+  translate: 0 -50%;
+}
+.seat2 {
+  left: 50%;
+  top: 2.2%;
+  translate: -50% 0;
+}
+.seat3 {
+  right: 2.5%;
+  top: 47%;
+  translate: 0 -50%;
+}
+/* Wide-table ring (5–8 seats): opponents fill the upper arc between the
+   side seats. Generic positions — any game can opt in per table. */
+.seat4 {
+  left: 15%;
+  top: 16%;
+}
+.seat5 {
+  left: 33%;
+  top: 2.2%;
+}
+.seat6 {
+  right: 33%;
+  top: 2.2%;
+}
+.seat7 {
+  right: 15%;
+  top: 16%;
+}
+
+/* Compact plaques whenever the table hosts more than four seats. */
+.compactRing .seat {
+  width: clamp(5rem, 8.6vw, 7rem);
+}
+.compactRing .avatar {
+  width: clamp(2.5rem, 4.2vw, 3.4rem);
+  border-width: 3px;
+  border-radius: 0.9rem;
+}
+.compactRing .nameplate {
+  font-size: clamp(0.58rem, 1vw, 0.74rem);
+  padding: 0.16rem 0.55rem;
+}
+.compactRing .opponentCards > * {
+  margin-inline: -1.45rem;
+}
+.seatEliminated {
+  filter: grayscale(0.8);
+  opacity: 0.45;
+}
+
+.avatar {
+  display: grid;
+  place-items: center;
+  width: clamp(3.2rem, 5.6vw, 4.8rem);
+  aspect-ratio: 1;
+  border: 4px solid var(--seat-accent);
+  border-radius: 1.2rem;
+  background: radial-gradient(
+    circle at 38% 28%,
+    color-mix(in srgb, var(--seat-accent) 76%, white),
+    var(--seat-shade)
+  );
+  color: white;
+  font:
+    800 clamp(1.4rem, 2.8vw, 2.3rem)/1 var(--font-display),
+    sans-serif;
+  text-shadow: 0 2px 0 var(--seat-shade);
+  box-shadow:
+    inset 0 2px 0 rgba(255, 255, 255, 0.4),
+    0 8px 18px rgba(4, 14, 20, 0.55);
+  animation: avatarBob 3.8s ease-in-out infinite;
+}
+
+.seatActive .avatar {
+  box-shadow:
+    inset 0 2px 0 rgba(255, 255, 255, 0.5),
+    0 0 0 5px rgba(255, 218, 160, 0.28),
+    0 0 30px var(--seat-accent);
+}
+
+.seatActive::before {
+  content: '';
+  position: absolute;
+  top: -7px;
+  width: clamp(3.75rem, 6.4vw, 5.45rem);
+  aspect-ratio: 1;
+  border: 2px solid var(--hearth-core);
+  border-radius: 1.45rem;
+  animation: turnPulse 1.4s ease-in-out infinite;
+}
+
+.nameplate {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  margin-top: -0.35rem;
+  padding: 0.22rem 0.72rem;
+  border: 2px solid var(--seat-shade);
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--seat-accent), var(--seat-shade));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    0 5px 12px rgba(4, 14, 20, 0.45);
+  font-size: clamp(0.66rem, 1.2vw, 0.88rem);
+  white-space: nowrap;
+}
+
+.nameplate small {
+  opacity: 0.72;
+  font-size: 0.58rem;
+  text-transform: uppercase;
+}
+.lifeRow {
+  display: flex;
+  gap: 0.25rem;
+  margin-top: 0.25rem;
+}
+.lifeRow i {
+  width: 0.62rem;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: var(--hearth-core);
+  border: 2px solid #a65b28;
+  box-shadow:
+    inset 0 1px white,
+    0 2px 4px rgba(0, 0, 0, 0.4);
+}
+
+.opponentCards {
+  position: absolute;
+  top: -0.85rem;
+  z-index: -1;
+  display: flex;
+  justify-content: center;
+  transform-origin: 50% 115%;
+}
+
+.opponentCards > * {
+  margin-inline: -1.16rem;
+  transform: rotate(var(--card-rotation));
+  transform-origin: 50% 135%;
+  /* `backwards` covers the first frame; `both`/`forwards` would keep every
+     opponent card composited for the life of the table after a 240ms deal-in. */
+  animation: dealtCardSettle 240ms var(--ease-pop) backwards;
+}
+
+.seat1 .opponentCards {
+  transform: rotate(16deg);
+}
+
+.seat3 .opponentCards {
+  transform: rotate(-16deg);
+}
+
+.piles {
+  position: absolute;
+  left: 50%;
+  top: 46%;
+  z-index: 5;
+  display: flex;
+  gap: clamp(1.2rem, 3vw, 2.8rem);
+  transform: translate(-50%, -50%) scale(0.78);
+  isolation: isolate;
+}
+
+.piles[data-local-turn='true']::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset: -1.65rem -2rem;
+  border: 2px solid rgba(255, 218, 160, 0.62);
+  border-radius: 2.2rem;
+  background: radial-gradient(
+    ellipse,
+    rgba(255, 188, 92, 0.38),
+    rgba(75, 177, 185, 0.1) 55%,
+    transparent 76%
+  );
+  box-shadow:
+    0 0 28px rgba(255, 194, 105, 0.6),
+    0 0 64px rgba(75, 177, 185, 0.3),
+    inset 0 0 28px rgba(255, 222, 171, 0.2);
+  animation: pileTurnGlow 1.25s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.turnIndicator {
+  position: absolute;
+  z-index: 4;
+  left: 50%;
+  top: -2.6rem;
+  translate: -50% 0;
+  padding: 0.3rem 0.9rem;
+  border: 2px solid rgba(255, 237, 207, 0.85);
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(226, 147, 73, 0.98), rgba(150, 71, 28, 0.98));
+  color: #fff4df;
+  box-shadow:
+    0 5px 16px rgba(4, 14, 20, 0.44),
+    0 0 22px rgba(255, 194, 105, 0.55);
+  font:
+    800 0.8rem/1 var(--font-display),
+    sans-serif;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  pointer-events: none;
+  animation: turnIndicatorBob 1.25s ease-in-out infinite;
+}
+
+/* --- opening countdown ----------------------------------------------------- */
+
+.countdown {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  /* A plain painted veil — never backdrop-filter over the scene canvas. */
+  background: radial-gradient(ellipse at 50% 46%, rgba(6, 14, 19, 0.34), rgba(6, 14, 19, 0.66));
+  animation: countdownVeilIn 240ms ease-out both;
+}
+
+.countdown[data-leaving] {
+  animation: countdownVeilOut 320ms ease-in both;
+}
+
+@keyframes countdownVeilIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes countdownVeilOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+.countdownDigit {
+  position: relative;
+  font:
+    800 clamp(6rem, 22vmin, 11rem)/1 var(--font-display),
+    sans-serif;
+  color: #fff3dc;
+  -webkit-text-stroke: 3px rgba(150, 71, 28, 0.9);
+  text-shadow:
+    0 6px 0 rgba(70, 30, 10, 0.45),
+    0 0 60px rgba(255, 194, 105, 0.75);
+  animation: countdownPop 800ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+.countdownDigit[data-final] {
+  font-size: clamp(4.4rem, 16vmin, 8rem);
+  color: #ffd17e;
+  animation-duration: 700ms;
+}
+
+/* an expanding ring behind each beat */
+.countdownDigit::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 1.6em;
+  aspect-ratio: 1;
+  translate: -50% -50%;
+  border: 4px solid rgba(255, 218, 160, 0.65);
+  border-radius: 50%;
+  z-index: -1;
+  animation: countdownRing 800ms ease-out both;
+}
+
+@keyframes countdownPop {
+  0% {
+    opacity: 0;
+    transform: scale(1.7);
+  }
+  22% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  78% {
+    opacity: 1;
+    transform: scale(0.96);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.82);
+  }
+}
+
+@keyframes countdownRing {
+  0% {
+    opacity: 0.9;
+    scale: 0.4;
+  }
+  100% {
+    opacity: 0;
+    scale: 1.5;
+  }
+}
+
+@keyframes turnIndicatorBob {
+  0%,
+  100% {
+    translate: -50% 0;
+  }
+  50% {
+    translate: -50% -0.3rem;
+  }
+}
+
+/*
+ * Your-turn spotlight under the fan. `data-playable='true'` only ever appears
+ * on a hand whose owner has a live decision, so the rail can light itself
+ * without a single screen passing turn state down — every game that marks
+ * legality inherits the spotlight for free.
+ */
+.localHand:has(.handCard[data-playable='true'])::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  left: -12%;
+  right: -12%;
+  bottom: -1.4rem;
+  height: 7.5rem;
+  background: radial-gradient(58% 100% at 50% 100%, rgba(255, 188, 92, 0.34), transparent 72%);
+  animation: handSpotlight 1.4s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes handSpotlight {
+  0%,
+  100% {
+    opacity: 0.75;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.pileButton {
+  position: relative;
+  width: clamp(5.6rem, 8vw, 7.2rem);
+  aspect-ratio: 5 / 7;
+  height: auto;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  perspective: 600px;
+  overflow: visible;
+}
+.pileButton:has([data-stack-depth]) {
+  width: auto;
+  aspect-ratio: auto;
+}
+.pileButton:not(:disabled):hover {
+  transform: translateY(-5px) scale(1.04);
+}
+.pileButton:disabled {
+  cursor: default;
+}
+.stockStack {
+  --stack-step-x: 0.28rem;
+  --stack-step-y: 0.22rem;
+  position: relative;
+  display: inline-block;
+  line-height: 0;
+  padding-right: calc((var(--stack-n) - 1) * var(--stack-step-x));
+  padding-bottom: calc((var(--stack-n) - 1) * var(--stack-step-y));
+}
+.stockStackLayer {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 0;
+  pointer-events: none;
+  translate: calc(var(--layer) * var(--stack-step-x)) calc(var(--layer) * var(--stack-step-y));
+}
+.stockStackLayer .card {
+  box-shadow: none;
+}
+.stockStackFace {
+  position: relative;
+  z-index: 1;
+  display: block;
+}
+.stockEmpty {
+  display: inline-block;
+  width: clamp(5.6rem, 8vw, 7.2rem);
+  aspect-ratio: 5 / 7;
+  border: 0.16rem dashed rgba(255, 250, 240, 0.28);
+  border-radius: 0.72rem;
+  background: rgba(8, 16, 20, 0.22);
+}
+.stockEmpty[data-compact] {
+  width: clamp(3rem, 4.2vw, 4rem);
+  border-radius: 0.5rem;
+}
+.pileCount {
+  position: absolute;
+  right: -0.5rem;
+  bottom: -0.45rem;
+  min-width: 1.7rem;
+  padding: 0.15rem 0.4rem;
+  border-radius: 999px;
+  background: #162c38;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  color: white;
+  font-weight: 800;
+}
+.discardPile .card {
+  position: absolute;
+  inset: 0;
+  transform: rotate(var(--card-rotation));
+}
+
+/*
+ * One rail holds every hand in the app, so it has to solve for the hardest one
+ * without any game telling it to.
+ *
+ * `calculateFanStep` caps the step at 0.48x the card, and otherwise divides the
+ * rail between the cards. Which of those two wins decides how much of each card
+ * a player can see and hit — and with thirteen cards in a fixed-width rail the
+ * division wins and every card collapses to about 23px. The instinct is to
+ * shrink the card, but that is backwards: a smaller card lowers the cap too.
+ * The answer is a rail that grows with what it holds, so the division stays
+ * above the cap and the cap is what governs.
+ *
+ * So the span is a function of the card count and the orientation supplies only
+ * its own ceiling. Spades used to carry this arithmetic privately, which meant
+ * Spades exposed 44px of each card while Hearts — the same thirteen cards —
+ * exposed 38px. A game should inherit the hand it deserves without knowing any
+ * of this exists; nothing below this line is a per-game decision.
+ */
+.localHand {
+  --fan-n: 3;
+  --fan-un: 0.334;
+  --fan-step: 0px;
+  --hand-card-width: clamp(8.6rem, 12.5vw, 11.2rem);
+  --hand-rail-span: calc(9rem + var(--fan-n) * 3.4rem);
+  --hand-rail-max: 92vw;
+  position: absolute;
+  z-index: 10;
+  left: 50%;
+  /* A hand is held from below the table, not laid flat on top of it. Cropping
+     the lower half keeps a physical deck-sized face without taking the felt
+     away from play. The rank and the exposed band of every card stay on-screen. */
+  bottom: -4rem;
+  display: flex;
+  justify-content: center;
+  width: min(var(--hand-rail-span), var(--hand-rail-max));
+  height: 14.4rem;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.localHand button.card:focus-visible {
+  outline: 3px solid var(--hearth-core);
+  outline-offset: 2px;
+}
+
+.handTrack {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  transform-origin: 50% 82%;
+}
+
+.localHand[data-deal-state='complete'] .handTrack {
+  animation: dealFanBloom 360ms var(--ease-pop) backwards;
+}
+
+.ownerStatusRail {
+  position: absolute;
+  z-index: 12;
+  left: max(4.75rem, calc(env(safe-area-inset-left) + 3.75rem));
+  bottom: max(1rem, env(safe-area-inset-bottom));
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  pointer-events: none;
+}
+
+.ownerCount,
+.ownerLives {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  min-width: 4.8rem;
+  padding: 0.42rem 0.68rem 0.5rem;
+  border: 2px solid rgba(255, 224, 173, 0.72);
+  border-radius: 1rem;
+  background: linear-gradient(180deg, rgba(38, 81, 86, 0.96), rgba(15, 42, 49, 0.98));
+  color: #fff1d5;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    0 8px 18px rgba(3, 15, 20, 0.46);
+  font-family: var(--font-display), sans-serif;
+  line-height: 1;
+}
+
+.ownerCount span {
+  color: var(--hearth-core);
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ownerCount strong {
+  margin-top: 0.18rem;
+  font-size: 1.75rem;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.32);
+}
+
+.ownerLives {
+  width: 4.8rem;
+  padding-block: 0.64rem;
+}
+
+.ownerLives > span:first-child {
+  color: var(--hearth-core);
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ownerLifePips {
+  position: absolute;
+  top: calc(100% + 0.38rem);
+  left: 50%;
+  display: flex;
+  gap: 0.2rem;
+  translate: -50% 0;
+}
+
+.ownerLifePips i {
+  width: 0.58rem;
+  aspect-ratio: 1;
+  border: 2px solid #a65b28;
+  border-radius: 50%;
+  background: var(--hearth-core);
+  box-shadow:
+    inset 0 1px white,
+    0 2px 4px rgba(0, 0, 0, 0.4);
+}
+
+.handCard {
+  position: absolute;
+  left: 50%;
+  top: 0.9rem;
+  width: var(--hand-card-width);
+  margin-left: calc(var(--hand-card-width) / -2);
+  pointer-events: none;
+}
+
+.localHand .card {
+  width: 100%;
+  pointer-events: auto;
+}
+
+.handFan {
+  transform-origin: 50% 138%;
+  transform: translateX(calc(var(--fan-index) * var(--fan-step) + var(--spread-x, 0rem)))
+    rotate(calc(var(--fan-index) * min(6deg, 24deg * var(--fan-un))))
+    translateY(
+      calc(
+        var(--fan-abs, 0) * min(0.48rem, 2.1rem * var(--fan-un)) + var(--spread-y, 0rem) +
+          var(--playable-y, 0rem)
+      )
+    );
+  transition: transform 280ms var(--ease-pop);
+}
+
+.localHand[data-receiving] .handFan {
+  transition: transform 200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Legality reads as depth first: a playable card steps forward out of the fan,
+   and the dim on the rest is only a supporting cue, not the whole story. */
+.handCard[data-playable='true'] {
+  --playable-y: -1.05rem;
+}
+
+.handCard[data-playable='true'] .card {
+  filter: var(--playable-filter);
+  box-shadow:
+    0 13px 24px -8px rgba(3, 11, 15, 0.82),
+    0 0 0 2px rgba(255, 224, 173, 0.46),
+    0 0 20px rgba(255, 193, 102, 0.32),
+    inset 0 0 0 1px rgba(92, 48, 25, 0.18);
+}
+
+.handCard[data-playable='false'] .card {
+  filter: var(--unplayable-filter);
+  opacity: var(--unplayable-opacity);
+}
+
+/* The card you just drew: lifted clear of the fan so the decision is obvious. */
+.handCard[data-just-drawn] {
+  --playable-y: -1.55rem;
+  z-index: 6;
+}
+
+.handCard[data-just-drawn] .card {
+  box-shadow:
+    0 16px 28px -8px rgba(3, 11, 15, 0.85),
+    0 0 0 3px rgba(184, 255, 205, 0.75),
+    0 0 26px rgba(140, 235, 175, 0.5);
+}
+
+/* In-flight arrivals occupy their fan slot invisibly so the flyer can land on
+   the real card instead of vanishing into the rail, then popping in beside it. */
+.handCard[data-arriving] .card {
+  opacity: 0;
+  pointer-events: none;
+  filter: none;
+  box-shadow: none;
+}
+.handCard[data-departing] .card {
+  opacity: 0;
+  pointer-events: none;
+  filter: none;
+  box-shadow: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .handCard:hover .handFan,
+  .handCard:focus-within .handFan {
+    --spread-y: -0.42rem;
+  }
+  .handCard:hover ~ .handCard .handFan,
+  .handCard:focus-within ~ .handCard .handFan {
+    --spread-x: 0.9rem;
+  }
+  .handCard:has(~ .handCard:hover) .handFan,
+  .handCard:has(~ .handCard:focus-within) .handFan {
+    --spread-x: -0.9rem;
+  }
+  .localHand button.card:not(:disabled):hover {
+    transform: rotate(var(--card-rotation));
+  }
+}
+
+.card {
+  --card-rotation: 0deg;
+  position: relative;
+  display: inline-block;
+  width: clamp(6.3rem, 9vw, 8.1rem);
+  aspect-ratio: 5 / 7;
+  overflow: hidden;
+  border: 0.28rem solid #fffaf0;
+  border-radius: 0.72rem;
+  box-shadow:
+    0 10px 20px -8px rgba(3, 11, 15, 0.75),
+    inset 0 0 0 1px rgba(92, 48, 25, 0.18);
+  transform: rotate(var(--card-rotation));
+  transform-origin: 50% 100%;
+  transition: transform 140ms var(--ease-pop);
+  /*
+   * Every measurement on the face below is a share of THIS card, not of the
+   * viewport.
+   *
+   * The index and the centre pip used to be `clamp(…, Nvw, …)`. A full card is
+   * `clamp(6.3rem, 9vw, 8.1rem)` but a compact one is `clamp(3rem, 4.2vw, 4rem)`,
+   * so the same viewport-derived glyph that was 56% of a full card's width was
+   * 125% of a compact one's — the centre heart spilled over the corner heart
+   * and off the edge. `cqw` ties the face to the card in both, so one set of
+   * numbers is correct everywhere and a compact card can never outgrow its
+   * own index again.
+   */
+  container-type: inline-size;
+}
+
+button.card {
+  cursor: pointer;
+}
+@media (hover: hover) and (pointer: fine) {
+  button.card:not(:disabled):hover {
+    transform: translateY(-11px) rotate(var(--card-rotation)) scale(1.04);
+  }
+}
+.cardCompact {
+  width: clamp(3rem, 4.2vw, 4rem);
+  border-width: 0.2rem;
+  border-radius: 0.5rem;
+}
+.cardFace {
+  background: linear-gradient(145deg, #fffdf8, #eee6d8);
+  color: #18252c;
+}
+.cardDisabled {
+  filter: saturate(0.68) brightness(0.8);
+}
+.cardBack {
+  padding: 0.35rem;
+  background: linear-gradient(145deg, #f9ddad, #d6823a);
+}
+.cardBackInset {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  border: 3px solid rgba(255, 245, 222, 0.9);
+  border-radius: 0.42rem;
+  background: repeating-linear-gradient(45deg, #24586a 0 8px, #1c4556 8px 16px);
+  color: #ffd9a0;
+  font:
+    800 2rem/1 var(--font-display),
+    sans-serif;
+  text-shadow: 0 2px #77391c;
+}
+.cardIndex {
+  position: absolute;
+  top: 0.3rem;
+  left: 0.32rem;
+  display: grid;
+  justify-items: center;
+  line-height: 0.84;
+  font-family: var(--font-display), sans-serif;
+}
+.cardIndex b {
+  font-size: 30cqw;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+.cardIndex i {
+  margin-top: 0.03em;
+  font-style: normal;
+  font-size: 19cqw;
+}
+/*
+ * The centre mark is the one that used to swallow the card.
+ *
+ * `padding-top` keeps it clear of the corner index rather than relying on the
+ * two never meeting by accident, and 34cqw puts it back to roughly the share
+ * of a full card it always looked right at — while a compact card, which used
+ * to get the same absolute glyph at 125% of its width, now gets 34% of its own.
+ */
+.cardSuit {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding-top: 8cqw;
+  font-size: 34cqw;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+.cardCompact .cardIndex {
+  top: 0.16rem;
+  left: 0.18rem;
+}
+.cardRed {
+  color: #c9423b;
+}
+
+.actionRail {
+  position: absolute;
+  right: max(1.25rem, env(safe-area-inset-right));
+  bottom: max(1rem, env(safe-area-inset-bottom));
+  z-index: 22;
+  display: flex;
+  gap: 0.45rem;
+}
+.actionRail button {
+  min-width: 0;
+  min-height: 2.75rem;
+  padding: 0.58rem 1rem;
+  border-radius: 0.85rem;
+  font-size: 0.86rem;
+  letter-spacing: 0.035em;
+}
+.actionRail button:disabled {
+  filter: grayscale(0.7) brightness(0.7);
+  opacity: 0.65;
+  cursor: default;
+  transform: none;
+}
+
+.fxLayer {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  pointer-events: none;
+  overflow: hidden;
+}
+.flyingCard {
+  position: absolute;
+  left: 0;
+  top: 0;
+  translate: -50% -50%;
+  opacity: 0;
+  will-change: transform, opacity;
+}
+.flightCardVisual {
+  position: relative;
+  z-index: 2;
+  display: block;
+  line-height: 0;
+  perspective: 800px;
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+.flightCardVisual .card {
+  transition: none;
+  box-shadow:
+    0 16px 18px rgba(3, 11, 15, 0.48),
+    0 10px 20px -8px rgba(3, 11, 15, 0.75),
+    inset 0 0 0 1px rgba(92, 48, 25, 0.18);
+}
+.cardTrail {
+  position: absolute;
+  z-index: 1;
+  left: 50%;
+  top: 50%;
+  width: clamp(6rem, 12vw, 10rem);
+  height: clamp(0.8rem, 1.6vw, 1.3rem);
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(81, 211, 220, 0.12) 24%,
+    rgba(255, 188, 91, 0.55) 67%,
+    rgba(255, 242, 207, 0.94) 100%
+  );
+  filter: blur(5px);
+  transform: translate(-100%, -50%) rotate(var(--flight-angle, 0rad));
+  transform-origin: 100% 50%;
+  opacity: 0;
+  box-shadow: 0 0 18px rgba(255, 188, 91, 0.38);
+}
+.cardTrail::before,
+.cardTrail::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  border-radius: inherit;
+  background: linear-gradient(90deg, transparent, rgba(255, 245, 218, 0.92));
+}
+.cardTrail::before {
+  top: -0.38rem;
+  width: 68%;
+  height: 0.13rem;
+}
+.cardTrail::after {
+  bottom: -0.34rem;
+  width: 48%;
+  height: 0.1rem;
+}
+.cardGlint {
+  position: absolute;
+  z-index: 3;
+  left: 50%;
+  top: 50%;
+  width: 1.6rem;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(circle, #fff 0 5%, #ffe0a3 14%, transparent 68%);
+  filter: blur(0.4px);
+  translate: -50% -50%;
+  opacity: 0;
+}
+.burst {
+  position: absolute;
+  left: 50%;
+  top: 44%;
+  display: grid;
+  place-items: center;
+  transform: translate(-50%, -50%);
+  opacity: 0;
+  will-change: transform, opacity;
+}
+.knockBurst strong {
+  padding: 0.45rem 1.2rem;
+  border: 0.35rem solid #f4c06f;
+  border-radius: 0.35rem;
+  background: #9e3b27;
+  color: #fff0cd;
+  font:
+    800 clamp(2.3rem, 7vw, 6rem)/1 var(--font-display),
+    sans-serif;
+  letter-spacing: 0.04em;
+  text-shadow: 0 4px #5a2118;
+  box-shadow: 0 15px 35px rgba(4, 14, 20, 0.75);
+  transform: rotate(-5deg);
+}
+.ripple {
+  position: absolute;
+  width: 8rem;
+  aspect-ratio: 1;
+  border: 5px solid rgba(255, 217, 160, 0.8);
+  border-radius: 50%;
+  animation: ripple 0.65s ease-out both;
+}
+.blitzBurst {
+  color: #fff2be;
+  text-align: center;
+  text-shadow:
+    0 5px 0 #a64222,
+    0 0 35px #ffc66f;
+}
+.blitzBurst b {
+  z-index: 2;
+  font:
+    800 clamp(6rem, 18vw, 15rem)/0.68 var(--font-display),
+    sans-serif;
+}
+.blitzBurst strong {
+  z-index: 2;
+  font:
+    800 clamp(2.2rem, 6vw, 5.2rem)/1 var(--font-display),
+    sans-serif;
+  letter-spacing: 0.1em;
+}
+.starburst {
+  position: absolute;
+  width: min(70vw, 45rem);
+  aspect-ratio: 1;
+  background: repeating-conic-gradient(
+    from 0deg,
+    rgba(255, 203, 98, 0.78) 0 7deg,
+    transparent 7deg 15deg
+  );
+  border-radius: 50%;
+  animation: spin 7s linear infinite;
+}
+.showdownBurst {
+  position: absolute;
+  left: -7rem;
+  top: -5rem;
+  display: grid;
+  justify-items: center;
+  opacity: 0;
+}
+.showdownBurst > div {
+  display: flex;
+}
+.showdownBurst .card {
+  margin-inline: -0.55rem;
+  transform: rotateY(0deg);
+}
+.showdownBurst strong {
+  margin-top: -0.35rem;
+  min-width: 3.2rem;
+  padding: 0.15rem 0.6rem;
+  border-radius: 999px;
+  background: #f0b054;
+  color: #3a1d0d;
+  font:
+    800 1.5rem/1 var(--font-display),
+    sans-serif;
+  box-shadow: 0 5px 12px rgba(0, 0, 0, 0.4);
+}
+.flyingChip {
+  position: absolute;
+  left: -1.5rem;
+  top: -1.5rem;
+  display: grid;
+  place-items: center;
+  width: 3rem;
+  aspect-ratio: 1;
+  border: 4px solid #9f4a22;
+  border-radius: 50%;
+  background: #ffd282;
+  color: #6b2b18;
+  font-weight: 800;
+  opacity: 0;
+}
+.turnPop {
+  position: absolute;
+  left: -2.5rem;
+  top: -2.5rem;
+  width: 5rem;
+  aspect-ratio: 1;
+  border: 4px solid var(--hearth-core);
+  border-radius: 1.5rem;
+  opacity: 0;
+  box-shadow: 0 0 25px var(--hearth-core);
+}
+.fxError {
+  position: absolute;
+  left: 50%;
+  top: 15%;
+  transform: translateX(-50%);
+  padding: 0.45rem 0.8rem;
+  border-radius: 0.6rem;
+  background: #7e2e25;
+  color: #fff1df;
+  font-weight: 700;
+}
+
+.statusPanel {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  transform: translate(-50%, -50%);
+  padding: 1.2rem 1.5rem;
+}
+.statusPanel span:not(.loadingPip) {
+  opacity: 0.78;
+}
+.loadingPip {
+  width: 0.85rem;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: var(--hearth-core);
+  box-shadow: 0 0 20px var(--hearth-glow);
+  animation: turnPulse 1s ease-in-out infinite;
+}
+
+@keyframes avatarBob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+@keyframes turnPulse {
+  0%,
+  100% {
+    transform: scale(0.96);
+    opacity: 0.55;
+  }
+  50% {
+    transform: scale(1.08);
+    opacity: 1;
+  }
+}
+
+@keyframes pileTurnGlow {
+  0%,
+  100% {
+    opacity: 0.62;
+    transform: scale(0.97);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.035);
+  }
+}
+
+@keyframes dealtCardSettle {
+  0% {
+    opacity: 0;
+    scale: 0.94;
+    translate: 0 -0.7rem;
+  }
+  62% {
+    opacity: 1;
+    scale: 1.045;
+    translate: 0 0.12rem;
+  }
+  100% {
+    opacity: 1;
+    scale: 1;
+    translate: 0 0;
+  }
+}
+
+@keyframes dealFanBloom {
+  0% {
+    scale: 0.97 1.02;
+    translate: 0 0.25rem;
+  }
+  58% {
+    scale: 1.035 0.985;
+    translate: 0 -0.12rem;
+  }
+  100% {
+    scale: 1;
+    translate: 0 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .piles[data-local-turn='true']::before {
+    animation: none;
+    opacity: 0.86;
+  }
+
+  .turnIndicator,
+  .localHand:has(.handCard[data-playable='true'])::after,
+  .opponentCards > *,
+  .localHand[data-deal-state='complete'] .handTrack {
+    animation: none;
+  }
+}
+@keyframes ripple {
+  from {
+    transform: scale(0.2);
+    opacity: 1;
+  }
+  to {
+    transform: scale(4);
+    opacity: 0;
+  }
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (orientation: portrait) {
+  .seat {
+    width: clamp(6rem, 24vw, 8.5rem);
+  }
+  .seat1 {
+    left: 3%;
+    top: 7.2rem;
+    translate: 0 0;
+  }
+  .seat2 {
+    top: 3.4rem;
+  }
+  .seat3 {
+    right: 3%;
+    top: 7.2rem;
+    translate: 0 0;
+  }
+  .seat4 {
+    left: 12%;
+    top: 6.2rem;
+  }
+  .seat5 {
+    left: 30%;
+    top: 3.4rem;
+  }
+  .seat6 {
+    right: 30%;
+    top: 3.4rem;
+  }
+  .seat7 {
+    right: 12%;
+    top: 6.2rem;
+  }
+  .seat1 .opponentCards {
+    transform: rotate(8deg);
+  }
+  .seat3 .opponentCards {
+    transform: rotate(-8deg);
+  }
+  .feltMark {
+    top: 48%;
+    font-size: clamp(4rem, 18vw, 9rem);
+  }
+  .piles {
+    top: 48%;
+    transform: translate(-50%, -50%) scale(0.85);
+  }
+  /* Portrait keeps the same real card size as short landscape. The fan step is
+     the part that compresses as the hand grows, so even a huge Wild hand stays
+     one fixed arc instead of turning into a miniature deck or a scroll strip. */
+  .localHand {
+    --hand-card-width: 7.2rem;
+    /* The fan's outermost cards rotate past the rail, so its ceiling stops
+       short of the screen to leave the arc its gutters. At full width the
+       corner cards sit on the bezel. */
+    --hand-rail-max: calc(100vw - 2rem);
+    /*
+     * Sink the lower half of the card behind the phone edge — but behind the
+     * SAFE edge, not the glass one. A flat -6rem measured the crop from the
+     * bottom of the screen, which is fine on a phone with a bezel and wrong on
+     * every modern one: the home indicator then sits on top of the exposed
+     * band and eats a third of it, leaving barely a rank corner showing.
+     *
+     * A 7.2rem card is 10.27rem tall and its top edge sits 11.5rem above the
+     * rail's own bottom, so offsetting the rail by the inset less 6.37rem puts
+     * exactly half the card above the safe edge on any device. On a notched
+     * iPhone that lifts the fan ~28px; on a phone with no inset it is within a
+     * few pixels of where it already was. Either way the readable half — rank
+     * corner, colour and the top of the central mark — is fully in the clear,
+     * and the card still reads as held from below rather than laid on the felt.
+     */
+    bottom: calc(env(safe-area-inset-bottom, 0px) - 6.37rem);
+    height: 12.4rem;
+  }
+  /* The fan's outermost cards rotate away from centre. The rail remains
+     overflow-visible so their readable tops and lifted play states survive. */
+  .localHand .card {
+    min-height: 2.75rem;
+  }
+  /* Both rails clear the fan by sitting above it. The fan spans the full width
+     of a phone, so there is no bottom corner left to dock them in — and the
+     owner's standing rule is that nothing overlaps. */
+  .ownerStatusRail {
+    align-items: stretch;
+    bottom: calc(env(safe-area-inset-bottom) + 13.2rem);
+    gap: 0.4rem;
+  }
+  .ownerCount,
+  .ownerLives {
+    min-width: 4.4rem;
+    padding: 0.3rem 0.55rem 0.36rem;
+  }
+  .ownerCount span,
+  .ownerLives > span:first-child {
+    font-size: 0.58rem;
+  }
+  .ownerCount strong {
+    margin-top: 0.08rem;
+    font-size: 1.3rem;
+  }
+  .ownerLives {
+    align-content: center;
+    width: 4.4rem;
+    padding-block: 0.42rem;
+  }
+  /* The pips hang below the pill elsewhere; down here that would drop them onto
+     the home indicator, so they ride inside it instead. */
+  .ownerLifePips {
+    position: static;
+    margin-top: 0.26rem;
+    translate: none;
+  }
+  .actionRail {
+    right: max(0.9rem, env(safe-area-inset-right));
+    bottom: calc(env(safe-area-inset-bottom) + 13.2rem);
+  }
+}
+
+@media (orientation: landscape) and (max-height: 560px) {
+  .seat2 {
+    top: 1.25rem;
+  }
+  .seat1,
+  .seat3 {
+    top: 44%;
+  }
+  /* Scaling the rail to fit a 390px-tall phone shrank the tap targets with it,
+     which is the one thing a hand cannot afford. Take the height out of the
+     card instead and dock it lower: the fan keeps its true size, so a card
+     stays as easy to hit here as anywhere. Spades proved this privately; it
+     belongs to every game. */
+  .localHand {
+    --hand-card-width: 7.2rem;
+    /* A short screen has no spare middle: sink the fan into the bottom edge
+       and let the cards crop — the top halves stay readable and tappable. */
+    bottom: -6rem;
+    transform: translateX(-50%);
+  }
+  .ownerStatusRail {
+    left: max(4.75rem, calc(env(safe-area-inset-left) + 3.75rem));
+    bottom: max(0.65rem, env(safe-area-inset-bottom));
+    gap: 0.35rem;
+    transform: scale(0.88);
+    transform-origin: bottom left;
+  }
+  .piles {
+    top: 50.5%;
+    transform: translate(-50%, -50%) scale(0.62);
+  }
+  .piles[data-local-turn='true']::before {
+    inset: -0.65rem -1rem;
+  }
+  .actionRail {
+    right: max(0.75rem, env(safe-area-inset-right));
+    bottom: max(0.65rem, env(safe-area-inset-bottom));
+    transform-origin: bottom right;
+  }
+}
+
+/* --- table menu modal ----------------------------------------------------- */
+
+.menuOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: max(0.75rem, env(safe-area-inset-top)) max(0.75rem, env(safe-area-inset-right))
+    max(0.75rem, env(safe-area-inset-bottom)) max(0.75rem, env(safe-area-inset-left));
+}
+
+.menuScrim {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  cursor: pointer;
+  background: radial-gradient(120% 90% at 50% 40%, rgba(9, 20, 27, 0.82), rgba(9, 20, 27, 0.6));
+  backdrop-filter: blur(3px);
+}
+
+.menuScrim:focus-visible {
+  outline: 3px solid var(--hearth-core);
+  outline-offset: -6px;
+}
+
+.menuPanel {
+  position: relative;
+  display: flex;
+  max-height: 100%;
+  flex-direction: column;
+  gap: 1.1rem;
+  width: min(24rem, calc(100% - 2.5rem));
+  padding: 1.75rem 1.6rem 1.6rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  text-align: center;
+}
+
+.menuTitle {
+  font-family: var(--font-display), sans-serif;
+  font-size: 1.45rem;
+  font-weight: 800;
+  color: var(--ink-bright, #f3e6cf);
+}
+
+.menuHint {
+  margin-top: -0.5rem;
+  font-size: 0.9rem;
+  color: var(--ink-dim);
+}
+
+.menuToggles {
+  display: flex;
+  justify-content: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.menuActions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+/* Doubled so this still wins if a table stylesheet loads after `btn-fat`. The
+   quit confirm used to flip amber or coral depending on chunk order. */
+.quitButton.quitButton {
+  border-color: rgba(94, 22, 22, 0.7);
+  background: linear-gradient(180deg, #f07167 0%, #c62828 48%, #8a1616 100%);
+  color: #3c0d05;
+  text-shadow: 0 1px 0 rgba(255, 226, 214, 0.55);
+}
+
+/* A phone held sideways has about 390px of height, and the menu — sound, calm
+   motion, background, card effects, music, and the three ways out — is taller
+   than that as a single column. It used to run off both ends of the screen with
+   Quit somewhere below the glass. Landscape gets two columns instead, with the
+   music transport and the actions spanning the full width. */
+@media (orientation: landscape) and (max-height: 560px) {
+  .menuPanel {
+    display: grid;
+    width: min(46rem, 100%);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+    gap: 0.5rem 1.25rem;
+    padding: 0.85rem 1.1rem 0.95rem;
+  }
+
+  .menuTitle {
+    grid-column: 1 / -1;
+    font-size: 1.15rem;
+  }
+
+  .menuHint {
+    grid-column: 1 / -1;
+    margin-top: 0;
+    font-size: 0.82rem;
+  }
+
+  .menuToggles,
+  .menuSectionWide,
+  .menuActions {
+    grid-column: 1 / -1;
+  }
+
+  .menuActions {
+    flex-direction: row;
+    justify-content: center;
+  }
+
+  .menuActions > :global(.btn-fat) {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  .menuPanel :global(.btn-fat) {
+    padding-block: 0.45rem;
+    font-size: 0.85rem;
+  }
+}

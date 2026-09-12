@@ -1,0 +1,23 @@
+{
+  "webdoor_version": "1.0",
+  "game": {
+    "id": "parlour",
+    "name": "Parlour",
+    "version": "1.0.0",
+    "author": "Braedon Saunders (canonical Parlour); Crossroads adapters",
+    "description": "A full card room: Klondike, FreeCell, Spider, Pyramid, Golf, TriPeaks, Hearts, Spades, Euchre, Oh Hell, Pinochle, Scopa, Crazy Eights, Wild, President, Palace, Durak, Spite & Malice, Rat Screw, Gin Rummy, Cribbage, Blitz, and Poker — solo or against bots, with your progress saved.",
+    "entry_point": "index.php",
+    "icon": "icon.png"
+  },
+  "requirements": {
+    "min_host_version": "1.0"
+  },
+  "experience": {
+    "group": "parlour",
+    "surface": "web",
+    "primary": true
+  },
+  "multiplayer": {
+    "enabled": false
+  }
+}

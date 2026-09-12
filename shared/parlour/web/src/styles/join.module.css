@@ -1,0 +1,40 @@
+.codeInput {
+  width: min(20rem, calc(100vw - 3rem));
+  height: 5.4rem;
+  padding: 0 1rem 0 1.9rem;
+  border-radius: var(--radius-chunky);
+  border: 3px dashed rgba(175, 218, 228, 0.35);
+  background: rgba(21, 40, 51, 0.62);
+  font-family: var(--font-display), sans-serif;
+  font-size: 2.6rem;
+  font-weight: 800;
+  letter-spacing: 0.9rem;
+  text-align: center;
+  text-transform: uppercase;
+  color: var(--ink);
+  caret-color: var(--hearth-core);
+  outline: none;
+  transition:
+    border-color var(--dur-tap) ease,
+    background var(--dur-tap) ease,
+    transform var(--dur-feedback) var(--ease-pop);
+}
+
+.codeInput[data-filled='true'],
+.codeInput:focus {
+  border-style: solid;
+  border-color: var(--hearth-glow);
+  background: linear-gradient(180deg, rgba(246, 189, 122, 0.16), rgba(21, 40, 51, 0.72));
+  text-shadow: var(--shadow-glow);
+  transform: translateY(-3px);
+}
+
+.codeInput:focus-visible {
+  outline: 3px solid var(--hearth-core);
+  outline-offset: 2px;
+}
+
+.codeInput:disabled {
+  opacity: 0.45;
+  cursor: default;
+}

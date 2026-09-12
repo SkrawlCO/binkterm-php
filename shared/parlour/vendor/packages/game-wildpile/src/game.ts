@@ -1,0 +1,1808 @@
+import {
+  advanceSeat,
+  Fx,
+  addTo,
+  defineConfig,
+  dealOrder,
+  drawFrom,
+  isVeilHandle,
+  veilSupport,
+  VEILED_OPEN_PENDING,
+  type AutoMove,
+  type BotPolicy,
+  type CardId,
+  type ConfigFieldValue,
+  type DeckDef,
+  type Flow,
+  type GameDef,
+  type LegalMove,
+  type MatchResult,
+  type Move,
+  type MoveCtx,
+  type PhaseState,
+  type RuleError,
+  type SeatId,
+  recycleSpentPile,
+} from '@parlour/engine';
+import { wildpileHowToPlay } from './howto';
+import {
+  WILDPILE_BASE_CARD_IDS,
+  WILDPILE_COLORS,
+  isWildKind,
+  sameWildpileFace,
+  wildpileDeck,
+  wildpileFace,
+  type WildpileColor,
+  type WildpileKind,
+} from './deck';
+
+export interface WildpileRules {
+  /** Answer a Draw Two with another Draw Two and pass the pile along. */
+  stackDrawTwo: boolean;
+  /** Same, for Draw Four. */
+  stackDrawFour: boolean;
+  /** Slam an exact face match out of turn. */
+  jumpIn: boolean;
+  /** Keep drawing until something is playable instead of drawing exactly one. */
+  drawToMatch: boolean;
+  /** A drawn card that can be played must be played. */
+  forcePlay: boolean;
+  /** Sevens swap hands with a chosen seat; zeroes rotate every hand one seat. */
+  sevenZero: boolean;
+  /** Deal in the Wild Swap Hands and Wild Shuffle Hands cards. */
+  swapCards: boolean;
+  /** The seat facing a Draw Four may call it a bluff before picking it up. */
+  challengeDrawFour: boolean;
+  /** Cards dealt to each seat. */
+  handSize: number;
+  /** Seconds allowed for one visible decision before the authority plays it. */
+  turnTimeSeconds: number;
+  /** Minutes before the deal is ranked with cards still in hand. */
+  matchTimeMinutes: number;
+  [key: string]: ConfigFieldValue;
+}
+
+export interface WildpileInterrupt {
+  resumeTurn: SeatId;
+  card: CardId;
+  candidates: SeatId[];
+}
+
+/**
+ * An unresolved Draw Four. A Draw Four is only an honest play when the seat had
+ * nothing in the live colour, so the seat facing the pickup may call the bluff:
+ * proved right, the accused takes the cards instead; proved wrong, the
+ * challenger takes them plus {@link CHALLENGE_PENALTY}.
+ */
+export interface WildpileChallenge {
+  /** Seat that played the Draw Four. */
+  accused: SeatId;
+  /** The only seat that may challenge — the one facing the pickup. */
+  challenger: SeatId;
+  /** Colour that was live when the card was played; what makes it a bluff. */
+  colorAtPlay: WildpileColor;
+  /**
+   * The accused's hand as it stood when the Draw Four left it — the cards the
+   * accusation is actually about, before any later pickup topped the hand back
+   * up. Under Veil these are still handles, and the answer is not knowable from
+   * them until the table turns them over.
+   */
+  handAtPlay: CardId[];
+  /**
+   * True once the challenger has called it. The table settles the answer from
+   * {@link handAtPlay} on the very next step — under Veil, after the room has
+   * opened those cards in public.
+   */
+  called: boolean;
+  /** Pickup riding on the answer, before any challenge penalty. */
+  amount: number;
+}
+
+export interface WildpileState {
+  seats: number;
+  hands: CardId[][];
+  stock: CardId[];
+  discard: CardId[];
+  turn: SeatId;
+  direction: 1 | -1;
+  activeColor: WildpileColor | null;
+  pendingDraw: number;
+  pendingKind: 'draw-two' | 'wild-draw-four' | null;
+  awaitingColor: SeatId | null;
+  /** Seat that must nominate a hand to swap with (Wild Swap Hands, or a seven). */
+  awaitingSwap: SeatId | null;
+  interrupt: WildpileInterrupt | null;
+  /**
+   * Card the seat just drew and may still play. While set the turn stays put:
+   * the seat either plays it or passes (unless `forcePlay` removes the choice).
+   */
+  drawnCard: CardId | null;
+  /** Open Draw Four accusation window, or null when nothing is contestable. */
+  challenge: WildpileChallenge | null;
+  /**
+   * Seats that have armed last-card protection while holding two cards. Playing
+   * down to one without it costs {@link LAST_CARD_PENALTY}; drawing disarms it.
+   */
+  calledLastCard: boolean[];
+  /**
+   * Seat that reached one card without calling it — exposed, but only until
+   * someone notices. Any other seat may `catchLastCard` for the penalty; the
+   * exposed seat may still save themself with a late call. The window closes
+   * quietly when the table's next play, draw, or pass lands.
+   */
+  catchable: SeatId | null;
+  winner: SeatId | null;
+  /** Filled only by the replay-logged match clock expiry. */
+  timeoutRankings: SeatId[] | null;
+  rules: WildpileRules;
+  /**
+   * True when the round is dealt under Veil: hands and stock hold opaque
+   * handles. A card becomes readable the moment it is played, so ordinary play
+   * needs no rule changes — only jump-in does, because the table can no longer
+   * tell who is holding a match. See apps/web/src/lib/multiplayer/veil.
+   */
+  veiled: boolean;
+}
+
+/** Cards drawn by a seat that reaches one card without arming protection. */
+export const LAST_CARD_PENALTY = 2;
+
+/** Extra cards a seat takes on top of the pickup for a challenge that fails. */
+export const CHALLENGE_PENALTY = 2;
+
+/** Presentation offset so a forced pickup lands after the card that caused it. */
+const FORCED_DRAW_DELAY_MS = 300;
+
+/** Beat held for the accusation to be read before the cards move. */
+const CHALLENGE_REVEAL_MS = 900;
+
+export const wildpileConfig = defineConfig<WildpileRules>(
+  [
+    {
+      key: 'handSize',
+      kind: 'int',
+      label: 'Cards dealt',
+      min: 5,
+      max: 10,
+      default: 7,
+      group: 'The deal',
+      help: 'How many cards each seat starts with.',
+    },
+    {
+      key: 'turnTimeSeconds',
+      kind: 'int',
+      label: 'Seconds per turn',
+      min: 5,
+      max: 60,
+      default: 15,
+      advanced: true,
+      group: 'Timing',
+      help: 'When the clock runs out, the table makes a legal play for that seat.',
+    },
+    {
+      key: 'matchTimeMinutes',
+      kind: 'int',
+      label: 'Match minutes',
+      min: 2,
+      max: 15,
+      default: 5,
+      advanced: true,
+      group: 'Timing',
+      help: 'At zero, the player with the lightest remaining hand wins.',
+    },
+    {
+      key: 'stackDrawTwo',
+      kind: 'toggle',
+      label: 'Stack Draw Twos',
+      default: true,
+      group: 'Penalties',
+      help: 'Answer a pickup with a Draw Two of your own — matching the colour in play — and pass the growing pile along.',
+    },
+    {
+      key: 'stackDrawFour',
+      kind: 'toggle',
+      label: 'Stack Draw Fours',
+      default: true,
+      group: 'Penalties',
+      help: 'Same for Draw Fours, which go on any pile at all. Penalties can climb fast.',
+    },
+    {
+      key: 'jumpIn',
+      kind: 'toggle',
+      label: 'Jump in',
+      default: true,
+      advanced: true,
+      group: 'House rules',
+      help: 'Holding the exact card just played? Slam it down out of turn.',
+    },
+    {
+      key: 'drawToMatch',
+      kind: 'toggle',
+      label: 'Draw until playable',
+      default: false,
+      advanced: true,
+      group: 'House rules',
+      help: 'Keep drawing until something matches instead of drawing one card.',
+    },
+    {
+      key: 'forcePlay',
+      kind: 'toggle',
+      label: 'Force play',
+      default: false,
+      advanced: true,
+      group: 'House rules',
+      help: 'A card you drew that can be played must be played.',
+    },
+    {
+      key: 'sevenZero',
+      kind: 'toggle',
+      label: 'Sevens and zeroes',
+      default: false,
+      advanced: true,
+      group: 'House rules',
+      help: 'Play a 7 to swap hands with someone; play a 0 to pass every hand along.',
+    },
+    {
+      key: 'challengeDrawFour',
+      kind: 'toggle',
+      label: 'Challenge Draw Fours',
+      default: true,
+      advanced: true,
+      group: 'House rules',
+      help: 'A Draw Four is only honest with nothing in the live colour. Call the bluff: win and they take the cards, lose and you take two more.',
+    },
+    {
+      key: 'swapCards',
+      kind: 'toggle',
+      label: 'Swap-hand wilds',
+      default: false,
+      advanced: true,
+      group: 'The deck',
+      help: 'Deal in Wild Swap Hands and Wild Shuffle Hands.',
+    },
+  ],
+  [
+    {
+      id: 'classic',
+      label: 'Classic Wildpile',
+      values: { stackDrawTwo: false, stackDrawFour: false, jumpIn: false },
+    },
+    {
+      id: 'party',
+      label: 'Party Pile',
+      values: { stackDrawTwo: true, stackDrawFour: true, jumpIn: true },
+    },
+    {
+      id: 'houseRules',
+      label: 'House Rules',
+      values: {
+        stackDrawTwo: true,
+        stackDrawFour: true,
+        jumpIn: true,
+        drawToMatch: true,
+        forcePlay: true,
+        sevenZero: true,
+        swapCards: true,
+        challengeDrawFour: true,
+      },
+    },
+  ],
+);
+
+function isRealCard(card: CardId): boolean {
+  return !isVeilHandle(card);
+}
+
+/**
+ * The swap wilds ship with the deck but only join the shuffle when the table
+ * asks for them, so the ordinary pile stays exactly 112 cards.
+ */
+function wildpileDealtDeck(config: WildpileRules): DeckDef {
+  return config.swapCards ? wildpileDeck : { ...wildpileDeck, cardIds: WILDPILE_BASE_CARD_IDS };
+}
+
+function error(code: string, message: string): RuleError {
+  return { code, message };
+}
+
+function payloadCard(payload: unknown): CardId | null {
+  const card = (payload as { card?: unknown } | undefined)?.card;
+  return typeof card === 'string' ? card : null;
+}
+
+function payloadColor(payload: unknown): WildpileColor | null {
+  const color = (payload as { color?: unknown } | undefined)?.color;
+  return WILDPILE_COLORS.includes(color as WildpileColor) ? (color as WildpileColor) : null;
+}
+
+function payloadSeat(payload: unknown): SeatId | null {
+  const seat = (payload as { seat?: unknown } | undefined)?.seat;
+  return typeof seat === 'number' && Number.isInteger(seat) ? seat : null;
+}
+
+function hand(state: WildpileState, seat: SeatId): CardId[] {
+  return state.hands[seat] ?? [];
+}
+
+function nextSeat(state: WildpileState, from: SeatId, steps = 1): SeatId {
+  return advanceSeat(from, state.seats, steps, state.direction);
+}
+
+function topCard(state: WildpileState): CardId {
+  const card = state.discard[0];
+  if (!card) throw new Error('wildpile discard cannot be empty');
+  return card;
+}
+
+/** True when this table lets a pickup of that kind be passed along at all. */
+function stackable(state: WildpileState, kind: WildpileKind): boolean {
+  if (kind === 'draw-two') return state.rules.stackDrawTwo;
+  if (kind === 'wild-draw-four') return state.rules.stackDrawFour;
+  return false;
+}
+
+/**
+ * Answering a pending pickup with one of your own.
+ *
+ * The pile is a pile: a Draw Four is a wild and joins anything, and a Draw Two
+ * joins when it matches the colour in play — the same test every other coloured
+ * card passes. This used to demand the *same* card kind, so a red Draw Two could
+ * not answer a Draw Four that had just called red, which is the mixed pile
+ * everybody plays at a real table.
+ *
+ * Each half is still gated by its own house rule, and mixing needs both: a table
+ * that has said Draw Fours must be taken should not see one answered by a Draw
+ * Two either.
+ */
+function canStack(state: WildpileState, card: CardId): boolean {
+  const pending = state.pendingKind;
+  if (pending === null) return false;
+  const face = wildpileFace(card);
+  const kind = face.meta.kind;
+  if (!stackable(state, kind)) return false;
+  if (kind === pending) return true;
+  if (!stackable(state, pending)) return false;
+  return kind === 'wild-draw-four' || face.color === state.activeColor;
+}
+
+/**
+ * What playing this card adds to a pickup pile — four for a Draw Four, two for
+ * a Draw Two, nothing for anything else. Exported because the table has to say
+ * what stacking would cost the next seat, and a mixed pile makes that a
+ * question about the card in hand rather than about the pile.
+ */
+export function wildpileDrawAmount(card: CardId): number {
+  const kind = wildpileFace(card).meta.kind;
+  return kind === 'wild-draw-four' ? 4 : kind === 'draw-two' ? 2 : 0;
+}
+
+function canPlay(state: WildpileState, card: CardId): boolean {
+  const face = wildpileFace(card);
+  if (state.pendingDraw > 0) return canStack(state, card);
+  if (isWildKind(face.meta.kind)) return true;
+  if (face.color === state.activeColor) return true;
+  const top = wildpileFace(topCard(state));
+  if (face.meta.kind === 'number' && top.meta.kind === 'number') {
+    return face.meta.value === top.meta.value;
+  }
+  return face.meta.kind === top.meta.kind;
+}
+
+/** Sevens swap with one seat; zeroes pass every hand along. Both are opt-in. */
+function sevenZeroEffect(state: WildpileState, card: CardId): 'swap' | 'rotate' | null {
+  if (!state.rules.sevenZero) return null;
+  const meta = wildpileFace(card).meta;
+  if (meta.kind !== 'number') return null;
+  if (meta.value === 7) return 'swap';
+  if (meta.value === 0) return 'rotate';
+  return null;
+}
+
+/** Every hand moves one seat in the direction of play. */
+function rotateHands(state: WildpileState, ctx: MoveCtx): WildpileState {
+  const transfers: { card: CardId; from: SeatId; to: SeatId }[] = [];
+  const longestHand = Math.max(...state.hands.map((cards) => cards.length));
+  for (let index = 0; index < longestHand; index++) {
+    for (let from = 0; from < state.seats; from++) {
+      const card = state.hands[from]?.[index];
+      if (card) transfers.push({ card, from, to: nextSeat(state, from) });
+    }
+  }
+  const settledAt = emitHandTransfers(transfers, ctx);
+  const hands = state.hands.map((_, seat) => {
+    // The seat that *gives* to `seat` is one step against the play direction.
+    const from = (seat - state.direction + state.seats) % state.seats;
+    return (state.hands[from] ?? []).slice();
+  });
+  ctx.fx.emit('wildpile.rotate', { direction: state.direction }, settledAt);
+  return { ...state, hands, calledLastCard: state.calledLastCard.map(() => false) };
+}
+
+function swapHands(state: WildpileState, a: SeatId, b: SeatId, ctx: MoveCtx): WildpileState {
+  const transfers: { card: CardId; from: SeatId; to: SeatId }[] = [];
+  const left = state.hands[a] ?? [];
+  const right = state.hands[b] ?? [];
+  for (let index = 0; index < Math.max(left.length, right.length); index++) {
+    const fromA = left[index];
+    const fromB = right[index];
+    if (fromA) transfers.push({ card: fromA, from: a, to: b });
+    if (fromB) transfers.push({ card: fromB, from: b, to: a });
+  }
+  const settledAt = emitHandTransfers(transfers, ctx);
+  const hands = state.hands.map((cards, seat) => {
+    if (seat === a) return (state.hands[b] ?? []).slice();
+    if (seat === b) return (state.hands[a] ?? []).slice();
+    return cards.slice();
+  });
+  ctx.fx.emit(
+    'wildpile.swap',
+    { seat: a, target: b, amount: left.length, targetAmount: right.length },
+    settledAt,
+  );
+  return {
+    ...state,
+    hands,
+    calledLastCard: state.calledLastCard.map((armed, seat) =>
+      seat === a || seat === b ? false : armed,
+    ),
+  };
+}
+
+/** Card-by-card flights make a hand exchange readable without dragging out a large hand. */
+function emitHandTransfers(
+  transfers: readonly { card: CardId; from: SeatId; to: SeatId }[],
+  ctx: MoveCtx,
+): number {
+  const lastIndex = Math.max(0, transfers.length - 1);
+  const stagger = lastIndex === 0 ? 0 : Math.min(62, Math.floor(620 / lastIndex));
+  transfers.forEach((transfer, index) => {
+    ctx.fx.emit(
+      'wildpile.transfer',
+      {
+        card: transfer.card,
+        from: `hand:${transfer.from}`,
+        to: `hand:${transfer.to}`,
+        dur: 240,
+      },
+      index * stagger,
+    );
+  });
+  return lastIndex * stagger + 240;
+}
+
+/** Pool every hand, shuffle, and redeal round-robin from the next seat. */
+function shuffleHands(state: WildpileState, from: SeatId, ctx: MoveCtx): WildpileState {
+  const pool = ctx.rng.shuffle(state.hands.flat());
+  const hands: CardId[][] = Array.from({ length: state.seats }, () => []);
+  pool.forEach((card, index) => {
+    const seat = nextSeat(state, from, index + 1);
+    hands[seat]?.push(card);
+  });
+  ctx.fx.emit('wildpile.shuffle-hands', { seat: from });
+  return { ...state, hands, calledLastCard: state.calledLastCard.map(() => false) };
+}
+
+/**
+ * Records what the seat was holding when they played a Draw Four, so the
+ * accusation can be settled later without re-deriving history.
+ *
+ * The hand is kept rather than the verdict. Under Veil it is a list of handles
+ * and the verdict cannot be computed at all yet — the room turns those cards
+ * face up if and only if someone actually calls the bluff, and the answer is
+ * read off them then. A veiled table used to skip the window entirely, which
+ * quietly took the whole rule away from every online game.
+ */
+function openChallenge(
+  state: WildpileState,
+  accused: SeatId,
+  handAtPlay: readonly CardId[],
+  amount: number,
+): WildpileChallenge | null {
+  if (!state.rules.challengeDrawFour) return null;
+  const colorAtPlay = state.activeColor;
+  if (!colorAtPlay) return null;
+  return {
+    accused,
+    challenger: nextSeat(state, accused),
+    colorAtPlay,
+    handAtPlay: [...handAtPlay],
+    called: false,
+    amount,
+  };
+}
+
+/**
+ * The cards that make the play a bluff: the accused's own hand, in the colour
+ * that was live when they claimed to have nothing.
+ *
+ * Only the *live colour* counts — other wilds, and matching numbers or symbols
+ * in other colours, are not alternatives the rule cares about. A hand still
+ * holding handles cannot answer, which is why {@link settleChallenge} refuses
+ * to run until the room has opened them.
+ */
+function challengeProof(challenge: WildpileChallenge): CardId[] {
+  return challenge.handAtPlay.filter((held) => wildpileFace(held).color === challenge.colorAtPlay);
+}
+
+/** Handles the table has to turn over before a called bluff can be answered. */
+function challengeOpens(state: WildpileState): { handles: CardId[]; move: string } | null {
+  const challenge = state.challenge;
+  if (!challenge?.called) return null;
+  const handles = challenge.handAtPlay.filter(isVeilHandle);
+  return handles.length > 0 ? { handles, move: 'settleChallenge' } : null;
+}
+
+/** The seat on the clock may call the Draw Four they are staring at a bluff. */
+function canChallenge(state: WildpileState, seat: SeatId): boolean {
+  return (
+    state.challenge !== null &&
+    !state.challenge.called &&
+    state.challenge.challenger === seat &&
+    state.pendingDraw > 0 &&
+    state.awaitingColor === null
+  );
+}
+
+function exactJumpCards(state: WildpileState, seat: SeatId): CardId[] {
+  const target = state.interrupt?.card;
+  if (!target) return [];
+  return hand(state, seat).filter((card) => sameWildpileFace(card, target));
+}
+
+/**
+ * An open catch window makes the whole table acting seats — primary actor
+ * first, so every driver that takes "the" actor keeps taking the same one.
+ */
+function withCatchWindow(
+  state: WildpileState,
+  phase: { phase: string; actor: SeatId | null; round: number },
+) {
+  if (state.catchable === null || phase.actor === null) return phase;
+  const actors = [phase.actor];
+  for (let seatIndex = 0; seatIndex < state.seats; seatIndex += 1) {
+    if (seatIndex !== phase.actor) actors.push(seatIndex);
+  }
+  return { ...phase, actors };
+}
+
+function phaseFor(state: WildpileState) {
+  if (state.winner !== null || state.timeoutRankings !== null) {
+    return { phase: 'ended', actor: null, round: 1 };
+  }
+  // A called bluff is the table's business, not any seat's: the answer comes off
+  // the accused's own cards, which the room may still be turning over. Nobody
+  // acts in between, or the challenger would be offered the call twice.
+  if (state.challenge?.called) {
+    return { phase: 'challenge-proof', actor: null, round: 1 };
+  }
+  if (state.awaitingColor !== null) {
+    return withCatchWindow(state, { phase: 'choose-color', actor: state.awaitingColor, round: 1 });
+  }
+  if (state.awaitingSwap !== null) {
+    return withCatchWindow(state, { phase: 'choose-target', actor: state.awaitingSwap, round: 1 });
+  }
+  const interrupter = state.interrupt?.candidates[0];
+  if (interrupter !== undefined) {
+    return withCatchWindow(state, { phase: 'interrupt', actor: interrupter, round: 1 });
+  }
+  return withCatchWindow(state, { phase: 'play', actor: state.turn, round: 1 });
+}
+
+/**
+ * Seats that may jump in on `card`, polled in the *current* play direction so a
+ * reverse re-orders the queue it just created. Seats the card passed over are
+ * excluded: a skip that the skipped seat can jump back into is not a skip.
+ */
+function jumpCandidates(
+  state: WildpileState,
+  card: CardId,
+  playingSeat: SeatId,
+  passedOver: readonly SeatId[],
+): SeatId[] {
+  if (!state.rules.jumpIn) return [];
+  const kind = wildpileFace(card).meta.kind;
+  if (isWildKind(kind)) return [];
+  const candidates: SeatId[] = [];
+  for (let offset = 1; offset < state.seats; offset++) {
+    const seat = nextSeat(state, playingSeat, offset);
+    if (passedOver.includes(seat)) continue;
+    // Under Veil the table cannot tell who is holding a match, so the window
+    // opens to everyone and each seat answers for itself: play the exact match
+    // (which opens the card) or decline. Clients auto-decline when their own
+    // resolved hand has nothing, so this costs a round trip, not a prompt.
+    if (state.veiled || hand(state, seat).some((held) => sameWildpileFace(held, card))) {
+      candidates.push(seat);
+    }
+  }
+  return candidates;
+}
+
+function withInterrupt(
+  state: WildpileState,
+  card: CardId,
+  playingSeat: SeatId,
+  resumeTurn: SeatId,
+  passedOver: readonly SeatId[],
+): WildpileState {
+  const candidates = jumpCandidates(state, card, playingSeat, passedOver);
+  return {
+    ...state,
+    /*
+     * The turn belongs to the seat the card passed it to, even while a jump-in
+     * window is open over the top of it.
+     *
+     * A candidate is being asked a question, not handed the turn — and under
+     * Veil that question goes to every seat, because the table cannot see who
+     * holds a match. Moving `turn` down the queue made a single play look like
+     * the table hopping from player to player, ringing and highlighting each
+     * one, before settling on the seat that was next all along. Only an actual
+     * jump moves the turn, and that goes through `playResolved` like any other
+     * play. `interrupt.candidates[0]` is who the window is waiting on;
+     * `phaseFor` hands them the decision without pretending it is their turn.
+     */
+    turn: resumeTurn,
+    interrupt: candidates.length > 0 ? { resumeTurn, card, candidates } : null,
+  };
+}
+
+function validatePlayable(state: WildpileState, seat: SeatId, payload: unknown): true | RuleError {
+  const card = payloadCard(payload);
+  if (!card) return error('bad-payload', 'expected {card}');
+  if (!hand(state, seat).includes(card)) return error('not-in-hand', `${card} is not in the hand`);
+  if (state.awaitingColor !== null) return error('color-required', 'choose a color first');
+  if (state.awaitingSwap !== null) return error('target-required', 'choose a hand first');
+  // A card just drawn is the only thing that seat may play this turn.
+  if (state.drawnCard !== null && state.turn === seat && card !== state.drawnCard) {
+    return error('play-the-drawn-card', 'only the card you drew can be played now');
+  }
+
+  if (state.interrupt) {
+    if (state.interrupt.candidates[0] !== seat)
+      return error('not-interrupter', 'seat cannot jump in');
+    return exactJumpCards(state, seat).includes(card)
+      ? true
+      : error('not-exact-match', 'jump-in requires an exact face match');
+  }
+
+  if (state.turn !== seat) return error('not-your-turn', 'seat is not taking this turn');
+  return canPlay(state, card) ? true : error('card-not-playable', `${card} cannot be played`);
+}
+
+/**
+ * A Drop All card takes every other card of its colour with it. The action card
+ * remains on top; swept action cards are only cargo and never fire themselves.
+ */
+export function wildpileDiscardAllCards(cards: readonly CardId[], played: CardId): CardId[] {
+  const face = wildpileFace(played);
+  if (face.meta.kind !== 'discard-all' || !face.color) return [played];
+  return [
+    played,
+    ...cards.filter((card) => card !== played && wildpileFace(card).color === face.color),
+  ];
+}
+
+/** Keep even a huge colour dump inside one authored burst. */
+const DISCARD_ALL_STEP_MS = 65;
+const DISCARD_ALL_SPAN_MAX_MS = 650;
+
+function discardAllStep(count: number): number {
+  return Math.min(DISCARD_ALL_STEP_MS, DISCARD_ALL_SPAN_MAX_MS / Math.max(1, count - 1));
+}
+
+function playResolved(
+  state: WildpileState,
+  seat: SeatId,
+  card: CardId,
+  ctx: MoveCtx,
+): WildpileState {
+  const face = wildpileFace(card);
+  const discarded = wildpileDiscardAllCards(hand(state, seat), card);
+  const swept = discarded.slice(1);
+  const discardAll = face.meta.kind === 'discard-all';
+  const stepMs = discardAllStep(discarded.length);
+  const actionDelayMs = discardAll ? swept.length * stepMs : 0;
+  const hands = state.hands.map((cards, index) =>
+    index === seat ? cards.filter((held) => !discarded.includes(held)) : cards.slice(),
+  );
+
+  if (discardAll) {
+    swept.forEach((sweptCard, index) =>
+      ctx.fx.emit(
+        Fx.DiscardCard,
+        { card: sweptCard, seat, to: 'discard', passive: true },
+        index * stepMs,
+      ),
+    );
+    ctx.fx.emit(Fx.DiscardCard, { card, seat, to: 'discard' }, actionDelayMs);
+    ctx.fx.emit(
+      'wildpile.discard-all',
+      { seat, color: face.color, amount: discarded.length },
+      actionDelayMs,
+    );
+  } else {
+    ctx.fx.emit(Fx.DiscardCard, { card, seat, to: 'discard' });
+  }
+
+  const reachedLastCard = hands[seat]?.length === 1;
+  const protectedSeat = state.calledLastCard[seat] ?? false;
+  if (reachedLastCard && protectedSeat) ctx.fx.emit('wildpile.last-card', { seat });
+
+  let next: WildpileState = {
+    ...state,
+    hands,
+    discard: discardAll ? [card, ...swept, ...state.discard] : addTo(state.discard, card),
+    activeColor: face.color ?? null,
+    interrupt: null,
+    drawnCard: null,
+    // Any open accusation dies with the card that answers it; a fresh Draw Four
+    // below opens its own.
+    challenge: null,
+    calledLastCard: state.calledLastCard.map((armed, index) => (index === seat ? false : armed)),
+    winner: hands[seat]?.length === 0 ? seat : null,
+    // Reaching one card unprotected is no longer punished by the table itself:
+    // it quietly opens a window, and it costs two only if a *player* calls it.
+    // Any previous window dies with this play — the moment has passed.
+    catchable: reachedLastCard && !protectedSeat ? seat : null,
+  };
+
+  if (isWildKind(face.meta.kind)) {
+    if (face.meta.kind === 'wild-draw-four') {
+      next = {
+        ...next,
+        pendingDraw: state.pendingDraw + 4,
+        pendingKind: 'wild-draw-four',
+        // `hands` is the hand as it stood when the card left it, before any
+        // last-card penalty topped it back up — that is what was bluffed with.
+        challenge: openChallenge(state, seat, hands[seat] ?? [], state.pendingDraw + 4),
+      };
+      ctx.fx.emit('wildpile.draw-stack', { seat, amount: next.pendingDraw });
+    }
+    // A hand already emptied has won; redealing into it would un-win the match.
+    if (face.meta.kind === 'wild-shuffle' && next.winner === null) {
+      next = shuffleHands(next, seat, ctx);
+    }
+    ctx.fx.emit('wildpile.wild', { card, seat });
+    // Every wild picks a color first; Swap Hands then nominates a hand.
+    return next.winner === null ? { ...next, awaitingColor: seat, turn: seat } : next;
+  }
+
+  const sevenZero = next.winner === null ? sevenZeroEffect(next, card) : null;
+  if (sevenZero === 'rotate') next = rotateHands(next, ctx);
+
+  let steps = 1;
+  if (face.meta.kind === 'skip') {
+    steps = 2;
+  } else if (face.meta.kind === 'reverse') {
+    next = { ...next, direction: state.direction === 1 ? -1 : 1 };
+    // Head-to-head has no ring to turn around, so a reverse lands as a skip.
+    steps = state.seats === 2 ? 2 : 1;
+    ctx.fx.emit('wildpile.reverse', { direction: next.direction, seat });
+  } else if (face.meta.kind === 'draw-two') {
+    next = {
+      ...next,
+      pendingDraw: state.pendingDraw + 2,
+      pendingKind: 'draw-two',
+    };
+    ctx.fx.emit('wildpile.draw-stack', { seat, amount: next.pendingDraw });
+  }
+
+  // Seats the card stepped over. They lose the turn *and* the jump-in window,
+  // otherwise the skipped seat could simply jump back in and undo the card.
+  const passedOver: SeatId[] = [];
+  for (let offset = 1; offset < steps; offset++) passedOver.push(nextSeat(next, seat, offset));
+  if (face.meta.kind === 'skip') {
+    ctx.fx.emit('wildpile.skip', { seat: passedOver[0] ?? seat });
+  }
+
+  const resumeTurn = nextSeat(next, seat, steps);
+  if (next.winner !== null) return { ...next, turn: resumeTurn };
+
+  if (sevenZero === 'swap') {
+    // Head-to-head there is only one hand to take, so skip the pointless prompt.
+    if (next.seats === 2) {
+      next = swapHands(next, seat, nextSeat(next, seat), ctx);
+      ctx.fx.emit(Fx.TurnRing, { seat: resumeTurn }, actionDelayMs + 80);
+      return { ...next, turn: resumeTurn };
+    }
+    return { ...next, awaitingSwap: seat, turn: seat };
+  }
+
+  const interrupted = withInterrupt(next, card, seat, resumeTurn, passedOver);
+  // The ring names the seat that has the turn. With a jump-in window open the
+  // table is still asking whether anyone takes this card back, so the ring
+  // waits for the window to close rather than firing once per seat polled.
+  if (interrupted.interrupt === null) {
+    ctx.fx.emit(Fx.TurnRing, { seat: interrupted.turn }, actionDelayMs + 80);
+  }
+  return interrupted;
+}
+
+const playCard: Move<WildpileState> = {
+  validate: validatePlayable,
+  apply(state, seat, payload, ctx) {
+    const card = payloadCard(payload);
+    if (!card) throw new Error('playCard apply requires a card');
+    return playResolved(state, seat, card, ctx);
+  },
+};
+
+function replenish(state: WildpileState, ctx: MoveCtx): WildpileState {
+  if (state.stock.length > 0 || state.discard.length <= 1) return state;
+  // A re-veiled exchange swaps exactly the cards its ceremony covered; cards
+  // played after the cut stay face up on the discard for the next recycle.
+  if (ctx.recycle) {
+    const swapped = recycleSpentPile(state.stock, state.discard, ctx.recycle);
+    if (swapped) {
+      ctx.fx.emit(Fx.ShuffleStock, {});
+      return { ...state, ...swapped };
+    }
+  }
+  // A veiled pile must never be shuffled by the session rng — that would put
+  // face-up cards into a stock the table believes is hidden. With no usable
+  // exchange the pile simply stays down and the draw comes up empty.
+  const [top, ...recyclable] = state.discard;
+  if (state.veiled && recyclable.some(isRealCard)) return state;
+  ctx.fx.emit(Fx.ShuffleStock, {});
+  return {
+    ...state,
+    stock: ctx.rng.shuffle(recyclable),
+    discard: top ? [top] : [],
+  };
+}
+
+/** Why a seat is picking up, for the table's running pickup counter. */
+export type WildpilePickupReason = 'penalty' | 'caught' | 'challenge';
+
+/**
+ * Longest window a pickup is allowed to occupy. A stacked +12 that dealt itself
+ * out at a fixed pace would stall the table, so the stagger compresses instead.
+ */
+const PICKUP_SPAN_MAX_MS = 1100;
+
+/** Gap between cards in a short pickup, before the span cap kicks in. */
+const PICKUP_STEP_MS = 150;
+
+interface DrawOptions {
+  delayMs?: number;
+  /** Ends the draw as soon as a taken card satisfies it (draw-until-playable). */
+  stopWhen?: (card: CardId) => boolean;
+  /**
+   * Announces the pickup as a single event the table can count against. Set for
+   * anything the seat did not choose — the moments that need to be read, not
+   * just seen.
+   */
+  announce?: WildpilePickupReason;
+}
+
+function drawCards(
+  state: WildpileState,
+  seat: SeatId,
+  count: number,
+  ctx: MoveCtx,
+  options: DrawOptions = {},
+): WildpileState {
+  const delayMs = options.delayMs ?? 0;
+  let next = state;
+  const drawn: CardId[] = [];
+  while (drawn.length < count) {
+    next = replenish(next, ctx);
+    if (next.stock.length === 0) break;
+    const take = drawFrom(next.stock, 1);
+    const card = take.drawn[0];
+    if (!card) break;
+    drawn.push(card);
+    next = { ...next, stock: take.rest };
+    if (options.stopWhen?.(card)) break;
+  }
+
+  // Cards arrive one at a time so a big pickup reads as it lands, rather than
+  // appearing in the hand all at once.
+  const gaps = Math.max(1, drawn.length - 1);
+  const step = Math.min(PICKUP_STEP_MS, PICKUP_SPAN_MAX_MS / gaps);
+  if (options.announce && drawn.length > 0) {
+    ctx.fx.emit(
+      'wildpile.pickup',
+      { seat, amount: drawn.length, reason: options.announce, stepMs: step },
+      delayMs,
+    );
+  }
+  drawn.forEach((card, index) =>
+    ctx.fx.emit(Fx.DrawCard, { card, seat, from: 'stock' }, delayMs + index * step),
+  );
+  return {
+    ...next,
+    hands: next.hands.map((cards, index) => (index === seat ? [...cards, ...drawn] : cards)),
+    // A hand that grew is no longer one card from out: protection must be re-armed.
+    calledLastCard: next.calledLastCard.map((armed, index) => (index === seat ? false : armed)),
+  };
+}
+
+const draw: Move<WildpileState> = {
+  validate(state, seat, _payload, ctx) {
+    if (state.interrupt || state.awaitingColor !== null || state.awaitingSwap !== null) {
+      return error('draw-unavailable', 'draw is unavailable during this decision');
+    }
+    if (state.drawnCard !== null) return error('already-drew', 'play the card you drew or pass');
+    // Recycling a face-up discard into the stock would make every remaining
+    // draw readable by the whole table, so a veiled room has to re-veil it
+    // through a fresh shuffle ceremony first.
+    if (
+      state.veiled &&
+      state.stock.length === 0 &&
+      state.discard.slice(1).some(isRealCard) &&
+      !ctx?.recycle
+    ) {
+      return error(
+        'stock-not-reveiled',
+        'the discard pile must be re-veiled before it becomes the stock',
+      );
+    }
+    // An exchange that no longer fits the pile — the board moved while its
+    // ceremony ran — is refused cleanly so the sender can cut a fresh one.
+    if (ctx?.recycle && recycleSpentPile(state.stock, state.discard, ctx.recycle) === null) {
+      return error('stale-recycle', 'the re-veiled exchange no longer matches the pile');
+    }
+    return state.turn === seat ? true : error('not-your-turn', 'seat is not taking this turn');
+  },
+  apply(state, seat, _payload, ctx) {
+    const forced = state.pendingDraw > 0;
+    // Draw-until-playable is bounded by the cards in play, so a pile nothing
+    // matches still terminates instead of spinning.
+    const ceiling = state.stock.length + state.discard.length;
+    const count = forced ? state.pendingDraw : state.rules.drawToMatch ? Math.max(1, ceiling) : 1;
+    // A forced pickup trails the card that caused it; a voluntary draw is instant.
+    const drawn = drawCards(state, seat, count, ctx, {
+      delayMs: forced ? FORCED_DRAW_DELAY_MS : 0,
+      stopWhen: forced ? undefined : (card) => canPlay(state, card),
+      // A pickup the seat did not choose is the one worth counting out loud.
+      announce: forced ? 'penalty' : undefined,
+    });
+    const settled: WildpileState = {
+      ...drawn,
+      pendingDraw: 0,
+      pendingKind: null,
+      interrupt: null,
+      drawnCard: null,
+      // Taking the pickup is how a seat accepts a Draw Four: window closed.
+      challenge: null,
+      // A draw is the table moving on; an uncaught slip stays uncaught.
+      catchable: null,
+    };
+
+    // A pickup is a lost turn. A voluntary draw that lands something playable
+    // keeps the turn: standard play lets you use the card you just drew.
+    const taken = hand(settled, seat).at(-1) ?? null;
+    if (!forced && taken !== null && canPlay(settled, taken)) {
+      ctx.fx.emit('wildpile.drew-playable', { seat, card: taken });
+      return { ...settled, drawnCard: taken };
+    }
+
+    const turn = nextSeat(settled, seat);
+    ctx.fx.emit(Fx.TurnRing, { seat: turn }, 80);
+    return { ...settled, turn };
+  },
+};
+
+/** Decline the card you just drew. Unavailable when the table forces the play. */
+const pass: Move<WildpileState> = {
+  validate(state, seat) {
+    if (state.drawnCard === null) return error('nothing-to-pass', 'no drawn card is pending');
+    if (state.turn !== seat) return error('not-your-turn', 'seat is not taking this turn');
+    return state.rules.forcePlay && canPlay(state, state.drawnCard)
+      ? error('force-play', 'the table requires you to play that card')
+      : true;
+  },
+  apply(state, seat, _payload, ctx) {
+    const turn = nextSeat(state, seat);
+    ctx.fx.emit(Fx.TurnRing, { seat: turn }, 80);
+    return { ...state, drawnCard: null, turn, catchable: null };
+  },
+};
+
+/**
+ * Call a Draw Four a bluff. The accused had to be empty of the live colour for
+ * the play to be honest; whoever is wrong takes the pile.
+ */
+const challengeDrawFour: Move<WildpileState> = {
+  validate(state, seat) {
+    if (!state.rules.challengeDrawFour) {
+      return error('challenge-off', 'this table does not allow Draw Four challenges');
+    }
+    if (state.challenge === null) return error('nothing-to-challenge', 'no Draw Four is pending');
+    if (state.challenge.challenger !== seat) {
+      return error('not-the-challenger', 'only the seat facing the pickup may challenge');
+    }
+    return canChallenge(state, seat)
+      ? true
+      : error('challenge-closed', 'the challenge window has passed');
+  },
+  apply(state, _seat, _payload, ctx) {
+    const challenge = state.challenge;
+    if (!challenge) throw new Error('challengeDrawFour apply requires an open challenge');
+    // Calling it and answering it are two steps, because between them a veiled
+    // table has cards to turn over. `flow.advance` settles the answer the
+    // instant the hand can be read — immediately at an open table, and once the
+    // room has run the openings at a veiled one — so the seat still experiences
+    // one action.
+    if (state.veiled) ctx.fx.emit('wildpile.challenge-called', { seat: challenge.accused });
+    return { ...state, challenge: { ...challenge, called: true } };
+  },
+};
+
+/**
+ * Answer a called bluff from the accused's own cards.
+ *
+ * Never sent by a player: the flow runs it the moment the hand behind the
+ * accusation can be read. At an open table that is the same instant the call
+ * lands. Under Veil the cards are still handles, so this refuses with
+ * {@link VEILED_OPEN_PENDING} and the room turns them face up first — the
+ * online equivalent of the accused laying their hand on the table, which is
+ * exactly what the rule asks of them.
+ */
+const settleChallenge: Move<WildpileState> = {
+  validate(state) {
+    const challenge = state.challenge;
+    if (!challenge?.called) return error('nothing-called', 'no bluff has been called');
+    if (challenge.handAtPlay.some(isVeilHandle)) {
+      return {
+        code: VEILED_OPEN_PENDING,
+        message: 'the accused hand must be turned face up before the bluff can be answered',
+      };
+    }
+    return true;
+  },
+  apply(state, _seat, _payload, ctx) {
+    const challenge = state.challenge;
+    if (!challenge) throw new Error('settleChallenge apply requires a called challenge');
+    const challenger = challenge.challenger;
+    const proof = challengeProof(challenge);
+    const upheld = proof.length > 0;
+
+    // The proof is public: an accusation that lands should be seen to land.
+    ctx.fx.emit('wildpile.challenge', {
+      challenger,
+      accused: challenge.accused,
+      upheld,
+      color: challenge.colorAtPlay,
+      amount: upheld ? challenge.amount : challenge.amount + CHALLENGE_PENALTY,
+      proof,
+    });
+
+    const loser = upheld ? challenge.accused : challenger;
+    const amount = upheld ? challenge.amount : challenge.amount + CHALLENGE_PENALTY;
+    const settled = drawCards(state, loser, amount, ctx, {
+      delayMs: CHALLENGE_REVEAL_MS,
+      announce: 'challenge',
+    });
+    const cleared: WildpileState = {
+      ...settled,
+      pendingDraw: 0,
+      pendingKind: null,
+      challenge: null,
+    };
+
+    // Right: the pile lands on the bluffer and the challenger still has a turn.
+    // Wrong: the challenger has picked up and forfeits it.
+    const turn = upheld ? challenger : nextSeat(cleared, challenger);
+    ctx.fx.emit(Fx.TurnRing, { seat: turn }, CHALLENGE_REVEAL_MS + 80);
+    return { ...cleared, turn };
+  },
+};
+
+/**
+ * Last-card protection. Usually this arms while holding two; Drop All can make
+ * a larger hand fall straight to one, so the real question is whether any
+ * playable card would leave exactly one behind.
+ *
+ * Under Veil that question cannot be asked here. The hand is opaque handles to
+ * everyone except its owner, and legality is decided by the host — which is
+ * exactly the seat that must not be able to read it. The owner's own client
+ * resolves its hand and offers the button correctly; the host then refused the
+ * move it had just watched light up, and the player got
+ * "move callLastCard is not legal right now" holding four cards with a Drop All
+ * that would have taken them to one.
+ *
+ * So a veiled table takes the seat at its word. This is a declaration about
+ * your own hand, which is what calling last card is at a real table too, and
+ * the part that actually matters is still enforced: reaching one card
+ * unprotected is caught and costs two, and hand SIZE is visible under Veil even
+ * when the faces are not. What is lost is the ability to refuse a premature
+ * call — a veiled player can arm early to be safe. That is a smaller price than
+ * either removing last-card protection from every veiled room or asking a
+ * player to reveal the card they are about to play in order to claim it.
+ */
+const callLastCard: Move<WildpileState> = {
+  validate(state, seat) {
+    if (state.calledLastCard[seat]) return error('already-called', 'protection is already armed');
+    // Exposed but not yet caught: a late call is a race the seat may still win.
+    if (state.catchable === seat) return true;
+    const cards = hand(state, seat);
+    if (!cards.every(isRealCard)) {
+      return cards.length > 1 ? true : error('not-last-card', 'nothing to protect');
+    }
+    const canReachOne = cards.some(
+      (card) =>
+        canPlay(state, card) && cards.length - wildpileDiscardAllCards(cards, card).length === 1,
+    );
+    return canReachOne
+      ? true
+      : error('not-last-card', 'no playable card would leave exactly one card');
+  },
+  apply(state, seat, _payload, ctx) {
+    ctx.fx.emit('wildpile.last-card-armed', { seat });
+    if (state.catchable === seat) ctx.fx.emit('wildpile.last-card', { seat });
+    return {
+      ...state,
+      catchable: state.catchable === seat ? null : state.catchable,
+      calledLastCard: state.calledLastCard.map((armed, index) => (index === seat ? true : armed)),
+    };
+  },
+};
+
+/**
+ * Point at the seat that reached one card without calling it. This is a
+ * player's accusation, never the table's own bookkeeping — the whole point of
+ * the rule is the moment someone shouts it first. Whoever is exposed takes
+ * {@link LAST_CARD_PENALTY}, and the window closes.
+ */
+const catchLastCard: Move<WildpileState> = {
+  validate(state, seat) {
+    if (state.catchable === null) return error('nothing-to-catch', 'no one is exposed');
+    return state.catchable === seat
+      ? error('cannot-catch-self', 'call your last card instead')
+      : true;
+  },
+  apply(state, seat, _payload, ctx) {
+    const offender = state.catchable;
+    if (offender === null) throw new Error('catchLastCard apply requires an exposed seat');
+    ctx.fx.emit('wildpile.caught', { seat: offender, by: seat, amount: LAST_CARD_PENALTY });
+    return drawCards({ ...state, catchable: null }, offender, LAST_CARD_PENALTY, ctx, {
+      delayMs: FORCED_DRAW_DELAY_MS,
+      announce: 'caught',
+    });
+  },
+};
+
+const chooseColor: Move<WildpileState> = {
+  validate(state, seat, payload) {
+    if (state.awaitingColor !== seat)
+      return error('color-not-awaited', 'seat is not choosing color');
+    return payloadColor(payload) ? true : error('bad-color', 'expected a Wildpile color');
+  },
+  apply(state, seat, payload, ctx) {
+    const color = payloadColor(payload);
+    if (!color) throw new Error('chooseColor apply requires a color');
+    ctx.fx.emit('wildpile.color', { seat, color });
+    const colored: WildpileState = { ...state, activeColor: color, awaitingColor: null };
+
+    // Wild Swap Hands calls a color and then a hand.
+    if (wildpileFace(topCard(state)).meta.kind === 'wild-swap') {
+      if (colored.seats === 2) {
+        const target = nextSeat(colored, seat);
+        const swapped = swapHands(colored, seat, target, ctx);
+        const turn = nextSeat(swapped, seat);
+        ctx.fx.emit(Fx.TurnRing, { seat: turn }, 80);
+        return { ...swapped, turn };
+      }
+      return { ...colored, awaitingSwap: seat, turn: seat };
+    }
+
+    const turn = nextSeat(colored, seat);
+    ctx.fx.emit(Fx.TurnRing, { seat: turn }, 80);
+    return { ...colored, turn };
+  },
+};
+
+/** Nominates the hand to take — Wild Swap Hands, or a seven under 7-0. */
+const chooseTarget: Move<WildpileState> = {
+  validate(state, seat, payload) {
+    if (state.awaitingSwap !== seat)
+      return error('swap-not-awaited', 'seat is not choosing a hand');
+    const target = payloadSeat(payload);
+    if (target === null || target < 0 || target >= state.seats) {
+      return error('bad-target', 'expected a seated opponent');
+    }
+    return target === seat ? error('bad-target', 'pick another seat') : true;
+  },
+  apply(state, seat, payload, ctx) {
+    const target = payloadSeat(payload);
+    if (target === null) throw new Error('chooseTarget apply requires a seat');
+    const swapped = swapHands(state, seat, target, ctx);
+    const turn = nextSeat(swapped, seat);
+    ctx.fx.emit(Fx.TurnRing, { seat: turn }, 80);
+    return { ...swapped, awaitingSwap: null, turn };
+  },
+};
+
+const declineJump: Move<WildpileState> = {
+  validate(state, seat) {
+    return state.interrupt?.candidates[0] === seat
+      ? true
+      : error('not-interrupter', 'seat has no jump-in decision');
+  },
+  apply(state, _seat, _payload, ctx) {
+    if (!state.interrupt) throw new Error('declineJump apply requires an interrupt');
+    const candidates = state.interrupt.candidates.slice(1);
+    // Passing the question to the next candidate is bookkeeping — the turn has
+    // not moved and nothing about the table has changed. Only closing the
+    // window releases the seat that was next, so that is the one moment worth
+    // ringing.
+    if (candidates.length === 0) {
+      ctx.fx.emit(Fx.TurnRing, { seat: state.interrupt.resumeTurn }, 40);
+    }
+    return {
+      ...state,
+      interrupt: candidates.length > 0 ? { ...state.interrupt, candidates } : null,
+    };
+  },
+};
+
+type WildpileTimeoutPayload = { kind: 'turn'; actor: SeatId } | { kind: 'match' };
+
+function timeoutPayload(payload: unknown): WildpileTimeoutPayload | null {
+  if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) return null;
+  const record = payload as Record<string, unknown>;
+  if (record.kind === 'match') return { kind: 'match' };
+  if (
+    record.kind === 'turn' &&
+    typeof record.actor === 'number' &&
+    Number.isInteger(record.actor)
+  ) {
+    return { kind: 'turn', actor: record.actor };
+  }
+  return null;
+}
+
+function remainingHandValue(cards: readonly CardId[]): number {
+  return cards.reduce((total, card) => {
+    if (!isRealCard(card)) return total;
+    const kind = wildpileFace(card).meta.kind;
+    if (kind === 'number') return total + (wildpileFace(card).meta.value ?? 0);
+    if (kind === 'skip' || kind === 'reverse' || kind === 'draw-two') return total + 20;
+    if (kind === 'discard-all') return total + 30;
+    return total + 50;
+  }, 0);
+}
+
+function timeoutOrder(state: WildpileState): SeatId[] {
+  return state.hands
+    .map((cards, seat) => ({ seat, cards: cards.length }))
+    .sort((left, right) => left.cards - right.cards || left.seat - right.seat)
+    .map(({ seat }) => seat);
+}
+
+/** Authority-only clock event. Its timestamp and chosen action live in the replay log. */
+const timeout: Move<WildpileState> = {
+  validate() {
+    return error('authority-only', 'timeouts are applied by the table authority');
+  },
+  apply(state, _seat, payload, ctx) {
+    const parsed = timeoutPayload(payload);
+    if (!parsed) throw new Error('timeout apply requires a clock payload');
+    if (parsed.kind === 'match') {
+      const timeoutRankings = timeoutOrder(state);
+      ctx.fx.emit('wildpile.match-timeout', { winner: timeoutRankings[0] ?? null });
+      return { ...state, timeoutRankings };
+    }
+
+    const actor = parsed.actor;
+    ctx.fx.emit('wildpile.turn-timeout', { seat: actor });
+    if (state.awaitingColor === actor) {
+      return chooseColor.apply(state, actor, { color: preferredColor(state, actor) }, ctx);
+    }
+    if (state.awaitingSwap === actor) {
+      const target = state.hands
+        .map((cards, seat) => ({ seat, count: cards.length }))
+        .filter((entry) => entry.seat !== actor)
+        .sort((left, right) => right.count - left.count || left.seat - right.seat)[0]?.seat;
+      return target === undefined ? state : chooseTarget.apply(state, actor, { seat: target }, ctx);
+    }
+    if (state.interrupt?.candidates[0] === actor) {
+      return declineJump.apply(state, actor, undefined, ctx);
+    }
+    if (state.turn !== actor) return state;
+    if (state.veiled) {
+      return state.drawnCard !== null
+        ? pass.apply(state, actor, undefined, ctx)
+        : draw.apply(state, actor, undefined, ctx);
+    }
+
+    const playable = legalMoves(state).find((move) => move.id === 'playCard');
+    if (playable) {
+      const card = payloadCard(playable.payload);
+      if (!card) return state;
+      const cards = hand(state, actor);
+      const reachesOne = cards.length - wildpileDiscardAllCards(cards, card).length === 1;
+      const armed = reachesOne
+        ? {
+            ...state,
+            calledLastCard: state.calledLastCard.map((value, seat) =>
+              seat === actor ? true : value,
+            ),
+          }
+        : state;
+      return playCard.apply(armed, actor, { card }, ctx);
+    }
+    if (state.drawnCard !== null) return pass.apply(state, actor, undefined, ctx);
+    return draw.apply(state, actor, undefined, ctx);
+  },
+};
+
+/** The catch on offer to `seat`, when someone else sits exposed. */
+function catchMoves(state: WildpileState, seat: SeatId): LegalMove[] {
+  if (state.catchable === null || state.catchable === seat) return [];
+  return [{ id: 'catchLastCard', hint: 'they never called last card' }];
+}
+
+/** Offered alongside the seat's real options — arming never costs the turn. */
+function lastCardMoves(state: WildpileState, seat: SeatId): LegalMove[] {
+  if (state.calledLastCard[seat]) return [];
+  const cards = hand(state, seat);
+  const offer: LegalMove[] = [{ id: 'callLastCard', hint: 'protect your last card' }];
+  // Exposed: the only call that matters now is the one that saves you.
+  if (state.catchable === seat) return offer;
+  /*
+   * Whether the HAND is readable, not whether the ROOM is veiled.
+   *
+   * `state.veiled` stays true on the owner's own view even after its cards have
+   * been resolved, so keying on it made the client take the host's branch too —
+   * and the button was offered on almost every turn, including ones that could
+   * not reach a last card. The seat that can read its hand answers the real
+   * question; only a view holding handles has to be taken at its word.
+   */
+  if (!cards.every(isRealCard)) return cards.length > 1 ? offer : [];
+  const canReachOne = cards.some(
+    (card) =>
+      canPlay(state, card) && cards.length - wildpileDiscardAllCards(cards, card).length === 1,
+  );
+  return canReachOne ? offer : [];
+}
+
+function legalMoves(state: WildpileState): LegalMove[] {
+  if (state.winner !== null || state.timeoutRankings !== null) return [];
+  // The table is answering a called bluff off the accused's cards. No seat has
+  // anything to add until it has.
+  if (state.challenge?.called) return [];
+  if (state.awaitingColor !== null) {
+    return WILDPILE_COLORS.map((color) => ({ id: 'chooseColor', payload: { color } }));
+  }
+  if (state.awaitingSwap !== null) {
+    const chooser = state.awaitingSwap;
+    return state.hands
+      .map((_, seat) => seat)
+      .filter((seat) => seat !== chooser)
+      .map((seat) => ({ id: 'chooseTarget', payload: { seat } }));
+  }
+  if (state.interrupt) {
+    const actor = state.interrupt.candidates[0];
+    if (actor === undefined) return [];
+    return [
+      ...exactJumpCards(state, actor).map((card) => ({ id: 'playCard', payload: { card } })),
+      ...lastCardMoves(state, actor),
+      ...catchMoves(state, actor),
+      { id: 'declineJump' },
+    ];
+  }
+  // Mid-turn after a draw: the drawn card is the only card on offer.
+  if (state.drawnCard !== null) {
+    const playable = canPlay(state, state.drawnCard);
+    return [
+      ...(playable ? [{ id: 'playCard', payload: { card: state.drawnCard } }] : []),
+      ...lastCardMoves(state, state.turn),
+      ...catchMoves(state, state.turn),
+      ...(playable && state.rules.forcePlay ? [] : [{ id: 'pass' }]),
+    ];
+  }
+  return [
+    ...hand(state, state.turn)
+      .filter((card) => canPlay(state, card))
+      .map((card) => ({ id: 'playCard', payload: { card } })),
+    ...lastCardMoves(state, state.turn),
+    ...catchMoves(state, state.turn),
+    ...(canChallenge(state, state.turn)
+      ? [{ id: 'challengeDrawFour', hint: 'call the bluff' }]
+      : []),
+    { id: 'draw' },
+  ];
+}
+
+/**
+ * Per-seat enumeration for the catch window. While someone sits exposed the
+ * whole table is acting: the turn seat keeps its ordinary options, every other
+ * seat holds the catch, and the exposed seat holds its own late call.
+ */
+function legalMovesForSeat(state: WildpileState, phase: PhaseState, seat: SeatId): LegalMove[] {
+  const base = phase.actor === seat ? legalMoves(state) : [];
+  if (state.catchable === null || phase.actor === null || state.winner !== null) return base;
+  if (seat === state.catchable) {
+    return base.some((move) => move.id === 'callLastCard')
+      ? base
+      : [...base, { id: 'callLastCard', hint: 'save yourself — call it' }];
+  }
+  return base.some((move) => move.id === 'catchLastCard')
+    ? base
+    : [...base, ...catchMoves(state, seat)];
+}
+
+/**
+ * A pending pickup with nothing to stack on it is not a decision, so the flow
+ * takes it for the seat instead of parking the table behind a draw button. An
+ * open accusation *is* a decision, so the window is left for the seat to close.
+ *
+ * "Nothing to stack" has to be something the whole table can verify, because
+ * every peer replays this the same way. Under Veil it cannot: the hand is
+ * handles here, `canStack` says no to all of them, and the pickup was taken from
+ * under a seat that was holding the perfect answer — which is why stacking
+ * looked switched off in every online game. A hand the table cannot read
+ * answers for itself; the seat's own client can see its cards, and the turn
+ * clock is what keeps the table moving if it does not.
+ */
+function forcedPickup(state: WildpileState, phase: PhaseState): AutoMove | null {
+  if (phase.phase !== 'play' || phase.actor === null) return null;
+  if (state.pendingDraw <= 0 || state.drawnCard !== null) return null;
+  if (canChallenge(state, phase.actor)) return null;
+  const cards = hand(state, phase.actor);
+  if (!cards.every(isRealCard)) return null;
+  if (cards.some((card) => canStack(state, card))) return null;
+  return { seat: phase.actor, move: 'draw', reason: 'forced-pickup' };
+}
+
+/**
+ * The answer to a called bluff, run as soon as the accused's hand can be read.
+ *
+ * At an open table that is the same instant the call lands, so calling and
+ * answering stay one beat. Under Veil the room has cards to turn over first —
+ * {@link challengeOpens} names them — and holding the auto-move back until they
+ * are open is what gives the peel chain somewhere to land.
+ */
+function challengeAnswer(state: WildpileState): AutoMove | null {
+  if (!state.challenge?.called) return null;
+  if (challengeOpens(state)) return null;
+  return { seat: null, move: 'settleChallenge', reason: 'bluff called' };
+}
+
+function result(state: WildpileState): MatchResult | null {
+  if (state.timeoutRankings) {
+    const winner = state.timeoutRankings[0] ?? null;
+    return {
+      winner,
+      rankings: state.timeoutRankings.map((seat, index) => ({
+        seat,
+        rank: index + 1,
+        detail: {
+          cards: state.hands[seat]?.length ?? 0,
+          value: remainingHandValue(state.hands[seat] ?? []),
+        },
+      })),
+      reason: 'match-timeout',
+    };
+  }
+  if (state.winner === null) return null;
+  const rankings = state.hands
+    .map((cards, seat) => ({ seat, cards: cards.length }))
+    .sort((a, b) => a.cards - b.cards || a.seat - b.seat)
+    .map((entry, index) => ({
+      seat: entry.seat,
+      rank: entry.seat === state.winner ? 1 : index + 1,
+      detail: { cards: entry.cards },
+    }));
+  return { winner: state.winner, rankings, reason: 'hand-emptied' };
+}
+
+const flow: Flow<WildpileState> = {
+  start(state) {
+    return phaseFor(state);
+  },
+  legalMoves(state) {
+    return legalMoves(state);
+  },
+  legalMovesFor(state, phase, seat) {
+    return legalMovesForSeat(state, phase, seat);
+  },
+  advance(state) {
+    const phase = phaseFor(state);
+    const ended = result(state);
+    if (ended) return { phase, ended };
+    const auto = challengeAnswer(state) ?? forcedPickup(state, phase);
+    return auto ? { phase, autoMoves: [auto] } : { phase };
+  },
+  canInject(state, phase, moveId, payload, meta) {
+    // The room injects the answer to a called bluff once it has turned the
+    // accused's cards over; the move itself decides whether they are readable.
+    if (moveId === 'settleChallenge') return settleChallenge.validate?.(state, -1, payload) ?? true;
+    if (moveId !== 'timeout') return error('unsupported-injection', 'only Wild clocks inject');
+    const parsed = timeoutPayload(payload);
+    if (!parsed) return error('bad-timeout', 'timeout needs a valid clock payload');
+    if (parsed.kind === 'match') {
+      const elapsed = meta.atMs ?? 0;
+      return elapsed >= state.rules.matchTimeMinutes * 60_000
+        ? true
+        : error('match-clock-live', 'the match clock still has time');
+    }
+    return phase.actor === parsed.actor
+      ? true
+      : error('stale-turn-clock', 'that seat is no longer on the clock');
+  },
+};
+
+function preferredColor(state: WildpileState, seat: SeatId): WildpileColor {
+  const counts = new Map<WildpileColor, number>(WILDPILE_COLORS.map((color) => [color, 0]));
+  for (const card of hand(state, seat)) {
+    const color = wildpileFace(card).color;
+    if (color) counts.set(color, (counts.get(color) ?? 0) + 1);
+  }
+  return WILDPILE_COLORS.reduce((best, color) =>
+    (counts.get(color) ?? 0) > (counts.get(best) ?? 0) ? color : best,
+  );
+}
+
+/** Bots forget their protection this often, so the penalty is visible in play. */
+const BOT_LAST_CARD_SLIP_IN = 6;
+
+/**
+ * How often a bot notices an uncalled last card, per hundred. Catching is a
+ * player's job now, so the bots have to play the part — sharp ones almost
+ * always shout it, easy ones usually miss it, and nobody is perfect, so a
+ * quick human can still be the one who calls it first.
+ */
+const BOT_CATCH_CHANCE: Record<number, number> = { 1: 35, 2: 65, 3: 90 };
+
+function botCatch(
+  legal: readonly LegalMove[],
+  rng: { int(bound: number): number },
+  tier: number,
+): LegalMove | null {
+  const move = legal.find((candidate) => candidate.id === 'catchLastCard');
+  if (!move) return null;
+  return rng.int(100) < (BOT_CATCH_CHANCE[tier] ?? 50) ? move : null;
+}
+
+/**
+ * A bot cannot see the accused's hand, so it plays the odds the way a person
+ * does: the more cards someone is holding, the likelier one of them was in the
+ * live colour. Capped well under certainty — a bot that always challenges would
+ * make the bluff worthless.
+ */
+function botChallengeChance(state: WildpileState, accused: SeatId): number {
+  return Math.min(60, hand(state, accused).length * 8);
+}
+
+const easyBot: BotPolicy<WildpileState> = {
+  id: 'wildpile-easy',
+  label: 'Easy Wild Bot',
+  tier: 1,
+  chooseMove(_state, _seat, legal, rng) {
+    const colorMoves = legal.filter((move) => move.id === 'chooseColor');
+    if (colorMoves.length > 0) return colorMoves[rng.int(colorMoves.length)]!;
+    const caught = botCatch(legal, rng, 1);
+    if (caught) return caught;
+    const call = legal.find((move) => move.id === 'callLastCard');
+    if (call) return call;
+    const targets = legal.filter((move) => move.id === 'chooseTarget');
+    if (targets.length > 0) return targets[rng.int(targets.length)]!;
+    const plays = legal.filter((move) => move.id === 'playCard');
+    if (plays.length > 0) return plays[rng.int(plays.length)]!;
+    return (
+      legal.find((move) => move.id === 'declineJump') ??
+      legal.find((move) => move.id === 'draw') ??
+      legal.find((move) => move.id === 'pass') ??
+      legal[0] ??
+      null
+    );
+  },
+};
+
+const mediumBot: BotPolicy<WildpileState> = {
+  id: 'wildpile-house-bot',
+  label: 'House Bot',
+  tier: 2,
+  chooseMove(state, seat, legal, rng) {
+    const color = preferredColor(state, seat);
+    const colorMove = legal.find(
+      (move) =>
+        move.id === 'chooseColor' &&
+        (move.payload as { color?: unknown } | undefined)?.color === color,
+    );
+    if (colorMove) return colorMove;
+    const caught = botCatch(legal, rng, 2);
+    if (caught) return caught;
+    // Arming is free and never ends the turn, so take it first — but slip
+    // occasionally so players see the rule bite someone other than themselves.
+    const callMove = legal.find((move) => move.id === 'callLastCard');
+    if (callMove && rng.int(BOT_LAST_CARD_SLIP_IN) > 0) return callMove;
+    // Stacking beats accusing when both are available: it costs nothing and
+    // hands the whole problem to the next seat.
+    const challengeMove = legal.find((move) => move.id === 'challengeDrawFour');
+    if (challengeMove && !legal.some((move) => move.id === 'playCard')) {
+      const accused = state.challenge?.accused;
+      if (accused !== undefined && rng.int(100) < botChallengeChance(state, accused)) {
+        return challengeMove;
+      }
+    }
+    // Take the fattest hand on the table when a swap is on offer.
+    const swapMoves = legal.filter((move) => move.id === 'chooseTarget');
+    if (swapMoves.length > 0) {
+      return swapMoves.reduce((best, move) => {
+        const size = (target: LegalMove) => hand(state, payloadSeat(target.payload) ?? seat).length;
+        return size(move) > size(best) ? move : best;
+      });
+    }
+    return (
+      legal.find((move) => move.id === 'playCard') ??
+      legal.find((move) => move.id === 'declineJump') ??
+      legal.find((move) => move.id === 'draw') ??
+      legal.find((move) => move.id === 'pass') ??
+      legal[0] ??
+      null
+    );
+  },
+};
+
+const hardBot: BotPolicy<WildpileState> = {
+  id: 'wildpile-hard',
+  label: 'Hard Wild Bot',
+  tier: 3,
+  chooseMove(state, seat, legal, rng) {
+    const color = preferredColor(state, seat);
+    const colorMove = legal.find(
+      (move) =>
+        move.id === 'chooseColor' &&
+        (move.payload as { color?: unknown } | undefined)?.color === color,
+    );
+    if (colorMove) return colorMove;
+    const caught = botCatch(legal, rng, 3);
+    if (caught) return caught;
+    const callMove = legal.find((move) => move.id === 'callLastCard');
+    if (callMove) return callMove;
+    const swapMoves = legal.filter((move) => move.id === 'chooseTarget');
+    if (swapMoves.length > 0) {
+      return swapMoves.reduce((best, move) => {
+        const size = (target: LegalMove) => hand(state, payloadSeat(target.payload) ?? seat).length;
+        return size(move) > size(best) ? move : best;
+      });
+    }
+    const plays = legal.filter((move) => move.id === 'playCard');
+    if (plays.length > 0) {
+      return plays.reduce((best, move) => {
+        const score = (candidate: LegalMove) => {
+          const card = payloadCard(candidate.payload);
+          if (!card) return -1;
+          const face = wildpileFace(card);
+          const dumped = wildpileDiscardAllCards(hand(state, seat), card).length;
+          const action =
+            face.meta.kind === 'discard-all'
+              ? 80
+              : face.meta.kind === 'wild-draw-four'
+                ? 18
+                : face.meta.kind === 'draw-two'
+                  ? 14
+                  : face.meta.kind === 'skip' || face.meta.kind === 'reverse'
+                    ? 9
+                    : isWildKind(face.meta.kind)
+                      ? 4
+                      : 0;
+          return dumped * 100 + action;
+        };
+        return score(move) > score(best) ? move : best;
+      });
+    }
+    const challengeMove = legal.find((move) => move.id === 'challengeDrawFour');
+    if (challengeMove && state.challenge) {
+      const chance = botChallengeChance(state, state.challenge.accused) + 18;
+      if (rng.int(100) < Math.min(82, chance)) return challengeMove;
+    }
+    return (
+      legal.find((move) => move.id === 'declineJump') ??
+      legal.find((move) => move.id === 'draw') ??
+      legal.find((move) => move.id === 'pass') ??
+      legal[0] ??
+      null
+    );
+  },
+};
+
+export const WILDPILE_BOTS: readonly BotPolicy<WildpileState>[] = [easyBot, mediumBot, hardBot];
+
+export function wildpileTierBot(tier: 1 | 2 | 3): BotPolicy<WildpileState> {
+  return WILDPILE_BOTS[tier - 1]!;
+}
+
+export const wildpileGame: GameDef<WildpileState, WildpileRules> = {
+  id: 'wildpile',
+  howToPlay: wildpileHowToPlay,
+  configSchema: wildpileConfig,
+  // Veil, inherited: hands are dealt face down, then the room keeps opening
+  // cards in public until it turns up a number to start the pile on.
+  veil: veilSupport({
+    deck: (config) => wildpileDealtDeck(config as WildpileRules),
+    handSize: (config) => (config as WildpileRules).handSize,
+    publicSetup: (opened) => opened.some((card) => wildpileFace(card).meta.kind === 'number'),
+    // A called bluff is answered from the accused's own hand, so that hand has
+    // to come face up — the same thing the rule asks for at a real table, and
+    // the price of calling. Nothing opens unless someone actually calls.
+    publicOpens: (state) => challengeOpens(state as WildpileState),
+  }),
+  setup(ctx) {
+    const { config, seats, fx } = ctx;
+    if (!Number.isInteger(seats) || seats < 2 || seats > 4) {
+      throw new Error('wildpile requires 2–4 seats');
+    }
+    const shuffled = dealOrder(ctx, wildpileDealtDeck(config));
+    const hands: CardId[][] = Array.from({ length: seats }, () => []);
+    let cursor = 0;
+    for (let round = 0; round < config.handSize; round++) {
+      for (let seat = 0; seat < seats; seat++) {
+        const card = shuffled[cursor++];
+        if (!card) throw new Error('wildpile deck exhausted during deal');
+        hands[seat]?.push(card);
+        fx.emit(
+          Fx.DealCard,
+          { card, from: 'stock', to: `hand:${seat}`, dur: 220 },
+          (cursor - 1) * 70,
+        );
+      }
+    }
+    const starterIndex = shuffled.findIndex(
+      (card, index) => index >= cursor && wildpileFace(card).meta.kind === 'number',
+    );
+    if (starterIndex < 0) throw new Error('wildpile deck has no numeric starter');
+    const starter = shuffled[starterIndex] as CardId;
+    const stock = shuffled.slice(cursor);
+    stock.splice(starterIndex - cursor, 1);
+    fx.emit(Fx.FlipCard, { card: starter, to: 'discard' }, cursor * 70);
+    return {
+      seats,
+      hands,
+      stock,
+      discard: [starter],
+      turn: 0,
+      direction: 1,
+      activeColor: wildpileFace(starter).color ?? null,
+      pendingDraw: 0,
+      pendingKind: null,
+      awaitingColor: null,
+      awaitingSwap: null,
+      interrupt: null,
+      drawnCard: null,
+      challenge: null,
+      calledLastCard: Array.from({ length: seats }, () => false),
+      catchable: null,
+      winner: null,
+      timeoutRankings: null,
+      rules: config,
+      veiled: ctx.veiled === true,
+    };
+  },
+  moves: {
+    playCard,
+    draw,
+    pass,
+    chooseColor,
+    chooseTarget,
+    declineJump,
+    callLastCard,
+    catchLastCard,
+    challengeDrawFour,
+    settleChallenge,
+    timeout,
+  },
+  flow,
+  playerView(state, seat) {
+    return {
+      ...state,
+      hands: state.hands.map((cards, index) =>
+        index === seat ? cards.slice() : cards.map(() => '??'),
+      ),
+      stock: state.stock.map(() => '??'),
+      // An open accusation carries the accused's hand so it can be answered
+      // later. It is evidence, not a peephole: until the bluff is actually
+      // called it stays as hidden as the hand it came from.
+      challenge:
+        state.challenge === null || state.challenge.accused === seat || state.challenge.called
+          ? state.challenge
+          : { ...state.challenge, handAtPlay: state.challenge.handAtPlay.map(() => '??') },
+    };
+  },
+  end: result,
+  bots: WILDPILE_BOTS,
+};

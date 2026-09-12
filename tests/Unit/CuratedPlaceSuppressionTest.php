@@ -14,7 +14,7 @@ final class CuratedPlaceSuppressionTest extends TestCase
     private function games(): array
     {
         $games = [];
-        foreach (['wordwright', 'hangman', 'blackjack', 'klondike-solitaire', 'tatham'] as $id) {
+        foreach (['wordwright', 'hangman', 'blackjack', 'parlour', 'tatham'] as $id) {
             $row = ['id' => $id, 'name' => $id, 'category' => 'game',
                 'backend' => ['type' => 'web', 'id' => $id === 'tatham' ? 'tatham-web' : $id],
                 'surfaces' => ['web' => 'full', 'telnet' => 'planned'],
@@ -41,7 +41,7 @@ final class CuratedPlaceSuppressionTest extends TestCase
             self::assertSame('/games/' . $game['id'], ExperienceLaunch::resolve($game, 'web')['url']);
         }
         self::assertNull($entries[0]['experience_presentation']['runtime']['active']);
-        self::assertSame(['wordwright', 'hangman', 'blackjack', 'klondike-solitaire', 'tatham/lightup', 'breaklock', 'ordinary-puzzles', 'dokuel'], array_column($definitions[0]['members'], 'reference'));
+        self::assertSame(['wordwright', 'hangman', 'blackjack', 'parlour', 'tatham/lightup', 'breaklock', 'ordinary-puzzles', 'dokuel'], array_column($definitions[0]['members'], 'reference'));
     }
 
     public function testDisabledOrNonCuratedPlaceCannotHideAnything(): void
@@ -66,7 +66,7 @@ final class CuratedPlaceSuppressionTest extends TestCase
         $games = $this->games();
         unset($games[1]); // Authorization/discovery omitted Hangman.
         $result = CuratedPlacePresentation::shelfEntries($games, $definitions);
-        self::assertSame(['wordwright', 'blackjack', 'klondike-solitaire', 'tatham'], array_column($result, 'id'));
+        self::assertSame(['wordwright', 'blackjack', 'parlour', 'tatham'], array_column($result, 'id'));
         self::assertCount(5, $result);
         $games[0]['policy']['enabled'] = false;
         $definitions[0]['members'] = [['reference' => 'wordwright', 'primary_presentation' => true]];

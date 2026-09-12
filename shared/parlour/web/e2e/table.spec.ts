@@ -1,0 +1,244 @@
+import { expect, test } from '@playwright/test';
+
+/**
+ * The path a first-time player actually walks.
+ *
+ * Every step here is covered by unit tests in isolation and by nothing at all
+ * end to end: the static export booting, the shelf rendering from the registry,
+ * the route wipe carrying you to a table, the deal arriving a tick later, and a
+ * card accepting a click. A regression in any of them is invisible to jsdom.
+ */
+
+test('the title screen boots and offers a game', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('play')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'parlour' })).toBeVisible();
+});
+
+test('the shelf lists the games the registry knows', async ({ page }) => {
+  await page.goto('/games/');
+  // Named rather than counted: a count would pass while showing the wrong ones.
+  for (const id of ['blitz', 'wild', 'hearts', 'spades', 'euchre', 'cribbage']) {
+    await expect(page.getByTestId(`game-${id}`)).toBeVisible();
+  }
+});
+
+test('searching the shelf narrows it and can be cleared', async ({ page }) => {
+  await page.goto('/games/');
+  await page.getByPlaceholder(/search games/i).fill('hearts');
+  await expect(page.getByTestId('game-hearts')).toBeVisible();
+  await expect(page.getByTestId('game-spades')).toHaveCount(0);
+
+  await page.getByRole('button', { name: /clear game search/i }).click();
+  await expect(page.getByTestId('game-spades')).toBeVisible();
+});
+
+/**
+ * The deal is deferred by a tick so the route wipe keeps its first frame, so
+ * "the table renders" and "the table has cards" are genuinely different
+ * assertions and only the second one proves the transport was built.
+ */
+test('a solo table deals and shows a hand', async ({ page }) => {
+  await page.goto('/hearts/table/');
+  // The rail is the `role="list"` zone the local hand fans into, and a card is
+  // a listitem inside it — the same handles a screen reader navigates by.
+  const hand = page.locator('[role="list"][data-zone]').first();
+  await expect(hand).toBeVisible({ timeout: 15_000 });
+  await expect(hand.locator('[role="listitem"]').first()).toBeVisible({ timeout: 15_000 });
+});
+
+test('leaving a table returns to its shelf without orphaning keyboard focus', async ({
+  page,
+  browserName,
+}) => {
+  // Hearts exercises the shared table frame without adding a game-specific
+  // result screen to the route home.
+  await page.goto('/hearts/table/');
+  await expect(page.locator('[role="list"][data-zone] [role="listitem"]').first()).toBeVisible({
+    timeout: 15_000,
+  });
+  await page.getByRole('button', { name: /table menu/i }).click();
+  // Quitting is deliberately two taps — the menu asks before it drops a match.
+  await page.getByTestId('quit-to-menu').click();
+  await page.getByTestId('confirm-quit').click();
+  await expect(page).toHaveURL(/\/hearts\/?$/, { timeout: 15_000 });
+
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          document.activeElement !== document.body &&
+          document.activeElement !== document.documentElement,
+      ),
+    )
+    .toBe(true);
+  await page.keyboard.press(browserName === 'webkit' ? 'Alt+Tab' : 'Tab');
+  await expect
+    .poll(() =>
+      page.evaluate(() => ['A', 'BUTTON'].includes(document.activeElement?.tagName ?? '')),
+    )
+    .toBe(true);
+});
+
+/*
+ * The hand is one held fan in every viewport. It compresses to fit whatever it
+ * holds and never pans. Its lower half deliberately passes behind the screen
+ * edge so the cards can stay large; its readable top must always remain intact.
+ * These assertions are deliberately about what a player can SEE rather than
+ * about what exists in the DOM.
+ */
+const HAND_GAMES = [
+  { game: 'spades', cards: 13 },
+  { game: 'hearts', cards: 13 },
+  { game: 'president', cards: 13 },
+  { game: 'gin', cards: 10 },
+] as const;
+
+for (const orientation of ['portrait', 'landscape', 'desktop'] as const) {
+  const viewport =
+    orientation === 'portrait'
+      ? { width: 390, height: 844 }
+      : orientation === 'landscape'
+        ? { width: 844, height: 390 }
+        : { width: 1440, height: 900 };
+
+  test.describe(`${orientation} hand rails`, () => {
+    test.use({ viewport });
+
+    for (const { game, cards } of HAND_GAMES) {
+      test(`${game} holds every card in one visible fan`, async ({ page }) => {
+        await page.emulateMedia({ reducedMotion: 'reduce' });
+        if (game === 'president') {
+          await page.addInitScript(() => {
+            localStorage.setItem(
+              'parlour.president.setup.v1',
+              JSON.stringify({
+                state: { mode: 'classic', seats: 4, botTier: 2, overrides: {} },
+                version: 1,
+              }),
+            );
+          });
+        }
+
+        await page.goto(`/${game}/table/`);
+        const hand = page.locator('[role="list"][data-zone^="hand:"]').first();
+        await expect(hand.locator('[data-hand-card]')).toHaveCount(cards, { timeout: 15_000 });
+        await expect(page.locator('[data-testid$="-rotate-notice"]')).toHaveCount(0);
+
+        const measure = (rail: SVGElement | HTMLElement) => {
+          const track = rail.querySelector<HTMLElement>('[data-hand-track]');
+          if (!track) throw new Error('hand rail has no track');
+          const items = [...rail.querySelectorAll<HTMLElement>('[data-hand-card]')];
+          // Measure the transformed physical card, not its centered motion
+          // wrapper. Every wrapper occupies the same untransformed box; using
+          // it here would claim a fan fits even while an outer card is visibly
+          // hanging past the bezel.
+          const boxes = items.map((item) =>
+            item.querySelector<HTMLElement>('[data-hand-fan]')!.getBoundingClientRect(),
+          );
+          const fans = items.map(
+            (item) =>
+              getComputedStyle(item.querySelector<HTMLElement>('[data-hand-fan]')!).transform,
+          );
+
+          const trackStyle = getComputedStyle(track);
+          return {
+            // The invariant is that no ancestor of the cards is a scroll
+            // container or a clipping box. Comparing scrollWidth to clientWidth
+            // would not say this: the fan's rotated corners overflow a visible
+            // box by a few pixels by design, which is harmless.
+            overflow: [trackStyle.overflowX, trackStyle.overflowY],
+            withinWidth: boxes.every((box) => box.left >= -1 && box.right <= window.innerWidth + 1),
+            // The top of a card carries its rank. Clipping it is what made the
+            // scrolling row unreadable, so it is asserted exactly.
+            topClipped: Math.max(0, ...boxes.map((box) => -box.top)),
+            // A held hand may sit a few pixels into the bottom edge — short
+            // landscape docks it there deliberately to leave the felt room.
+            //
+            // Two numbers, because two different things set them. How deep the
+            // hand is docked is the CSS `bottom` and reads the same in every
+            // engine; how much further the fan's OUTERMOST cards dip is the arc,
+            // and that is engine geometry — the same spades hand rests 28px
+            // deeper at its corners under WebKit on macOS and 52px deeper under
+            // the Linux WebKit the browser gate runs.
+            dockBleed: Math.max(
+              0,
+              boxes[Math.floor(boxes.length / 2)]!.bottom - window.innerHeight,
+            ),
+            bottomBleed: Math.max(0, ...boxes.map((box) => box.bottom - window.innerHeight)),
+            cardHeight: Math.max(0, ...boxes.map((box) => box.height)),
+            // A fan overlaps: consecutive cards advance by less than a card.
+            overlaps: boxes
+              .slice(1)
+              .every((box, index) => box.left - boxes[index]!.left < boxes[index]!.width),
+            // ...and it arcs: the outermost cards carry a rotation.
+            outerRotated: fans[0] !== fans[Math.floor(fans.length / 2)],
+            count: boxes.length,
+          };
+        };
+
+        /*
+         * Measure the fan that settles, not the one still moving into place.
+         *
+         * A rail that mounted empty has no card to measure, so `calculateFanStep`
+         * solves the real step only once the hand arrives — and `.card` carries a
+         * 140ms transform transition, so every card then GLIDES to its new slot.
+         * Measured on a spades hand: the step is right at 50ms and the cards are
+         * still arriving at their slots until ~150ms, reading 125px of bleed on
+         * the way to the 101px it rests at. Chromium happened to land inside the
+         * first measurement and WebKit did not, which is the whole of the
+         * difference between them here.
+         *
+         * So the wait is for quiet, not for one repeat: three identical reads
+         * spans 200ms, comfortably past the transition.
+         */
+        const QUIET_READS = 3;
+        let layout = await hand.evaluate(measure);
+        let signature = JSON.stringify(layout);
+        let quiet = 1;
+        for (let attempt = 0; attempt < 60 && quiet < QUIET_READS; attempt += 1) {
+          await page.waitForTimeout(100);
+          layout = await hand.evaluate(measure);
+          const next = JSON.stringify(layout);
+          quiet = next === signature ? quiet + 1 : 1;
+          signature = next;
+        }
+        expect(quiet, 'the hand rail settles').toBe(QUIET_READS);
+
+        expect(layout.count).toBe(cards);
+        expect(layout.overflow, 'the hand never pans and never clips').toEqual([
+          'visible',
+          'visible',
+        ]);
+        expect(layout.withinWidth, 'the fan fits the width, gutters and all').toBe(true);
+        expect(layout.topClipped, 'no card has its rank cut off').toBe(0);
+        /*
+         * The crop buys the felt back for play. The readable top of every card
+         * must survive (asserted above); the bleed may take the lower half.
+         *
+         * The docking depth is the assertion with teeth — it is what the CSS
+         * sets, so it is the same everywhere and it stays on the tight budget.
+         * The fan's corners get their own, looser ceiling: how far they dip is
+         * arc geometry, and the engines genuinely disagree about it (0.56 of a
+         * card under WebKit on macOS, 0.69 under the Linux WebKit CI runs, from
+         * an identical DOM). Holding the corners to the macOS number would be
+         * asserting a rendering engine, not a layout.
+         */
+        const bleedFloor = layout.cardHeight * (orientation === 'landscape' ? 0.18 : 0.35);
+        const dockBudget = layout.cardHeight * 0.58;
+        const arcBudget = layout.cardHeight * 0.75;
+        expect(layout.bottomBleed, 'the hand is visibly held from below').toBeGreaterThanOrEqual(
+          bleedFloor,
+        );
+        expect(layout.dockBleed, 'the hand is docked, not falling off').toBeLessThanOrEqual(
+          dockBudget,
+        );
+        expect(layout.bottomBleed, 'even the fan corners keep a readable band').toBeLessThanOrEqual(
+          arcBudget,
+        );
+        expect(layout.overlaps, 'cards overlap the way a held hand does').toBe(true);
+        expect(layout.outerRotated, 'the hand is fanned, not laid out straight').toBe(true);
+      });
+    }
+  });
+}

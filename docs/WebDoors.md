@@ -53,7 +53,7 @@ default-launch alias, not arbitrary subentry selection. Supporting non-default
 entries later requires an explicit runtime selection contract; listing
 membership alone cannot enable them.
 
-PP's configured order is Wordwright, Hangman, Blackjack, Solitaire, Light Up,
+PP's configured order is Wordwright, Hangman, Blackjack, Parlour, Light Up,
 BreakLock, Ordinary Puzzles, Dokuel. All eight declare `primary_presentation: true`.
 This existing member flag assigns their standalone shelf presentation to PP on
 both Web and terminal. Direct Experience routes, runtime discovery, authorization,
@@ -65,10 +65,23 @@ Intentional Game Hall entries such as Doom, Duke3D, Galactic Bloodshed, LORD and
 Usurper remain unaffected. Shelf filtering uses CuratedPlacePresentation.runtimeEntries;
 never use that filtered list as the runtime authorization catalog.
 
-Solitaire uses the existing `klondike-solitaire` runtime and
-`/games/klondike-solitaire` route; its PP-only title is "Solitaire". Its legacy
-save/load API calls are unchanged. These endpoints currently return 404, so PP
-does not promise durable Solitaire resume or introduce a replacement save path.
+Parlour (the full 23-game canonical card room — see `shared/parlour/README.md`)
+replaced Solitaire at PP position #4. It is one composed Experience across two
+backends sharing `experience.group: "parlour"`: the `parlour` WebDoor
+(`experience.primary: true`, `public_html/webdoors/parlour/`) and the
+`parlour-terminal` NativeDoor (`experience.primary: false`,
+`native-doors/doors/parlour-terminal/`), so PP shows one card, not one per
+surface or per game. Its caller-scoped solo/solo-vs-bots progress persists via
+the reserved `parlour` leased-storage namespace (slot 0, `webdoor_storage`) —
+see the "Caller-scoped persistence" section of `shared/parlour/README.md`; a shared multiplayer room is
+explicitly separate, later work, and is never written through this same path.
+
+Klondike Solitaire itself was not removed: `klondike-solitaire`'s own WebDoor
+(`public_html/webdoors/klondike-solitaire/`) stays enabled and its
+`/games/klondike-solitaire` route is unchanged. Since it is no longer a PP
+member, it no longer carries `primary_presentation: true` and now surfaces on
+its own in Game Hall (previously suppressed there while it was PP-only). Its
+legacy save/load API calls are unchanged and still currently return 404.
 
 Root search filters the rendered shelf cards. PP remains searchable by its name
 and description; searches for a hidden member name do not currently produce an

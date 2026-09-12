@@ -1,0 +1,1181 @@
+/* Wild deck skin + table furniture. Structural table classes (screen, seats,
+   piles, hand fan, fx layer) come from table.module.css; only what the loud
+   112-card deck adds lives here. */
+
+/* --- card faces ---------------------------------------------------------- */
+
+/*
+ * The Wild card is its own size context.
+ *
+ * The chassis it borrows (`table.module.css` `.card`) is a container, but
+ * `container-type` does not inherit through to a descendant's own `cqw`
+ * lookups the way a length would — `.corner` and `.pip` here resolve against
+ * the NEAREST container, so without this they would keep reading the viewport
+ * and a compact Wild card would wear a full-size pip. Declaring it here makes
+ * every face measurement below a share of this card, at every size, the same
+ * way the shared card already does.
+ */
+.face {
+  color: #ffffff;
+  text-shadow: 0 2.5px 0 rgba(20, 12, 4, 0.4);
+  container-type: inline-size;
+}
+
+.red {
+  background: linear-gradient(150deg, #ef5b49, #c22d20);
+}
+.yellow {
+  background: linear-gradient(150deg, #fac643, #e08e10);
+}
+.green {
+  background: linear-gradient(150deg, #4cc276, #2b8d4d);
+}
+.blue {
+  background: linear-gradient(150deg, #3db2dc, #1c7095);
+}
+.wildFace {
+  background:
+    radial-gradient(circle at 50% 46%, rgba(16, 24, 30, 0) 34%, rgba(16, 24, 30, 0.92) 35%),
+    conic-gradient(#c22d20 0 25%, #e08e10 0 50%, #2b8d4d 0 75%, #1c7095 0);
+}
+
+.corner {
+  position: absolute;
+  top: 0.22rem;
+  left: 0.34rem;
+  font-family: var(--font-display), sans-serif;
+  font-weight: 800;
+  font-size: 21cqw;
+  line-height: 1;
+  transform: skewX(-6deg);
+  text-shadow: 0.08em 0.08em 0 rgba(20, 12, 4, 0.5);
+}
+
+/* Mirrored index in the opposite corner, the way a real deck reads. */
+.cornerB {
+  composes: corner;
+  top: auto;
+  left: auto;
+  right: 0.34rem;
+  bottom: 0.22rem;
+  transform: rotate(180deg) skewX(-6deg);
+}
+
+/*
+ * The pip was `clamp(2.6rem, 4.9vw, 4.3rem)` — the same viewport bug the
+ * shared card had, and worse: 68.8px at 1440px was 66% of a full card but
+ * 157% of a compact one, spilling 29px past the edge. It never showed because
+ * Wild only renders `compact` as a face-down opponent fan, where there is no
+ * pip to spill. 53cqw keeps the full-size look it was tuned for (one glyph
+ * comfortably inside the oval plate) while making a compact card shrink with
+ * it instead of wearing a mark one and a half times its own width.
+ */
+.pip {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-family: var(--font-display), sans-serif;
+  font-weight: 800;
+  font-size: 53cqw;
+  transform: skewX(-6deg);
+  text-shadow: 0.055em 0.055em 0 rgba(20, 12, 4, 0.45);
+}
+
+.pip small {
+  font-size: 0.55em;
+}
+
+.dropAllMark {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 62%;
+  aspect-ratio: 0.9;
+  font-size: 0.28em;
+  letter-spacing: 0.04em;
+}
+
+.dropAllMark i {
+  position: absolute;
+  width: 72%;
+  height: 58%;
+  border: 2px solid rgba(255, 253, 246, 0.9);
+  border-radius: 0.22em;
+  background: rgba(70, 30, 24, 0.13);
+}
+
+.dropAllMark i:first-child {
+  translate: -18% -18%;
+}
+
+.dropAllMark i:nth-child(2) {
+  translate: 18% 18%;
+}
+
+.dropAllMark strong {
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 72%;
+  height: 58%;
+  border-radius: 0.22em;
+  background: rgba(255, 253, 246, 0.94);
+  color: rgba(34, 23, 18, 0.84);
+  text-shadow: none;
+}
+
+/* oval "table sticker" behind the center pip, like the reference deck */
+.pipPlate {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 78%;
+  height: 58%;
+  transform: translate(-50%, -50%) rotate(-24deg);
+  border-radius: 50%;
+  background: rgba(255, 252, 244, 0.26);
+  border: 3px solid rgba(255, 252, 244, 0.78);
+}
+
+.back {
+  padding: 0.32rem;
+  background: linear-gradient(150deg, #55345f, #33203c);
+}
+
+.backInset {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  border: 3px solid rgba(240, 220, 255, 0.55);
+  border-radius: 0.42rem;
+  background: repeating-linear-gradient(45deg, #462852 0 8px, #2c1836 8px 16px);
+  color: #e8c9f5;
+  /*
+   * A compact Wild back is the one place a fixed rem broke visibly: 1.7rem is
+   * a third of a 59px card, so the `W` filled the inset edge to edge. Unlike
+   * the pip, backs really do render at compact size — every opponent fan.
+   */
+  font-size: 28cqw;
+  font-family: var(--font-display), sans-serif;
+  font-weight: 800;
+  line-height: 1;
+  text-shadow: 0 2px #1c0f24;
+}
+
+/* --- table furniture ------------------------------------------------------ */
+
+.tableBadges {
+  position: absolute;
+  left: 50%;
+  /* Clear of the bigger bobbing "Your turn" pill that rides above the piles. */
+  top: 25.5%;
+  z-index: 6;
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.colorChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.75rem;
+  border-radius: 999px;
+  border: 2px solid rgba(255, 250, 240, 0.5);
+  background: rgba(9, 20, 26, 0.72);
+  color: #f3e7d4;
+  font-family: var(--font-display), sans-serif;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.colorChip i {
+  width: 0.85rem;
+  height: 0.85rem;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 250, 240, 0.65);
+  background: var(--wild-color, #8ea2ad);
+}
+
+.directionChip {
+  composes: colorChip;
+  gap: 0.3rem;
+  line-height: 1;
+}
+
+.directionChip i {
+  width: auto;
+  height: auto;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  font-size: 1.05rem;
+  font-style: normal;
+  line-height: 1;
+}
+
+.directionChip[data-direction='-1'] {
+  border-color: rgba(160, 210, 240, 0.8);
+  color: #cfe9f8;
+}
+
+.drawChip {
+  composes: colorChip;
+  border-color: rgba(240, 150, 120, 0.8);
+  color: #ffcf9e;
+}
+
+/* --- decision overlays ---------------------------------------------------- */
+
+/*
+ * The chassis for anything the table is waiting on an answer to.
+ *
+ * These used to wear `panel-soft`, which is a 72–78% wash — right for a HUD
+ * pill that is decoration over felt, wrong for a prompt on a clock. Wild's felt
+ * is an illustrated room: lamplight, bookshelves, a cat. Read a three-number
+ * decision through that and the eye spends its first second separating the
+ * words from the wallpaper, which is most of the time the decision has.
+ *
+ * So these are opaque, and they blur what is behind them rather than letting it
+ * through. The ring is the same warm hearth line the turn affordances use, so
+ * the panel reads as the table asking rather than as an error.
+ */
+.urgentPanel {
+  border: 2px solid rgba(255, 225, 178, 0.72);
+  border-radius: var(--radius-chunky);
+  background: linear-gradient(180deg, rgba(20, 44, 56, 0.985), rgba(9, 22, 30, 0.995));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 243, 220, 0.22),
+    0 0 0 4px rgba(6, 14, 19, 0.55),
+    0 18px 40px rgba(2, 9, 13, 0.72);
+  backdrop-filter: blur(6px);
+}
+
+.chooser {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  background: rgba(6, 14, 19, 0.55);
+  backdrop-filter: blur(3px);
+}
+
+.chooserPanel {
+  display: grid;
+  gap: 0.9rem;
+  justify-items: center;
+  padding: 1.4rem 1.8rem;
+  text-align: center;
+}
+
+.chooserRow {
+  display: flex;
+  gap: 0.8rem;
+}
+
+.chooserSwatch {
+  width: clamp(3.4rem, 7vw, 4.6rem);
+  aspect-ratio: 1;
+  border-radius: 1rem;
+  border: 3px solid rgba(255, 250, 240, 0.85);
+  box-shadow: 0 10px 18px -8px rgba(3, 11, 15, 0.8);
+  cursor: pointer;
+  transition: transform 140ms var(--ease-pop);
+}
+
+.chooserSwatch:hover {
+  transform: translateY(-4px) scale(1.06);
+}
+
+/* --- quartered color wheel ------------------------------------------------- */
+
+/* Four wedges laid out in a 2×2 grid, each rounded on its outer corner. Grid
+   cells beat clip-path here: the hit target matches the ink exactly. */
+.wheel {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 0.4rem;
+  width: clamp(14rem, 44vw, 19rem);
+  aspect-ratio: 1;
+  padding: 0.4rem;
+  border-radius: 50%;
+  background: rgba(6, 16, 22, 0.72);
+  box-shadow:
+    0 0 0 3px rgba(255, 246, 228, 0.35),
+    0 22px 46px -20px rgba(2, 8, 12, 0.95);
+}
+
+.wedge {
+  border: 0;
+  background: var(--wild-color);
+  box-shadow: inset 0 0 0 2px rgba(255, 250, 240, 0.35);
+  cursor: pointer;
+  transition:
+    transform 160ms var(--ease-pop),
+    filter 160ms ease;
+}
+
+.wedge[data-wedge='0'] {
+  border-radius: 100% 0 0 0;
+  transform-origin: 100% 100%;
+}
+.wedge[data-wedge='1'] {
+  border-radius: 0 100% 0 0;
+  transform-origin: 0 100%;
+}
+.wedge[data-wedge='2'] {
+  border-radius: 0 0 0 100%;
+  transform-origin: 100% 0;
+}
+.wedge[data-wedge='3'] {
+  border-radius: 0 0 100% 0;
+  transform-origin: 0 0;
+}
+
+.wedge:hover,
+.wedge:focus-visible {
+  transform: scale(1.07);
+  filter: brightness(1.15);
+  outline: none;
+  box-shadow:
+    inset 0 0 0 3px rgba(255, 250, 240, 0.9),
+    0 0 1.4rem var(--wild-color);
+}
+
+.wheelHub {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  display: grid;
+  place-items: center;
+  width: 33%;
+  aspect-ratio: 1;
+  translate: -50% -50%;
+  border-radius: 50%;
+  border: 3px solid rgba(255, 250, 240, 0.55);
+  background: rgba(6, 16, 22, 0.95);
+  color: #fff3dc;
+  font-family: var(--font-display), sans-serif;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  pointer-events: none;
+}
+
+/* --- swap-hands picker ----------------------------------------------------- */
+
+.swapRow {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.7rem;
+}
+
+.swapTarget {
+  display: grid;
+  justify-items: center;
+  gap: 0.2rem;
+  min-width: 6rem;
+  padding: 0.7rem 0.9rem;
+  border: 2px solid rgba(255, 246, 228, 0.35);
+  border-radius: 1rem;
+  background: rgba(10, 24, 30, 0.85);
+  color: #f3e7d4;
+  cursor: pointer;
+  transition: transform 140ms var(--ease-pop);
+}
+
+.swapTarget:hover,
+.swapTarget:focus-visible {
+  transform: translateY(-4px);
+  border-color: rgba(255, 246, 228, 0.85);
+  outline: none;
+}
+
+.swapTarget strong {
+  font-family: var(--font-display), sans-serif;
+  font-size: 0.86rem;
+  font-weight: 800;
+}
+
+.swapTarget small {
+  color: rgba(214, 226, 232, 0.7);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.jumpBanner {
+  position: absolute;
+  left: 50%;
+  bottom: 30%;
+  z-index: 31;
+  display: flex;
+  gap: 0.8rem;
+  align-items: center;
+  transform: translateX(-50%);
+  padding: 0.6rem 0.7rem 0.6rem 1rem;
+}
+
+/* A jump-in window is the shortest one Wild has, so its question is set at the
+   size of the answer rather than the size of a caption. */
+.jumpBanner strong {
+  font-family: var(--font-display), sans-serif;
+  font-size: 1.02rem;
+  font-weight: 800;
+  color: #fff3dc;
+}
+
+.cardCount {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-top: 0.15rem;
+  padding: 0.1rem 0.55rem;
+  border-radius: 999px;
+  background: rgba(9, 20, 26, 0.65);
+  color: #f3e7d4;
+  font-family: var(--font-display), sans-serif;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+/* A seat holding one card with protection armed wears a small shield pip. */
+.cardCount[data-armed] {
+  background: rgba(56, 122, 78, 0.88);
+  color: #e9ffef;
+}
+
+.cardCount[data-armed] i {
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 50%;
+  background: #b8ffcd;
+  box-shadow: 0 0 6px rgba(184, 255, 205, 0.9);
+}
+
+/* --- action calls --------------------------------------------------------- */
+
+.seatStamp {
+  position: absolute;
+  z-index: 8;
+  left: 50%;
+  top: 0.4rem;
+  translate: -50% 0;
+  padding: 0.24rem 0.7rem;
+  border: 2px solid rgba(255, 246, 228, 0.92);
+  border-radius: 0.5rem;
+  background: rgba(178, 60, 51, 0.95);
+  color: #fff6e4;
+  box-shadow: 0 8px 20px -8px rgba(4, 12, 18, 0.9);
+  font-family: var(--font-display), sans-serif;
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.seatStamp[data-stamp='caught'] {
+  background: rgba(140, 46, 100, 0.95);
+}
+
+.seatStamp[data-stamp='last-card'] {
+  background: rgba(61, 127, 86, 0.95);
+}
+
+.announcer {
+  position: absolute;
+  left: 50%;
+  top: 17%;
+  z-index: 26;
+  display: grid;
+  gap: 0.4rem;
+  justify-items: center;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.announcement {
+  display: grid;
+  justify-items: center;
+  gap: 0.1rem;
+  padding: 0.45rem 1.15rem;
+  border: 2px solid rgba(255, 246, 228, 0.55);
+  border-radius: 0.9rem;
+  background: linear-gradient(180deg, rgba(20, 40, 50, 0.94), rgba(9, 20, 26, 0.94));
+  box-shadow: 0 14px 30px -14px rgba(2, 8, 12, 0.95);
+  text-align: center;
+}
+
+.announcement strong {
+  font-family: var(--font-display), sans-serif;
+  font-size: clamp(1.15rem, 3.2vw, 1.75rem);
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  line-height: 1;
+  text-transform: uppercase;
+  color: #fff3dc;
+  text-shadow: 0 2px 0 rgba(6, 16, 22, 0.6);
+}
+
+.announcement small {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: rgba(243, 231, 212, 0.72);
+}
+
+.announcement[data-announcement='reverse'] {
+  border-color: rgba(120, 200, 235, 0.85);
+}
+.announcement[data-announcement='skip'] {
+  border-color: rgba(240, 150, 120, 0.85);
+}
+.announcement[data-announcement='draw-stack'] {
+  border-color: rgba(255, 195, 110, 0.9);
+}
+.announcement[data-announcement='last-card'] {
+  border-color: rgba(140, 235, 175, 0.9);
+}
+.announcement[data-announcement='caught'] {
+  border-color: rgba(235, 120, 175, 0.9);
+}
+
+/* --- pickup counter -------------------------------------------------------- */
+
+.pickupLayer {
+  position: absolute;
+  left: 50%;
+  bottom: 24%;
+  z-index: 27;
+  display: grid;
+  justify-items: center;
+  translate: -50% 0;
+  pointer-events: none;
+}
+
+.pickupLayer:not(:has(.pickup)) {
+  display: none;
+}
+
+.pickup {
+  display: grid;
+  justify-items: center;
+  gap: 0.24rem;
+  padding: 0.85rem 1.6rem;
+  border: 3px solid rgba(240, 150, 120, 0.85);
+  border-radius: 1.2rem;
+  background: linear-gradient(180deg, rgba(46, 20, 24, 0.96), rgba(14, 22, 28, 0.96));
+  box-shadow:
+    0 18px 40px -16px rgba(2, 8, 12, 0.95),
+    0 0 30px -6px rgba(240, 150, 120, 0.45);
+  text-align: center;
+}
+
+.pickup[data-reason='caught'] {
+  border-color: rgba(235, 120, 175, 0.9);
+}
+
+.pickup[data-reason='challenge'] {
+  border-color: rgba(160, 210, 240, 0.9);
+}
+
+/* Landing on you is the version that has to hurt. */
+.pickup[data-mine] {
+  border-width: 4px;
+  animation: pickupJolt 0.5s ease-out;
+}
+
+.pickupWho {
+  color: rgba(243, 231, 212, 0.72);
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.pickupCount {
+  display: block;
+  font-family: var(--font-display), sans-serif;
+  font-size: clamp(2.2rem, 7vw, 3.4rem);
+  font-weight: 800;
+  line-height: 1;
+  color: #fff3dc;
+  text-shadow: 0 3px 0 rgba(6, 16, 22, 0.55);
+}
+
+/* One pip per card, filling in as each one lands. */
+.pickupTrack {
+  display: flex;
+  gap: 0.24rem;
+  margin-top: 0.15rem;
+}
+
+.pickupTrack i {
+  width: 0.5rem;
+  height: 0.72rem;
+  border-radius: 0.12rem;
+  border: 1px solid rgba(255, 246, 228, 0.4);
+  background: rgba(255, 246, 228, 0.12);
+  transition:
+    background 160ms ease,
+    transform 160ms var(--ease-pop);
+}
+
+.pickupTrack i[data-landed] {
+  background: #f0966f;
+  border-color: rgba(255, 246, 228, 0.9);
+  transform: translateY(-2px);
+}
+
+.pickupProgress {
+  color: rgba(243, 231, 212, 0.66);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+@keyframes pickupJolt {
+  0% {
+    transform: scale(1) rotate(0deg);
+  }
+  25% {
+    transform: scale(1.06) rotate(-1.2deg);
+  }
+  55% {
+    transform: scale(0.99) rotate(0.8deg);
+  }
+  100% {
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+/* --- Draw Four challenge --------------------------------------------------- */
+
+.challengePrompt {
+  position: absolute;
+  left: 50%;
+  bottom: 27%;
+  z-index: 28;
+  display: grid;
+  justify-items: center;
+  gap: 0.5rem;
+  width: min(24rem, 88vw);
+  padding: 0.9rem 1.1rem;
+  translate: -50% 0;
+  text-align: center;
+}
+
+.challengePrompt strong {
+  font-family: var(--font-display), sans-serif;
+  font-size: 1.15rem;
+  font-weight: 800;
+  line-height: 1.15;
+  color: #fff3dc;
+}
+
+/*
+ * The whole decision, as two chips.
+ *
+ * A call is a bet with two outcomes and the seat only needs to compare their
+ * sizes, so they are set side by side in tabular figures at the same weight —
+ * the comparison is the layout. Green and rose carry which is which without
+ * being read, and the words stay in front of the numbers so the chips are not
+ * two bare integers floating over a felt full of other integers.
+ */
+.challengeOdds {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.4rem;
+}
+
+.challengeOdds span {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.3rem;
+  padding: 0.24rem 0.6rem;
+  border: 1px solid currentcolor;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.challengeOdds span b {
+  font-family: var(--font-display), sans-serif;
+  font-size: 1rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.challengeOdds span[data-outcome='win'] {
+  color: #9de7bd;
+}
+
+.challengeOdds span[data-outcome='lose'] {
+  color: #f4a0ae;
+}
+
+.challengeActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+/* Doubled for the same reason as .lastCardButton below: it overrides the
+   global `btn-fat` background at equal specificity. */
+.challengeButton.challengeButton {
+  background: linear-gradient(180deg, #d67ba0, #8c2e64);
+  border-color: rgba(255, 226, 240, 0.75);
+}
+
+/* Stacking is the escalating choice, so it wears the hot end of the palette —
+   the same amber the draw pile uses when it wants a card. */
+.stackButton.stackButton {
+  background: linear-gradient(180deg, #efa14b, #b45c18);
+  border-color: rgba(255, 234, 199, 0.78);
+}
+
+/* --- draw + last-card affordances ----------------------------------------- */
+
+.stockPile[data-can-draw='true']::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 0.72rem;
+  box-shadow: 0 0 14px rgba(255, 205, 130, 0.75);
+  pointer-events: none;
+  animation: stockBeckon 1.6s ease-in-out infinite;
+}
+
+.drawHint {
+  position: absolute;
+  left: 50%;
+  bottom: -1.5rem;
+  translate: -50% 0;
+  padding: 0.14rem 0.5rem;
+  border-radius: 999px;
+  background: rgba(9, 20, 26, 0.8);
+  color: rgba(255, 237, 207, 0.9);
+  font-family: var(--font-display), sans-serif;
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* The shout itself: a hot magenta call-out that begs to be slammed. */
+.catchButton.catchButton {
+  position: relative;
+  background: linear-gradient(180deg, #e668a0, #9c2660);
+  border-color: rgba(255, 214, 235, 0.85);
+  animation: catchWobble 0.55s ease-in-out infinite;
+}
+
+@keyframes catchWobble {
+  0%,
+  100% {
+    rotate: -1.2deg;
+  }
+  50% {
+    rotate: 1.2deg;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .catchButton.catchButton {
+    animation: none;
+  }
+}
+
+/* Doubled class on purpose: these sit on top of the global `btn-fat`, which
+   declares its own amber background at the same specificity, so which one wins
+   would otherwise come down to the order the style chunks happen to load in.
+   The call to protect your last card is green — that is the design, not a
+   coin toss. */
+.lastCardButton.lastCardButton {
+  position: relative;
+  background: linear-gradient(180deg, #6fc98d, #357a54);
+  border-color: rgba(220, 255, 232, 0.75);
+}
+
+.lastCardButton.lastCardButton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: 0 0 0 0.75rem rgba(140, 235, 175, 0.55);
+  pointer-events: none;
+  animation: lastCardPulse 0.9s ease-in-out infinite;
+}
+
+/**
+ * Calling your last card is a decision, not a corner control.
+ *
+ * The shared rail is pinned bottom-right, which on a desktop table is empty
+ * felt but on a phone is the worst square inch of the screen: the fanned hand
+ * spans the full width and reaches the bottom edge, so the call lands on top of
+ * your own cards, under your thumb, a few pixels above the home indicator. It
+ * is a one-turn window and missing it costs you the catch penalty, so on
+ * portrait it moves up beside the jump-in and challenge prompts — the place
+ * this table already asks its questions — and gets a hit target to match.
+ */
+.actionRail.actionRail {
+  z-index: 32;
+}
+
+@media (orientation: portrait) {
+  .actionRail.actionRail {
+    right: auto;
+    left: 50%;
+    bottom: 27%;
+    justify-content: center;
+    transform: translateX(-50%);
+    gap: 0.6rem;
+  }
+  .actionRail.actionRail button {
+    min-height: 3.15rem;
+    padding: 0.8rem 1.5rem;
+    border-radius: 1rem;
+    font-size: 1rem;
+  }
+  .actionRail.actionRail .lastCardArmed {
+    padding: 0.8rem 1.2rem;
+    font-size: 0.86rem;
+  }
+}
+
+.lastCardArmed {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.58rem 0.95rem;
+  border: 2px solid rgba(184, 255, 205, 0.6);
+  border-radius: 0.85rem;
+  background: rgba(24, 58, 40, 0.85);
+  color: #d6ffe4;
+  font-family: var(--font-display), sans-serif;
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.liveStandings {
+  position: absolute;
+  z-index: 8;
+  top: 4.6rem;
+  left: clamp(0.65rem, 2.5vw, 2rem);
+  width: min(12.5rem, 34vw);
+  padding: 0.65rem 0.75rem;
+  color: var(--paper-100);
+  pointer-events: none;
+}
+
+.liveStandings > strong {
+  display: block;
+  margin-bottom: 0.35rem;
+  color: #ffd17e;
+  font-family: var(--font-display), sans-serif;
+  font-size: 0.78rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.liveStandings ol {
+  display: grid;
+  gap: 0.22rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.liveStandings li {
+  display: grid;
+  grid-template-columns: 2rem 1fr auto;
+  gap: 0.35rem;
+  align-items: baseline;
+  font-size: 0.72rem;
+}
+
+.liveStandings li[data-local] {
+  color: #ffe3a8;
+}
+
+.liveStandings li span,
+.liveStandings li small {
+  color: rgba(255, 239, 211, 0.72);
+  font-size: 0.64rem;
+}
+
+.matchClock {
+  display: grid;
+  justify-items: center;
+  min-width: 5.25rem;
+  margin-left: auto;
+  margin-right: 0.65rem;
+  padding-inline: 0.8rem;
+  color: rgba(255, 239, 211, 0.78);
+  font-family: var(--font-display), sans-serif;
+  font-size: 0.66rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.matchClock strong {
+  color: #ffd17e;
+  font-size: 0.94rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.turnClock {
+  --turn-clock-color: #77d7c4;
+  position: absolute;
+  z-index: 9;
+  /* Beside the piles, not beneath them — the grown hand fan owns that lane. */
+  left: calc(50% + clamp(8.6rem, 13vw, 10.5rem));
+  top: 46%;
+  display: grid;
+  grid-template-rows: auto auto;
+  place-content: center;
+  justify-items: center;
+  width: 3.4rem;
+  aspect-ratio: 1;
+  translate: 0 -50%;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(17, 42, 48, 0.96) 52%, rgba(9, 22, 28, 0.98) 54%);
+  color: #ddfff7;
+  box-shadow:
+    0 0 0 2px rgba(255, 246, 228, 0.2),
+    0 8px 20px rgba(3, 14, 20, 0.55);
+  font-family: var(--font-display), sans-serif;
+  line-height: 0.88;
+  pointer-events: none;
+}
+
+.turnClock[data-mine] {
+  --turn-clock-color: #ffd17e;
+  color: #fff1cc;
+}
+
+.turnClock svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  rotate: -90deg;
+  overflow: visible;
+}
+
+.turnClockTrack,
+.turnClockProgress {
+  fill: none;
+  stroke-width: 3.5;
+}
+
+.turnClockTrack {
+  stroke: rgba(255, 246, 228, 0.16);
+}
+
+/* The sweep is a straight line from full to empty over a known duration, so it
+   is a CSS animation rather than a ten-times-a-second React render. */
+.turnClockProgress {
+  stroke: var(--turn-clock-color);
+  stroke-linecap: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 0;
+  animation: turnClockSweep var(--turn-duration, 15000ms) linear forwards;
+  filter: drop-shadow(0 0 3px var(--turn-clock-color));
+}
+
+@keyframes turnClockSweep {
+  from {
+    stroke-dashoffset: 0;
+  }
+  to {
+    stroke-dashoffset: 1;
+  }
+}
+
+.turnClock span {
+  z-index: 1;
+  font-size: 0.5rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.turnClock strong {
+  z-index: 1;
+  margin-top: 0.12rem;
+  font-size: 1.05rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Portrait has vertical room to spare: the clock sits under the piles there. */
+@media (orientation: portrait) {
+  .turnClock {
+    left: 50%;
+    top: calc(46% + 4.2rem);
+    translate: -50% 0;
+  }
+}
+
+.turnClock[data-warning] {
+  --turn-clock-color: #ff715f;
+  animation: turnClockUrgent 700ms ease-in-out infinite;
+}
+
+.turnClock[data-warning]::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 5px rgba(255, 113, 95, 0.12),
+    0 0 20px rgba(255, 113, 95, 0.45);
+  pointer-events: none;
+  animation: turnClockUrgentGlow 700ms ease-in-out infinite;
+}
+
+@keyframes stockBeckon {
+  0%,
+  100% {
+    opacity: 0;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes lastCardPulse {
+  0% {
+    opacity: 0.55;
+    transform: scale(0.92);
+  }
+  70% {
+    opacity: 0;
+    transform: scale(1.15);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.15);
+  }
+}
+
+@keyframes turnClockUrgent {
+  50% {
+    scale: 1.08;
+  }
+}
+
+@keyframes turnClockUrgentGlow {
+  0%,
+  100% {
+    opacity: 0;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stockPile[data-can-draw='true']::after,
+  .lastCardButton.lastCardButton::after,
+  .pickup[data-mine],
+  .turnClock[data-warning],
+  .turnClock[data-warning]::after {
+    animation: none;
+  }
+
+  .stockPile[data-can-draw='true']::after,
+  .lastCardButton.lastCardButton::after,
+  .turnClock[data-warning]::after {
+    opacity: 0;
+  }
+
+  .turnClockProgress {
+    animation: none;
+  }
+}
+
+@media (max-height: 560px) {
+  .tableBadges {
+    left: 19%;
+    top: 31%;
+    transform: none;
+  }
+  .announcer {
+    top: 8%;
+  }
+  .turnClock {
+    left: calc(50% + 7.6rem);
+    top: 50.5%;
+    width: 2.9rem;
+  }
+  .turnClock span {
+    font-size: 0.43rem;
+  }
+  .turnClock strong {
+    font-size: 0.9rem;
+  }
+  .matchClock {
+    min-width: 4.6rem;
+    margin-right: 0.45rem;
+    padding-inline: 0.55rem;
+  }
+}
+
+@media (orientation: landscape) and (max-height: 560px) {
+  .challengePrompt {
+    top: 50%;
+    bottom: auto;
+    grid-template-columns: minmax(0, 1fr) auto;
+    justify-items: start;
+    width: min(40rem, calc(100vw - 2rem - env(safe-area-inset-left) - env(safe-area-inset-right)));
+    padding: 0.7rem 0.85rem;
+    translate: -50% -50%;
+    text-align: left;
+  }
+
+  .challengePrompt strong,
+  .challengeOdds {
+    grid-column: 1;
+  }
+
+  .challengeOdds {
+    justify-content: flex-start;
+  }
+
+  .challengeActions {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    align-self: center;
+    flex-wrap: nowrap;
+  }
+
+  .challengeActions button {
+    padding: 0.55rem 0.85rem;
+    font-size: 0.78rem;
+    white-space: nowrap;
+  }
+}

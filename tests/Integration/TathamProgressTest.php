@@ -283,6 +283,46 @@ final class TathamProgressTest extends TestCase
         self::assertEquals(['schema' => 1, 'revision' => 'pinned', 'puzzle' => 'opaque', 'actions' => []], $dokuel->read()['data']);
     }
 
+    /**
+     * Parlour (Slice 4): caller-scoped solo/solo-vs-bots persistence reuses this
+     * exact generalized mechanism (namespace 'parlour', slot 0) — no schema change.
+     * The envelope itself (schemaVersion/upstreamRevision/gameId/seed/options/log/
+     * mode/humanSeat/botSeats) is opaque to this layer, same as every sibling game;
+     * deterministic replay parity of that envelope is proven in
+     * shared/parlour/persistence/*.test.ts, not here.
+     */
+    public function testParlourNamespaceIsReservedAndIsolated(): void
+    {
+        self::assertFalse(LeasedWebDoorStorage::isReserved('wordle'));
+        $parlour = new LeasedWebDoorStorage($this->db, 1, 'parlour');
+        $lease = $parlour->acquire();
+        self::assertTrue($lease['success']);
+        $envelope = [
+            'schemaVersion' => 1, 'upstreamRevision' => 'ee9aa7e695be507fb8a0f11968ab73474f8dc7f9',
+            'gameId' => 'klondike', 'seed' => 8808, 'seats' => 1, 'options' => ['drawCount' => 3],
+            'log' => [], 'mode' => 'solo', 'humanSeat' => 0, 'botSeats' => [],
+        ];
+        self::assertTrue($parlour->write($lease['owner_token'], $lease['attempt_id'], 0, $envelope)['success']);
+        foreach (['tatham', 'breaklock', 'ordinary-puzzles', 'wordwright', 'dokuel'] as $namespace) {
+            $other = new LeasedWebDoorStorage($this->db, 1, $namespace);
+            self::assertNull($other->read());
+            $otherLease = $other->acquire();
+            self::assertFalse($other->write($lease['owner_token'], $otherLease['attempt_id'], 0, [])['success']);
+            self::assertFalse($parlour->write($otherLease['owner_token'], $lease['attempt_id'], 1, [])['success']);
+            self::assertSame([], $other->read()['data']);
+        }
+        self::assertNull((new LeasedWebDoorStorage($this->db, 2, 'parlour'))->read());
+        self::assertTrue(LeasedWebDoorStorage::isReserved('parlour'));
+        self::assertSame(409, $this->finish($this->worker('sdk', 'parlour'))['status']);
+        $auth = $this->createMock(Auth::class);
+        $auth->method('getCurrentUser')->willReturn(['user_id' => 1, 'id' => 1]);
+        $controller = new WebDoorController($this->db, $auth, $this->createMock(GameCatalog::class));
+        $_GET['game_id'] = 'parlour';
+        self::assertFalse($controller->saveGame(0)['success']);
+        self::assertFalse($controller->deleteSave(0)['success']);
+        self::assertEquals($envelope, $parlour->read()['data']);
+    }
+
     private function worker(string $mode, string $key = ''): array
     {
         $root = dirname(__DIR__, 2);
