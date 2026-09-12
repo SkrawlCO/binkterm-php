@@ -63,7 +63,11 @@
         }
 
         #bbsSystemsMap .leaflet-tile-pane {
-            filter: grayscale(0.45) saturate(0.45) brightness(0.38) contrast(1.28);
+            /* Dark-theme tint for the OSM basemap. brightness(0.38) previously
+               crushed OSM's naturally light tiles to near-black, making the
+               whole basemap look blank/missing under the dark container
+               background even though tiles were loading correctly. */
+            filter: grayscale(0.45) saturate(0.45) brightness(0.72) contrast(1.05);
         }
 
         #bbsSystemsMap .leaflet-popup-content-wrapper,
