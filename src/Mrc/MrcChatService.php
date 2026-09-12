@@ -648,6 +648,40 @@ final class MrcChatService
      * @return array<int,string> The rooms the caller was in (sanitized names),
      *     so the caller can fire any web-realtime presence refresh itself.
      */
+    /**
+     * Leave exactly one room: queues LOGOFF for that room and removes only
+     * this (user_id, room_name) presence row.
+     *
+     * Deliberately room-scoped, unlike {@see disconnect()} (whole-account,
+     * every currently-joined room). MRC Terminal Convergence M1C-1: a caller
+     * may have Web MRC and terminal MRC open simultaneously under the same
+     * BinkTerm account, in different rooms -- calling the whole-account
+     * disconnect() from one surface would incorrectly tear down the other
+     * surface's independently-active room presence too (confirmed collision
+     * risk, not fixed here; disconnect() is unchanged and this method exists
+     * so the terminal lifecycle never needs to call it). mrc_local_handles
+     * (the account's current MRC handle, not room-specific) is untouched --
+     * harmless to leave, and connect() already keeps it fresh on every use.
+     */
+    public function leaveRoom(?int $userId, string $username, string $bbsName, string $room): void
+    {
+        $localUserId = $userId ?? 0;
+        $room = MrcClient::sanitizeName($room);
+
+        $this->db->prepare("
+            INSERT INTO mrc_outbound (field1, field2, field3, field4, field5, field6, field7, priority)
+            VALUES (:f1, :f2, :f3, :f4, :f5, :f6, :f7, :priority)
+        ")->execute([
+            'f1' => $username, 'f2' => $bbsName, 'f3' => $room,
+            'f4' => 'SERVER',  'f5' => '',        'f6' => $room,
+            'f7' => 'LOGOFF', 'priority' => 10,
+        ]);
+
+        $this->db->prepare("
+            DELETE FROM mrc_local_presence WHERE user_id = :user_id AND room_name = :room
+        ")->execute(['user_id' => $localUserId, 'room' => $room]);
+    }
+
     public function disconnect(?int $userId, string $username, string $bbsName): array
     {
         $localUserId = $userId ?? 0;
