@@ -76,6 +76,8 @@
       "label_fallback": "Community",
       "items": [
         { "id": "chat",     "label_fallback": "Local Chat", "hotkey": "c", "action": "localchat", "access": "feature:chat" },
+        { "id": "mrc",      "label_fallback": "Inter-BBS Chat", "hotkey": "i", "action": "mrc", "access": "authenticated",
+          "description_fallback": "MRC -- chat with callers across the network" },
         { "id": "shoutbox", "label_fallback": "Shoutbox",   "hotkey": "s", "action": "shoutbox", "access": "feature:shoutbox" },
         { "id": "polls",    "label_fallback": "Polls",      "hotkey": "p", "action": "polls",    "access": "feature:voting_booth" },
         { "id": "who",      "label_fallback": "Who's Online","hotkey": "w", "action": "whosonline" },

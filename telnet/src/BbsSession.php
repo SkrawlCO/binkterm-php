@@ -948,17 +948,13 @@ class BbsSession
                 'nodelist'     => $nodelistHandler,
                 'whosonline'   => fn () => $this->showWhosOnline($conn, $state, $session, null),
                 'settings'     => $settingsHandler,
-                // TEMPORARY admin-only MRC Terminal Convergence human-test
-                // entry (M1C-2). Gated end-to-end on is_admin: the nav item's
-                // own "access": "admin" (config/terminal_navigation.json) and
-                // the mrc_test action's own 'admin' availability
-                // (TerminalActionCatalog) both independently enforce it.
-                // MrcChatHandler::participate() takes ($conn, &$state) only
-                // (no $session), so it is wired via a closure adapter here,
-                // the same pattern already used for newscan/echomail/
-                // whosonline above -- DeclarativeMenuBridge itself is
-                // unchanged. Not final M1D menu placement/label/hotkey.
-                'mrc_test'     => fn () => (new MrcChatHandler(
+                // MRC Terminal Convergence (M1D): Inter-BBS Chat, under the
+                // People submenu. MrcChatHandler::participate() takes
+                // ($conn, &$state) only (no $session), so it is wired via a
+                // closure adapter here, the same pattern already used for
+                // newscan/echomail/whosonline above -- DeclarativeMenuBridge
+                // itself is unchanged.
+                'mrc'          => fn () => (new MrcChatHandler(
                     $this,
                     new \BinktermPHP\Mrc\MrcChatService(\BinktermPHP\Database::getInstance()->getPdo())
                 ))->participate($conn, $state),

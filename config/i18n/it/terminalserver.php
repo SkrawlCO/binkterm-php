@@ -83,7 +83,7 @@ return [
     'ui.terminalserver.server.menu.shoutbox'           => 'S) Shoutbox',
     'ui.terminalserver.server.menu.polls'              => 'P) Sondaggi',
     'ui.terminalserver.server.menu.doors'              => 'D) Giochi door',
-    'ui.terminalserver.server.menu.mrc_test'          => 'R) MRC Test',
+    'ui.terminalserver.server.menu.mrc'               => 'I) Inter-BBS Chat',
     'ui.terminalserver.server.menu.quit'              => 'Q) Esci',
 
     // --- Farewell ---

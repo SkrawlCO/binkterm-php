@@ -83,7 +83,7 @@ return [
     'ui.terminalserver.server.menu.doors'              => 'D) Juegos de Puertas',
     'ui.terminalserver.server.menu.files'              => 'F) Archivos',
     'ui.terminalserver.server.menu.freqrequests'       => 'R) Solicitudes de archivos',
-    'ui.terminalserver.server.menu.mrc_test'          => 'R) MRC Test',
+    'ui.terminalserver.server.menu.mrc'               => 'I) Inter-BBS Chat',
     'ui.terminalserver.server.menu.quit'              => 'Q) Salir',
 
     // --- Farewell ---

@@ -573,6 +573,11 @@ as reading it from the message list does; skipping marks nothing, so a scan is
 always resumable. `newscan` is not part of the built-in menu — add it to your
 `config/terminal_navigation.json` to expose it.
 
+It can also bind the **`mrc`** action — Inter-BBS Chat, live chat with callers
+on other boards over the MRC network. Any authenticated caller can use it; it
+requires no separate feature flag and shares the same MRC network connection
+and service as the Web MRC WebDoor. On this board it lives under People.
+
 A sysop can optionally add an **ANSI presentation theme** (`config/terminal_theme.json`,
 see `config/terminal_theme.json.example`): a trusted `.ans` frame drawn around the
 navigation at exactly 80x24, with the menu and footer positioned into named

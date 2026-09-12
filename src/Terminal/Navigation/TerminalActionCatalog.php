@@ -35,13 +35,12 @@ final class TerminalActionCatalog
             ['id' => 'bbslist',      'key' => 'ui.terminalserver.server.menu.bbs_list',    'fallback' => 'BBS Directory',        'availability' => 'feature:bbs_directory', 'hotkey' => 'b', 'group' => 'explore',   'terminates' => false],
             ['id' => 'nodelist',     'key' => 'ui.terminalserver.server.menu.nodelist',    'fallback' => 'Node List',            'availability' => 'feature:nodelist',      'hotkey' => 'l', 'group' => 'explore',   'terminates' => false],
             ['id' => 'settings',     'key' => 'ui.terminalserver.server.menu.settings',    'fallback' => 'Settings',             'availability' => 'authenticated',         'hotkey' => 't', 'group' => 'account',   'terminates' => false],
-            // TEMPORARY admin-only MRC Terminal Convergence human-test entry
-            // (M1C-2). Gated on 'admin' here (in addition to the nav item's
-            // own "access": "admin" in config/terminal_navigation.json) so
-            // this action can never be usable by a non-admin regardless of
-            // how any future nav config references it. Not final M1D
-            // placement/label/hotkey.
-            ['id' => 'mrc_test',     'key' => 'ui.terminalserver.server.menu.mrc_test',    'fallback' => 'MRC Test',             'availability' => 'admin',                 'hotkey' => 'r', 'group' => 'account',   'terminates' => false],
+            // MRC Terminal Convergence (M1D): Inter-BBS Chat, final
+            // caller-facing placement under the People submenu. Any
+            // authenticated caller may use it -- same gate Web MRC's own
+            // api.php uses (WebDoorSDK\requireAuth()), no separate feature
+            // flag exists or is needed.
+            ['id' => 'mrc',          'key' => 'ui.terminalserver.server.menu.mrc',         'fallback' => 'Inter-BBS Chat',       'availability' => 'authenticated',         'hotkey' => 'i', 'group' => 'community', 'terminates' => false],
             ['id' => 'quit',         'key' => 'ui.terminalserver.server.menu.quit',        'fallback' => 'Quit',                 'availability' => 'always',                'hotkey' => 'q', 'group' => 'account',   'terminates' => true],
         ];
     }
