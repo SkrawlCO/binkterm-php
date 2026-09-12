@@ -36,15 +36,22 @@ final class ChessmataWebSessionTest extends TestCase
         // below calls ChessmataWebSession::issue() with no broker, which falls
         // back to constructing its own ChessmataIdentity via
         // Database::getInstance() internally.
+        //
+        // No outer test transaction here: ChessmataIdentity::resolve() (reached
+        // via issue()) owns a real transaction (pg_advisory_xact_lock,
+        // transaction-scoped) as genuine production behavior -- PDO doesn't
+        // support nesting beginTransaction(). Isolation instead comes from
+        // TestDatabase (the connection can only ever be binktermphp_test) plus
+        // the explicit per-fixture cleanup in tearDown() below.
         Database::setInstanceForTesting($this->db);
-        $this->db->beginTransaction();
         $this->box = new ChessmataSecretBox(random_bytes(SODIUM_CRYPTO_SECRETBOX_KEYBYTES));
     }
 
     protected function tearDown(): void
     {
-        if (isset($this->db) && $this->db->inTransaction()) {
-            $this->db->rollBack();
+        foreach ($this->testUserIds as $id) {
+            $this->db->prepare('DELETE FROM chessmata_identities WHERE binkterm_user_id = ?')->execute([$id]);
+            $this->db->prepare('DELETE FROM users WHERE id = ?')->execute([$id]);
         }
         Database::resetInstanceForTesting();
     }
