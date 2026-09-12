@@ -40,18 +40,18 @@ final class ChessmataTerminalSessionTest extends TestCase
     protected function setUp(): void
     {
         $this->db = Database::getInstance()->getPdo();
+        $this->db->beginTransaction();
         $this->box = new ChessmataSecretBox(random_bytes(SODIUM_CRYPTO_SECRETBOX_KEYBYTES));
         $this->launcher = dirname(__DIR__, 2) . '/native-doors/doors/chessmata/launch-chessmata.sh';
     }
 
     protected function tearDown(): void
     {
-        foreach ($this->testUserIds as $id) {
-            $this->db->prepare('DELETE FROM chessmata_identities WHERE binkterm_user_id = ?')->execute([$id]);
-            $this->db->prepare('DELETE FROM users WHERE id = ?')->execute([$id]);
-        }
         foreach ($this->tmpPaths as $p) {
             $this->rmrf($p);
+        }
+        if (isset($this->db) && $this->db->inTransaction()) {
+            $this->db->rollBack();
         }
     }
 
