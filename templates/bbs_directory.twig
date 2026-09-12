@@ -466,9 +466,26 @@
         updateSortIndicators();
     }
 
+    // Bounds captured at map-build time so the view can be reapplied after
+    // invalidateSize() (needed because the map is built while its tab is
+    // still hidden — see applyMapView()/the tab-shown listener below).
+    let lastMapBounds = [];
+
+    function applyMapView() {
+        if (!bbsSystemsMap || lastMapBounds.length === 0) {
+            return;
+        }
+        if (lastMapBounds.length === 1) {
+            bbsSystemsMap.setView(lastMapBounds[0], 6);
+        } else {
+            bbsSystemsMap.fitBounds(lastMapBounds, { padding: [30, 30] });
+        }
+    }
+
     function initMap() {
         if (bbsSystemsMap) {
-            bbsSystemsMap.invalidateSize();
+            // Already built. Sizing/view correction for tab activation is
+            // handled by the shown.bs.tab listener below.
             return;
         }
 
@@ -539,11 +556,8 @@
 
         bbsSystemsMap.addLayer(markerClusterGroup);
 
-        if (bounds.length === 1) {
-            bbsSystemsMap.setView(bounds[0], 6);
-        } else {
-            bbsSystemsMap.fitBounds(bounds, { padding: [30, 30] });
-        }
+        lastMapBounds = bounds;
+        applyMapView();
     }
 
     if (input) {
@@ -588,7 +602,16 @@
         mapTab.addEventListener('shown.bs.tab', function() {
             initMap();
             if (bbsSystemsMap) {
-                bbsSystemsMap.invalidateSize();
+                // The tab-pane's box may not have its final layout size yet in
+                // this same synchronous tick, which previously left the map
+                // built at a 0x0 container (tiles never requested, though
+                // markers still rendered since they don't depend on pixel
+                // size). Defer to the next frame so layout has settled, then
+                // resize and reapply the view.
+                requestAnimationFrame(function() {
+                    bbsSystemsMap.invalidateSize();
+                    applyMapView();
+                });
             }
         });
     }
