@@ -195,6 +195,34 @@ final class MrcChatService
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    /**
+     * The most recent non-private messages for a room, oldest first (for an
+     * initial history view). Distinct from {@see getRoomMessages()}, which is
+     * a forward cursor from an `after` id for live polling and would return
+     * the OLDEST messages first on a fresh (after=0) call if the room has
+     * more than $limit messages -- not "recent" at all.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function getRecentRoomMessages(string $room, int $limit = 100): array
+    {
+        $limit = min(1000, max(1, $limit));
+        $stmt = $this->db->prepare("
+            SELECT
+                id, from_user, from_site, from_room, to_user, to_room,
+                message_body, msg_ext, is_private, received_at
+            FROM mrc_messages
+            WHERE (to_room = :room OR from_room = :room)
+              AND is_private = false
+            ORDER BY received_at DESC, id DESC
+            LIMIT :limit
+        ");
+        $stmt->bindValue(':room', $room, PDO::PARAM_STR);
+        $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+        $stmt->execute();
+        return array_reverse($stmt->fetchAll(PDO::FETCH_ASSOC));
+    }
+
     /** @return array<int, array<string, mixed>> */
     public function getPrivateMessages(string $me, string $with, int $after, int $limit = 100): array
     {
