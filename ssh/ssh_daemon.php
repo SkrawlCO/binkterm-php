@@ -21,6 +21,7 @@ require_once __DIR__ . '/../telnet/src/TerminalLineEditor.php';
 require_once __DIR__ . '/../telnet/src/TerminalLineHistory.php';
 require_once __DIR__ . '/../telnet/src/TelnetUtils.php';
 require_once __DIR__ . '/../telnet/src/TerminalMarkupRenderer.php';
+require_once __DIR__ . '/../telnet/src/AnsiCanvasRenderer.php';
 require_once __DIR__ . '/../telnet/src/SixelImageRenderer.php';
 require_once __DIR__ . '/../telnet/src/TerminalBoxRenderer.php';
 require_once __DIR__ . '/../telnet/src/DeclarativeMenuBridge.php';

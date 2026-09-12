@@ -49,7 +49,7 @@ class TerminalTextSanitizer
      * No private ('?','<','>','=') markers and no intermediate bytes are
      * allowed, so mode changes and device queries never match.
      */
-    private const POSITIONING_PATTERN = '\x1b\[[0-9;]*[A-HJKSTdfsu]';
+    public const POSITIONING_PATTERN = '\x1b\[[0-9;]*[A-HJKSTdfsu]';
 
     /**
      * Strip terminal control sequences from untrusted text, keeping only SGR

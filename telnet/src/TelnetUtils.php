@@ -942,6 +942,66 @@ class TelnetUtils
     }
 
     /**
+     * Render a raw FTN message body to safe terminal display lines, sharing
+     * one body-rendering decision across every echomail/netmail reader.
+     *
+     * Genuinely positioned ANSI art (cursor movement/erase — see
+     * {@see \BinktermPHP\TerminalTextSanitizer::POSITIONING_PATTERN}) is
+     * detected directly against the RAW body, before any sanitisation. When
+     * present, it is the only body class routed through the virtual-canvas
+     * renderer, which resolves the positioning server-side and returns
+     * SGR/text-only lines — the result is used as-is, never re-wrapped or
+     * re-clipped. Every other body (plain prose, SGR-colour prose, SGR-only
+     * ANSI art, and markup-rendered bodies) takes the existing POLICY_STRIP
+     * path completely unchanged: markup render if applicable, else
+     * {@see ArtFormatDetector}-gated {@see clipArtLines()} for SGR-only art,
+     * else {@see wrapTextLines()} for ordinary prose.
+     *
+     * Known non-blocking gap: POLICY_POSITIONING preserves CSI `S`/`T`
+     * (scroll up/down), but AnsiCanvasRenderer has no case for them in its
+     * CSI switch and intentionally consumes and ignores them rather than
+     * leaking them into output — scroll-region art renders no worse than
+     * today, just not better. Not fixed here.
+     *
+     * @param string      $rawBody      Raw, unsanitized message body.
+     * @param string|null $markupFormat Detected markup format, if any (unrelated to ANSI art).
+     * @param string|null $charsetHint  Message charset hint, passed through to ArtFormatDetector.
+     * @param int         $cols         Current terminal column count.
+     * @return string[] Display lines, ready for encodeForTerminal().
+     */
+    public static function renderMessageBodyLines(
+        string $rawBody,
+        ?string $markupFormat,
+        ?string $charsetHint,
+        int $cols
+    ): array {
+        if (preg_match('/' . \BinktermPHP\TerminalTextSanitizer::POSITIONING_PATTERN . '/', $rawBody) === 1) {
+            $positioned  = \BinktermPHP\TerminalTextSanitizer::sanitize(
+                $rawBody,
+                \BinktermPHP\TerminalTextSanitizer::POLICY_POSITIONING
+            );
+            $canvasWidth = min(max(10, $cols - 1), 80);
+            return AnsiCanvasRenderer::render($positioned, $canvasWidth);
+        }
+
+        $safeBody = \BinktermPHP\TerminalTextSanitizer::sanitize($rawBody);
+        $width    = max(10, $cols - 2);
+
+        if ($markupFormat !== null) {
+            return TerminalMarkupRenderer::render($markupFormat, $safeBody, $width);
+        }
+
+        $artFormat = \BinktermPHP\ArtFormatDetector::detectArtFormat($safeBody, $charsetHint);
+        if ($artFormat !== null) {
+            // ANSI artwork: keep authored rows, clip (never reflow) to the
+            // full terminal width less one guard column.
+            return self::clipArtLines($safeBody, max(10, $cols - 1));
+        }
+
+        return self::wrapTextLines($safeBody, $width);
+    }
+
+    /**
      * Clear the screen and render a full-screen layout: header, body, and status bar.
      *
      * Hides the cursor during the draw pass to prevent scroll artifacts, then parks

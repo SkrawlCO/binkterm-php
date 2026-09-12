@@ -751,12 +751,13 @@ class NetmailHandler
             }
             // GHSA-4225: sanitize the body before the art-fidelity layer.
             // stripNonDisplayAnsi() delegates to TerminalTextSanitizer::sanitize().
-            $body         = TerminalMarkupRenderer::stripNonDisplayAnsi($detail['data']['message_text'] ?? '');
+            // renderMessageBodyLines() (below) makes the wrap/clip/canvas
+            // decision from $rawBody itself, so $body here stays the
+            // POLICY_STRIP body used only for image-reference extraction.
+            $rawBody      = $detail['data']['message_text'] ?? '';
+            $body         = TerminalMarkupRenderer::stripNonDisplayAnsi($rawBody);
             $markupFormat = $detail['data']['markup_format'] ?? null;
-            $artFormat    = \BinktermPHP\ArtFormatDetector::detectArtFormat(
-                $body,
-                $detail['data']['message_charset'] ?? null
-            );
+            $charsetHint  = $detail['data']['message_charset'] ?? null;
             $attachments  = $detail['data']['attachments'] ?? [];
             $rawKludges   = \BinktermPHP\TerminalTextSanitizer::sanitize(($detail['data']['kludge_lines'] ?? '') . "\n" . ($detail['data']['bottom_kludges'] ?? ''));
             $kludgeLines  = TerminalMarkupRenderer::extractKludgeLines($rawKludges);
@@ -776,7 +777,7 @@ class NetmailHandler
 
             // Closure that rebuilds all layout-dependent view components from current $state.
             // Called once on open and again whenever the terminal is resized.
-            $buildView = function(array $s) use ($msg, $body, $markupFormat, $artFormat, $hasAttachments, $imageRefs, $isSentFolder, &$isSaved, $keyColor, $lblColor): array {
+            $buildView = function(array $s) use ($msg, $rawBody, $markupFormat, $charsetHint, $hasAttachments, $imageRefs, $isSentFolder, &$isSaved, $keyColor, $lblColor): array {
                 $cols    = $s['cols'] ?? 80;
                 $width   = max(10, $cols - 2);
                 $charset = $this->server->getTerminalCharset();
@@ -806,16 +807,7 @@ class NetmailHandler
                 $segments[] = ['text' => 'Q', 'color' => $keyColor];
                 $segments[] = ['text' => ' Quit', 'color' => $lblColor];
 
-                $safeBody = TerminalMarkupRenderer::stripNonDisplayAnsi($body);
-                if ($markupFormat !== null) {
-                    $wrappedLines = TerminalMarkupRenderer::render($markupFormat, $body, $width);
-                } elseif ($artFormat !== null) {
-                    // ANSI artwork: keep authored rows, clip (never reflow) to the
-                    // full terminal width less one guard column.
-                    $wrappedLines = TelnetUtils::clipArtLines($safeBody, max(10, $cols - 1));
-                } else {
-                    $wrappedLines = TelnetUtils::wrapTextLines($safeBody, $width);
-                }
+                $wrappedLines = TelnetUtils::renderMessageBodyLines($rawBody, $markupFormat, $charsetHint, $cols);
                 $wrappedLines = array_map(fn(string $line): string => $this->server->encodeForTerminal($line), $wrappedLines);
 
                 return [

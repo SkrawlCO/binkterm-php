@@ -294,12 +294,19 @@ final class AnsiEchomailRenderingTest extends TestCase
         );
     }
 
-    public function testEchomailAndNetmailViewersBothRouteArtThroughClipArtLines(): void
+    /**
+     * Echomail's two viewers and Netmail's viewer no longer each carry a
+     * local copy of the ArtFormatDetector/clipArtLines decision -- they all
+     * call the single shared TelnetUtils::renderMessageBodyLines() helper,
+     * which is what now gates on the detector and renders SGR-only art
+     * without reflow (see RenderMessageBodyLinesTest for that behavior).
+     */
+    public function testEchomailAndNetmailViewersBothRouteArtThroughTheSharedHelper(): void
     {
         foreach (['EchomailHandler.php', 'NetmailHandler.php'] as $file) {
             $src = file_get_contents(__DIR__ . '/../../telnet/src/' . $file);
-            self::assertStringContainsString('ArtFormatDetector::detectArtFormat', $src, "{$file} gates on the generic detector");
-            self::assertStringContainsString('TelnetUtils::clipArtLines', $src, "{$file} renders detected art without reflow");
+            self::assertStringContainsString('TelnetUtils::renderMessageBodyLines', $src, "{$file} uses the shared body-render helper");
+            self::assertStringNotContainsString('ArtFormatDetector::detectArtFormat', $src, "{$file} no longer duplicates the art-detection gate locally");
         }
     }
 

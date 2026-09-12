@@ -19,6 +19,7 @@ require_once __DIR__ . '/src/TerminalLineEditor.php';
 require_once __DIR__ . '/src/TerminalLineHistory.php';
 require_once __DIR__ . '/src/TelnetUtils.php';
 require_once __DIR__ . '/src/TerminalMarkupRenderer.php';
+require_once __DIR__ . '/src/AnsiCanvasRenderer.php';
 require_once __DIR__ . '/src/SixelImageRenderer.php';
 require_once __DIR__ . '/src/TerminalBoxRenderer.php';
 require_once __DIR__ . '/src/DeclarativeMenuBridge.php';
