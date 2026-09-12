@@ -1,0 +1,19 @@
+{
+  "webdoor_version": "1.0",
+  "game": {
+    "id": "doot",
+    "name": "Doot Games",
+    "version": "0.0.0-0f78d6d",
+    "author": "Doot Games project (MIT); L33TEST Crossroads integration",
+    "description": "A live, collaborative party-game platform. Host puts a game on the big screen, everyone else joins from their phone with a short room code or QR -- no accounts needed to play. The full canonical catalog: Story Chain, Mad Libs, Doodle Chain, Quip Clash, Split the Room, Wavelength, and dozens more.",
+    "entry_point": "index.php",
+    "icon": "icon.png"
+  },
+  "requirements": {
+    "min_host_version": "1.0",
+    "admin_only": false
+  },
+  "multiplayer": {
+    "enabled": true
+  }
+}
