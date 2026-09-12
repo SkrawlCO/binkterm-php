@@ -185,6 +185,128 @@ across Sep 5, 6, 7, 8, 10, 11 2026.
 **Do NOT claim** application-consistent restore has been tested or that an
 actual restore drill has been performed — both remain unproven.
 
+## PEH-P2 — Backup/Recovery coverage closeout — 2026-09-12
+
+Read-only investigation (no production touched, no restarts, no rebuilds).
+
+**Storage topology.** The VPS has one primary disk, `vda` = 200 GB. `vda1` is
+the single ext4 root filesystem mounted at `/` (~194G usable, 59% used at
+inspection); `vda15` is the small EFI partition at `/boot/efi`. No additional
+data disks, no network storage. `/var/lib/docker` and every identified
+production bind-mount source reside on this same root filesystem.
+
+The locally observed 200 GB `vda` disk matches, by size, the RackGenius
+control-panel identification of the backed-up VPS "Drive A" (also human-
+verified 2026-09-12: backups enabled, 11 restore points, multiple AVAILABLE
+restore points Sep 5–11, retention "1 week, minimum 3 retained", Restore
+function available). This is strong evidence that the single root disk
+holding all identified recovery-critical state is the provider-backed Drive
+A. Provider-side inclusion/exclusion semantics were intentionally **not**
+independently re-investigated, so this is recorded as the supported
+backup-coverage conclusion, not a newly proven provider implementation
+detail.
+
+**Recovery-critical state map:**
+
+1. Primary BinkTermPHP PostgreSQL DB — `/root/binktermphp/pgdata` — bind
+   mount → `binkterm-db`/postgres:16 — **CRITICAL**
+2. App/runtime persistent state — `/root/binktermphp/app` (gitignored
+   `data/` and similar: users, netmail/echomail attachments, FTN
+   inbound/outbound spool, Doot state, config, uploads) — **CRITICAL**
+3. MultiZork (player DB/pinned runtime/story) —
+   `/root/binktermphp/state/multizork` — **CRITICAL**
+4. Chessmata MongoDB (users/games/Elo) —
+   `/root/binktermphp/state/chessmata-mongo` — IMPORTANT
+5. Chessmata Maia2 model cache —
+   `/root/binktermphp/state/chessmata-agent-models` — LOW, rebuildable via
+   verified re-download
+6. Galactic Bloodshed state — `/root/binktermphp/state/galactic-bloodshed` —
+   WATCH, not currently a curated production Experience
+7. Production secrets — `/root/binktermphp/secrets/*` (paths/roles recorded
+   only; contents not inspected or reproduced) — **CRITICAL**
+8. Production deployment definitions —
+   `/root/binktermphp/docker-compose.yml`, `/root/binktermphp/docker/` —
+   **CRITICAL**. Important recovery fact: the deploy repo (`master`) has
+   **no remote**, so this filesystem is the sole known copy of that
+   deployment git history/source.
+9. Application source — `/root/binktermphp/app`, `experience-lobby-v2`,
+   checkpoint `a84353b74` — **CRITICAL but redundantly recoverable** (has
+   `origin`/GitHub).
+10. LORD runtime state — `/root/lord-binkterm/runtime`,
+    `/root/lord-binkterm/drops` — IMPORTANT. Flagged explicitly: these live
+    **outside** `/root/binktermphp/` and are easy to overlook during
+    recovery.
+11. TLS state — `/etc/letsencrypt/` — **CRITICAL** for restored HTTPS.
+12. Host Apache configuration (Cloudflare trust/proxy boundary) —
+    `/etc/apache2/sites-available/*` — **CRITICAL**. Backup copies of some
+    vhost material also exist in deployment repo material, but the active
+    host configuration remains part of recovery.
+13. ascii-royale-arena / tournament-trivia — no independent recovery-critical
+    mutable state; runtime is image/source-defined.
+
+**Live stack reconciliation.** The known 16 in-container supervisor programs
+were reconciled and no unexplained ephemeral-only production state was
+found. Architectural note: those 16 programs describe processes inside
+`binkterm-app` only. The complete production ecosystem additionally includes
+sibling containers — `binkterm-db`, Chessmata/Mongo/agents,
+`doorparty-connector`, `l33test-lord`, Galactic Bloodshed/provisioning — all
+covered in the state map above, all resolving onto the same root filesystem.
+
+**Recovery order / checklist:**
+
+1. Restore VPS/root filesystem from an appropriate RackGenius Drive A
+   restore point.
+2. Verify recovery-critical deployment/host configuration exists:
+   `/root/binktermphp/docker-compose.yml`, `/root/binktermphp/docker/`,
+   `/etc/apache2/sites-available/`, `/etc/letsencrypt/`.
+3. Verify persistent state before recreating services: `pgdata`, app
+   persistent/runtime data, `state/multizork`, `state/chessmata-mongo`,
+   `state/galactic-bloodshed`, `/root/lord-binkterm/{runtime,drops}`,
+   `secrets/`.
+4. Verify required ownership/modes/identities/secrets. Dedicated
+   in-container identities (`dosdoor`, `binkterm-admin`) use dynamically
+   assigned UIDs and must be re-verified after rebuild/recreate, not
+   assumed from prior numeric values (existing PEH guidance).
+5. Recreate/start the production stack in dependency-aware order from the
+   committed real deployment source under `/root/binktermphp`.
+6. Verify stateful services: primary PostgreSQL healthy; BBS Directory
+   regression anchor; Doot SQLite/state present; MultiZork state present;
+   Chessmata Mongo replica set PRIMARY; other Experience state as
+   applicable.
+7. Verify application health: 16/16 supervisor RUNNING, cron RUNNING,
+   `/crossroads` → 200, `/bbs-directory` → 200, `/doot-app/` → 200.
+8. Verify externally facing paths: Cloudflare → Apache → Caddy proxy/trust
+   chain, Telnet, SSH, BinkP :24554, other relevant endpoints.
+
+**RESTORE VALIDATION REMAINS UNPROVEN.** No application-consistent restore
+drill has been performed or authorized. Provider restore-point availability
+plus this storage-location mapping establishes the current backup/recovery
+*coverage* assessment — it does **not** establish that a restored VPS has
+successfully booted the complete L33TEST stack, or that application data is
+transactionally consistent after a restore.
+
+**Follow-up/watch item (not investigated further, not fixed):** a running
+container named `binkterm-modern-postgres` (postgres:18, Docker named
+volume) is not referenced by the current production
+`docker-compose.yml`; the live app is configured against `binkterm-db`
+instead. Its named volume still resides on the same Drive-A/root
+filesystem, so this does **not** create a backup-coverage gap. Purpose
+appears orphaned/experimental from current evidence but is not conclusively
+classified. Disposition: P2/P3 follow-up/watch — do not remove, stop,
+inspect deeply, or modify absent a dedicated later transaction.
+
+### P2 BACKUP / RECOVERY COVERAGE: CLOSED
+
+Basis: all identified recovery-critical L33TEST persistent state resides on
+the single 200 GB root disk; that disk corresponds by size/topology to the
+human-verified RackGenius Drive A with active restore points; no
+production-critical state was found on another disk, network filesystem, or
+unexplained ephemeral-only storage; recovery-critical paths and recovery
+order are now documented above.
+
+Separate, standing limitation: **REAL RESTORE DRILL: UNPROVEN / NOT
+AUTHORIZED.**
+
 ## Remaining PEH work
 
 All P0: **CLOSED**. All P1: **CLOSED**.
@@ -195,9 +317,9 @@ privilege drop.
 
 **Remaining P2 / closeout work:**
 
-1. **Backup/recovery closeout** — confirm all important L33TEST persistent
-   state resides on RackGenius-backed Drive A; document recovery order; no
-   restore drill required unless explicitly chosen later.
+1. ~~**Backup/recovery closeout**~~ — **CLOSED 2026-09-12**, see "PEH-P2 —
+   Backup/recovery coverage closeout" above. Restore drill remains
+   UNPROVEN/not authorized (unchanged, not required for this closure).
 2. **Incomplete lifecycle sweep** — revisit only unresolved/partially-covered
    P2 lifecycle items from the broader audit (Doot/CLASP cleanup leftovers,
    WebDoor lifecycle leftovers, game-service lifecycle leftovers, unattended
@@ -233,7 +355,7 @@ candidate assays.
 
 ## Recommended next-session objective
 
-Start with **item 1 (Backup/recovery closeout)** — it is the narrowest,
-lowest-risk remaining item and was explicitly flagged by Matt tonight: confirm
-persistent-state coverage on Drive A and write the recovery-order checklist,
-without performing a restore drill.
+Item 1 (Backup/recovery closeout) is now **CLOSED** (see PEH-P2 section
+above). Next candidate is **item 2 (Incomplete lifecycle sweep)** or **item 3
+(test-safety survey of the 17 other `Database::getInstance()` Unit tests)** —
+pick whichever Matt prioritizes; both are bounded, narrow, low-risk.
