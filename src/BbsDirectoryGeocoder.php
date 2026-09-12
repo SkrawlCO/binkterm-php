@@ -8,6 +8,22 @@ class BbsDirectoryGeocoder
     private const REQUEST_INTERVAL_US = 1000000;
     private const TIMEOUT_SECONDS = 10;
     private static float $lastRequestAt = 0.0;
+    private ?\PDO $db;
+
+    /**
+     * @param \PDO|null $db Optional injected connection (tests use this to
+     *   point at an isolated database instead of production -- see PEH-6B).
+     *   Defaults to the production singleton, unchanged from prior behavior.
+     */
+    public function __construct(?\PDO $db = null)
+    {
+        $this->db = $db;
+    }
+
+    private function getDb(): \PDO
+    {
+        return $this->db ?? Database::getInstance()->getPdo();
+    }
 
     public function isEnabled(): bool
     {
@@ -77,7 +93,7 @@ class BbsDirectoryGeocoder
     private function getCachedResult(string $cacheKey): ?array
     {
         try {
-            $db = Database::getInstance()->getPdo();
+            $db = $this->getDb();
             $stmt = $db->prepare("
                 SELECT latitude, longitude
                 FROM geocode_cache
@@ -113,7 +129,7 @@ class BbsDirectoryGeocoder
     private function storeCachedResult(string $cacheKey, string $location, ?array $result, string $status): void
     {
         try {
-            $db = Database::getInstance()->getPdo();
+            $db = $this->getDb();
             $stmt = $db->prepare("
                 INSERT INTO geocode_cache (location_key, normalized_location, latitude, longitude, status, cached_at)
                 VALUES (:location_key, :normalized_location, :latitude, :longitude, :status, NOW())
@@ -136,7 +152,7 @@ class BbsDirectoryGeocoder
         }
     }
 
-    private function httpGetJson(string $url): ?array
+    protected function httpGetJson(string $url): ?array
     {
         $this->throttle();
 
