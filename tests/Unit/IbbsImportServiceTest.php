@@ -3,22 +3,39 @@
 declare(strict_types=1);
 
 use BinktermPHP\Directory\IbbsImportService;
-use BinktermPHP\Database;
+use BinktermPHP\Config;
 use PHPUnit\Framework\TestCase;
 
 /**
  * IBBS (Telnet BBS Guide) directory sync importer — parsing, normalization,
  * identity/dedupe, and dry-run reconciliation planning.
+ *
+ * DATABASE ISOLATION (PEH-5): every test in this class that touches the
+ * database uses a dedicated, disposable `binktermphp_test` PostgreSQL
+ * database — never the production `binktermphp` database. self::db() builds
+ * its own PDO directly (reusing DB_HOST/DB_PORT/DB_USER/DB_PASS from .env,
+ * but hard-forcing the database name) and never calls
+ * BinktermPHP\Database::getInstance(), which resolves production. A
+ * fail-closed guard checks `SELECT current_database()` immediately after
+ * connecting and refuses to proceed if it is anything other than
+ * `binktermphp_test` — so a misconfigured environment fails loudly before
+ * any fixture INSERT/UPDATE/DELETE, rather than silently mutating
+ * production. Because the test database is fully disposable, an interrupted
+ * run (killed process, failed assertion before cleanup) can only leave stray
+ * rows in `binktermphp_test`, never in production. Never point these tests
+ * at the production database.
  */
 final class IbbsImportServiceTest extends TestCase
 {
+    private const TEST_DATABASE_NAME = 'binktermphp_test';
+
     private const HEADER = "bbsName, bbsSysop, newLogin, TelnetAddress, bbsPort, sshPort, WebAddress, location, Modem, software\n";
 
     public function testParsesValidCsvIntoNormalizedRecords(): void
     {
         $csv = self::HEADER .
             "Test BBS,Sysop Name,NEW,bbs.example.com,2323,22,http://example.com,\"Denver, CO, USA\",,Mystic\n";
-        $service = new IbbsImportService();
+        $service = new IbbsImportService(self::db());
         $result = $service->parseCsv($csv);
 
         $this->assertSame(1, $result['stats']['source_rows']);
@@ -39,7 +56,7 @@ final class IbbsImportServiceTest extends TestCase
         $csv = self::HEADER . "Blank Fields BBS,,,,,,,,,,\n";
         // The row above has too many columns due to trailing comma; use exact column count instead.
         $csv = self::HEADER . "Blank Fields BBS,,,,,,,,,\n";
-        $service = new IbbsImportService();
+        $service = new IbbsImportService(self::db());
         $result = $service->parseCsv($csv);
 
         $this->assertSame(1, $result['stats']['valid_rows']);
@@ -57,7 +74,7 @@ final class IbbsImportServiceTest extends TestCase
     public function testDefaultsTelnetPortTo23WhenHostPresentButPortBlank(): void
     {
         $csv = self::HEADER . "Port Default BBS,,,bbs.example.net,,,,,,\n";
-        $service = new IbbsImportService();
+        $service = new IbbsImportService(self::db());
         $result = $service->parseCsv($csv);
 
         $this->assertSame(23, $result['records'][0]['telnet_port']);
@@ -66,7 +83,7 @@ final class IbbsImportServiceTest extends TestCase
     public function testInvalidPortIsFlaggedAndEndpointDropped(): void
     {
         $csv = self::HEADER . "Bad Port BBS,,,bbs.example.net,notaport,,,,,\n";
-        $service = new IbbsImportService();
+        $service = new IbbsImportService(self::db());
         $result = $service->parseCsv($csv);
 
         $this->assertSame(1, $result['stats']['invalid_port_count']);
@@ -76,7 +93,7 @@ final class IbbsImportServiceTest extends TestCase
     public function testBlankNameRowIsExcludedAsInvalid(): void
     {
         $csv = self::HEADER . ",Sysop,,bbs.example.net,23,,,,,Mystic\n";
-        $service = new IbbsImportService();
+        $service = new IbbsImportService(self::db());
         $result = $service->parseCsv($csv);
 
         $this->assertSame(0, $result['stats']['valid_rows']);
@@ -86,7 +103,7 @@ final class IbbsImportServiceTest extends TestCase
     public function testModemPreservedAsNotesNotMergedIntoUnrelatedField(): void
     {
         $csv = self::HEADER . "Dialup BBS,,,,,,,,555-1234,\n";
-        $service = new IbbsImportService();
+        $service = new IbbsImportService(self::db());
         $result = $service->parseCsv($csv);
 
         $this->assertSame('Modem: 555-1234', $result['records'][0]['notes']);
@@ -95,14 +112,14 @@ final class IbbsImportServiceTest extends TestCase
     public function testMissingCsvHeaderFieldThrows(): void
     {
         $this->expectException(\RuntimeException::class);
-        $service = new IbbsImportService();
+        $service = new IbbsImportService(self::db());
         $service->parseCsv("bbsName,bbsSysop\nOnly Two Cols,Sysop\n");
     }
 
     public function testMissingZipThrowsWithoutWrites(): void
     {
         $this->expectException(\RuntimeException::class);
-        $service = new IbbsImportService();
+        $service = new IbbsImportService(self::db());
         $service->readCsvFromZip('/tmp/does-not-exist-ibbs-' . uniqid() . '.zip');
     }
 
@@ -112,7 +129,7 @@ final class IbbsImportServiceTest extends TestCase
         file_put_contents($badZip, 'not a real zip file');
         try {
             $this->expectException(\RuntimeException::class);
-            $service = new IbbsImportService();
+            $service = new IbbsImportService(self::db());
             $service->readCsvFromZip($badZip);
         } finally {
             @unlink($badZip);
@@ -129,7 +146,7 @@ final class IbbsImportServiceTest extends TestCase
 
         try {
             $this->expectException(\RuntimeException::class);
-            $service = new IbbsImportService();
+            $service = new IbbsImportService(self::db());
             $service->readCsvFromZip($zipPath);
         } finally {
             @unlink($zipPath);
@@ -389,8 +406,56 @@ final class IbbsImportServiceTest extends TestCase
         return $lines;
     }
 
+    /** @var \PDO|null cached for the duration of the process */
+    private static ?\PDO $testPdo = null;
+
+    /**
+     * Returns a PDO connected ONLY to the dedicated binktermphp_test
+     * database. Deliberately does NOT call BinktermPHP\Database::getInstance()
+     * (which resolves the production DB_NAME from .env) — instead builds its
+     * own DSN, reusing the connection host/port/credentials but hard-forcing
+     * the database name to self::TEST_DATABASE_NAME. Immediately verifies
+     * `current_database()` and throws before returning if it is not exactly
+     * the approved test database, so no caller can ever receive a PDO
+     * pointed at production.
+     */
     private static function db(): \PDO
     {
-        return Database::getInstance()->getPdo();
+        if (self::$testPdo instanceof \PDO) {
+            return self::$testPdo;
+        }
+
+        $host = Config::env('DB_HOST', 'localhost');
+        $port = Config::env('DB_PORT', '5432');
+        $user = Config::env('DB_USER', 'postgres');
+        $pass = Config::env('DB_PASS', '');
+
+        $dsn = sprintf('pgsql:host=%s;port=%s;dbname=%s', $host, $port, self::TEST_DATABASE_NAME);
+        $pdo = new \PDO($dsn, $user, $pass, [
+            \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
+        ]);
+
+        self::assertConnectedToTestDatabase($pdo);
+
+        self::$testPdo = $pdo;
+        return $pdo;
+    }
+
+    /**
+     * Fail-closed production guard. Must run before any mutating fixture
+     * SQL or IbbsImportService call that could write. Deliberately checks
+     * the database identity itself (current_database()) rather than any
+     * naming convention on the fixture rows — the exact failure mode this
+     * guards against is a misconfigured connection reaching production
+     * regardless of what the test intended to write.
+     */
+    private static function assertConnectedToTestDatabase(\PDO $pdo): void
+    {
+        $actual = (string)$pdo->query('SELECT current_database()')->fetchColumn();
+        if ($actual !== self::TEST_DATABASE_NAME) {
+            throw new \RuntimeException(
+                "Refusing to run mutating IBBS tests against non-test database: {$actual}"
+            );
+        }
     }
 }
