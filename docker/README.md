@@ -1,5 +1,17 @@
 # Docker Configuration Files
 
+> ⚠️ **NOT THE L33TEST PRODUCTION BUILD SOURCE.** This `app/docker/` tree
+> belongs to the application repo's general/upstream Docker deployment
+> architecture (entrypoint-generated cron, `ENABLE_*`-templated optional
+> daemons, etc.). **Current L33TEST production does NOT build from this
+> directory and editing it will not change the real L33TEST production
+> image.** L33TEST production is built from a separate, no-remote deploy
+> repo at `/root/binktermphp` — its `docker-compose.yml` and `docker/`
+> (Dockerfile, supervisord.conf, Caddyfile, binkterm.cron) are authoritative
+> for that host. For L33TEST deployment work, use that repo, not this one.
+> (This confusion cost real time during the 2026-09 post-expansion hardening
+> pass — see that repo's top-level `README.md` for the mirror of this note.)
+
 This directory contains Docker-specific configuration files for BinktermPHP.
 
 **Note:** Docker is a best-effort deployment option, not the primary target — the bare-metal install (`docs/INSTALL.md`) receives the most testing. Docker support is improving as issues are reported; if you run into problems, please report them in the **LVLY_BINKTERMPHP** echo area or on [GitHub](https://github.com/awehttam/binkterm-php/issues).
