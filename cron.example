@@ -11,3 +11,12 @@ MAILTO=""
 
 # Update nodelists daily at 3am
 0 3 * * * /usr/bin/php /path/to/binkterm/scripts/update_nodelists.php --quiet
+
+# Monthly IBBS (Telnet BBS Guide) directory sync — downloads/validates/reconciles;
+# leaves the directory untouched on any failure. Disabled by default in Docker
+# (ENABLE_IBBS_DIRECTORY_SYNC); bare-metal installs enable by adding this line.
+0 6 1 * * /usr/bin/php /path/to/binkterm/scripts/ibbs_directory_sync.php --apply --quiet >> /path/to/binkterm/data/logs/ibbs_directory_sync.log 2>&1
+
+# Bounded BBS Directory coordinate backfill (separate from the sync above;
+# respects the geocoder's 1 req/sec throttle).
+0 */6 * * * /usr/bin/php /path/to/binkterm/scripts/geocode_bbs_directory.php --limit=150 >> /path/to/binkterm/data/logs/bbs_directory_geocoding.log 2>&1

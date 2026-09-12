@@ -35,6 +35,83 @@ class IbbsImportService
      *
      * @throws \RuntimeException on missing/invalid ZIP or missing bbslist.csv
      */
+    /**
+     * Discover and download the current official monthly IBBS archive from
+     * the Telnet BBS Guide download page, to a temp file. Acquisition is
+     * kept separate from parsing: on ANY failure (network, non-2xx, HTML
+     * masquerading as a ZIP, etc.) this throws and touches nothing in the
+     * directory — callers must not proceed to apply.
+     *
+     * @return array{path:string, edition:string, sha256:string}
+     * @throws \RuntimeException on any acquisition failure
+     */
+    public function downloadCurrentArchive(): array
+    {
+        $pageUrl = 'https://www.telnetbbsguide.com/lists/download-list/';
+        $userAgent = 'L33TEST-BinktermPHP-IbbsDirectorySync/1.0 (+https://l33test.com)';
+
+        $html = $this->httpGet($pageUrl, $userAgent, 15);
+
+        // The monthly edition link looks like /bbslist/ibbsMMYY.zip (not the
+        // "daily" personal-use-only delta, which carries 6 digits).
+        if (!preg_match('#href="(/bbslist/ibbs(\d{4})\.zip)"#i', $html, $m)) {
+            throw new \RuntimeException('Could not discover the monthly IBBS archive link on the download page');
+        }
+        $archivePath = $m[1];
+        $edition = 'ibbs' . $m[2];
+        $archiveUrl = 'https://www.telnetbbsguide.com' . $archivePath;
+
+        $bytes = $this->httpGet($archiveUrl, $userAgent, 30, true);
+        if ($bytes === '' || strlen($bytes) < 1024) {
+            throw new \RuntimeException("Downloaded archive is implausibly small or empty: {$archiveUrl}");
+        }
+        // A ZIP local-file-header signature; rejects HTML/error pages served
+        // with a 200 status masquerading as the archive.
+        if (substr($bytes, 0, 4) !== "PK\x03\x04") {
+            throw new \RuntimeException("Downloaded content is not a ZIP archive (bad signature): {$archiveUrl}");
+        }
+
+        $tmpPath = tempnam(sys_get_temp_dir(), 'ibbs_dl_') . '.zip';
+        if (file_put_contents($tmpPath, $bytes) === false) {
+            throw new \RuntimeException("Failed to write downloaded archive to temp path: {$tmpPath}");
+        }
+
+        return [
+            'path' => $tmpPath,
+            'edition' => $edition,
+            'sha256' => hash('sha256', $bytes),
+        ];
+    }
+
+    private function httpGet(string $url, string $userAgent, int $timeout, bool $binary = false): string
+    {
+        if (!function_exists('curl_init')) {
+            throw new \RuntimeException('cURL extension is required for IBBS archive acquisition');
+        }
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_MAXREDIRS => 3,
+            CURLOPT_TIMEOUT => $timeout,
+            CURLOPT_PROTOCOLS => CURLPROTO_HTTPS,
+            CURLOPT_REDIR_PROTOCOLS => CURLPROTO_HTTPS,
+            CURLOPT_USERAGENT => $userAgent,
+        ]);
+        $body = curl_exec($ch);
+        $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $error = curl_error($ch);
+        curl_close($ch);
+
+        if ($body === false) {
+            throw new \RuntimeException("HTTP request failed for {$url}: {$error}");
+        }
+        if ($httpCode < 200 || $httpCode >= 300) {
+            throw new \RuntimeException("HTTP request to {$url} returned status {$httpCode}");
+        }
+        return $body;
+    }
+
     public function readCsvFromZip(string $zipPath): string
     {
         if (!is_file($zipPath)) {
@@ -259,11 +336,11 @@ class IbbsImportService
         ];
 
         $findByEndpoint = $this->db->prepare(
-            "SELECT id, name, sysop, location, os, telnet_host, telnet_port, ssh_port, website, software, is_local
+            "SELECT id, name, sysop, location, os, telnet_host, telnet_port, ssh_port, website, software, is_local, missing_since
              FROM bbs_directory WHERE LOWER(telnet_host) = LOWER(:host) AND telnet_port = :port"
         );
         $findByName = $this->db->prepare(
-            "SELECT id, name, sysop, location, os, telnet_host, telnet_port, ssh_port, website, software, is_local
+            "SELECT id, name, sysop, location, os, telnet_host, telnet_port, ssh_port, website, software, is_local, missing_since
              FROM bbs_directory WHERE LOWER(name) = LOWER(:name)"
         );
 
@@ -328,9 +405,15 @@ class IbbsImportService
                     'existing_id' => (int)$existing['id'],
                     'changed_fields' => $changed,
                     'record' => $r,
+                    'was_missing' => $existing['missing_since'] !== null,
                 ];
             } else {
-                $plan['unchanged'][] = ['name' => $r['name'], 'existing_id' => (int)$existing['id']];
+                $plan['unchanged'][] = [
+                    'name' => $r['name'],
+                    'existing_id' => (int)$existing['id'],
+                    'record' => $r,
+                    'was_missing' => $existing['missing_since'] !== null,
+                ];
             }
         }
 
@@ -398,10 +481,38 @@ class IbbsImportService
                 updated_at = NOW()
             WHERE id = :id AND is_local = FALSE
         ");
+        // Bookkeeping-only touch for rows whose source-owned fields didn't
+        // change: still marks the row as "seen in this edition" (clears
+        // missing_since, advances source_edition) without altering data.
+        $touchStmt = $this->db->prepare("
+            UPDATE bbs_directory SET
+                source_edition = :edition,
+                updated_from_source_at = NOW(),
+                last_seen = NOW(),
+                missing_since = NULL
+            WHERE id = :id AND is_local = FALSE
+        ");
+        // After all matched rows are touched with the new edition, any
+        // remaining source='ibbs' row still stamped with an older edition
+        // was absent from this edition's validated CSV — mark it missing
+        // (never delete; is_local/manual rows are excluded by source='ibbs').
+        $markMissingStmt = $this->db->prepare("
+            UPDATE bbs_directory SET missing_since = NOW()
+            WHERE source = 'ibbs' AND is_local = FALSE
+              AND source_edition IS DISTINCT FROM :edition
+              AND missing_since IS NULL
+        ");
+        $alreadyMissingStmt = $this->db->prepare("
+            SELECT COUNT(*) FROM bbs_directory
+            WHERE source = 'ibbs' AND is_local = FALSE
+              AND source_edition IS DISTINCT FROM :edition
+              AND missing_since IS NOT NULL
+        ");
 
         $added = 0;
         $distinctSharedEndpointAdded = 0;
         $updated = 0;
+        $reactivated = 0;
 
         $this->db->beginTransaction();
         try {
@@ -437,7 +548,23 @@ class IbbsImportService
                     'id' => $entry['existing_id'],
                 ]);
                 $updated += $updateStmt->rowCount();
+                if ($entry['was_missing']) {
+                    $reactivated++;
+                }
             }
+
+            foreach ($plan['details']['unchanged'] as $entry) {
+                $touchStmt->execute(['edition' => $sourceEdition, 'id' => $entry['existing_id']]);
+                if ($entry['was_missing']) {
+                    $reactivated++;
+                }
+            }
+
+            $alreadyMissingStmt->execute(['edition' => $sourceEdition]);
+            $alreadyMissing = (int)$alreadyMissingStmt->fetchColumn();
+
+            $markMissingStmt->execute(['edition' => $sourceEdition]);
+            $newlyMissing = $markMissingStmt->rowCount();
 
             $this->db->commit();
         } catch (\Throwable $e) {
@@ -450,6 +577,9 @@ class IbbsImportService
             'distinct_shared_endpoint_added' => $distinctSharedEndpointAdded,
             'updated' => $updated,
             'unchanged' => count($plan['details']['unchanged']),
+            'reactivated' => $reactivated,
+            'newly_missing' => $newlyMissing,
+            'already_missing' => $alreadyMissing,
             'protected_local' => count($plan['details']['protected_local']),
             'skipped_likely_alias' => $plan['counts']['ambiguous_collision_likely_alias'],
             'distinct_shared_endpoint_total' => $plan['counts']['ambiguous_collision_distinct_shared_endpoint'],

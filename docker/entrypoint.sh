@@ -175,6 +175,17 @@ if [ -n "$LOGROTATE_MAX_SIZE" ]; then
 else
     LOGROTATE_MAX_SIZE_ARG=""
 fi
+# Monthly, 1st of the month at 06:00. Downloads/validates/reconciles the
+# official Telnet BBS Guide IBBS list; leaves the directory untouched on any
+# acquisition/validation failure. Defaults OFF pending sysop opt-in.
+IBBS_DIRECTORY_SYNC_SCHEDULE="${IBBS_DIRECTORY_SYNC_SCHEDULE:-0 6 1 * *}"
+# Separate, courteous bounded coordinate-backfill job for BBS Directory rows
+# imported without coordinates (IBBS supplies none). Runs a small batch every
+# few hours rather than one long foreground pass, respecting the geocoder's
+# own 1 req/sec throttle. Not the same as BBS_DIRECTORY_GEOCODING_ENABLED
+# (the geocoder provider kill switch, unrelated to scheduling).
+BBS_DIRECTORY_GEOCODING_SCHEDULE="${BBS_DIRECTORY_GEOCODING_SCHEDULE:-0 */6 * * *}"
+BBS_DIRECTORY_GEOCODING_BATCH_SIZE="${BBS_DIRECTORY_GEOCODING_BATCH_SIZE:-150}"
 
 {
     echo "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
@@ -189,6 +200,16 @@ fi
 
     if [ "${ENABLE_LOGROTATE:-true}" = "true" ]; then
         echo "$LOGROTATE_SCHEDULE binkterm cd /var/www/html && php scripts/logrotate.php --keep=$LOGROTATE_KEEP$LOGROTATE_MAX_SIZE_ARG >> /var/www/html/data/logs/logrotate.log 2>&1"
+    fi
+
+    # Defaults to FALSE: machinery is installed and proven, enabled only
+    # after explicit sysop opt-in.
+    if [ "${ENABLE_IBBS_DIRECTORY_SYNC:-false}" = "true" ]; then
+        echo "$IBBS_DIRECTORY_SYNC_SCHEDULE binkterm cd /var/www/html && php scripts/ibbs_directory_sync.php --apply --quiet >> /var/www/html/data/logs/ibbs_directory_sync.log 2>&1"
+    fi
+
+    if [ "${ENABLE_BBS_DIRECTORY_GEOCODING:-false}" = "true" ]; then
+        echo "$BBS_DIRECTORY_GEOCODING_SCHEDULE binkterm cd /var/www/html && php scripts/geocode_bbs_directory.php --limit=$BBS_DIRECTORY_GEOCODING_BATCH_SIZE >> /var/www/html/data/logs/bbs_directory_geocoding.log 2>&1"
     fi
 
     echo ""
