@@ -29,6 +29,44 @@ const {
 const { startKeepalive } = require('./ws-keepalive');
 require('dotenv').config({ path: __dirname + '/../../.env' });
 
+// --- NativeDoor child privilege drop (PEH-3B) --------------------------------
+// dosdoor_bridge itself runs as root (it needs to chown/chmod the control
+// Unix socket -- see controlServer.listen() below). Every DOSBox/door CHILD it
+// spawns must not inherit that root identity. The runtime account name is
+// fixed, trusted, server-side configuration -- never manifest-supplied -- and
+// is resolved from /etc/passwd (not hardcoded numerically, since the real
+// production image assigns it a dynamic system UID/GID). Resolution happens
+// once at module load so a missing/misconfigured account fails the whole
+// bridge closed at startup rather than silently falling back to root on the
+// first door launch.
+const DOSDOOR_RUNTIME_USER = 'dosdoor';
+
+function resolveDosdoorIdentity(username) {
+    let passwdContents;
+    try {
+        passwdContents = fs.readFileSync('/etc/passwd', 'utf8');
+    } catch (err) {
+        throw new Error(`[SECURITY] Could not read /etc/passwd to resolve the '${username}' runtime account: ${err.message}`);
+    }
+    const line = passwdContents.split('\n').find((l) => l.startsWith(`${username}:`));
+    if (!line) {
+        throw new Error(`[SECURITY] Runtime account '${username}' does not exist -- refusing to launch door children as root.`);
+    }
+    const fields = line.split(':');
+    const uid = parseInt(fields[2], 10);
+    const gid = parseInt(fields[3], 10);
+    if (!Number.isInteger(uid) || uid === 0 || !Number.isInteger(gid) || gid === 0) {
+        throw new Error(`[SECURITY] Runtime account '${username}' resolved to uid=${uid} gid=${gid} -- refusing to launch door children as root.`);
+    }
+    return { uid, gid };
+}
+
+// Resolved once at startup so a broken runtime account is a loud, immediate
+// bridge-startup failure instead of a silent per-launch root fallback.
+const DOSDOOR_IDENTITY = resolveDosdoorIdentity(DOSDOOR_RUNTIME_USER);
+console.log(`[SECURITY] NativeDoor children will run as ${DOSDOOR_RUNTIME_USER} (uid=${DOSDOOR_IDENTITY.uid} gid=${DOSDOOR_IDENTITY.gid})`);
+// ------------------------------------------------------------------------
+
 // Bounded wall-clock budget for tearing every tracked runtime down on
 // SIGTERM/SIGINT before the process exits. Must stay under the supervisor's
 // stopwaitsecs (10s default for [program:dosdoor_bridge]) so the bridge always
@@ -1057,9 +1095,25 @@ class SessionManager {
             console.log(`[DOSBOX] Linux headless mode: SDL_VIDEODRIVER=dummy`);
         }
 
-        console.log(`[DOSBOX] Spawning: ${dosboxExe} ${args.join(' ')}`);
+        // Drop privilege to the dedicated dosdoor identity before the real
+        // DOSBox binary gains control. setpriv (not spawn()'s own uid/gid
+        // options) is used deliberately: --clear-groups also strips the
+        // supplementary group list the bridge's own root process carries,
+        // which plain uid/gid spawn options do not touch. The identity is
+        // resolved trusted server-side config (DOSDOOR_IDENTITY, above) --
+        // nothing here comes from the door manifest.
+        const setprivArgs = [
+            `--reuid=${DOSDOOR_IDENTITY.uid}`,
+            `--regid=${DOSDOOR_IDENTITY.gid}`,
+            '--clear-groups',
+            '--',
+            dosboxExe,
+            ...args
+        ];
 
-        const dosboxProcess = spawn(dosboxExe, args, spawnOptions);
+        console.log(`[DOSBOX] Spawning (as ${DOSDOOR_RUNTIME_USER}): ${dosboxExe} ${args.join(' ')}`);
+
+        const dosboxProcess = spawn('setpriv', setprivArgs, spawnOptions);
 
         session.dosboxProcess = dosboxProcess;
 
