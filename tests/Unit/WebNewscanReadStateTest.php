@@ -2,10 +2,13 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/Support/TestDatabase.php';
+
 use BinktermPHP\Database;
 use BinktermPHP\MessageHandler;
 use BinktermPHP\Newscan\UnifiedNewscanService;
 use BinktermPHP\Newscan\WebNewscanSummary;
+use BinktermPHP\Tests\Support\TestDatabase;
 use PHPUnit\Framework\TestCase;
 
 /** Real canonical queries, transaction-local fixtures, write-rejecting source tables. */
@@ -17,7 +20,11 @@ final class WebNewscanReadStateTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->db = Database::getInstance()->getPdo();
+        $this->db = TestDatabase::pdo();
+        // Install the same isolated PDO into the singleton BEFORE constructing
+        // the anonymous MessageHandler subclass below, whose inherited
+        // MessageHandler::__construct() internally calls Database::getInstance().
+        Database::setInstanceForTesting($this->db);
         $this->db->beginTransaction();
         foreach (self::TABLES as $table) {
             $this->db->exec("CREATE TEMP TABLE $table (LIKE public.$table INCLUDING DEFAULTS) ON COMMIT DROP");
@@ -70,6 +77,7 @@ final class WebNewscanReadStateTest extends TestCase
     protected function tearDown(): void
     {
         if (isset($this->db) && $this->db->inTransaction()) $this->db->rollBack();
+        Database::resetInstanceForTesting();
     }
 
     private function fingerprint(): array

@@ -2,8 +2,11 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/Support/TestDatabase.php';
+
 use BinktermPHP\Auth;
 use BinktermPHP\Database;
+use BinktermPHP\Tests\Support\TestDatabase;
 use PHPUnit\Framework\TestCase;
 
 /** Real PostgreSQL queries against transaction-local shadow tables, never caller data. */
@@ -14,7 +17,10 @@ final class RecentCallerVisitsTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->db = Database::getInstance()->getPdo();
+        $this->db = TestDatabase::pdo();
+        // Install the same isolated PDO into the singleton BEFORE constructing
+        // Auth below, which internally calls Database::getInstance().
+        Database::setInstanceForTesting($this->db);
         $this->db->beginTransaction();
         foreach (['users', 'user_sessions', 'users_meta'] as $table) {
             $this->db->exec("CREATE TEMP TABLE $table (LIKE public.$table INCLUDING DEFAULTS) ON COMMIT DROP");
@@ -35,6 +41,7 @@ final class RecentCallerVisitsTest extends TestCase
     protected function tearDown(): void
     {
         if (isset($this->db) && $this->db->inTransaction()) $this->db->rollBack();
+        Database::resetInstanceForTesting();
     }
 
     private function visit(int $id = 1): mixed

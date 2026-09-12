@@ -2,8 +2,11 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/Support/TestDatabase.php';
+
 use BinktermPHP\Auth;
 use BinktermPHP\Database;
+use BinktermPHP\Tests\Support\TestDatabase;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -28,11 +31,13 @@ final class AuthTimingEqualizationTest extends TestCase
     protected function setUp(): void
     {
         try {
-            $this->pdo = Database::getInstance()->getPdo();
-            $this->pdo->query('SELECT 1');
+            $this->pdo = TestDatabase::pdo();
         } catch (\Throwable $e) {
             self::markTestSkipped('database not available: ' . $e->getMessage());
         }
+        // Install the same isolated PDO into the singleton BEFORE constructing
+        // Auth below, which internally calls Database::getInstance().
+        Database::setInstanceForTesting($this->pdo);
 
         $this->pdo->beginTransaction();
         $this->username = 'authtiming_' . bin2hex(random_bytes(6));
@@ -55,6 +60,7 @@ final class AuthTimingEqualizationTest extends TestCase
         if (isset($this->pdo) && $this->pdo->inTransaction()) {
             $this->pdo->rollBack();
         }
+        Database::resetInstanceForTesting();
     }
 
     public function testCorrectCredentialsStillAuthenticate(): void

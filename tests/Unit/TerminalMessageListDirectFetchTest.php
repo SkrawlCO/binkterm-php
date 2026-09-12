@@ -18,6 +18,7 @@ require_once __DIR__ . '/../../telnet/src/MailUtils.php';
 require_once __DIR__ . '/../../telnet/src/TerminalMessageService.php';
 require_once __DIR__ . '/../../telnet/src/NetmailHandler.php';
 require_once __DIR__ . '/../../telnet/src/EchomailHandler.php';
+require_once __DIR__ . '/Support/TestDatabase.php';
 
 use BinktermPHP\Database;
 use BinktermPHP\I18n\Translator;
@@ -29,6 +30,7 @@ use BinktermPHP\TelnetServer\NetmailHandler;
 use BinktermPHP\TelnetServer\TerminalCapabilities;
 use BinktermPHP\TelnetServer\TerminalMessageService;
 use BinktermPHP\TelnetServer\TerminalRenderContext;
+use BinktermPHP\Tests\Support\TestDatabase;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -59,19 +61,23 @@ final class TerminalMessageListDirectFetchTest extends TestCase
 
     public static function setUpBeforeClass(): void
     {
-        // The shared PDO singleton can be left unusable by an earlier test in the
-        // full-suite run; force a reconnect before giving up.
-        foreach ([false, true] as $reconnect) {
-            try {
-                if ($reconnect) {
-                    Database::reconnect();
-                }
-                self::$db = Database::getInstance()->getPdo();
-                self::$db->query('SELECT 1');
-                return;
-            } catch (\Throwable $e) {
-                self::$db = null;
-            }
+        try {
+            self::$db = TestDatabase::pdo();
+        } catch (\Throwable $e) {
+            self::$db = null;
+
+            return;
+        }
+        // Install the same isolated PDO into the singleton BEFORE any test
+        // constructs BbsSession/MessageHandler/EchoFetchProbe/NetFetchProbe
+        // below, all of which internally call Database::getInstance().
+        Database::setInstanceForTesting(self::$db);
+    }
+
+    public static function tearDownAfterClass(): void
+    {
+        if (self::$db !== null) {
+            Database::resetInstanceForTesting();
         }
     }
 

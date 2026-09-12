@@ -2,8 +2,12 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/Support/TestDatabase.php';
+
+use BinktermPHP\Database;
 use BinktermPHP\Newscan\NewscanPlan;
 use BinktermPHP\Newscan\UnifiedNewscanService;
+use BinktermPHP\Tests\Support\TestDatabase;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -219,8 +223,7 @@ final class UnifiedNewscanServiceTest extends TestCase
     public function testPlanPerformsZeroWritesAgainstTheRealDatabase(): void
     {
         try {
-            $pdo = \BinktermPHP\Database::getInstance()->getPdo();
-            $pdo->query('SELECT 1');
+            $pdo = TestDatabase::pdo();
         } catch (\Throwable $e) {
             self::markTestSkipped('database not available: ' . $e->getMessage());
         }
@@ -235,10 +238,19 @@ final class UnifiedNewscanServiceTest extends TestCase
 
         $before = $this->readStateFingerprint($pdo, $userId);
 
-        $plan = (new UnifiedNewscanService())->plan([
-            'user_id'  => $userId,
-            'is_admin' => (bool) $user['is_admin'],
-        ]);
+        // Install the same isolated PDO into the singleton BEFORE constructing
+        // UnifiedNewscanService below (no injected $db/$messages here), which
+        // internally calls Database::getInstance(). Narrowly scoped to this
+        // one test/finally so no other test in this file is affected.
+        Database::setInstanceForTesting($pdo);
+        try {
+            $plan = (new UnifiedNewscanService())->plan([
+                'user_id'  => $userId,
+                'is_admin' => (bool) $user['is_admin'],
+            ]);
+        } finally {
+            Database::resetInstanceForTesting();
+        }
 
         $after = $this->readStateFingerprint($pdo, $userId);
 

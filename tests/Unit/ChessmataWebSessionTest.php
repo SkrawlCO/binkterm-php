@@ -7,10 +7,12 @@ use BinktermPHP\Crossroads\ChessmataIdentity;
 use BinktermPHP\Crossroads\ChessmataSecretBox;
 use BinktermPHP\Crossroads\ChessmataWebSession;
 use BinktermPHP\Database;
+use BinktermPHP\Tests\Support\TestDatabase;
 use PHPUnit\Framework\TestCase;
 
 // Reuse the scripted Chessmata API double from the Slice 2 broker test.
 require_once __DIR__ . '/ChessmataIdentityTest.php';
+require_once __DIR__ . '/Support/TestDatabase.php';
 
 /**
  * Crossroads Experience #4, Slice 4 (graphical Web surface).
@@ -28,7 +30,13 @@ final class ChessmataWebSessionTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->db = Database::getInstance()->getPdo();
+        $this->db = TestDatabase::pdo();
+        // Install the same isolated PDO into the singleton for the whole test
+        // lifecycle: testBrokerUnavailableSurfacesWhenNoKeyAndNoInjectedBroker
+        // below calls ChessmataWebSession::issue() with no broker, which falls
+        // back to constructing its own ChessmataIdentity via
+        // Database::getInstance() internally.
+        Database::setInstanceForTesting($this->db);
         $this->db->beginTransaction();
         $this->box = new ChessmataSecretBox(random_bytes(SODIUM_CRYPTO_SECRETBOX_KEYBYTES));
     }
@@ -38,6 +46,7 @@ final class ChessmataWebSessionTest extends TestCase
         if (isset($this->db) && $this->db->inTransaction()) {
             $this->db->rollBack();
         }
+        Database::resetInstanceForTesting();
     }
 
     private function makeUser(string $prefix = 'cmweb'): int

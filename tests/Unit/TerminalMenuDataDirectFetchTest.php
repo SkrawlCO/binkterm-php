@@ -2,12 +2,15 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/Support/TestDatabase.php';
+
 use BinktermPHP\Auth;
 use BinktermPHP\Crossroads\TerminalDashboardSignal;
 use BinktermPHP\Database;
 use BinktermPHP\DashboardStatsService;
 use BinktermPHP\EchoareaManager;
 use BinktermPHP\Terminal\TerminalMenuData;
+use BinktermPHP\Tests\Support\TestDatabase;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -32,22 +35,17 @@ final class TerminalMenuDataDirectFetchTest extends TestCase
 
     public static function setUpBeforeClass(): void
     {
-        foreach ([false, true] as $reconnect) {
-            try {
-                if ($reconnect) {
-                    Database::reconnect();
-                }
-                self::$db = Database::getInstance()->getPdo();
-                self::$db->query('SELECT 1');
-                break;
-            } catch (\Throwable $e) {
-                self::$db = null;
-            }
-        }
+        try {
+            self::$db = TestDatabase::pdo();
+        } catch (\Throwable $e) {
+            self::$db = null;
 
-        if (self::$db === null) {
             return;
         }
+        // Install the same isolated PDO into the singleton BEFORE any test
+        // constructs EchoareaManager/TerminalMenuData/etc below, which
+        // internally call Database::getInstance().
+        Database::setInstanceForTesting(self::$db);
 
         $stmt = self::$db->prepare(
             'SELECT id AS user_id, username, real_name, is_admin FROM users WHERE id = ?'
@@ -55,6 +53,13 @@ final class TerminalMenuDataDirectFetchTest extends TestCase
         $stmt->execute([self::UID]);
         $row = $stmt->fetch(\PDO::FETCH_ASSOC);
         self::$user = $row ?: null;
+    }
+
+    public static function tearDownAfterClass(): void
+    {
+        if (self::$db !== null) {
+            Database::resetInstanceForTesting();
+        }
     }
 
     protected function setUp(): void

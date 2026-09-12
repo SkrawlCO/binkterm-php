@@ -2,8 +2,11 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/Support/TestDatabase.php';
+
 use BinktermPHP\Database;
 use BinktermPHP\FileAreaManager;
+use BinktermPHP\Tests\Support\TestDatabase;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -38,21 +41,14 @@ final class FileSearchServiceTest extends TestCase
 
     protected function setUp(): void
     {
-        // Other suites in the full run can leave the shared connection closed
-        // ("server closed the connection unexpectedly"). Probe it, and only
-        // reconnect if it is actually dead, so this suite is order-independent
-        // without gratuitously resetting the singleton for everyone else.
         try {
-            $this->pdo = Database::getInstance()->getPdo();
-            $this->pdo->query('SELECT 1');
+            $this->pdo = TestDatabase::pdo();
         } catch (\Throwable $e) {
-            try {
-                $this->pdo = Database::reconnect()->getPdo();
-                $this->pdo->query('SELECT 1');
-            } catch (\Throwable $e2) {
-                self::markTestSkipped('database not available: ' . $e2->getMessage());
-            }
+            self::markTestSkipped('database not available: ' . $e->getMessage());
         }
+        // Install the same isolated PDO into the singleton BEFORE constructing
+        // FileAreaManager below, which internally calls Database::getInstance().
+        Database::setInstanceForTesting($this->pdo);
 
         $this->pdo->beginTransaction();
         $this->manager = new FileAreaManager();
@@ -64,6 +60,7 @@ final class FileSearchServiceTest extends TestCase
         if (isset($this->pdo) && $this->pdo->inTransaction()) {
             $this->pdo->rollBack();
         }
+        Database::resetInstanceForTesting();
     }
 
     private function newArea(string $tag, bool $active, bool $private, bool $public): int

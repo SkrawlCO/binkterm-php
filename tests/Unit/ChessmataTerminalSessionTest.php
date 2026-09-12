@@ -7,12 +7,14 @@ use BinktermPHP\Crossroads\ChessmataIdentity;
 use BinktermPHP\Crossroads\ChessmataSecretBox;
 use BinktermPHP\Crossroads\ChessmataTerminalSession;
 use BinktermPHP\Database;
+use BinktermPHP\Tests\Support\TestDatabase;
 use PHPUnit\Framework\TestCase;
 
 // Reuse the scripted Chessmata API double from the Slice 2 broker test. PHPUnit
 // require_once's each test file exactly as we do here, so this is idempotent
 // whether this file or ChessmataIdentityTest.php is loaded first.
 require_once __DIR__ . '/ChessmataIdentityTest.php';
+require_once __DIR__ . '/Support/TestDatabase.php';
 
 /**
  * Crossroads Experience #4, Slice 3 (Telnet / NativeDoor surface).
@@ -39,7 +41,13 @@ final class ChessmataTerminalSessionTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->db = Database::getInstance()->getPdo();
+        $this->db = TestDatabase::pdo();
+        // Install the same isolated PDO into the singleton for the whole test
+        // lifecycle: testPrepareSurfacesBrokerUnavailableWhenNoKeyAndNoInjectedBroker
+        // below calls ChessmataTerminalSession::prepare() with no broker, which
+        // falls back to constructing its own ChessmataIdentity via
+        // Database::getInstance() internally.
+        Database::setInstanceForTesting($this->db);
         $this->db->beginTransaction();
         $this->box = new ChessmataSecretBox(random_bytes(SODIUM_CRYPTO_SECRETBOX_KEYBYTES));
         $this->launcher = dirname(__DIR__, 2) . '/native-doors/doors/chessmata/launch-chessmata.sh';
@@ -53,6 +61,7 @@ final class ChessmataTerminalSessionTest extends TestCase
         if (isset($this->db) && $this->db->inTransaction()) {
             $this->db->rollBack();
         }
+        Database::resetInstanceForTesting();
     }
 
     // ---------------------------------------------------------------- helpers
