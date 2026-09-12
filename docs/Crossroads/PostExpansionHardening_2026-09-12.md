@@ -113,9 +113,12 @@ fails closed unless `current_database()` equals `binktermphp_test`.
 Interruption proof passed; two consecutive runs: 20 tests / 72 assertions.
 Production remained at 1,043 rows with 0 IBBS-test fixture rows throughout.
 
-**Known future debt (not P1):** 17 other Unit test files were found
-referencing `Database::getInstance()` and were NOT individually assessed for
-mutation risk. This is a **future test-safety survey**, not an active P1.
+**Known future debt (not P1):** other Unit test files were found referencing
+`Database::getInstance()` and were NOT individually assessed for mutation
+risk. This is a **future test-safety survey**, not an active P1. (Originally
+recorded here as "17" — reconciled and corrected to **18** during the survey
+itself; see "PEH-P2 item 3 — Database::getInstance() test-safety survey"
+below for the reconciliation and the completed, closed survey.)
 
 ## PEH-6 — Geocoder failure-semantics hardening — CLOSED
 
@@ -421,6 +424,149 @@ remediated/activated/verified; one intervening P1 cron-execution defect found
 and resolved; no other concrete P2 lifecycle defect established; remaining
 concerns explicitly classified P3/WATCH or N/A above.
 
+## PEH-P2 item 3 — Database::getInstance() test-safety survey — CLOSED
+
+### Count reconciliation
+
+The checkpoint originally said "17 other Unit test files" (introduced at
+commit `a84353b74`). Targeted reconciliation established this was an
+authorship undercount, not a later addition: at `a84353b74`, `tests/Unit`
+had 19 textual matches for `Database::getInstance()`; `IbbsImportServiceTest.php`
+was already comment-only at that same commit (already remediated under
+PEH-5, mentioning `Database::getInstance()` only to explain why it doesn't
+use it), leaving an actual code-use count of **18**, unchanged then and now
+— the filename set never changed. Corrected count: **18**.
+
+### Static classification (before remediation)
+
+```
+TOTAL: 18
+SAFE — NO MUTATION:              3
+SAFE — ISOLATED:                 8
+SAFE — MOCKED:                   0
+RISK — DIRECT MUTATION:          0
+RISK — INDIRECT MUTATION:        0
+RISK — SETUP/TEARDOWN MUTATION:  7
+UNCERTAIN:                       0
+```
+
+The seven confirmed mutation-risk files: `ChessmataIdentityTest.php`,
+`ChessmataTerminalSessionTest.php`, `ChessmataWebSessionTest.php`,
+`GalacticBloodshedIdentityTest.php`, `LoginThrottleTest.php`,
+`MultiZorkAccessMappingTest.php`, `MultiZorkAccessRateLimitTest.php`. Root
+cause: all seven called `Database::getInstance()` against ambient
+production-capable configuration and performed real fixture/test mutation
+without sufficient test-DB isolation. An initial `beginTransaction()`/
+`rollBack()` remediation prevented any commit, but a later runtime preflight
+established that `Database::getInstance()` still resolved to
+`DB_HOST=binkterm-db` / `DB_NAME=binktermphp` — i.e. real production,
+transactionally rolled back. "Production but rolled back" was explicitly
+**not** accepted as sufficient test isolation, and the work below replaced
+it with genuine database-target isolation.
+
+### Isolated test-DB foundation
+
+App commit `a9ac0058f71b8f5e7fdd88e3d6eccbb10e480831` "Add isolated test
+database foundation". `tests/Unit/Support/TestDatabase.php`:
+`TestDatabase::pdo()` reuses `DB_HOST`/`DB_PORT`/`DB_USER`/`DB_PASS`, **never**
+reads `DB_NAME`, hard-forces `binktermphp_test`, uses
+`PDO::ATTR_ERRMODE => ERRMODE_EXCEPTION`, and fails closed via
+`SELECT current_database()` — refuses to return a PDO unless the connected
+database is exactly `binktermphp_test`. `src/Database.php` gained a
+test-only singleton seam: `Database::setInstanceForTesting(PDO $pdo)` and
+`Database::resetInstanceForTesting()`. `setInstanceForTesting()`
+independently re-checks `current_database() == binktermphp_test` itself
+before replacing the singleton — it does not trust the caller's own check.
+Production `Database::getInstance()` behavior is unchanged unless a test
+explicitly invokes this seam.
+
+### 18-file migration
+
+App commits `e3fc5d5c0ee21a2f5f6d45af1acbf8c47cea31ec` "Isolate direct
+database unit tests" and `1694b592ef3b99ff153002940e49a3cfa0d83be4` "Isolate
+singleton database unit tests". Result: explicit `binktermphp_test` path
+18/18, remaining production-DB test paths 0, uncertain 0. Design property:
+fixture SQL and production code reached internally through
+`Database::getInstance()` resolve to the **same** already-verified isolated
+PDO — no split-brain test path in the surveyed scope.
+
+### Test-DB schema initialization
+
+`binktermphp_test` initially contained only `bbs_directory` and
+`geocode_cache`, so the first runtime acceptance attempt failed on missing
+application relations. Canonical fresh-schema mechanism established:
+`database/postgresql_schema.sql` followed by `scripts/upgrade.php` applying
+the committed `database/migrations/`. One pre-existing PEH-6
+`geocode_cache` table (created directly by earlier test work, not via
+migration) blocked migration `1.11.0.19` "Rename geocode cache"; after
+explicit authorization, `DROP TABLE public.geocode_cache` (no CASCADE) was
+run against `binktermphp_test` only, then `scripts/upgrade.php` completed
+successfully. Final isolated-DB state: full canonical schema, 140 public
+tables, all 253 migrations applied, latest `20260912102037`. Production DB
+was not touched at any point.
+
+### Nested-transaction follow-up
+
+Runtime testing surfaced a legitimate test/application transaction
+interaction in `ChessmataIdentityTest.php`, `ChessmataTerminalSessionTest.php`,
+`ChessmataWebSessionTest.php`, `GalacticBloodshedIdentityTest.php`:
+`ChessmataIdentity::resolve()` and `GalacticBloodshedIdentity::resolve()`
+each legitimately own a real transaction (`pg_advisory_xact_lock`,
+transaction-scoped) as production behavior. The tests' outer isolation
+transaction therefore caused `PDOException: There is already an active
+transaction`. Fixed in tests only — app commit
+`732ca82e15c088b56b0aa06c7619ca411471cb35` "Fix nested transaction database
+tests": the four tests remain hard-isolated to `binktermphp_test`, no longer
+pre-open a conflicting transaction, use deterministic narrowly-scoped
+per-fixture-ID cleanup in `tearDown()`, preserve application-owned
+production transaction semantics exactly, and leave zero fixture residue.
+Production code was not modified.
+
+### Seven-file runtime acceptance — PASSED
+
+The originally risky seven: 75 tests / 252 assertions / 73 passed / 0 failed
+/ 0 errors / 2 known unrelated skips (`ChessmataSecretBox::isConfigured()`
+environment condition). Test-DB residue: NONE. Production DB touched: NO.
+
+### Complete 18-file runtime acceptance
+
+Hard isolation gate (helper + singleton seam) PASS: both report
+`current_database() = binktermphp_test`, same PDO object, reset confirmed.
+Result: exit code 2, 183 tests, 539 assertions, 161 passed, 0 failed, 1
+error, 21 skipped.
+
+Classification of non-pass results — isolation failures: **0**; schema
+failures: **0**; functional regressions: **0**; production DB touches:
+**0**; test-DB fixture residue: **NONE**; known environment skips:
+`ChessmataSecretBox` configuration (unrelated to DB isolation).
+
+P3/WATCH data-dependency results (the only non-pass category populated):
+1. `TerminalMenuDataDirectFetchTest.php` — hardcoded `UID = 3`; isolated DB
+   lacks that assumed populated user; class-wide skip.
+2. `TerminalMessageListDirectFetchTest.php` — same hardcoded `UID = 3` /
+   populated-data assumption; several safe per-test skips; one FK error
+   when legitimate `user_settings` write behavior was attempted for
+   nonexistent `user_id = 3` — classified as test-data dependency, **not**
+   an application functional regression; no row persisted.
+
+Prior P3/WATCH fixture-dependency notes for `MultiZorkAccessMappingTest.php`
+/ `MultiZorkAccessRateLimitTest.php` are retained, though both currently
+**pass** because the canonical `binktermphp_test` schema/migrations happen
+to leave exactly two users available.
+
+### Final test-safety disposition
+
+**PEH TEST-SAFETY P2 ITEM: CLOSED.** Basis: corrected scope reconciled to
+18; 18/18 statically classified; the seven confirmed mutation-risk tests
+remediated; 18/18 explicitly isolated to `binktermphp_test`; internal
+singleton paths redirected safely; test helper and singleton seam both fail
+closed; full isolated schema established canonically; seven-risk-file
+runtime acceptance passed; complete 18-file runtime acceptance showed zero
+isolation failures, zero schema failures, zero functional regressions, zero
+production DB touches, zero fixture residue. Remaining non-pass behavior is
+exclusively P3/WATCH fixture/environment dependency, tracked below — not a
+reason to leave this item open.
+
 ## Remaining PEH work
 
 All P0: **CLOSED**. All P1: **CLOSED**.
@@ -438,16 +584,22 @@ privilege drop.
    "PEH-P2 item 2 — Incomplete lifecycle sweep" above (echomail_robots.php
    overlap fixed/activated/verified; intervening cron log-directory P1
    fixed; remaining items reclassified P3/WATCH or N/A).
-3. **Test-safety survey** — assess the 17 other Unit tests using
-   `Database::getInstance()`; fix only actual production-mutating risks.
-   **This is now the only remaining substantive P2 investigation.**
+3. ~~**Test-safety survey**~~ — **CLOSED**, see "PEH-P2 item 3 —
+   Database::getInstance() test-safety survey" above (18/18 isolated to
+   `binktermphp_test`; seven mutation-risk tests remediated and
+   runtime-accepted; complete 18-file runtime acceptance showed zero
+   isolation/schema/functional/production-touch issues). **No substantive
+   P2 investigation remains.**
 4. **P3/WATCH** — Docker json-file stdout growth; dead
    `DoorSessionManager::startBridge()`/`startDosBox()` cleanup; optional real
    DOS-door human/functional privilege acceptance; low-risk documentation
    polish; Doot/CLASP restart/shutdown; WebDoor/game-service lifecycle
    leftovers; `binkterm-modern-postgres` orphaned container;
    rss_poster/logrotate overlap; fresh-host `data/logs` permission
-   initialization determinism.
+   initialization determinism; MultiZork real-existing-user/test-data
+   dependency; `TerminalMenuDataDirectFetchTest.php` hardcoded UID 3
+   fixture dependency; `TerminalMessageListDirectFetchTest.php` hardcoded
+   UID 3/populated-data dependency.
 5. **PEH final closeout** — classify remaining items FIXED / ACCEPTED /
    PARKED and create the final durable PEH completion checkpoint.
 
@@ -471,7 +623,8 @@ candidate assays.
 
 ## Recommended next-session objective
 
-Item 1 (Backup/recovery closeout) is now **CLOSED** (see PEH-P2 section
-above). Next candidate is **item 2 (Incomplete lifecycle sweep)** or **item 3
-(test-safety survey of the 17 other `Database::getInstance()` Unit tests)** —
-pick whichever Matt prioritizes; both are bounded, narrow, low-risk.
+Items 1–3 (Backup/recovery closeout, Incomplete lifecycle sweep, Database
+test-safety survey) are all now **CLOSED**. No substantive P2 investigation
+remains. Next candidates are item 4 (classify/finalize the accumulated
+P3/WATCH items) or item 5 (PEH final closeout) — pick whichever Matt
+prioritizes; both are bounded, narrow, low-risk.
