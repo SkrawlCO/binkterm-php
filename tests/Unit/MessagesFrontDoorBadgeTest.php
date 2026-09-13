@@ -143,10 +143,10 @@ final class MessagesFrontDoorBadgeTest extends TestCase
         $grid = $this->grid($h->bytes());
 
         // Geometry (config/terminal_theme_m2_messages.json.example, 80x24):
-        // MENU rows 5-16 (0-based 4-15), STATUS rows 21-22 (0-based 20-21).
+        // STATUS rows 5-6 (0-based 4-5), MENU rows 8-19 (0-based 7-18).
         return [
-            'menu'   => implode("\n", array_slice($grid, 4, 12)),
-            'status' => implode("\n", array_slice($grid, 20, 2)),
+            'menu'   => implode("\n", array_slice($grid, 7, 12)),
+            'status' => implode("\n", array_slice($grid, 4, 2)),
         ];
     }
 

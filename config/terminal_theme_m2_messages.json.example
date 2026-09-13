@@ -8,9 +8,9 @@
     "80x24": {
       "template": "nav-frontdoor-m2",
       "regions": {
-        "MENU": { "row": 5, "col": 5, "width": 72, "height": 12 },
-        "DESCRIPTION": { "row": 18, "col": 5, "width": 72, "height": 2 },
-        "STATUS": { "row": 21, "col": 5, "width": 72, "height": 2 },
+        "STATUS": { "row": 5, "col": 5, "width": 72, "height": 2 },
+        "MENU": { "row": 8, "col": 5, "width": 72, "height": 12 },
+        "DESCRIPTION": { "row": 21, "col": 5, "width": 72, "height": 2 },
         "FOOTER": { "row": 24, "col": 5, "width": 72, "height": 1 }
       }
     }

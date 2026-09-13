@@ -253,7 +253,8 @@ final class MessagesLandingCompositionTest extends TestCase
         $renderer->render($h->context(), $screen, ['cursor' => 0]);
         self::assertSame('themed', $renderer->lastReport()['mode']);
         $grid = $this->grid($h->bytes());
-        $menu = implode("\n", array_slice($grid, 4, 12));
+        // MENU rows 8-19 (0-based 7-18); see config/terminal_theme_m2_messages.json.example.
+        $menu = implode("\n", array_slice($grid, 7, 12));
         self::assertStringContainsString('PEOPLE', $menu);
         self::assertStringNotContainsString('2 online', $menu, 'live badge stays out of the front-door menu rows');
     }
