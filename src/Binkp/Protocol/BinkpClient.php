@@ -84,6 +84,21 @@ class BinkpClient
      *                             binkp session rather than silently reusing
      *                             a real uplink relationship's secret.
      */
+    /**
+     * Acquire the flock()-based per-hostname:port serialization lock.
+     *
+     * Returns the open file handle on success, or null if the lock could NOT
+     * be acquired for ANY reason (lock file unavailable, or the bounded wait
+     * expired while another session held it). Null NEVER means "safe to
+     * proceed without the lock" - callers (see connect()) must treat null as
+     * a hard "do not dial" signal. Prior to the 2026-09-13 BinkP incident
+     * hardening (S2), a timeout here logged a warning and returned a handle
+     * that callers treated as "proceed anyway" - that bypass allowed two
+     * sessions to the same physical remote host to dial concurrently
+     * whenever the first session ran long enough to exhaust the wait, which
+     * is exactly the collision commit 000a9eb08 was meant to prevent. See
+     * docs/checkpoints/BinkP_FidoAgora_InboundHang_2026-09-13.md.
+     */
     private function acquireHostLock(string $hostname, int $port, int $timeoutSeconds = 90)
     {
         $lockDir = rtrim(sys_get_temp_dir(), '/') . '/binkterm-host-locks';
@@ -96,14 +111,14 @@ class BinkpClient
 
         $handle = @fopen($lockPath, 'c');
         if ($handle === false) {
-            $this->log("Could not open host lock file {$lockPath}, proceeding without a lock", 'WARNING');
+            $this->log("Could not open host lock file {$lockPath}; refusing to dial to {$hostname}:{$port} without serialization", 'ERROR');
             return null;
         }
 
         $start = time();
         while (!flock($handle, LOCK_EX | LOCK_NB)) {
             if (time() - $start >= $timeoutSeconds) {
-                $this->log("Timed out after {$timeoutSeconds}s waiting for host lock on {$hostname}:{$port}; proceeding without it", 'WARNING');
+                $this->log("Timed out after {$timeoutSeconds}s waiting for host lock on {$hostname}:{$port}; another session is still active, deferring this poll", 'WARNING');
                 fclose($handle);
                 return null;
             }
@@ -159,6 +174,17 @@ class BinkpClient
             : ($password !== null ? $password : ($uplink['password'] ?? ''));
 
         $hostLock = $this->acquireHostLock($hostname, $port);
+        if ($hostLock === null) {
+            // Lock not acquired - another session to this physical host is
+            // still active (or the lock itself is unavailable). Never dial
+            // without it; fail cleanly so the caller's existing poll-failure
+            // handling (Scheduler, scripts/binkp_poll.php) defers/retries on
+            // its own normal schedule instead of racing the still-active
+            // session.
+            throw new HostLockBusyException(
+                "Host {$hostname}:{$port} is busy with another BinkP session (or its lock is unavailable); poll deferred for {$address}"
+            );
+        }
 
         try {
 

@@ -973,7 +973,182 @@ silently lost from those two files even while their ownership stays wrong.
 
 ### Parked, unchanged by this fix
 
-- 90s same-host lock timeout vs. 300s session: **PARKED**
-- Unexplained same-uplink retry: **PARKED**, recurred live again during this
-  transaction
+- 90s same-host lock timeout vs. 300s session: **PARKED** (superseded by §12
+  below — the timeout itself is kept, but the bypass behind it is removed)
+- Unexplained same-uplink retry: **root-caused in §12** (was "unexplained
+  same-uplink retry", parked)
 - Session-timeout-recorded-as-success misclassification: **PARKED**
+
+## 12. Post-incident hardening S1 — duplicate/overlapping poll recon (read-only)
+
+Separate, later slice: with the primary hang closed, a second-order symptom
+remained — a second dial to the same uplink appearing shortly after a
+scheduled poll, rejected by the remote as `Secure AKA ... busy`. Read-only
+recon (no traffic, no changes) mapped every poll-initiation path in
+`Scheduler`, `AdminDaemonClient`/`AdminDaemonServer`, and the host crontab,
+and reconstructed the incident-night DB/log rows exactly.
+
+**Host crontab ruled out.** `*/15 * * * * ... docker compose exec -T
+binkterm-app php scripts/binkp_poll.php --all >> .../storage/logs/binkp_poll.log
+2>&1` looked like the obvious suspect (mirrors the logrotate deployment
+mismatch in §10) but was empirically proven dead: `storage/logs/` does not
+exist on the host, and `sh -c 'echo x >> <missing dir>/f 2>&1'` was
+reproduced to fail at the shell's own redirection setup — the command never
+runs at all. Confirmed via `/var/log/syslog` showing cron dispatching the
+line every 15 minutes for hours with no corresponding effect. This entry is
+inert, not a contributor.
+
+**Confirmed mechanism** (log-timing-consistent for both the incident night
+and a later post-fix recurrence at `05:46:29`):
+
+1. `Scheduler::processScheduledPolls()` calls `AdminDaemonClient::binkPollSync()`
+   for a due uplink. `AdminDaemonServer` spawns a real `scripts/binkp_poll.php`
+   child ("child A"), which dials, handshakes, and (pre-inbound-fix) hangs
+   the full 300s.
+2. `AdminDaemonClient::readResponse()`'s `fgets()` had no explicit
+   `stream_set_timeout()`, so it fell back to PHP's `default_socket_timeout`
+   ini (60s). `sendCommand()` retried up to 2 attempts on any
+   `\RuntimeException` — including this ambiguous read failure — so after
+   ~120s (two stacked ~60s timeouts) the scheduler logged `"Scheduled poll
+   failed for <addr>: Admin daemon closed connection"`, exactly matching
+   `binkp_scheduler.log`'s observed 04:15:08→04:17:09 (Fido) and
+   04:17:09→04:19:09 (Agora) gaps.
+3. The retry (attempt 2) opened a **second** RPC connection and re-sent the
+   identical `binkp_poll_sync` command. `AdminDaemonServer` spawned a
+   **second, independent** `binkp_poll.php` child ("child B") for the same
+   uplink — with no awareness that child A was still alive.
+4. Child B's `BinkpClient::connect()` called `acquireHostLock()`, found
+   child A still holding the `flock()` on `binkp.pharcyde.org:24554`, waited
+   its full 90s, then — under the pre-S2 behavior — **logged a warning and
+   dialed anyway**. The remote, seeing our AKA already connected via child
+   A, immediately rejected child B with `Secure AKA ... busy` — the fast
+   (~0.02s) "failed" session rows (`18164`, `18170`) recovered from
+   `binkp_session_log`.
+
+Classified **STRONG LEAD** (mechanism fully explained and timing-consistent;
+not confirmed via a controlled live repro, per the read-only constraint of
+that slice). Full recon detail (initiation-path inventory, per-mechanism
+classification, invariants) was delivered inline in that turn and is not
+duplicated here.
+
+## 13. Post-incident hardening S2 — eliminate the RPC blind-redial and host-lock bypass
+
+Fixes exactly the two unsafe behaviors confirmed in §12. Does **not** add a
+DB/in-flight poll registry (deliberately deferred — see below).
+
+### Fix 1 — `AdminDaemonClient::sendCommand()` retry policy
+
+- Added a `bool $retryable = true` parameter (default preserves prior
+  behavior for every other admin RPC — smallest possible blast radius).
+- `binkPollSync()` now calls `sendCommand('binkp_poll_sync', [...], false)`.
+  When `$retryable` is `false`, exactly one attempt is made; any failure —
+  including an ambiguous read timeout — is thrown immediately, never
+  re-dispatched.
+- Added a narrowly-scoped explicit read timeout for `binkp_poll_sync` only:
+  `(int)Config::env('BINKP_TIMEOUT', 300) + 60` seconds via
+  `stream_set_timeout()`, applied only when `$cmd === 'binkp_poll_sync'`.
+  Derivation: `BinkpConfig::getBinkpTimeout()` (default 300s) bounds how
+  long a single legitimate BinkP session's socket I/O can take before the
+  session itself fails; +60s buffer covers pipe-draining and dispatch
+  overhead. This lets a real, legitimately long poll report back normally
+  instead of being cut off by PHP's 60s `default_socket_timeout` — but does
+  **not** reintroduce retry: a timeout past this window is still a single,
+  clean failure.
+- `readResponse()` now distinguishes a genuine `stream_get_meta_data()`
+  `timed_out` condition from a plain closed connection in its exception
+  message, for clearer logs.
+
+### Fix 2 — `BinkpClient::acquireHostLock()` / `connect()` strictness
+
+- `acquireHostLock()`'s contract is now unconditional: it returns a lock
+  handle on success, or `null` for **any** failure to acquire (contention
+  timeout, or the lock file itself unavailable) — `null` never again means
+  "safe to proceed without the lock." (The lock-file-unavailable branch was
+  also tightened to fail closed, not just the 90s-timeout branch, to satisfy
+  the invariant literally — this is a rare edge case with no observed
+  incident-night role.)
+- `connect()` now checks the lock result immediately: `if ($hostLock ===
+  null) { throw new HostLockBusyException(...); }`, before any socket/network
+  code runs.
+- New `BinktermPHP\Binkp\Protocol\HostLockBusyException extends
+  \RuntimeException` (`src/Binkp/Protocol/HostLockBusyException.php`) —
+  deliberately a plain `\RuntimeException` subclass so it flows unchanged
+  through every existing `catch (\Exception $e)` / `catch (Exception $e)`
+  poll-failure handler already in place (`Scheduler::processScheduledPolls()`,
+  `Scheduler::pollIfOutbound()`, `scripts/binkp_poll.php`'s top-level catch,
+  etc.) — a controlled, expected "host busy" outcome, not a new crash class.
+- The 90-second wait itself is unchanged in this slice (not "90 raised to
+  300" — the wait bound wasn't the defect, the bypass after it was).
+- Lock release (`releaseHostLock()`) is untouched; still covered by
+  `connect()`'s existing `finally` block for normal completion, failed
+  connection, and any exception — including the new `HostLockBusyException`
+  case, which now throws *before* the lock is ever acquired in the failure
+  branch, so there is nothing to release on that path (the lock was never
+  obtained).
+
+### Explicitly NOT done this slice
+
+Per instruction: no DB/in-flight per-uplink registry. The two fixes above
+remove the two demonstrated unsafe mechanisms; whether another initiator
+(web "Poll Now", netmail-triggered poll, FREQ, manual CLI, hub push) can
+still race a concurrent same-uplink/same-host poll is a **remaining
+theoretical race**, now believed to be caught by the strict host lock
+(same `hostname:port` → same flock, and a failed acquisition now always
+defers/fails rather than dialing) but not proven end-to-end for those other
+initiators. Recommendation: **observe** before building a registry.
+
+### Local proof (no external traffic)
+
+- `tests/Unit/AdminDaemonClientRetryPolicyTest.php` — a forked, local-only
+  TCP fake server (127.0.0.1, no BinkP protocol) that authenticates then
+  closes without responding (the exact "ambiguous failure" case):
+  `binkPollSync()` (non-retryable) dispatches the command exactly once and
+  fails fast; an unmodified default-retryable command (`processPackets()`)
+  still dispatches twice, proving the fix is scoped and non-retryable
+  commands are otherwise unaffected. 2 tests, both PASS.
+- `tests/Unit/BinkpHostLockStrictnessTest.php` — reflects into the private
+  `acquireHostLock()`/`releaseHostLock()` methods directly (two file handles
+  from one process standing in for two contending processes, since `flock()`
+  contention is per open-file-description, not per-process); a short
+  test-supplied timeout (1s), never the production 90s default. Proves: a
+  second contender cannot acquire while the first holds it; the wait is
+  bounded (does not hang past its timeout); after release, a later attempt
+  succeeds. 1 test, PASS. (A second, end-to-end `connect()` test was
+  considered and deliberately dropped — `connect()`'s only call site uses
+  the hardcoded 90s default with no per-call override, so exercising it live
+  would require a genuine 90s wait; the wiring is instead verified by direct
+  source inspection, documented in the test file.)
+- Collateral: `AdminDaemonUdpLogFallbackTest.php`,
+  `BinkpCramAuthLoggingTest.php`,
+  `BinkpOriginatorReceiveWindowIncidentTest.php`,
+  `BinkpServerSocketOwnershipTest.php` — all still green (19 tests total
+  across this slice's new + collateral files, 77 assertions, 0 failures).
+
+### Activation
+
+**Not performed this slice** — per instruction, stopping for review before
+any restart. `binkp_scheduler`, `binkp_server`, and `admin_daemon` are all
+still running the pre-S2 code as of this writing; the fix is local-only
+(diff + tests), not yet live.
+
+### Files changed (S2)
+
+- `src/Admin/AdminDaemonClient.php` — `sendCommand()` retryable flag +
+  scoped `binkp_poll_sync` read timeout; `binkPollSync()` opts out of retry;
+  `readResponse()` timeout-vs-close distinction.
+- `src/Binkp/Protocol/BinkpClient.php` — `acquireHostLock()` fail-closed on
+  every failure path; `connect()` throws `HostLockBusyException` on a null
+  lock instead of proceeding.
+- `src/Binkp/Protocol/HostLockBusyException.php` — new.
+- `tests/Unit/AdminDaemonClientRetryPolicyTest.php` — new.
+- `tests/Unit/BinkpHostLockStrictnessTest.php` — new.
+- `docs/checkpoints/BinkP_FidoAgora_InboundHang_2026-09-13.md` — this section.
+
+### Parked, unchanged by S2
+
+- Session-timeout-recorded-as-success misclassification: **PARKED**
+- `binkp_poll.log` / `packets.log` ownership: **PARKED**
+- Duplicate logrotate mechanisms: **PARKED**
+- Production entrypoint discrepancy: **PARKED**
+- Per-uplink/global in-flight poll registry: **explicitly deferred**, see
+  above — not a defect, a deliberate scope boundary for this slice.
