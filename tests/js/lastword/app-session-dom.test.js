@@ -114,6 +114,41 @@ function clickByText(container, text) {
     button.click();
 }
 
+/**
+ * A puzzle's "shape" — length plus the position of every non-letter
+ * character (space/digit/punctuation), letters collapsed to '_'. With 200
+ * curated puzzles, matching a dealt board by LENGTH alone is no longer
+ * reliably unique (e.g. "THE GODFATHER" / "JURASSIC PARK" / "THE LION KING"
+ * are all 13 characters) — the shape (where the spaces fall) is.
+ */
+function answerShape(answer) {
+    return answer.toUpperCase().replace(/[A-Z]/g, '_');
+}
+
+/** Reads the currently-rendered board's shape the same way, from the fake DOM cells. */
+function boardShape(boardEl) {
+    return boardEl._children.map((cell) => {
+        if (cell.className === 'cell space') return ' ';
+        if (cell.className === 'cell punct') return cell.textContent;
+        return '_'; // 'cell' (revealed letter) or 'cell blank' (unrevealed letter) — a letter position either way
+    }).join('');
+}
+
+/**
+ * Seed puzzles whose shape (length + where the spaces/punctuation fall)
+ * matches the currently-dealt board, in `category`. At 200 curated puzzles
+ * a shape is not always unique (e.g. "SUPER BOWL" and "GRAND SLAM" are both
+ * two five-letter words) — that's a harmless coincidence of English word
+ * lengths, not a content defect, so callers try each candidate in turn
+ * rather than assuming exactly one match.
+ */
+function dealtPuzzleCandidates(boardEl, puzzlesDoc, category) {
+    const shape = boardShape(boardEl);
+    const candidates = puzzlesDoc.puzzles.filter((p) => p.category === category && answerShape(p.answer) === shape);
+    assert.ok(candidates.length > 0, 'no seed puzzle matches the dealt board shape for ' + category);
+    return candidates;
+}
+
 let passed = 0;
 async function check(name, fn) {
     await fn();
@@ -126,18 +161,17 @@ async function check(name, fn) {
 
     await check('a correct solve completes the round through the real DOM wiring (not just the rules engine)', async () => {
         const { elements } = await bootApp();
+        const puzzlesDoc = JSON.parse(fs.readFileSync(path.join(ROOT, 'lastword/puzzles.json'), 'utf8'));
         clickByText(elements.categoryList, 'Movies & TV');
-        // Land on "THE GODFATHER" (13 chars) rather than "BACK TO THE FUTURE" (19).
-        let tries = 0;
-        while (elements.board._children.length !== 13 && tries < 50) {
-            clickByText(elements.categoryList, 'Movies & TV');
-            tries++;
-        }
-        assert.strictEqual(elements.board._children.length, 13);
+        const candidates = dealtPuzzleCandidates(elements.board, puzzlesDoc, 'Movies & TV');
 
-        elements.solveToggle.click();
-        elements.solveInput.value = 'The Godfather';
-        elements.solveSubmit.click();
+        // Try each shape-matching candidate (see dealtPuzzleCandidates) until one solves.
+        for (const candidate of candidates) {
+            elements.solveToggle.click();
+            elements.solveInput.value = candidate.answer;
+            elements.solveSubmit.click();
+            if (elements.game.className === 'layout hidden') break; // solved
+        }
 
         assert.strictEqual(elements.game.className, 'layout hidden');
         assert.strictEqual(elements['round-result'].className, 'panel');
@@ -182,13 +216,13 @@ async function check(name, fn) {
 
         function currentCategory() { return elements.categoryLabel.textContent; }
         function solveCurrentRound() {
-            const category = currentCategory();
-            const boardLen = elements.board._children.length;
-            const candidate = puzzlesDoc.puzzles.find((p) => p.category === category && p.answer.length === boardLen);
-            assert.ok(candidate, 'no seed puzzle matches the dealt board for ' + category + ' len ' + boardLen);
-            elements.solveToggle.click();
-            elements.solveInput.value = candidate.answer;
-            elements.solveSubmit.click();
+            const candidates = dealtPuzzleCandidates(elements.board, puzzlesDoc, currentCategory());
+            for (const candidate of candidates) {
+                elements.solveToggle.click();
+                elements.solveInput.value = candidate.answer;
+                elements.solveSubmit.click();
+                if (elements.game.className === 'layout hidden') return; // solved
+            }
         }
         function failCurrentRoundByWrongSolves() {
             for (let i = 0; i < 3 && elements.game.className === 'layout'; i++) {

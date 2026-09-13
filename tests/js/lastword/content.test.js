@@ -35,8 +35,8 @@ check('seed puzzle set loads without throwing', () => {
 
 const puzzles = LastWordContent.loadPuzzleSet(doc);
 
-check('seed set is within the 10-20 proof-content target', () => {
-    assert.ok(puzzles.length >= 10 && puzzles.length <= 20, `expected 10-20, got ${puzzles.length}`);
+check('curated corpus is at least at the ~200-puzzle content-expansion target', () => {
+    assert.ok(puzzles.length >= 150, `expected >=150 (targeting ~200), got ${puzzles.length}`);
 });
 
 check('every puzzle id is unique', () => {
@@ -120,18 +120,66 @@ check('pickRandom respects a category restriction', () => {
 });
 
 check('pickRandom respects an exclude list unless it would empty the pool', () => {
-    const category = 'BBS & Retro'; // exactly 2 seed puzzles in this category
+    const category = puzzles[0].category;
     const inCategory = LastWordContent.filterByCategory(puzzles, category);
-    assert.strictEqual(inCategory.length, 2);
-    const excludeOne = [inCategory[0].id];
-    const picked = LastWordContent.pickRandom(puzzles, { category, excludeIds: excludeOne });
-    assert.strictEqual(picked.id, inCategory[1].id);
+    const excludeAllButOne = inCategory.slice(1).map((p) => p.id);
+    const picked = LastWordContent.pickRandom(puzzles, { category, excludeIds: excludeAllButOne });
+    assert.strictEqual(picked.id, inCategory[0].id);
 
-    // Excluding both falls back to the full (unfiltered-by-exclusion) pool
-    // rather than returning null, so the game is never left without a puzzle.
-    const excludeBoth = inCategory.map((p) => p.id);
-    const fallback = LastWordContent.pickRandom(puzzles, { category, excludeIds: excludeBoth });
+    // Excluding the whole category falls back to the full (unfiltered-by-exclusion)
+    // pool rather than returning null, so the game is never left without a puzzle.
+    const excludeAll = inCategory.map((p) => p.id);
+    const fallback = LastWordContent.pickRandom(puzzles, { category, excludeIds: excludeAll });
     assert.strictEqual(fallback.category, category);
+});
+
+// --- content-expansion audit (durable — re-run this after every content edit) ---
+
+check('every category has at least 10 curated puzzles', () => {
+    const categories = LastWordContent.listCategories(puzzles);
+    categories.forEach((category) => {
+        const count = LastWordContent.filterByCategory(puzzles, category).length;
+        assert.ok(count >= 10, `category "${category}" has only ${count} puzzles`);
+    });
+});
+
+check('no two puzzles share the same answer once punctuation/case/spacing is stripped', () => {
+    const seen = new Map();
+    puzzles.forEach((p) => {
+        const normalized = p.answer.toUpperCase().replace(/[^A-Z]/g, '');
+        const prior = seen.get(normalized);
+        assert.ok(!prior, `"${p.answer}" (${p.id}) duplicates "${prior}" once normalized`);
+        seen.set(normalized, p.id + ' (' + p.answer + ')');
+    });
+});
+
+check('every puzzle has enough distinct guessable letters for a real Hangman round (>=4)', () => {
+    puzzles.forEach((p) => {
+        assert.ok(p.guessableLetters.length >= 4,
+            `"${p.answer}" (${p.id}) has only ${p.guessableLetters.length} distinct guessable letters`);
+    });
+});
+
+check('every answer contains only letters, spaces, digits, apostrophes, or hyphens (no stray punctuation/typos)', () => {
+    puzzles.forEach((p) => {
+        const stray = p.answer.replace(/[A-Z0-9 '\-]/gi, '');
+        assert.strictEqual(stray, '', `"${p.answer}" (${p.id}) has unexpected character(s): "${stray}"`);
+    });
+});
+
+check('no answer has leading/trailing whitespace or doubled spaces', () => {
+    puzzles.forEach((p) => {
+        assert.strictEqual(p.answer, p.answer.trim(), `"${p.answer}" (${p.id}) has leading/trailing whitespace`);
+        assert.ok(!/ {2,}/.test(p.answer), `"${p.answer}" (${p.id}) has a doubled space`);
+    });
+});
+
+check('at least three difficulties and a substantial Final-eligible pool exist across the whole corpus', () => {
+    const difficulties = new Set(puzzles.map((p) => p.difficulty));
+    assert.strictEqual(difficulties.size, 3);
+    const eligible = LastWordContent.filterFinalEligible(puzzles);
+    assert.ok(eligible.length >= puzzles.length * 0.5,
+        `expected at least half the corpus Final-eligible, got ${eligible.length}/${puzzles.length}`);
 });
 
 console.log(`content.test.js: ${passed} passed`);

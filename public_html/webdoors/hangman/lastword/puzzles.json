@@ -1,21 +1,1405 @@
 {
   "version": 1,
   "puzzles": [
-    { "id": "movies-0001", "category": "Movies & TV", "answer": "BACK TO THE FUTURE", "difficulty": "normal", "finalEligible": true },
-    { "id": "movies-0002", "category": "Movies & TV", "answer": "THE GODFATHER", "difficulty": "easy", "finalEligible": true },
-    { "id": "music-0001", "category": "Music", "answer": "BOHEMIAN RHAPSODY", "difficulty": "normal", "finalEligible": true },
-    { "id": "music-0002", "category": "Music", "answer": "PURPLE RAIN", "difficulty": "easy", "finalEligible": false },
-    { "id": "games-0001", "category": "Games", "answer": "THE LEGEND OF ZELDA", "difficulty": "hard", "finalEligible": true },
-    { "id": "food-0001", "category": "Food & Drink", "answer": "MACARONI AND CHEESE", "difficulty": "normal", "finalEligible": false },
-    { "id": "places-0001", "category": "Places", "answer": "NIAGARA FALLS", "difficulty": "easy", "finalEligible": true },
-    { "id": "sayings-0001", "category": "Sayings", "answer": "DON'T CRY OVER SPILLED MILK", "difficulty": "hard", "finalEligible": true },
-    { "id": "sayings-0002", "category": "Sayings", "answer": "BETTER LATE THAN NEVER", "difficulty": "normal", "finalEligible": false },
-    { "id": "sci-tech-0001", "category": "Science & Tech", "answer": "ARTIFICIAL INTELLIGENCE", "difficulty": "hard", "finalEligible": true },
-    { "id": "history-0001", "category": "History", "answer": "THE BERLIN WALL", "difficulty": "normal", "finalEligible": true },
-    { "id": "people-0001", "category": "People", "answer": "ALBERT EINSTEIN", "difficulty": "easy", "finalEligible": true },
-    { "id": "books-0001", "category": "Books & Stories", "answer": "TO KILL A MOCKINGBIRD", "difficulty": "hard", "finalEligible": true },
-    { "id": "sports-0001", "category": "Sports", "answer": "STANLEY CUP", "difficulty": "easy", "finalEligible": false },
-    { "id": "bbs-retro-0001", "category": "BBS & Retro", "answer": "WILDCAT BBS", "difficulty": "normal", "finalEligible": true },
-    { "id": "bbs-retro-0002", "category": "BBS & Retro", "answer": "FIDONET", "difficulty": "easy", "finalEligible": false }
+    {
+      "id": "movies-0001",
+      "category": "Movies & TV",
+      "answer": "BACK TO THE FUTURE",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "movies-0002",
+      "category": "Movies & TV",
+      "answer": "THE GODFATHER",
+      "difficulty": "easy",
+      "finalEligible": true
+    },
+    {
+      "id": "music-0001",
+      "category": "Music",
+      "answer": "BOHEMIAN RHAPSODY",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "music-0002",
+      "category": "Music",
+      "answer": "PURPLE RAIN",
+      "difficulty": "easy",
+      "finalEligible": false
+    },
+    {
+      "id": "games-0001",
+      "category": "Games",
+      "answer": "THE LEGEND OF ZELDA",
+      "difficulty": "hard",
+      "finalEligible": true
+    },
+    {
+      "id": "food-0001",
+      "category": "Food & Drink",
+      "answer": "MACARONI AND CHEESE",
+      "difficulty": "normal",
+      "finalEligible": false
+    },
+    {
+      "id": "places-0001",
+      "category": "Places",
+      "answer": "NIAGARA FALLS",
+      "difficulty": "easy",
+      "finalEligible": true
+    },
+    {
+      "id": "sayings-0001",
+      "category": "Sayings",
+      "answer": "DON'T CRY OVER SPILLED MILK",
+      "difficulty": "hard",
+      "finalEligible": true
+    },
+    {
+      "id": "sayings-0002",
+      "category": "Sayings",
+      "answer": "BETTER LATE THAN NEVER",
+      "difficulty": "normal",
+      "finalEligible": false
+    },
+    {
+      "id": "sci-tech-0001",
+      "category": "Science & Tech",
+      "answer": "ARTIFICIAL INTELLIGENCE",
+      "difficulty": "hard",
+      "finalEligible": true
+    },
+    {
+      "id": "history-0001",
+      "category": "History",
+      "answer": "THE BERLIN WALL",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "people-0001",
+      "category": "People",
+      "answer": "ALBERT EINSTEIN",
+      "difficulty": "easy",
+      "finalEligible": true
+    },
+    {
+      "id": "books-0001",
+      "category": "Books & Stories",
+      "answer": "TO KILL A MOCKINGBIRD",
+      "difficulty": "hard",
+      "finalEligible": true
+    },
+    {
+      "id": "sports-0001",
+      "category": "Sports",
+      "answer": "STANLEY CUP",
+      "difficulty": "easy",
+      "finalEligible": false
+    },
+    {
+      "id": "bbs-retro-0001",
+      "category": "BBS & Retro",
+      "answer": "WILDCAT BBS",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "bbs-retro-0002",
+      "category": "BBS & Retro",
+      "answer": "FIDONET",
+      "difficulty": "easy",
+      "finalEligible": false
+    },
+    {
+      "id": "movies-0003",
+      "category": "Movies & TV",
+      "answer": "STAR WARS",
+      "difficulty": "easy",
+      "finalEligible": true
+    },
+    {
+      "id": "movies-0004",
+      "category": "Movies & TV",
+      "answer": "JURASSIC PARK",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "movies-0005",
+      "category": "Movies & TV",
+      "answer": "THE MATRIX",
+      "difficulty": "easy",
+      "finalEligible": true
+    },
+    {
+      "id": "movies-0006",
+      "category": "Movies & TV",
+      "answer": "FORREST GUMP",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "movies-0007",
+      "category": "Movies & TV",
+      "answer": "THE LION KING",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "movies-0008",
+      "category": "Movies & TV",
+      "answer": "BREAKING BAD",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "movies-0009",
+      "category": "Movies & TV",
+      "answer": "GAME OF THRONES",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "movies-0010",
+      "category": "Movies & TV",
+      "answer": "THE OFFICE",
+      "difficulty": "easy",
+      "finalEligible": false
+    },
+    {
+      "id": "movies-0011",
+      "category": "Movies & TV",
+      "answer": "STRANGER THINGS",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "movies-0012",
+      "category": "Movies & TV",
+      "answer": "PULP FICTION",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "movies-0013",
+      "category": "Movies & TV",
+      "answer": "THE SHAWSHANK REDEMPTION",
+      "difficulty": "hard",
+      "finalEligible": true
+    },
+    {
+      "id": "movies-0014",
+      "category": "Movies & TV",
+      "answer": "SAVING PRIVATE RYAN",
+      "difficulty": "hard",
+      "finalEligible": true
+    },
+    {
+      "id": "movies-0015",
+      "category": "Movies & TV",
+      "answer": "THE SILENCE OF THE LAMBS",
+      "difficulty": "hard",
+      "finalEligible": true
+    },
+    {
+      "id": "movies-0016",
+      "category": "Movies & TV",
+      "answer": "FRIENDS",
+      "difficulty": "easy",
+      "finalEligible": false
+    },
+    {
+      "id": "movies-0017",
+      "category": "Movies & TV",
+      "answer": "THE WIZARD OF OZ",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "music-0003",
+      "category": "Music",
+      "answer": "THRILLER",
+      "difficulty": "easy",
+      "finalEligible": true
+    },
+    {
+      "id": "music-0004",
+      "category": "Music",
+      "answer": "HOTEL CALIFORNIA",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "music-0005",
+      "category": "Music",
+      "answer": "STAIRWAY TO HEAVEN",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "music-0006",
+      "category": "Music",
+      "answer": "SWEET HOME ALABAMA",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "music-0007",
+      "category": "Music",
+      "answer": "BORN IN THE USA",
+      "difficulty": "normal",
+      "finalEligible": false
+    },
+    {
+      "id": "music-0008",
+      "category": "Music",
+      "answer": "SMELLS LIKE TEEN SPIRIT",
+      "difficulty": "hard",
+      "finalEligible": true
+    },
+    {
+      "id": "music-0009",
+      "category": "Music",
+      "answer": "LIKE A ROLLING STONE",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "music-0010",
+      "category": "Music",
+      "answer": "BILLIE JEAN",
+      "difficulty": "easy",
+      "finalEligible": true
+    },
+    {
+      "id": "music-0011",
+      "category": "Music",
+      "answer": "DANCING QUEEN",
+      "difficulty": "easy",
+      "finalEligible": true
+    },
+    {
+      "id": "music-0012",
+      "category": "Music",
+      "answer": "WE WILL ROCK YOU",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "music-0013",
+      "category": "Music",
+      "answer": "WONDERWALL",
+      "difficulty": "easy",
+      "finalEligible": true
+    },
+    {
+      "id": "music-0014",
+      "category": "Music",
+      "answer": "UPTOWN FUNK",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "music-0015",
+      "category": "Music",
+      "answer": "SHAPE OF YOU",
+      "difficulty": "easy",
+      "finalEligible": true
+    },
+    {
+      "id": "music-0016",
+      "category": "Music",
+      "answer": "ROCKET MAN",
+      "difficulty": "easy",
+      "finalEligible": true
+    },
+    {
+      "id": "music-0017",
+      "category": "Music",
+      "answer": "IMAGINE",
+      "difficulty": "easy",
+      "finalEligible": true
+    },
+    {
+      "id": "games-0002",
+      "category": "Games",
+      "answer": "SUPER MARIO BROS",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "games-0003",
+      "category": "Games",
+      "answer": "MINECRAFT",
+      "difficulty": "easy",
+      "finalEligible": true
+    },
+    {
+      "id": "games-0004",
+      "category": "Games",
+      "answer": "FORTNITE",
+      "difficulty": "easy",
+      "finalEligible": true
+    },
+    {
+      "id": "games-0005",
+      "category": "Games",
+      "answer": "THE SIMS",
+      "difficulty": "easy",
+      "finalEligible": true
+    },
+    {
+      "id": "games-0006",
+      "category": "Games",
+      "answer": "GRAND THEFT AUTO",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "games-0007",
+      "category": "Games",
+      "answer": "CALL OF DUTY",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "games-0008",
+      "category": "Games",
+      "answer": "WORLD OF WARCRAFT",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "games-0009",
+      "category": "Games",
+      "answer": "FINAL FANTASY",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "games-0010",
+      "category": "Games",
+      "answer": "RESIDENT EVIL",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "games-0011",
+      "category": "Games",
+      "answer": "DONKEY KONG",
+      "difficulty": "easy",
+      "finalEligible": true
+    },
+    {
+      "id": "games-0012",
+      "category": "Games",
+      "answer": "PAC-MAN",
+      "difficulty": "easy",
+      "finalEligible": false
+    },
+    {
+      "id": "games-0013",
+      "category": "Games",
+      "answer": "STREET FIGHTER",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "games-0014",
+      "category": "Games",
+      "answer": "TETRIS",
+      "difficulty": "easy",
+      "finalEligible": true
+    },
+    {
+      "id": "games-0015",
+      "category": "Games",
+      "answer": "ANIMAL CROSSING",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "games-0016",
+      "category": "Games",
+      "answer": "HALF-LIFE",
+      "difficulty": "easy",
+      "finalEligible": false
+    },
+    {
+      "id": "food-0002",
+      "category": "Food & Drink",
+      "answer": "PIZZA",
+      "difficulty": "easy",
+      "finalEligible": false
+    },
+    {
+      "id": "food-0003",
+      "category": "Food & Drink",
+      "answer": "SPAGHETTI",
+      "difficulty": "easy",
+      "finalEligible": true
+    },
+    {
+      "id": "food-0004",
+      "category": "Food & Drink",
+      "answer": "CHOCOLATE CAKE",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "food-0005",
+      "category": "Food & Drink",
+      "answer": "FRIED CHICKEN",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "food-0006",
+      "category": "Food & Drink",
+      "answer": "ICE CREAM SUNDAE",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "food-0007",
+      "category": "Food & Drink",
+      "answer": "PEANUT BUTTER",
+      "difficulty": "easy",
+      "finalEligible": true
+    },
+    {
+      "id": "food-0008",
+      "category": "Food & Drink",
+      "answer": "BUFFALO WINGS",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "food-0009",
+      "category": "Food & Drink",
+      "answer": "GRILLED CHEESE SANDWICH",
+      "difficulty": "hard",
+      "finalEligible": true
+    },
+    {
+      "id": "food-0010",
+      "category": "Food & Drink",
+      "answer": "APPLE PIE",
+      "difficulty": "easy",
+      "finalEligible": true
+    },
+    {
+      "id": "food-0011",
+      "category": "Food & Drink",
+      "answer": "CHICKEN NOODLE SOUP",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "food-0012",
+      "category": "Food & Drink",
+      "answer": "BANANA SPLIT",
+      "difficulty": "easy",
+      "finalEligible": true
+    },
+    {
+      "id": "food-0013",
+      "category": "Food & Drink",
+      "answer": "HOT DOG",
+      "difficulty": "easy",
+      "finalEligible": false
+    },
+    {
+      "id": "food-0014",
+      "category": "Food & Drink",
+      "answer": "FRENCH TOAST",
+      "difficulty": "easy",
+      "finalEligible": true
+    },
+    {
+      "id": "food-0015",
+      "category": "Food & Drink",
+      "answer": "CAESAR SALAD",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "food-0016",
+      "category": "Food & Drink",
+      "answer": "CHOCOLATE CHIP COOKIE",
+      "difficulty": "hard",
+      "finalEligible": true
+    },
+    {
+      "id": "food-0017",
+      "category": "Food & Drink",
+      "answer": "ROOT BEER FLOAT",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "places-0002",
+      "category": "Places",
+      "answer": "GRAND CANYON",
+      "difficulty": "easy",
+      "finalEligible": true
+    },
+    {
+      "id": "places-0003",
+      "category": "Places",
+      "answer": "EIFFEL TOWER",
+      "difficulty": "easy",
+      "finalEligible": true
+    },
+    {
+      "id": "places-0004",
+      "category": "Places",
+      "answer": "STATUE OF LIBERTY",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "places-0005",
+      "category": "Places",
+      "answer": "GREAT WALL OF CHINA",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "places-0006",
+      "category": "Places",
+      "answer": "MOUNT EVEREST",
+      "difficulty": "easy",
+      "finalEligible": true
+    },
+    {
+      "id": "places-0007",
+      "category": "Places",
+      "answer": "TIMES SQUARE",
+      "difficulty": "easy",
+      "finalEligible": true
+    },
+    {
+      "id": "places-0008",
+      "category": "Places",
+      "answer": "GOLDEN GATE BRIDGE",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "places-0009",
+      "category": "Places",
+      "answer": "YELLOWSTONE NATIONAL PARK",
+      "difficulty": "hard",
+      "finalEligible": true
+    },
+    {
+      "id": "places-0010",
+      "category": "Places",
+      "answer": "MACHU PICCHU",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "places-0011",
+      "category": "Places",
+      "answer": "TAJ MAHAL",
+      "difficulty": "easy",
+      "finalEligible": true
+    },
+    {
+      "id": "places-0012",
+      "category": "Places",
+      "answer": "AMAZON RAINFOREST",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "places-0013",
+      "category": "Places",
+      "answer": "SAHARA DESERT",
+      "difficulty": "easy",
+      "finalEligible": true
+    },
+    {
+      "id": "places-0014",
+      "category": "Places",
+      "answer": "GREAT BARRIER REEF",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "places-0015",
+      "category": "Places",
+      "answer": "MOUNT RUSHMORE",
+      "difficulty": "easy",
+      "finalEligible": true
+    },
+    {
+      "id": "places-0016",
+      "category": "Places",
+      "answer": "NORTH POLE",
+      "difficulty": "easy",
+      "finalEligible": false
+    },
+    {
+      "id": "places-0017",
+      "category": "Places",
+      "answer": "LAS VEGAS STRIP",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "sayings-0003",
+      "category": "Sayings",
+      "answer": "ACTIONS SPEAK LOUDER THAN WORDS",
+      "difficulty": "hard",
+      "finalEligible": true
+    },
+    {
+      "id": "sayings-0004",
+      "category": "Sayings",
+      "answer": "THE EARLY BIRD CATCHES THE WORM",
+      "difficulty": "hard",
+      "finalEligible": true
+    },
+    {
+      "id": "sayings-0005",
+      "category": "Sayings",
+      "answer": "PRACTICE MAKES PERFECT",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "sayings-0006",
+      "category": "Sayings",
+      "answer": "HONESTY IS THE BEST POLICY",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "sayings-0007",
+      "category": "Sayings",
+      "answer": "WHEN IN ROME",
+      "difficulty": "easy",
+      "finalEligible": false
+    },
+    {
+      "id": "sayings-0008",
+      "category": "Sayings",
+      "answer": "A PICTURE IS WORTH A THOUSAND WORDS",
+      "difficulty": "hard",
+      "finalEligible": true
+    },
+    {
+      "id": "sayings-0009",
+      "category": "Sayings",
+      "answer": "OUT OF SIGHT OUT OF MIND",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "sayings-0010",
+      "category": "Sayings",
+      "answer": "BIRDS OF A FEATHER FLOCK TOGETHER",
+      "difficulty": "hard",
+      "finalEligible": true
+    },
+    {
+      "id": "sayings-0011",
+      "category": "Sayings",
+      "answer": "TIME FLIES WHEN YOU'RE HAVING FUN",
+      "difficulty": "hard",
+      "finalEligible": true
+    },
+    {
+      "id": "sayings-0012",
+      "category": "Sayings",
+      "answer": "LOOK BEFORE YOU LEAP",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "sayings-0013",
+      "category": "Sayings",
+      "answer": "TOO MANY COOKS SPOIL THE BROTH",
+      "difficulty": "hard",
+      "finalEligible": true
+    },
+    {
+      "id": "sayings-0014",
+      "category": "Sayings",
+      "answer": "EVERY CLOUD HAS A SILVER LINING",
+      "difficulty": "hard",
+      "finalEligible": true
+    },
+    {
+      "id": "sayings-0015",
+      "category": "Sayings",
+      "answer": "LET SLEEPING DOGS LIE",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "sayings-0016",
+      "category": "Sayings",
+      "answer": "ONCE BITTEN TWICE SHY",
+      "difficulty": "normal",
+      "finalEligible": false
+    },
+    {
+      "id": "sci-tech-0002",
+      "category": "Science & Tech",
+      "answer": "SOLAR SYSTEM",
+      "difficulty": "easy",
+      "finalEligible": true
+    },
+    {
+      "id": "sci-tech-0003",
+      "category": "Science & Tech",
+      "answer": "BLACK HOLE",
+      "difficulty": "easy",
+      "finalEligible": true
+    },
+    {
+      "id": "sci-tech-0004",
+      "category": "Science & Tech",
+      "answer": "PHOTOSYNTHESIS",
+      "difficulty": "normal",
+      "finalEligible": false
+    },
+    {
+      "id": "sci-tech-0005",
+      "category": "Science & Tech",
+      "answer": "QUANTUM PHYSICS",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "sci-tech-0006",
+      "category": "Science & Tech",
+      "answer": "DOUBLE HELIX",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "sci-tech-0007",
+      "category": "Science & Tech",
+      "answer": "PERIODIC TABLE",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "sci-tech-0008",
+      "category": "Science & Tech",
+      "answer": "GLOBAL WARMING",
+      "difficulty": "easy",
+      "finalEligible": true
+    },
+    {
+      "id": "sci-tech-0009",
+      "category": "Science & Tech",
+      "answer": "RENEWABLE ENERGY",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "sci-tech-0010",
+      "category": "Science & Tech",
+      "answer": "VIRTUAL REALITY",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "sci-tech-0011",
+      "category": "Science & Tech",
+      "answer": "MACHINE LEARNING",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "sci-tech-0012",
+      "category": "Science & Tech",
+      "answer": "GENETIC ENGINEERING",
+      "difficulty": "hard",
+      "finalEligible": true
+    },
+    {
+      "id": "sci-tech-0013",
+      "category": "Science & Tech",
+      "answer": "NUCLEAR FUSION",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "sci-tech-0014",
+      "category": "Science & Tech",
+      "answer": "SPACE STATION",
+      "difficulty": "easy",
+      "finalEligible": true
+    },
+    {
+      "id": "sci-tech-0015",
+      "category": "Science & Tech",
+      "answer": "GRAVITATIONAL WAVES",
+      "difficulty": "hard",
+      "finalEligible": true
+    },
+    {
+      "id": "sci-tech-0016",
+      "category": "Science & Tech",
+      "answer": "CLOUD COMPUTING",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "sci-tech-0017",
+      "category": "Science & Tech",
+      "answer": "ELECTRIC VEHICLE",
+      "difficulty": "normal",
+      "finalEligible": false
+    },
+    {
+      "id": "history-0002",
+      "category": "History",
+      "answer": "WORLD WAR TWO",
+      "difficulty": "easy",
+      "finalEligible": true
+    },
+    {
+      "id": "history-0003",
+      "category": "History",
+      "answer": "THE COLD WAR",
+      "difficulty": "easy",
+      "finalEligible": true
+    },
+    {
+      "id": "history-0004",
+      "category": "History",
+      "answer": "THE BOSTON TEA PARTY",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "history-0005",
+      "category": "History",
+      "answer": "THE INDUSTRIAL REVOLUTION",
+      "difficulty": "hard",
+      "finalEligible": true
+    },
+    {
+      "id": "history-0006",
+      "category": "History",
+      "answer": "THE ROMAN EMPIRE",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "history-0007",
+      "category": "History",
+      "answer": "THE FRENCH REVOLUTION",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "history-0008",
+      "category": "History",
+      "answer": "THE GREAT DEPRESSION",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "history-0009",
+      "category": "History",
+      "answer": "THE MOON LANDING",
+      "difficulty": "easy",
+      "finalEligible": true
+    },
+    {
+      "id": "history-0010",
+      "category": "History",
+      "answer": "THE DECLARATION OF INDEPENDENCE",
+      "difficulty": "hard",
+      "finalEligible": true
+    },
+    {
+      "id": "history-0011",
+      "category": "History",
+      "answer": "THE UNDERGROUND RAILROAD",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "history-0012",
+      "category": "History",
+      "answer": "ANCIENT EGYPT",
+      "difficulty": "easy",
+      "finalEligible": true
+    },
+    {
+      "id": "history-0013",
+      "category": "History",
+      "answer": "THE RENAISSANCE",
+      "difficulty": "normal",
+      "finalEligible": false
+    },
+    {
+      "id": "history-0014",
+      "category": "History",
+      "answer": "THE GOLD RUSH",
+      "difficulty": "easy",
+      "finalEligible": true
+    },
+    {
+      "id": "history-0015",
+      "category": "History",
+      "answer": "PEARL HARBOR",
+      "difficulty": "easy",
+      "finalEligible": true
+    },
+    {
+      "id": "history-0016",
+      "category": "History",
+      "answer": "THE MAGNA CARTA",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "history-0017",
+      "category": "History",
+      "answer": "THE SILK ROAD",
+      "difficulty": "easy",
+      "finalEligible": true
+    },
+    {
+      "id": "people-0002",
+      "category": "People",
+      "answer": "ABRAHAM LINCOLN",
+      "difficulty": "easy",
+      "finalEligible": true
+    },
+    {
+      "id": "people-0003",
+      "category": "People",
+      "answer": "MARTIN LUTHER KING",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "people-0004",
+      "category": "People",
+      "answer": "WILLIAM SHAKESPEARE",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "people-0005",
+      "category": "People",
+      "answer": "LEONARDO DA VINCI",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "people-0006",
+      "category": "People",
+      "answer": "MARIE CURIE",
+      "difficulty": "easy",
+      "finalEligible": true
+    },
+    {
+      "id": "people-0007",
+      "category": "People",
+      "answer": "NELSON MANDELA",
+      "difficulty": "easy",
+      "finalEligible": true
+    },
+    {
+      "id": "people-0008",
+      "category": "People",
+      "answer": "AMELIA EARHART",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "people-0009",
+      "category": "People",
+      "answer": "WINSTON CHURCHILL",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "people-0010",
+      "category": "People",
+      "answer": "ROSA PARKS",
+      "difficulty": "easy",
+      "finalEligible": true
+    },
+    {
+      "id": "people-0011",
+      "category": "People",
+      "answer": "GALILEO GALILEI",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "people-0012",
+      "category": "People",
+      "answer": "CLEOPATRA",
+      "difficulty": "easy",
+      "finalEligible": true
+    },
+    {
+      "id": "people-0013",
+      "category": "People",
+      "answer": "MOTHER TERESA",
+      "difficulty": "easy",
+      "finalEligible": true
+    },
+    {
+      "id": "people-0014",
+      "category": "People",
+      "answer": "ISAAC NEWTON",
+      "difficulty": "easy",
+      "finalEligible": true
+    },
+    {
+      "id": "people-0015",
+      "category": "People",
+      "answer": "HARRIET TUBMAN",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "people-0016",
+      "category": "People",
+      "answer": "CHARLES DARWIN",
+      "difficulty": "easy",
+      "finalEligible": true
+    },
+    {
+      "id": "people-0017",
+      "category": "People",
+      "answer": "JANE AUSTEN",
+      "difficulty": "easy",
+      "finalEligible": true
+    },
+    {
+      "id": "books-0002",
+      "category": "Books & Stories",
+      "answer": "PRIDE AND PREJUDICE",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "books-0003",
+      "category": "Books & Stories",
+      "answer": "THE GREAT GATSBY",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "books-0004",
+      "category": "Books & Stories",
+      "answer": "ROMEO AND JULIET",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "books-0005",
+      "category": "Books & Stories",
+      "answer": "THE HOBBIT",
+      "difficulty": "easy",
+      "finalEligible": true
+    },
+    {
+      "id": "books-0006",
+      "category": "Books & Stories",
+      "answer": "HARRY POTTER",
+      "difficulty": "easy",
+      "finalEligible": true
+    },
+    {
+      "id": "books-0007",
+      "category": "Books & Stories",
+      "answer": "MOBY DICK",
+      "difficulty": "easy",
+      "finalEligible": true
+    },
+    {
+      "id": "books-0008",
+      "category": "Books & Stories",
+      "answer": "WAR AND PEACE",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "books-0009",
+      "category": "Books & Stories",
+      "answer": "ANIMAL FARM",
+      "difficulty": "easy",
+      "finalEligible": true
+    },
+    {
+      "id": "books-0010",
+      "category": "Books & Stories",
+      "answer": "THE CATCHER IN THE RYE",
+      "difficulty": "hard",
+      "finalEligible": true
+    },
+    {
+      "id": "books-0011",
+      "category": "Books & Stories",
+      "answer": "LITTLE WOMEN",
+      "difficulty": "easy",
+      "finalEligible": true
+    },
+    {
+      "id": "books-0012",
+      "category": "Books & Stories",
+      "answer": "THE ODYSSEY",
+      "difficulty": "easy",
+      "finalEligible": true
+    },
+    {
+      "id": "books-0013",
+      "category": "Books & Stories",
+      "answer": "FRANKENSTEIN",
+      "difficulty": "easy",
+      "finalEligible": true
+    },
+    {
+      "id": "books-0014",
+      "category": "Books & Stories",
+      "answer": "ALICE IN WONDERLAND",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "books-0015",
+      "category": "Books & Stories",
+      "answer": "THE THREE LITTLE PIGS",
+      "difficulty": "normal",
+      "finalEligible": false
+    },
+    {
+      "id": "books-0016",
+      "category": "Books & Stories",
+      "answer": "CHARLOTTE'S WEB",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "sports-0002",
+      "category": "Sports",
+      "answer": "SUPER BOWL",
+      "difficulty": "easy",
+      "finalEligible": true
+    },
+    {
+      "id": "sports-0003",
+      "category": "Sports",
+      "answer": "WORLD SERIES",
+      "difficulty": "easy",
+      "finalEligible": true
+    },
+    {
+      "id": "sports-0004",
+      "category": "Sports",
+      "answer": "OLYMPIC GAMES",
+      "difficulty": "easy",
+      "finalEligible": true
+    },
+    {
+      "id": "sports-0005",
+      "category": "Sports",
+      "answer": "WORLD CUP",
+      "difficulty": "easy",
+      "finalEligible": true
+    },
+    {
+      "id": "sports-0006",
+      "category": "Sports",
+      "answer": "HOME RUN",
+      "difficulty": "easy",
+      "finalEligible": false
+    },
+    {
+      "id": "sports-0007",
+      "category": "Sports",
+      "answer": "SLAM DUNK",
+      "difficulty": "easy",
+      "finalEligible": true
+    },
+    {
+      "id": "sports-0008",
+      "category": "Sports",
+      "answer": "TOUCHDOWN",
+      "difficulty": "easy",
+      "finalEligible": false
+    },
+    {
+      "id": "sports-0009",
+      "category": "Sports",
+      "answer": "HOLE IN ONE",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "sports-0010",
+      "category": "Sports",
+      "answer": "TRIPLE PLAY",
+      "difficulty": "normal",
+      "finalEligible": false
+    },
+    {
+      "id": "sports-0011",
+      "category": "Sports",
+      "answer": "GRAND SLAM",
+      "difficulty": "easy",
+      "finalEligible": true
+    },
+    {
+      "id": "sports-0012",
+      "category": "Sports",
+      "answer": "HAT TRICK",
+      "difficulty": "easy",
+      "finalEligible": true
+    },
+    {
+      "id": "sports-0013",
+      "category": "Sports",
+      "answer": "MARCH MADNESS",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "sports-0014",
+      "category": "Sports",
+      "answer": "PENALTY KICK",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "sports-0015",
+      "category": "Sports",
+      "answer": "FIGURE SKATING",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "sports-0016",
+      "category": "Sports",
+      "answer": "TRACK AND FIELD",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "sports-0017",
+      "category": "Sports",
+      "answer": "EXTRA INNINGS",
+      "difficulty": "normal",
+      "finalEligible": false
+    },
+    {
+      "id": "bbs-retro-0003",
+      "category": "BBS & Retro",
+      "answer": "BULLETIN BOARD SYSTEM",
+      "difficulty": "hard",
+      "finalEligible": true
+    },
+    {
+      "id": "bbs-retro-0004",
+      "category": "BBS & Retro",
+      "answer": "DIAL UP MODEM",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "bbs-retro-0005",
+      "category": "BBS & Retro",
+      "answer": "FLOPPY DISK",
+      "difficulty": "easy",
+      "finalEligible": true
+    },
+    {
+      "id": "bbs-retro-0006",
+      "category": "BBS & Retro",
+      "answer": "COMMODORE 64",
+      "difficulty": "normal",
+      "finalEligible": false
+    },
+    {
+      "id": "bbs-retro-0007",
+      "category": "BBS & Retro",
+      "answer": "ANSI ART",
+      "difficulty": "easy",
+      "finalEligible": true
+    },
+    {
+      "id": "bbs-retro-0008",
+      "category": "BBS & Retro",
+      "answer": "ZMODEM PROTOCOL",
+      "difficulty": "hard",
+      "finalEligible": true
+    },
+    {
+      "id": "bbs-retro-0009",
+      "category": "BBS & Retro",
+      "answer": "SYSOP",
+      "difficulty": "easy",
+      "finalEligible": false
+    },
+    {
+      "id": "bbs-retro-0010",
+      "category": "BBS & Retro",
+      "answer": "TELNET BBS",
+      "difficulty": "easy",
+      "finalEligible": false
+    },
+    {
+      "id": "bbs-retro-0011",
+      "category": "BBS & Retro",
+      "answer": "ASCII TEXT",
+      "difficulty": "easy",
+      "finalEligible": true
+    },
+    {
+      "id": "bbs-retro-0012",
+      "category": "BBS & Retro",
+      "answer": "USENET NEWSGROUP",
+      "difficulty": "hard",
+      "finalEligible": true
+    },
+    {
+      "id": "bbs-retro-0013",
+      "category": "BBS & Retro",
+      "answer": "DOOR GAME",
+      "difficulty": "easy",
+      "finalEligible": false
+    },
+    {
+      "id": "bbs-retro-0014",
+      "category": "BBS & Retro",
+      "answer": "ECHOMAIL NETWORK",
+      "difficulty": "hard",
+      "finalEligible": true
+    },
+    {
+      "id": "bbs-retro-0015",
+      "category": "BBS & Retro",
+      "answer": "SHAREWARE DISK",
+      "difficulty": "normal",
+      "finalEligible": true
+    },
+    {
+      "id": "bbs-retro-0016",
+      "category": "BBS & Retro",
+      "answer": "QWK PACKET",
+      "difficulty": "normal",
+      "finalEligible": false
+    }
   ]
 }

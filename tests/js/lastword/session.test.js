@@ -65,7 +65,7 @@ check('offerCategoryChoices degrades gracefully when fewer categories exist than
 
 check('dealPuzzle never repeats a puzzle already used this session', () => {
     let session = LastWordState.createSession();
-    const category = 'BBS & Retro'; // only 2 seed puzzles in this category
+    const category = allCategories[0];
     const dealt = [];
 
     let { session: s1, puzzle: p1 } = LastWordSession.dealRound(session, puzzles, 1, category);
@@ -80,12 +80,13 @@ check('dealPuzzle never repeats a puzzle already used this session', () => {
 
 check('dealPuzzle falls back gracefully rather than failing when a category is exhausted', () => {
     let session = LastWordState.createSession();
-    const category = 'BBS & Retro'; // exactly 2 puzzles
+    const category = allCategories[0];
     const inCategory = LastWordContent.filterByCategory(puzzles, category);
-    assert.strictEqual(inCategory.length, 2);
+    assert.ok(inCategory.length > 0);
 
-    // Simulate both already used this session.
-    session.rounds = inCategory.map((p, i) => ({ round: i + 1, puzzleId: p.id, category, outcome: 'solved' }));
+    // Simulate every puzzle in the category already used this session,
+    // regardless of how many that category actually has.
+    session.rounds = inCategory.map((p, i) => ({ round: (i % 4) + 1, puzzleId: p.id, category, outcome: 'solved' }));
 
     const dealt = LastWordSession.dealPuzzle(puzzles, category, session);
     assert.strictEqual(dealt.category, category); // still returns a real puzzle, does not throw
@@ -176,8 +177,11 @@ check('a struck-out round keeps its legitimately-earned points and the session c
     const earnedPoints = roundState.pointsThisRound;
     assert.ok(earnedPoints > 0);
 
-    // Six wrong guesses to force strikeout (letters guaranteed absent from any of our seed answers).
-    const wrongLetters = ['Q', 'X', 'Z', 'J', 'W', 'V'].filter((l) => l !== correctLetter);
+    // Wrong guesses to force strikeout — try every consonant absent from this
+    // (randomly-dealt) puzzle rather than a small fixed pool, which could
+    // occasionally all be present in a 200-puzzle corpus.
+    const wrongLetters = 'BCDFGHJKLMNPQRSTVWXYZ'.split('')
+        .filter((l) => l !== correctLetter && LastWordContent.countOccurrences(puzzle.answer, l) === 0);
     wrongLetters.forEach((l) => {
         if (!LastWordRound.isRoundOver(roundState)) {
             roundState = LastWordRound.guessConsonant(roundState, puzzle, l, LastWordState.ROUND_CONFIG[1]).roundState;
@@ -207,7 +211,10 @@ function playRoundToOutcome(session, puzzles, roundNumber, category, outcome) {
         roundState = result.roundState;
     } else {
         roundState = dealtSession.currentRound;
-        const wrongLetters = ['Q', 'X', 'Z', 'J', 'V', 'W', 'Y', 'K']
+        // Try every consonant, not just a small fixed pool — with 200 curated
+        // puzzles, any small fixed list of "usually absent" letters can
+        // occasionally all be present in a given puzzle.
+        const wrongLetters = 'BCDFGHJKLMNPQRSTVWXYZ'.split('')
             .filter((l) => LastWordContent.countOccurrences(puzzle.answer, l) === 0);
         for (const l of wrongLetters) {
             if (LastWordRound.isRoundOver(roundState)) break;
