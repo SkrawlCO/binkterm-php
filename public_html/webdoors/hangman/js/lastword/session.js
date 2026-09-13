@@ -62,6 +62,7 @@
     function usedPuzzleIds(session) {
         var ids = session.rounds.map(function (r) { return r.puzzleId; });
         if (session.currentRound) ids.push(session.currentRound.puzzleId);
+        if (session.finalState) ids.push(session.finalState.puzzleId);
         return ids;
     }
 
@@ -104,6 +105,36 @@
     }
 
     /**
+     * Deal the Final Hangman puzzle: an unused, finalEligible puzzle when
+     * possible (falls back gracefully to any finalEligible puzzle, then to
+     * content.js's own graceful degradation, against the tiny seed corpus —
+     * never fails to deal a puzzle). Returns a NEW session with `finalState`
+     * populated; does not mutate the session passed in.
+     */
+    function dealFinal(session, puzzles) {
+        var puzzle = LastWordContent.pickRandom(puzzles, {
+            finalEligibleOnly: true,
+            excludeIds: usedPuzzleIds(session)
+        });
+        var finalState = LastWordState.createFinalState(puzzle.id, puzzle.category);
+        var next = cloneSessionShallow(session);
+        next.finalState = finalState;
+        return { session: next, puzzle: puzzle };
+    }
+
+    /**
+     * Record the finished Final round into the session. Uses the existing
+     * `session.finished` field from the M1A foundation (rather than a new
+     * field) to mark the whole game complete.
+     */
+    function finishFinal(session, finalState) {
+        var next = cloneSessionShallow(session);
+        next.finalState = finalState;
+        next.finished = { outcome: finalState.outcome, endedAt: Date.now() };
+        return next;
+    }
+
+    /**
      * Session completion is decided SOLELY by how many rounds have actually
      * been recorded into history — never by the `session.round` counter,
      * and never by whether the last round was solved or failed. `round` is
@@ -142,6 +173,8 @@
         dealPuzzle: dealPuzzle,
         dealRound: dealRound,
         finishRound: finishRound,
+        dealFinal: dealFinal,
+        finishFinal: finishFinal,
         isSessionComplete: isSessionComplete
     };
 });
