@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <title>Last Word — M1B (unlisted human-test build)</title>
+    <link rel="stylesheet" href="css/lastword.css" />
+</head>
+<body>
+<!--
+  M1B UNLISTED TEST ENTRY POINT — not linked from /games, webdoors.json, or
+  GameConfig. Reachable only by direct URL for Matt/Puzl human-acceptance
+  testing. The live, catalog-listed Hangman experience (index.html) is
+  completely untouched by this file.
+-->
+<header>
+    <h1>LAST WORD</h1>
+    <div class="tagline">Know it? Solve it.</div>
+</header>
+
+<section id="category-select" class="panel">
+    <h2>Choose a category — Round 1: Warm-Up</h2>
+    <div id="categoryList" class="category-list" aria-label="Category choices"></div>
+</section>
+
+<main id="game" class="layout hidden">
+    <div class="panel side">
+        <canvas id="gallows" width="260" height="260" aria-label="Hangman drawing"></canvas>
+        <div class="meta">
+            <div><strong>Strikes:</strong> <span id="strikeCount">0</span>/6</div>
+            <div><strong>Round:</strong> 1 — Warm-Up</div>
+            <div><strong>Category:</strong> <span id="categoryLabel"></span></div>
+        </div>
+        <div class="meta scoreblock">
+            <div><strong>Score:</strong> <span id="score">0</span></div>
+            <div><strong>Solve bonus:</strong> <span id="solveBonus">1500</span></div>
+            <div class="hint">Bonus: 1500 − 150 per letter guessed or bought</div>
+        </div>
+    </div>
+
+    <div class="panel main">
+        <div id="board" class="board" aria-label="Puzzle board"></div>
+
+        <div id="statusLine" class="status"></div>
+
+        <div class="letters" id="letters" aria-label="Letter controls"></div>
+        <div class="hint">Consonants: free to guess. Vowels: cost 100 points, reveal all occurrences.</div>
+
+        <div class="solveRow">
+            <button id="solveToggle" class="solveButton">SOLVE</button>
+            <div id="solveForm" class="solveForm hidden">
+                <input id="solveInput" type="text" autocomplete="off" spellcheck="false"
+                       placeholder="Type the full answer…" aria-label="Solve answer" />
+                <button id="solveSubmit">Submit Solve</button>
+            </div>
+        </div>
+
+        <div id="result" class="result hidden"></div>
+        <div id="postRound" class="postRound hidden">
+            <button id="newPuzzleSameCategory">Play Another (same category)</button>
+            <button id="changeCategory">Change Category</button>
+        </div>
+    </div>
+</main>
+
+<script src="js/lastword/content.js"></script>
+<script src="js/lastword/state.js"></script>
+<script src="js/lastword/round.js"></script>
+<script src="js/lastword/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,203 @@
+/* Last Word — M1B playable round styling.
+   Independent of css/hangman.css (which stays untouched for the live
+   Hangman experience) but follows the same visual conventions: dark panel
+   background, canvas gallows, responsive single-breakpoint grid. */
+
+* { box-sizing: border-box; }
+
+body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    background: #14161f;
+    color: #e7eefc;
+}
+
+header {
+    padding: 14px 16px 6px 16px;
+    text-align: center;
+}
+
+header h1 {
+    margin: 0;
+    letter-spacing: 3px;
+}
+
+.tagline {
+    opacity: 0.75;
+    font-style: italic;
+    margin-top: 2px;
+}
+
+.hidden { display: none !important; }
+
+.panel {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.10);
+    border-radius: 12px;
+    padding: 14px;
+    margin: 10px 12px;
+}
+
+.category-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.category-list button {
+    background: rgba(255,255,255,0.08);
+    color: #e7eefc;
+    border: 1px solid rgba(255,255,255,0.18);
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 15px;
+    cursor: pointer;
+}
+
+.category-list button:hover { background: rgba(255,255,255,0.16); }
+
+.layout {
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    gap: 0;
+    padding: 0 6px 20px 6px;
+}
+
+@media (max-width: 780px) {
+    .layout { grid-template-columns: 1fr; }
+}
+
+.meta {
+    margin-top: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    opacity: 0.95;
+}
+
+.scoreblock { margin-top: 14px; font-size: 16px; }
+.scoreblock .hint { font-size: 12px; opacity: 0.7; margin-top: 4px; }
+
+.board {
+    font-size: 30px;
+    letter-spacing: 4px;
+    line-height: 1.5;
+    word-break: break-word;
+    min-height: 2.4em;
+    padding: 6px 0 10px 0;
+}
+
+.board .cell {
+    display: inline-block;
+    min-width: 0.75em;
+    text-align: center;
+}
+
+.board .cell.blank { border-bottom: 3px solid rgba(255,255,255,0.5); margin: 0 2px; }
+.board .cell.space { width: 0.6em; }
+.board .cell.punct { opacity: 0.85; }
+
+.status {
+    min-height: 1.4em;
+    margin: 6px 0 10px 0;
+    opacity: 0.9;
+}
+
+.letters {
+    display: grid;
+    grid-template-columns: repeat(13, minmax(0, 1fr));
+    gap: 6px;
+    margin-bottom: 10px;
+}
+
+@media (max-width: 480px) {
+    .letters { grid-template-columns: repeat(9, minmax(0, 1fr)); }
+}
+
+.letters button {
+    padding: 10px 0;
+    border-radius: 6px;
+    border: 1px solid rgba(255,255,255,0.2);
+    background: rgba(255,255,255,0.08);
+    color: #e7eefc;
+    font-size: 15px;
+    cursor: pointer;
+}
+
+.letters button.vowel {
+    border-color: #6ea8ff;
+    background: rgba(110,168,255,0.14);
+}
+
+.letters button.correct { background: rgba(70,200,120,0.35); border-color: #46c878; }
+.letters button.wrong { background: rgba(220,70,70,0.35); border-color: #dc4646; }
+.letters button:disabled { opacity: 0.35; cursor: not-allowed; }
+
+.solveRow { margin-top: 6px; }
+
+.solveButton {
+    background: linear-gradient(180deg, #ffcf4d, #f5a623);
+    color: #241a00;
+    font-weight: bold;
+    font-size: 16px;
+    letter-spacing: 1px;
+    border: none;
+    border-radius: 8px;
+    padding: 12px 24px;
+    cursor: pointer;
+}
+
+.solveForm {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+    flex-wrap: wrap;
+}
+
+.solveForm input {
+    flex: 1 1 220px;
+    padding: 10px;
+    border-radius: 6px;
+    border: 1px solid rgba(255,255,255,0.25);
+    background: rgba(0,0,0,0.25);
+    color: #e7eefc;
+    font-size: 16px;
+}
+
+.solveForm button {
+    padding: 10px 16px;
+    border-radius: 6px;
+    border: none;
+    background: #6ea8ff;
+    color: #06122b;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.result {
+    margin-top: 14px;
+    padding: 12px;
+    border-radius: 8px;
+    font-size: 18px;
+    font-weight: bold;
+}
+
+.result.win { background: rgba(70,200,120,0.25); border: 1px solid #46c878; }
+.result.lose { background: rgba(220,70,70,0.25); border: 1px solid #dc4646; }
+
+.postRound {
+    margin-top: 10px;
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.postRound button {
+    padding: 10px 14px;
+    border-radius: 6px;
+    border: 1px solid rgba(255,255,255,0.25);
+    background: rgba(255,255,255,0.1);
+    color: #e7eefc;
+    cursor: pointer;
+}
