@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1"/>
     <title>Last Word — M1B (unlisted human-test build)</title>
-    <link rel="stylesheet" href="css/lastword.css" />
+    <link rel="stylesheet" href="css/lastword.css?v=m1c3" />
 </head>
 <body>
 <!--
@@ -63,9 +63,10 @@
     </div>
 </main>
 
-<script src="js/lastword/content.js"></script>
-<script src="js/lastword/state.js"></script>
-<script src="js/lastword/round.js"></script>
-<script src="js/lastword/app.js"></script>
+<!-- ?v=m1c3 cache-busts these — see the matching comment in lastword-m1c.html for why (Cloudflare rewrites this zone's .js/.css Cache-Control to a 4-hour browser TTL, independent of sw.js's own cache). round.js and css/lastword.css changed for M1C's four-round generalization. -->
+<script src="js/lastword/content.js?v=m1c3"></script>
+<script src="js/lastword/state.js?v=m1c3"></script>
+<script src="js/lastword/round.js?v=m1c3"></script>
+<script src="js/lastword/app.js?v=m1c3"></script>
 </body>
 </html>

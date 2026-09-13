@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <title>Last Word — M1C (unlisted human-test build)</title>
+    <link rel="stylesheet" href="css/lastword.css?v=m1c3" />
+</head>
+<body>
+<!--
+  M1C UNLISTED TEST ENTRY POINT — not linked from /games, webdoors.json, or
+  GameConfig. Reachable only by direct URL for Matt/Puzl human-acceptance
+  testing of the four-round session arc. The M1B build (lastword-m1b.html)
+  and the live, catalog-listed Hangman experience (index.html) are both
+  completely untouched by this file.
+-->
+<header>
+    <h1>LAST WORD</h1>
+    <div class="tagline">Know it? Solve it.</div>
+</header>
+
+<section id="category-select" class="panel">
+    <h2>Round 1 — Warm-Up: choose a category</h2>
+    <div id="categoryList" class="category-list" aria-label="Category choices"></div>
+</section>
+
+<section id="round-offer" class="panel hidden">
+    <h2 id="roundOfferTitle"></h2>
+    <div id="roundOfferList" class="category-list" aria-label="Offered categories"></div>
+</section>
+
+<section id="transition" class="panel hidden">
+    <h2 id="transitionTitle"></h2>
+    <p id="transitionBody"></p>
+    <button id="transitionContinue">Continue</button>
+</section>
+
+<main id="game" class="layout hidden">
+    <div class="panel side">
+        <canvas id="gallows" width="260" height="260" aria-label="Hangman drawing"></canvas>
+        <div class="meta">
+            <div><strong>Strikes:</strong> <span id="strikeCount">0</span>/6</div>
+            <div><strong>Round:</strong> <span id="roundLabel"></span></div>
+            <div><strong>Category:</strong> <span id="categoryLabel"></span></div>
+        </div>
+        <div class="meta scoreblock">
+            <div><strong>Cumulative score:</strong> <span id="cumulativeScore">0</span></div>
+            <div><strong>This round:</strong> <span id="roundScore">0</span></div>
+            <div><strong>Solve bonus:</strong> <span id="solveBonus"></span></div>
+            <div class="hint" id="decayHint"></div>
+        </div>
+    </div>
+
+    <div class="panel main">
+        <div id="board" class="board" aria-label="Puzzle board"></div>
+        <div id="statusLine" class="status"></div>
+
+        <div class="letters" id="letters" aria-label="Letter controls"></div>
+        <div class="hint" id="valuesHint"></div>
+
+        <div class="solveRow">
+            <button id="solveToggle" class="solveButton">SOLVE</button>
+            <div id="solveForm" class="solveForm hidden">
+                <input id="solveInput" type="text" autocomplete="off" spellcheck="false"
+                       placeholder="Type the full answer…" aria-label="Solve answer" />
+                <button id="solveSubmit">Submit Solve</button>
+            </div>
+        </div>
+    </div>
+</main>
+
+<section id="round-result" class="panel hidden">
+    <h2 id="roundResultTitle"></h2>
+    <div id="roundResultBody" class="roundResultBody"></div>
+    <button id="continueAfterRound">Continue</button>
+</section>
+
+<section id="session-complete" class="panel hidden">
+    <h2>Four rounds complete!</h2>
+    <div id="sessionSummary" class="roundResultBody"></div>
+    <p class="hint">Final Hangman is not part of this test build yet — that's next.</p>
+    <button id="playAgain">Play Another Session</button>
+</section>
+
+<!--
+  ?v=m1c3 cache-busts these local scripts/stylesheet. Root cause of the M1C
+  solve blocker: Cloudflare rewrites the origin's `Cache-Control: max-age=0,
+  must-revalidate` to `max-age=14400` on the browser-facing response for
+  .js/.css — a per-zone Cloudflare setting outside this repo, not something
+  bumping public_html/sw.js's CACHE_NAME (a separate, lower cache layer) can
+  fix. A query-string bump forces a genuinely new URL that neither the
+  browser's HTTP cache nor Cloudflare's edge cache has seen before. Bump the
+  version token here (and in lastword-m1b.html) whenever content.js/state.js/
+  round.js/session.js/app.js/app-session.js/css/lastword.css change, until a
+  permanent fix (e.g. a Cloudflare Cache Rule for this zone) is in place.
+-->
+<script src="js/lastword/content.js?v=m1c3"></script>
+<script src="js/lastword/state.js?v=m1c3"></script>
+<script src="js/lastword/round.js?v=m1c3"></script>
+<script src="js/lastword/session.js?v=m1c3"></script>
+<script src="js/lastword/app-session.js?v=m1c3"></script>
+</body>
+</html>

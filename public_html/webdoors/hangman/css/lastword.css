@@ -201,3 +201,41 @@ header h1 {
     color: #e7eefc;
     cursor: pointer;
 }
+
+/* M1C: round-transition / between-round-result / session-complete panels */
+
+#transition button,
+#round-result button,
+#session-complete button,
+#continueAfterRound,
+#playAgain {
+    margin-top: 12px;
+    padding: 12px 20px;
+    border-radius: 8px;
+    border: none;
+    background: #6ea8ff;
+    color: #06122b;
+    font-weight: bold;
+    font-size: 15px;
+    cursor: pointer;
+}
+
+.roundResultBody {
+    margin-top: 8px;
+    line-height: 1.6;
+}
+
+.roundResultBody .rrLine { display: block; }
+.roundResultBody .rrSolved { color: #7ee0a0; }
+.roundResultBody .rrFailed { color: #ff9b9b; }
+
+.sessionHistory {
+    margin-top: 10px;
+    list-style: none;
+    padding: 0;
+}
+
+.sessionHistory li {
+    padding: 6px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+}

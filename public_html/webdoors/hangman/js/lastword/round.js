@@ -1,17 +1,20 @@
 /**
- * Last Word — Round 1 ("Warm-Up") rules engine (M1B)
+ * Last Word — normal-round rules engine (Round 1 in M1B; generalized to
+ * Rounds 1-4 in M1C)
  *
- * Pure rules/state-mutation logic for exactly ONE playable normal round.
- * Deliberately DOM-free (no `document`) so the rules can be unit-tested
- * under plain Node and, per the M1A hygiene goal, would not need to be
- * reinvented for a future Telnet client. All functions are non-mutating:
- * they return a NEW round state rather than modifying the one passed in,
- * matching the style already used by js/lastword/state.js.
+ * Pure rules/state-mutation logic for one playable normal round. Deliberately
+ * DOM-free (no `document`) so the rules can be unit-tested under plain Node
+ * and, per the M1A hygiene goal, would not need to be reinvented for a future
+ * Telnet client. All functions are non-mutating: they return a NEW round
+ * state rather than modifying the one passed in, matching the style already
+ * used by js/lastword/state.js.
  *
- * Only Round 1 values/rules are implemented here (Rounds 2-4 and Final
- * Hangman remain out of scope for M1B). See ROUND1_CONFIG /
- * SOLVE_BONUS_DECAY_PER_ACTION below and the M1B report for the exact
- * numbers and the reasoning behind the decay formula.
+ * guessConsonant()/purchaseVowel() take an optional roundConfig argument
+ * (one of LastWordState.ROUND_CONFIG[1..4]) so the SAME functions drive
+ * every normal round; it defaults to ROUND_CONFIG[1] so every M1B call site
+ * and test keeps working unchanged. Final Hangman (a different, non-normal
+ * round shape) remains out of scope. See SOLVE_BONUS_DECAY_DIVISOR below and
+ * the M1C report for the per-round decay values and the reasoning.
  */
 (function (root, factory) {
     if (typeof module === 'object' && module.exports) {
@@ -27,31 +30,45 @@
     var ROUND1_CONFIG = LastWordState.ROUND_CONFIG[1]; // { name, categorySelection, consonantValue, vowelCost, maxSolveBonus }
 
     /**
-     * SOLVE-BONUS DECAY FORMULA (M1B; Round 1 only — Rounds 2-4 remain
-     * unresolved per the product approval):
+     * SOLVE-BONUS DECAY FORMULA (M1B introduced it for Round 1; M1C
+     * generalizes it to Rounds 1-4 — the underlying principle is unchanged):
      *
-     *   remainingSolveBonus = max(0, maxSolveBonus - DECAY_PER_ACTION * actionsTaken)
+     *   remainingSolveBonus = max(0, maxSolveBonus - decayPerAction * actionsTaken)
+     *   decayPerAction       = maxSolveBonus / SOLVE_BONUS_DECAY_DIVISOR
      *
      * where actionsTaken = the number of distinct letter-guess actions taken
      * so far (every consonant guess attempt, right or wrong, counts once;
      * every vowel purchase counts once — occurrences within a single action
      * do NOT multiply the decay, only the letter-guess count does).
      *
-     * DECAY_PER_ACTION = 150 for Round 1 (maxSolveBonus 1500, consonant
-     * value/vowel cost 100). One sentence for the UI: "Solve bonus: 1500,
-     * minus 150 for every letter you guess or buy (never below 0)."
+     * SOLVE_BONUS_DECAY_DIVISOR = 10 for every round, giving:
+     *   Round 1: 1500/10 = 150   (unchanged from M1B)
+     *   Round 2: 2000/10 = 200
+     *   Round 3: 2500/10 = 250
+     *   Round 4: 3000/10 = 300
      *
-     * Why 150 (1.5x the 100-point consonant/vowel value), not something
-     * matching the payout 1:1: a 1:1 decay (100 per action) merely breaks
-     * even with farming — earn 100, lose 100 bonus, net identical to solving
-     * immediately — which does not create a "solve now" incentive, only a
-     * "doesn't matter" one. Decaying faster than the per-action payout
-     * average makes sustained farming strictly worse in the typical case,
-     * while staying simple, fixed, and puzzle-independent (see the M1B
-     * report for the worked-through scenarios that verified this against
-     * the seed puzzles).
+     * One sentence for the UI: "Solve bonus decays by 1/10th of this round's
+     * maximum for every letter you guess or buy (never below 0)."
+     *
+     * Why tie decay to maxSolveBonus (not to consonantValue, as M1B's "1.5x"
+     * framing suggested) — a fixed multiple of consonantValue looked right in
+     * isolation but drifts out of proportion across rounds because
+     * maxSolveBonus does NOT grow at the same rate as consonantValue (1500,
+     * 2000, 2500, 3000 vs. 100, 150, 200, 250): the same 1.5x-of-consonant
+     * decay was verified to let a long, letter-dense puzzle occasionally beat
+     * an immediate solve in Rounds 3-4. Tying decay to maxSolveBonus instead
+     * keeps the "how many actions before the bonus is gone" ratio identical
+     * across all four rounds, so the incentive strength does not quietly
+     * weaken in the higher-stakes rounds. See the M1C report for the
+     * worked-through scenarios (verified against all 16 seed puzzles across
+     * all 4 rounds) and the one known remaining edge case.
      */
-    var SOLVE_BONUS_DECAY_PER_ACTION = 150;
+    var SOLVE_BONUS_DECAY_DIVISOR = 10;
+    var SOLVE_BONUS_DECAY_PER_ACTION = ROUND1_CONFIG.maxSolveBonus / SOLVE_BONUS_DECAY_DIVISOR; // 150, kept for M1B compatibility
+
+    function decayPerActionFor(maxSolveBonus) {
+        return maxSolveBonus / SOLVE_BONUS_DECAY_DIVISOR;
+    }
 
     var MAX_STRIKES = LastWordState.MAX_STRIKES;
 
@@ -81,7 +98,7 @@
 
     function computeSolveBonus(roundState, maxSolveBonus, decayPerAction) {
         maxSolveBonus = maxSolveBonus != null ? maxSolveBonus : ROUND1_CONFIG.maxSolveBonus;
-        decayPerAction = decayPerAction != null ? decayPerAction : SOLVE_BONUS_DECAY_PER_ACTION;
+        decayPerAction = decayPerAction != null ? decayPerAction : decayPerActionFor(maxSolveBonus);
         return Math.max(0, maxSolveBonus - decayPerAction * actionsTaken(roundState));
     }
 
@@ -92,7 +109,8 @@
      * non-consonants are rejected as no-ops (changed:false) rather than
      * silently reprocessed.
      */
-    function guessConsonant(roundState, puzzle, letter) {
+    function guessConsonant(roundState, puzzle, letter, roundConfig) {
+        roundConfig = roundConfig || ROUND1_CONFIG;
         letter = String(letter).toUpperCase();
 
         if (isRoundOver(roundState)) {
@@ -113,7 +131,7 @@
 
         if (correct) {
             next.revealedLetters.push(letter);
-            next.pointsThisRound += occurrences * ROUND1_CONFIG.consonantValue;
+            next.pointsThisRound += occurrences * roundConfig.consonantValue;
         } else {
             next.wrongGuesses.push(letter);
             next.strikes += 1;
@@ -126,8 +144,9 @@
         return { roundState: next, changed: true, correct: correct, occurrences: occurrences };
     }
 
-    function canAffordVowel(availableScore) {
-        return availableScore >= ROUND1_CONFIG.vowelCost;
+    function canAffordVowel(availableScore, roundConfig) {
+        roundConfig = roundConfig || ROUND1_CONFIG;
+        return availableScore >= roundConfig.vowelCost;
     }
 
     /**
@@ -139,7 +158,8 @@
      * already disabled the control in that last case, but the check is
      * enforced here too so this can never go negative.
      */
-    function purchaseVowel(roundState, puzzle, letter, availableScore) {
+    function purchaseVowel(roundState, puzzle, letter, availableScore, roundConfig) {
+        roundConfig = roundConfig || ROUND1_CONFIG;
         letter = String(letter).toUpperCase();
 
         if (isRoundOver(roundState)) {
@@ -151,13 +171,13 @@
         if (roundState.purchasedVowels.indexOf(letter) !== -1) {
             return { roundState: roundState, changed: false, reason: 'already-purchased' };
         }
-        if (!canAffordVowel(availableScore)) {
+        if (!canAffordVowel(availableScore, roundConfig)) {
             return { roundState: roundState, changed: false, reason: 'insufficient-score' };
         }
 
         var next = cloneRoundState(roundState);
         next.purchasedVowels.push(letter);
-        next.pointsThisRound -= ROUND1_CONFIG.vowelCost;
+        next.pointsThisRound -= roundConfig.vowelCost;
 
         var occurrences = LastWordContent.countOccurrences(puzzle.answer, letter);
         var present = occurrences > 0;
@@ -187,7 +207,7 @@
     function attemptSolve(roundState, puzzle, guessText, options) {
         options = options || {};
         var maxSolveBonus = options.maxSolveBonus != null ? options.maxSolveBonus : ROUND1_CONFIG.maxSolveBonus;
-        var decayPerAction = options.decayPerAction != null ? options.decayPerAction : SOLVE_BONUS_DECAY_PER_ACTION;
+        var decayPerAction = options.decayPerAction != null ? options.decayPerAction : decayPerActionFor(maxSolveBonus);
 
         if (isRoundOver(roundState)) {
             return { roundState: roundState, changed: false, reason: 'round-over' };
@@ -236,6 +256,8 @@
     return {
         ROUND1_CONFIG: ROUND1_CONFIG,
         SOLVE_BONUS_DECAY_PER_ACTION: SOLVE_BONUS_DECAY_PER_ACTION,
+        SOLVE_BONUS_DECAY_DIVISOR: SOLVE_BONUS_DECAY_DIVISOR,
+        decayPerActionFor: decayPerActionFor,
         MAX_STRIKES: MAX_STRIKES,
         isRoundOver: isRoundOver,
         actionsTaken: actionsTaken,
