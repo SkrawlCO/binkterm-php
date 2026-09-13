@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "puzzles": [
+    { "id": "movies-0001", "category": "Movies & TV", "answer": "BACK TO THE FUTURE", "difficulty": "normal", "finalEligible": true },
+    { "id": "movies-0002", "category": "Movies & TV", "answer": "THE GODFATHER", "difficulty": "easy", "finalEligible": true },
+    { "id": "music-0001", "category": "Music", "answer": "BOHEMIAN RHAPSODY", "difficulty": "normal", "finalEligible": true },
+    { "id": "music-0002", "category": "Music", "answer": "PURPLE RAIN", "difficulty": "easy", "finalEligible": false },
+    { "id": "games-0001", "category": "Games", "answer": "THE LEGEND OF ZELDA", "difficulty": "hard", "finalEligible": true },
+    { "id": "food-0001", "category": "Food & Drink", "answer": "MACARONI AND CHEESE", "difficulty": "normal", "finalEligible": false },
+    { "id": "places-0001", "category": "Places", "answer": "NIAGARA FALLS", "difficulty": "easy", "finalEligible": true },
+    { "id": "sayings-0001", "category": "Sayings", "answer": "DON'T CRY OVER SPILLED MILK", "difficulty": "hard", "finalEligible": true },
+    { "id": "sayings-0002", "category": "Sayings", "answer": "BETTER LATE THAN NEVER", "difficulty": "normal", "finalEligible": false },
+    { "id": "sci-tech-0001", "category": "Science & Tech", "answer": "ARTIFICIAL INTELLIGENCE", "difficulty": "hard", "finalEligible": true },
+    { "id": "history-0001", "category": "History", "answer": "THE BERLIN WALL", "difficulty": "normal", "finalEligible": true },
+    { "id": "people-0001", "category": "People", "answer": "ALBERT EINSTEIN", "difficulty": "easy", "finalEligible": true },
+    { "id": "books-0001", "category": "Books & Stories", "answer": "TO KILL A MOCKINGBIRD", "difficulty": "hard", "finalEligible": true },
+    { "id": "sports-0001", "category": "Sports", "answer": "STANLEY CUP", "difficulty": "easy", "finalEligible": false },
+    { "id": "bbs-retro-0001", "category": "BBS & Retro", "answer": "WILDCAT BBS", "difficulty": "normal", "finalEligible": true },
+    { "id": "bbs-retro-0002", "category": "BBS & Retro", "answer": "FIDONET", "difficulty": "easy", "finalEligible": false }
+  ]
+}
