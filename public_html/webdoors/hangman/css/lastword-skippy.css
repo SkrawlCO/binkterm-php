@@ -1,0 +1,160 @@
+/* Last Word — SKIPPY integration build additive styling.
+   Loaded ONLY by lastword-skippy.html, on top of the shared css/lastword.css
+   (which stays untouched so lastword-m1d.html/m1c.html/m1b.html render
+   exactly as before). Just enough to host the SVG stage divs that replaced
+   the old <canvas id="gallows">/<canvas id="finalGallows"> elements, the
+   transient idle-chatter speech bubble above each (playtest iteration #2),
+   and the BUY HINT LETTER control (playtest iteration #2; restyled more
+   prominent in iteration #3 per human feedback — still visually subordinate
+   to SOLVE, same placement, same mechanic). */
+
+.lw-skippy-portrait {
+    position: relative;
+    /* Headroom above the stage for the transient chatter bubble to sit in
+       without ever overlapping the SVG (and therefore never overlapping
+       Skippy's head/face/hair/pose, trivially — it isn't drawn on the same
+       surface at all). */
+    padding-top: 46px;
+    max-width: 100%;
+}
+
+.lw-skippy-stage {
+    display: block;
+    margin: 0 auto;
+    /* 260x260 matches gallows-character.js's SVG viewBox, but mobile-first:
+       this is a max, not a fixed size — aspect-ratio keeps it square while
+       shrinking to fit a narrow viewport instead of ever forcing horizontal
+       overflow (unlike a fixed inline width/height would). */
+    width: 260px;
+    max-width: 100%;
+    aspect-ratio: 1 / 1;
+}
+
+.lw-skippy-stage svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+/* Strike-5's blinking red warning light (see gallows-character.js's
+   warningLight('red')) uses this class — restrained pulse, not flashing. */
+.lw-pulse {
+    animation: lwSkippyPulse 1.1s ease-in-out infinite;
+}
+
+@keyframes lwSkippyPulse {
+    0%, 100% { opacity: 0.5; }
+    50% { opacity: 1; }
+}
+
+/* Transient idle-chatter speech bubble (playtest iteration #2). Sits in the
+   padding-top headroom ABOVE the whole SVG stage — not just above Skippy's
+   head, above the entire apparatus too — so it can never cover any part of
+   his figure or pose regardless of tilt/state, with a small tail pointing
+   down at his portrait so it still visually reads as his line. Deliberately
+   a different shape/position from his baked-in in-SVG event bubbles
+   (PLEADING/TERRIFIED/SAVED, which sit centered below his feet) so the two
+   are never confused and never stack. [hidden] (toggled from JS) fully
+   removes it rather than just hiding text, so nothing lingers waiting to be
+   read twice. No animation beyond what's already here — a plain show/hide. */
+.lw-skippy-chatter-bubble {
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    /* Mobile-first: bounded by the viewport (minus a side gutter), not just
+       a fixed px cap, so it can never cause horizontal overflow on a narrow
+       phone screen; still caps out at a comfortable reading width on desktop. */
+    width: max-content;
+    max-width: min(240px, calc(100vw - 32px));
+    box-sizing: border-box;
+    background: #1a1d24;
+    border: 2px solid #6ea8ff;
+    border-radius: 10px;
+    padding: 7px 11px;
+    font-size: 13px;
+    font-style: italic;
+    line-height: 1.35;
+    text-align: center;
+    color: #e7eefc;
+}
+
+.lw-skippy-chatter-bubble::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 100%;
+    transform: translateX(-50%);
+    border: 8px solid transparent;
+    border-top-color: #6ea8ff;
+}
+
+.lw-skippy-chatter-bubble::before {
+    /* Inner fill triangle, drawn 2px inside the border-colored one above, so
+       the tail reads as an outlined bubble edge rather than a solid wedge. */
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 100%;
+    transform: translateX(-50%) translateY(-2px);
+    border: 6px solid transparent;
+    border-top-color: #1a1d24;
+    z-index: 1;
+}
+
+/* SOLVE + BUY HINT LETTER share one action row (iteration #2 introduced the
+   hint control; iteration #3 made it more prominent; iteration #4 — human
+   feedback: a separate hint row "throws off the visual balance" on desktop
+   — merges it into the SAME row as SOLVE instead of stacking a second full
+   action row beneath it). SOLVE (`.solveButton`, from the shared
+   css/lastword.css, untouched) stays the dominant amber primary action;
+   `.hintButton` is deliberately smaller/lighter (14px, semi-bold, tighter
+   padding) so it reads as clearly secondary sitting right next to it,
+   while `min-height` on both keeps their actual tap targets equally
+   comfortable regardless of that visual weight difference. Mobile-first:
+   `flex-wrap` lets the two buttons stack (SOLVE first, Hint second — DOM
+   order) when a narrow viewport can't fit them side by side, rather than
+   shrinking either one; the solve form and the hint-unavailable note are
+   each `flex-basis: 100%` so they always drop to their own full-width line
+   below the buttons instead of widening the row or wrapping awkwardly. */
+.actionRow {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid rgba(231, 238, 252, 0.15);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+}
+
+.actionRow .solveForm,
+#hintUnavailableReason {
+    flex-basis: 100%;
+    margin: 0;
+}
+
+#hintUnavailableReason {
+    min-height: 1em;
+}
+
+.hintButton {
+    font-size: 14px;
+    font-weight: 600;
+    padding: 9px 16px;
+    min-height: 44px;
+    box-sizing: border-box;
+    background: rgba(110, 168, 255, 0.22);
+    color: #e7eefc;
+    border: 2px solid #6ea8ff;
+    border-radius: 8px;
+    cursor: pointer;
+}
+
+.hintButton:disabled {
+    opacity: 0.4;
+    cursor: default;
+}
+
+.hintButton:not(:disabled):hover {
+    background: rgba(110, 168, 255, 0.34);
+}

@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <title>Last Word — SKIPPY (unlisted human-test build)</title>
+    <link rel="stylesheet" href="css/lastword.css?v=skippy6" />
+    <link rel="stylesheet" href="css/lastword-skippy.css?v=skippy6" />
+</head>
+<body>
+<!--
+  SKIPPY INTEGRATION UNLISTED TEST ENTRY POINT — not linked from /games,
+  webdoors.json, or GameConfig. Reachable only by direct URL for Matt/Puzl
+  human-acceptance testing of canonical Skippy (js/lastword/gallows-
+  character.js) wired into the complete game (four rounds + Final Hangman),
+  plus restrained state-aware idle chatter (js/lastword/idle-chatter.js).
+
+  This is a FORK of lastword-m1d.html, not an edit to it: lastword-m1d.html
+  (the accepted M1D build), lastword-m1c.html, lastword-m1b.html, and the
+  live catalog-listed Hangman experience (index.html) are all untouched by
+  this file — so M1D stays independently revisitable regardless of what
+  Matt/Puzl decide about Skippy.
+
+  The only structural differences from lastword-m1d.html: the two
+  `<canvas id="gallows">`/`<canvas id="finalGallows">` elements are replaced
+  by plain `<div>`s of the same footprint (Skippy renders as injected SVG
+  markup, not canvas drawing calls), each wrapped in a `.lw-skippy-portrait`
+  positioning anchor with a transient idle-chatter speech-bubble div
+  overlaid above it (playtest iteration #2: presentation-only change from a
+  plain caption — see js/lastword/app-final-skippy.js's chatter-bubble
+  presenter); a BUY HINT LETTER control sits below the normal letter grid
+  in Rounds 1-4 (playtest iteration #2's second feature — Final Hangman is
+  untouched, it keeps its own existing letter-purchase flow); an extra
+  stylesheet (css/lastword-skippy.css) styles all of the above; and the
+  page loads js/lastword/gallows-character.js + js/lastword/idle-chatter.js
+  + js/lastword/hint.js before a Skippy-aware app-final-skippy.js in place
+  of app-final.js. Every other panel/id/script is identical to M1D.
+-->
+<header>
+    <h1>LAST WORD</h1>
+    <div class="tagline">Know it? Solve it.</div>
+</header>
+
+<section id="category-select" class="panel">
+    <h2>Round 1 — Warm-Up: choose a category</h2>
+    <div id="categoryList" class="category-list" aria-label="Category choices"></div>
+</section>
+
+<section id="round-offer" class="panel hidden">
+    <h2 id="roundOfferTitle"></h2>
+    <div id="roundOfferList" class="category-list" aria-label="Offered categories"></div>
+</section>
+
+<section id="transition" class="panel hidden">
+    <h2 id="transitionTitle"></h2>
+    <p id="transitionBody"></p>
+    <button id="transitionContinue">Continue</button>
+</section>
+
+<main id="game" class="layout hidden">
+    <div class="panel side">
+        <div class="lw-skippy-portrait">
+            <div id="skippyChatterBubble" class="lw-skippy-chatter-bubble" aria-live="polite" hidden></div>
+            <div id="gallows" class="lw-skippy-stage" aria-label="Contestant status"></div>
+        </div>
+        <div class="meta">
+            <div><strong>Strikes:</strong> <span id="strikeCount">0</span>/6</div>
+            <div><strong>Round:</strong> <span id="roundLabel"></span></div>
+            <div><strong>Category:</strong> <span id="categoryLabel"></span></div>
+        </div>
+        <div class="meta scoreblock">
+            <div><strong>Cumulative score:</strong> <span id="cumulativeScore">0</span></div>
+            <div><strong>This round:</strong> <span id="roundScore">0</span></div>
+            <div><strong>Solve bonus:</strong> <span id="solveBonus"></span></div>
+            <div class="hint" id="decayHint"></div>
+        </div>
+    </div>
+
+    <div class="panel main">
+        <div id="board" class="board" aria-label="Puzzle board"></div>
+        <div id="statusLine" class="status"></div>
+
+        <div class="letters" id="letters" aria-label="Letter controls"></div>
+        <div class="hint" id="valuesHint"></div>
+
+        <!-- SOLVE + HINT LETTER share one action row (playtest iteration #4:
+             human feedback that a separate hint row threw off desktop
+             balance). SOLVE stays the dominant amber primary action; the
+             hint button is the secondary blue action beside it. Both the
+             solve form and the hint-unavailable note are flex-basis:100%
+             so they drop to their own line below the two buttons rather
+             than widening the row — see css/lastword-skippy.css. -->
+        <div class="actionRow">
+            <button id="solveToggle" class="solveButton">SOLVE</button>
+            <button id="buyHintButton" class="hintButton"></button>
+            <div id="solveForm" class="solveForm hidden">
+                <input id="solveInput" type="text" autocomplete="off" spellcheck="false"
+                       placeholder="Type the full answer…" aria-label="Solve answer" />
+                <button id="solveSubmit">Submit Solve</button>
+            </div>
+            <div class="hint" id="hintUnavailableReason"></div>
+        </div>
+    </div>
+</main>
+
+<section id="round-result" class="panel hidden">
+    <h2 id="roundResultTitle"></h2>
+    <div id="roundResultBody" class="roundResultBody"></div>
+    <button id="continueAfterRound">Continue</button>
+</section>
+
+<!-- M1D: Final Hangman -->
+
+<section id="final-intro" class="panel hidden">
+    <h2>FINAL HANGMAN</h2>
+    <div class="meta">
+        <div><strong>Category:</strong> <span id="finalIntroCategory"></span></div>
+        <div><strong>Accumulated score:</strong> <span id="finalIntroScore"></span></div>
+    </div>
+    <div id="finalIntroBoard" class="board" aria-label="Final puzzle board (blank)"></div>
+
+    <div id="finalOpeningChoice">
+        <h3>Choose opening help</h3>
+        <div class="category-list" id="finalOpeningCountButtons" aria-label="Opening help choices"></div>
+    </div>
+
+    <div id="finalOpeningPicker" class="hidden">
+        <h3 id="finalOpeningPickerPrompt"></h3>
+        <div class="letters" id="finalOpeningLetterGrid" aria-label="Choose your opening letters"></div>
+    </div>
+</section>
+
+<main id="final-play" class="layout hidden">
+    <div class="panel side">
+        <div class="lw-skippy-portrait">
+            <div id="finalSkippyChatterBubble" class="lw-skippy-chatter-bubble" aria-live="polite" hidden></div>
+            <div id="finalGallows" class="lw-skippy-stage" aria-label="Contestant status"></div>
+        </div>
+        <div class="meta">
+            <div><strong>Strikes:</strong> <span id="finalStrikeCount">0</span>/6</div>
+            <div><strong>Round:</strong> FINAL HANGMAN</div>
+            <div><strong>Category:</strong> <span id="finalCategoryLabel"></span></div>
+        </div>
+        <div class="meta scoreblock">
+            <div><strong>Score remaining:</strong> <span id="finalScoreRemaining">0</span></div>
+            <div class="hint">Every additional letter costs 250 (no points earned from letters this round)</div>
+        </div>
+    </div>
+
+    <div class="panel main">
+        <div id="finalBoard" class="board" aria-label="Final puzzle board"></div>
+        <div id="finalStatusLine" class="status"></div>
+
+        <div class="letters" id="finalLetters" aria-label="Letter controls"></div>
+
+        <div class="solveRow">
+            <button id="finalSolveToggle" class="solveButton">SOLVE</button>
+            <div id="finalSolveForm" class="solveForm hidden">
+                <input id="finalSolveInput" type="text" autocomplete="off" spellcheck="false"
+                       placeholder="Type the full answer…" aria-label="Solve answer" />
+                <button id="finalSolveSubmit">Submit Solve</button>
+            </div>
+        </div>
+    </div>
+</main>
+
+<section id="game-complete" class="panel hidden">
+    <h2 id="gameCompleteTitle">Game Complete!</h2>
+    <div id="gameCompleteBody" class="roundResultBody"></div>
+    <button id="playAgain">Play Another Session</button>
+</section>
+
+<!--
+  ?v=skippy6 cache-busts these local scripts/stylesheets. Bump the version
+  token here whenever any of these files change, and verify the live page
+  actually received the new version before human testing — Cloudflare
+  rewrites this zone's .js/.css Cache-Control to a 4-hour browser TTL (see
+  lastword-m1c.html for the full explanation), so a new query string is the
+  reliable way to force a genuinely fresh fetch.
+-->
+<script src="js/lastword/content.js?v=skippy6"></script>
+<script src="js/lastword/state.js?v=skippy6"></script>
+<script src="js/lastword/round.js?v=skippy6"></script>
+<script src="js/lastword/final.js?v=skippy6"></script>
+<script src="js/lastword/session.js?v=skippy6"></script>
+<script src="js/lastword/gallows-character.js?v=skippy6"></script>
+<script src="js/lastword/idle-chatter.js?v=skippy6"></script>
+<script src="js/lastword/hint.js?v=skippy6"></script>
+<script src="js/lastword/auto-solve.js?v=skippy6"></script>
+<script src="js/lastword/app-final-skippy.js?v=skippy6"></script>
+</body>
+</html>

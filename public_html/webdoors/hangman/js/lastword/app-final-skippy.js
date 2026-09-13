@@ -1,0 +1,903 @@
+/**
+ * Last Word — SKIPPY INTEGRATION build: M1D's four-round session + Final
+ * Hangman, with the accepted js/lastword/gallows-character.js (Skippy V1)
+ * replacing the generic canvas stick-figure gallows, plus restrained
+ * state-aware idle chatter (js/lastword/idle-chatter.js).
+ *
+ * This is a FORK of js/lastword/app-final.js, not an edit to it — M1D's
+ * canonical build stays untouched at lastword-m1d.html/app-final.js so it
+ * remains independently revisitable. Everything below that isn't
+ * Skippy/chatter-related (rounds 1-4 rules wiring, Final Hangman rules
+ * wiring, scoring, category flow) is unchanged from app-final.js on
+ * purpose: this transaction is a rendering + flavor-dialogue swap, not a
+ * gameplay change.
+ *
+ * All rules/outcomes still live in content.js/state.js/round.js/final.js/
+ * session.js (pure, DOM-free) — untouched. This file only renders that
+ * state and forwards DOM events.
+ *
+ * Skippy rendering: `renderSkippyOn(containerEl, ...)` replaces the old
+ * `drawGallowsOn(canvasEl, strikes)` canvas routine. It maps
+ * (strikes, solved) -> a gallows-character.js state name via
+ * `LastWordGallowsCharacter.pickStateName` and injects that state's SVG
+ * markup into a plain `<div>` (the HTML swaps the `<canvas>` element for a
+ * div of the same footprint) — no new game rule, purely a different way to
+ * draw the same strikes/solved facts the rest of this file already
+ * computes. TERRIFIED (Strike 5)'s rotating panic line and COMEDIC_DEFEAT/
+ * SAVED are only ever reached at round-end, which M1D's flow used to skip
+ * straight past (it jumped directly from the last guess to the round-result
+ * screen without ever painting the terminal canvas frame) — this build adds
+ * one short, fixed, cosmetic pause (`payoffDelayFor()`, backed by
+ * `DEFEAT_PAYOFF_DELAY_MS`/`SAVED_PAYOFF_DELAY_MS`) before that screen
+ * switch so the comedic-defeat gag and the SAVED! celebration — both
+ * explicitly part of Skippy's accepted design — actually get shown to the
+ * player instead of only existing in the renderer's test suite. The pause
+ * changes no score, timing-sensitive rule, or outcome; it only delays when
+ * the *next* screen appears.
+ *
+ * Idle chatter: a single js/lastword/idle-chatter.js controller per
+ * gameplay surface (rounds 1-4 share one; Final Hangman gets its own).
+ * `resetIdle()` is called whenever a gameplay screen begins and on every
+ * meaningful player action; `stop()` is called on every transition away
+ * from a gameplay screen. The controller only ever calls back into a tiny
+ * bubble-presenter pair (`show`/`hide`, see `makeChatterBubble` below) that
+ * sets a bubble element's text/visibility — it never touches round/session
+ * state, so it is provably incapable of affecting gameplay.
+ *
+ * PLAYTEST ITERATION #2 (two changes, both scoped to this isolated build):
+ *
+ * 1. Idle chatter PRESENTATION (behavior/timing unchanged): the chatter
+ *    caption used to be a plain always-visible text line beneath Skippy,
+ *    easy to miss while focused on the puzzle. `makeChatterBubble()` now
+ *    presents each remark as a transient speech-bubble element positioned
+ *    ABOVE the whole `.lw-skippy-portrait` stage (see css/lastword-skippy.css)
+ *    — never over any part of Skippy's figure, since it isn't drawn on the
+ *    SVG surface at all — that auto-hides itself after
+ *    `CHATTER_BUBBLE_DISPLAY_MS` and cleanly replaces (never stacks) if a
+ *    new remark arrives first. It is a different shape/position from
+ *    Skippy's own baked-in event bubbles (PLEADING/TERRIFIED/SAVED, drawn
+ *    inside the SVG below his feet) so the two are visually distinct and
+ *    never collide.
+ *
+ * 2. BUY HINT LETTER (new pure module js/lastword/hint.js, not a change to
+ *    round.js/state.js): a score-funded guaranteed-hint control for Rounds
+ *    1-4 only. See hint.js's own header for why this reuses round.js's
+ *    existing roundState fields instead of inventing a parallel score
+ *    system. Final Hangman is untouched — it keeps its existing
+ *    purchase-a-letter-you-choose flow.
+ */
+(function () {
+    'use strict';
+
+    var PUZZLES_URL = 'lastword/puzzles.json';
+
+    var puzzles = [];
+    var session = null;
+    var round = null;
+    var puzzle = null;
+    var roundConfig = null;
+    var solveSubmitting = false;
+    var pendingCategory = null; // category the transition screen is about to deal for round 2/4
+
+    // Final Hangman state
+    var finalState = null;
+    var finalPuzzle = null;
+    var finalSolveSubmitting = false;
+    var pendingOpeningCount = null;   // count chosen in the opening-help step, before letters are picked
+    var pendingOpeningLetters = [];   // letters picked so far toward pendingOpeningCount
+
+    var el = {};
+    [
+        'category-select', 'categoryList',
+        'round-offer', 'roundOfferTitle', 'roundOfferList',
+        'transition', 'transitionTitle', 'transitionBody', 'transitionContinue',
+        'game', 'gallows', 'skippyChatterBubble', 'strikeCount', 'roundLabel', 'categoryLabel',
+        'cumulativeScore', 'roundScore', 'solveBonus', 'decayHint',
+        'board', 'statusLine', 'letters', 'valuesHint',
+        'solveToggle', 'solveForm', 'solveInput', 'solveSubmit',
+        'buyHintButton', 'hintUnavailableReason',
+        'round-result', 'roundResultTitle', 'roundResultBody', 'continueAfterRound',
+        'final-intro', 'finalIntroCategory', 'finalIntroScore', 'finalIntroBoard',
+        'finalOpeningChoice', 'finalOpeningCountButtons',
+        'finalOpeningPicker', 'finalOpeningPickerPrompt', 'finalOpeningLetterGrid',
+        'final-play', 'finalGallows', 'finalSkippyChatterBubble', 'finalStrikeCount', 'finalCategoryLabel', 'finalScoreRemaining',
+        'finalBoard', 'finalStatusLine', 'finalLetters',
+        'finalSolveToggle', 'finalSolveForm', 'finalSolveInput', 'finalSolveSubmit',
+        'game-complete', 'gameCompleteTitle', 'gameCompleteBody', 'playAgain'
+    ].forEach(function (id) {
+        var camel = id.replace(/-([a-z])/g, function (_, c) { return c.toUpperCase(); });
+        el[camel] = document.getElementById(id);
+    });
+
+    // Cosmetic-only pause before switching away from a gameplay screen once
+    // a round/Final ends, so Skippy's terminal pose (SAVED or
+    // COMEDIC_DEFEAT) is actually visible for a beat instead of being
+    // skipped straight past. Does not change score, strikes, or outcome —
+    // only when the *next* screen (round-result / game-complete) appears.
+    // PLAYTEST ITERATION #3: the SAVED celebration specifically gets a
+    // longer hold (human feedback: "advances too quickly") — COMEDIC_DEFEAT
+    // is deliberately left at the original duration, not touched this pass.
+    var DEFEAT_PAYOFF_DELAY_MS = 1400;
+    var SAVED_PAYOFF_DELAY_MS = 3400;
+
+    function payoffDelayFor(solved) {
+        return solved ? SAVED_PAYOFF_DELAY_MS : DEFEAT_PAYOFF_DELAY_MS;
+    }
+
+    // Strike-5 (TERRIFIED) panic line stays stable for as long as the round
+    // remains at Strike 5 — re-rolled only on freshly entering Strike 5, per
+    // gallows-character.js's pickPanicLine contract. One holder per gameplay
+    // surface since rounds 1-4 and Final Hangman never overlap.
+    var panicState = { line: null, entered5: false };
+    var finalPanicState = { line: null, entered5: false };
+
+    // Latest state name each surface's Skippy render produced — read live by
+    // the idle-chatter controllers below at fire time, never snapshotted.
+    var currentSkippyState = null;
+    var finalCurrentSkippyState = null;
+
+    function skippyStateFor(strikes, solved) {
+        return LastWordGallowsCharacter.pickStateName(strikes, solved);
+    }
+
+    /**
+     * Render Skippy into `containerEl` for the given strikes/solved facts.
+     * `panicHolder` is one of the two { line, entered5 } trackers above,
+     * passed by reference (a plain object) so this function can update it.
+     */
+    function renderSkippyOn(containerEl, strikes, solved, panicState) {
+        var stateName = skippyStateFor(strikes, solved);
+        var opts;
+        if (stateName === 'TERRIFIED') {
+            if (!panicState.entered5) {
+                panicState.line = LastWordGallowsCharacter.pickPanicLine(panicState.line);
+                panicState.entered5 = true;
+            }
+            opts = { panicLine: panicState.line };
+        } else {
+            panicState.entered5 = false;
+        }
+        containerEl.innerHTML = LastWordGallowsCharacter.renderMarkup(stateName, opts);
+        return stateName;
+    }
+
+    // Idle chatter is shown for CHATTER_BUBBLE_DISPLAY_MS then auto-hides —
+    // long enough to comfortably read one of idle-chatter.js's short pool
+    // lines, short enough that it reads as a passing remark rather than a
+    // permanent fixture. Uses the page's real setTimeout/clearTimeout (the
+    // same ones idle-chatter.js itself defaults to), so a DOM test that
+    // injects a fake clock for idle-chatter.js's own timers must inject the
+    // same fake clock globally to control this too — see
+    // app-final-skippy-dom.test.js.
+    // PLAYTEST ITERATION #3: raised from 5000 (human feedback: "keep chatter
+    // visible longer" — timing/reset/pools/no-repeat behavior are otherwise
+    // completely unchanged, this is presentation duration only).
+    var CHATTER_BUBBLE_DISPLAY_MS = 10000;
+
+    /**
+     * Presents idle-chatter remarks for one gameplay surface as a transient
+     * speech bubble: `show(line)` displays it and (re)starts the auto-hide
+     * timer — replacing any bubble already showing cleanly, never stacking,
+     * since there is only ever the one bubble element and one pending
+     * timer; `hide()` removes it immediately and cancels that timer. Purely
+     * a presentation helper — it only ever writes to `bubbleEl` and never
+     * reads or writes any round/session/finalState.
+     */
+    function makeChatterBubble(bubbleEl) {
+        var hideTimer = null;
+        function clearTimer() {
+            if (hideTimer !== null) { clearTimeout(hideTimer); hideTimer = null; }
+        }
+        return {
+            show: function (chatterLine) {
+                if (!bubbleEl || !chatterLine) return;
+                clearTimer();
+                bubbleEl.textContent = chatterLine;
+                bubbleEl.hidden = false;
+                hideTimer = setTimeout(function () {
+                    hideTimer = null;
+                    bubbleEl.hidden = true;
+                    bubbleEl.textContent = '';
+                }, CHATTER_BUBBLE_DISPLAY_MS);
+            },
+            hide: function () {
+                if (!bubbleEl) return;
+                clearTimer();
+                bubbleEl.hidden = true;
+                bubbleEl.textContent = '';
+            }
+        };
+    }
+
+    var skippyChatterBubble = makeChatterBubble(el.skippyChatterBubble);
+    var finalSkippyChatterBubble = makeChatterBubble(el.finalSkippyChatterBubble);
+
+    // One idle-chatter controller per gameplay surface (rounds 1-4 share
+    // one; Final Hangman gets its own, since the two never play
+    // simultaneously). Neither controller ever touches round/session/
+    // finalState — only `currentSkippyState`/`finalCurrentSkippyState`
+    // (read-only to it) and its bubble presenter (purely cosmetic).
+    var idleChatter = LastWordIdleChatter.createIdleChatterController({
+        getStateName: function () { return currentSkippyState; },
+        onChatter: function (chatterLine) { skippyChatterBubble.show(chatterLine); }
+    });
+    var finalIdleChatter = LastWordIdleChatter.createIdleChatterController({
+        getStateName: function () { return finalCurrentSkippyState; },
+        onChatter: function (chatterLine) { finalSkippyChatterBubble.show(chatterLine); }
+    });
+
+    var ROUND_LABELS = {
+        1: 'Round 1 — Warm-Up',
+        2: 'Round 2 — Dealer\'s Choice',
+        3: 'Round 3 — Player\'s Choice',
+        4: 'Round 4 — Wildcard'
+    };
+
+    function showOnly(panelKey) {
+        ['categorySelect', 'roundOffer', 'transition', 'game', 'roundResult',
+            'finalIntro', 'finalPlay', 'gameComplete'].forEach(function (key) {
+            var target = el[key];
+            var isMain = key === 'game' || key === 'finalPlay';
+            target.className = (isMain ? 'layout' : 'panel') + (key === panelKey ? '' : ' hidden');
+        });
+    }
+
+    function setStatus(msg) {
+        el.statusLine.textContent = msg || '';
+    }
+
+    function availableScore() {
+        return session.cumulativeScore + round.pointsThisRound;
+    }
+
+    function renderBoardInto(containerEl, puzzleObj, stateObj) {
+        var cells = LastWordRound.buildDisplayBoard(puzzleObj, stateObj);
+        containerEl.innerHTML = '';
+        cells.forEach(function (cell) {
+            var span = document.createElement('span');
+            if (!cell.isLetter) {
+                span.className = cell.char === ' ' ? 'cell space' : 'cell punct';
+                span.textContent = cell.char === ' ' ? '  ' : cell.char;
+            } else if (cell.revealed) {
+                span.className = 'cell';
+                span.textContent = cell.char;
+            } else {
+                span.className = 'cell blank';
+                span.textContent = '  ';
+            }
+            containerEl.appendChild(span);
+        });
+    }
+
+    // ---------------------------------------------------------------------
+    // Rounds 1-4 (unchanged from M1C's app-session.js)
+    // ---------------------------------------------------------------------
+
+    function renderLetters() {
+        el.letters.innerHTML = '';
+        for (var i = 65; i <= 90; i++) {
+            var letter = String.fromCharCode(i);
+            var isVowel = LastWordContent.isVowel(letter);
+            var button = document.createElement('button');
+            button.textContent = isVowel ? letter + ' (' + roundConfig.vowelCost + ')' : letter;
+            if (isVowel) button.classList.add('vowel');
+
+            var alreadyUsed = isVowel
+                ? round.purchasedVowels.indexOf(letter) !== -1
+                : round.consonantsGuessed.indexOf(letter) !== -1;
+
+            if (alreadyUsed) {
+                button.disabled = true;
+                var wasCorrect = round.revealedLetters.indexOf(letter) !== -1;
+                button.classList.add(wasCorrect ? 'correct' : 'wrong');
+            } else if (LastWordRound.isRoundOver(round)) {
+                button.disabled = true;
+            } else if (isVowel && !LastWordRound.canAffordVowel(availableScore(), roundConfig)) {
+                button.disabled = true;
+            }
+
+            button.onclick = function (ltr) {
+                return function () { handleLetter(ltr); };
+            }(letter);
+
+            el.letters.appendChild(button);
+        }
+    }
+
+    function renderScoreboard() {
+        el.strikeCount.textContent = String(round.strikes);
+        el.roundLabel.textContent = ROUND_LABELS[round.round];
+        el.categoryLabel.textContent = round.category;
+        el.cumulativeScore.textContent = String(session.cumulativeScore);
+        el.roundScore.textContent = String(round.pointsThisRound);
+        el.solveBonus.textContent = String(LastWordRound.computeSolveBonus(round, roundConfig.maxSolveBonus));
+        el.decayHint.textContent = 'Bonus: ' + roundConfig.maxSolveBonus + ' − ' +
+            LastWordRound.decayPerActionFor(roundConfig.maxSolveBonus) + ' per letter guessed or bought';
+        el.valuesHint.textContent = 'Consonants: free, earn ' + roundConfig.consonantValue +
+            ' x occurrences. Vowels: cost ' + roundConfig.vowelCost + ', reveal all occurrences.';
+        currentSkippyState = renderSkippyOn(el.gallows, round.strikes, false, panicState);
+    }
+
+    /**
+     * BUY HINT LETTER control (playtest iteration #2): a subordinate escape
+     * valve, not the primary way to play — see css/lastword-skippy.css's
+     * `.hintButton`/`.hintRow` for how it's kept visually secondary to
+     * normal guessing/SOLVE. Disabled (with a reason shown below it) when
+     * the round is over, no unrevealed guessable letters remain, or the
+     * player cannot afford it; otherwise shows the round-specific cost.
+     */
+    function renderHintButton() {
+        var cost = LastWordHint.hintCostFor(roundConfig);
+        // PLAYTEST ITERATION #5: shortened again from "HINT LETTER · <cost>"
+        // (itself shortened from "BUY HINT LETTER — <cost>" in iteration #4).
+        // Label text only — styling/placement/behavior/price unchanged.
+        el.buyHintButton.textContent = 'HINT · ' + cost;
+        el.hintUnavailableReason.textContent = '';
+
+        if (LastWordRound.isRoundOver(round)) {
+            el.buyHintButton.disabled = true;
+            return;
+        }
+        if (!LastWordHint.hintCandidates(round, puzzle).length) {
+            el.buyHintButton.disabled = true;
+            el.hintUnavailableReason.textContent = 'No hint available — every letter is already revealed.';
+            return;
+        }
+        if (!LastWordHint.canAffordHint(availableScore(), roundConfig)) {
+            el.buyHintButton.disabled = true;
+            el.hintUnavailableReason.textContent = 'Not enough score for a hint (' + cost + ' needed).';
+            return;
+        }
+        el.buyHintButton.disabled = false;
+    }
+
+    function renderPlayingState() {
+        renderBoardInto(el.board, puzzle, round);
+        renderLetters();
+        renderScoreboard();
+        renderHintButton();
+    }
+
+    /**
+     * Buy one guaranteed hint letter — see js/lastword/hint.js for the pure
+     * rules. No strike, no points awarded for the reveal; the cost is
+     * charged to `round.pointsThisRound` exactly like a vowel purchase, and
+     * the purchase counts as one action toward solve-bonus decay for free
+     * (see hint.js's header for why). A meaningful player action, same as
+     * a letter guess, so it resets the idle-chatter stretch.
+     */
+    function handleBuyHint() {
+        if (!round || LastWordRound.isRoundOver(round)) return;
+        idleChatter.resetIdle();
+        skippyChatterBubble.hide();
+
+        var result = LastWordHint.purchaseHintLetter(round, puzzle, availableScore(), roundConfig);
+        if (!result.changed) {
+            if (result.reason === 'insufficient-score') {
+                setStatus('Not enough score for a hint (' + LastWordHint.hintCostFor(roundConfig) + ' needed).');
+            } else if (result.reason === 'no-letters-remaining') {
+                setStatus('No hint available — every letter is already revealed.');
+            }
+            return;
+        }
+        round = result.roundState;
+        setStatus('Hint: ' + result.letter + ' revealed! (−' + result.cost + ' points, no strike)');
+
+        // CORE-GAME FIX: if that reveal happened to complete the board (every
+        // guessable letter now visible), the round is solved right here —
+        // the player must never be required to retype an already-fully-
+        // visible answer. See js/lastword/auto-solve.js.
+        round = LastWordAutoSolve.applyRoundAutoSolve(round, puzzle, roundConfig);
+
+        if (LastWordRound.isRoundOver(round)) {
+            finishCurrentRound();
+            return;
+        }
+        renderPlayingState();
+    }
+
+    function handleLetter(letter) {
+        if (LastWordRound.isRoundOver(round)) return;
+        idleChatter.resetIdle();
+        skippyChatterBubble.hide();
+
+        if (LastWordContent.isConsonant(letter)) {
+            var result = LastWordRound.guessConsonant(round, puzzle, letter, roundConfig);
+            if (!result.changed) return;
+            round = result.roundState;
+            setStatus(result.correct
+                ? letter + ' is in the puzzle! +' + (result.occurrences * roundConfig.consonantValue) + ' points.'
+                : letter + ' is not in the puzzle. +1 strike.');
+        } else {
+            var vResult = LastWordRound.purchaseVowel(round, puzzle, letter, availableScore(), roundConfig);
+            if (!vResult.changed) {
+                if (vResult.reason === 'insufficient-score') setStatus('Not enough score to buy a vowel (' + roundConfig.vowelCost + ' needed).');
+                return;
+            }
+            round = vResult.roundState;
+            setStatus(vResult.present
+                ? 'Bought ' + letter + ' — it was there!'
+                : 'Bought ' + letter + ' — not in the puzzle. (Cost is charged either way.)');
+        }
+
+        // CORE-GAME FIX: see the identical comment in handleBuyHint() above —
+        // a consonant guess or vowel purchase that completes the board must
+        // solve the round right here, not merely leave it fully visible.
+        round = LastWordAutoSolve.applyRoundAutoSolve(round, puzzle, roundConfig);
+
+        if (LastWordRound.isRoundOver(round)) {
+            finishCurrentRound();
+            return;
+        }
+        renderPlayingState();
+    }
+
+    function submitSolve() {
+        if (solveSubmitting || !round || LastWordRound.isRoundOver(round)) return;
+        var text = el.solveInput.value.trim();
+        if (!text) return;
+
+        idleChatter.resetIdle();
+        skippyChatterBubble.hide();
+        solveSubmitting = true;
+        el.solveSubmit.disabled = true;
+
+        try {
+            var result = LastWordRound.attemptSolve(round, puzzle, text, {
+                maxSolveBonus: roundConfig.maxSolveBonus,
+                decayPerAction: LastWordRound.decayPerActionFor(roundConfig.maxSolveBonus)
+            });
+            round = result.roundState;
+            el.solveInput.value = '';
+
+            if (result.correct) {
+                setStatus('Correct! Solve bonus: ' + result.bonusAwarded + ' points.');
+            } else {
+                setStatus('Not quite — that\'s +2 strikes.');
+            }
+        } catch (err) {
+            setStatus('Something went wrong submitting that solve — please reload and try again.');
+            if (typeof console !== 'undefined' && console.error) console.error('Last Word solve error:', err);
+            return;
+        } finally {
+            solveSubmitting = false;
+            el.solveSubmit.disabled = false;
+        }
+
+        if (LastWordRound.isRoundOver(round)) {
+            finishCurrentRound();
+            return;
+        }
+        renderPlayingState();
+    }
+
+    function finishCurrentRound() {
+        var finishedRound = round;
+        idleChatter.stop();
+        skippyChatterBubble.hide();
+        var solved = finishedRound.outcome === 'solved';
+        // Paint Skippy's terminal pose (SAVED or COMEDIC_DEFEAT) before the
+        // screen switches away, and hold it on screen briefly — see
+        // payoffDelayFor()/DEFEAT_PAYOFF_DELAY_MS/SAVED_PAYOFF_DELAY_MS above.
+        currentSkippyState = renderSkippyOn(el.gallows, finishedRound.strikes, solved, panicState);
+        session = LastWordSession.finishRound(session, finishedRound);
+        setTimeout(function () {
+            renderRoundResult(finishedRound);
+        }, payoffDelayFor(solved));
+    }
+
+    function renderRoundResult(finishedRound) {
+        var solved = finishedRound.outcome === 'solved';
+        el.roundResultTitle.textContent = ROUND_LABELS[finishedRound.round] + ': ' + (solved ? 'Solved!' : 'Out of strikes');
+
+        var lines = [];
+        lines.push(line(solved ? 'rrSolved' : 'rrFailed', (solved ? '✅ ' : '❌ ') + 'Answer: ' + puzzle.answer));
+        lines.push(line('', 'Round points: ' + finishedRound.pointsThisRound));
+        lines.push(line('', 'Cumulative score: ' + session.cumulativeScore));
+
+        el.roundResultBody.innerHTML = '';
+        lines.forEach(function (l) { el.roundResultBody.appendChild(l); });
+
+        showOnly('roundResult');
+    }
+
+    function line(cls, text) {
+        var span = document.createElement('span');
+        span.className = 'rrLine' + (cls ? ' ' + cls : '');
+        span.textContent = text;
+        return span;
+    }
+
+    function beginRoundPlay(dealResult) {
+        session = dealResult.session;
+        round = session.currentRound;
+        puzzle = dealResult.puzzle;
+        roundConfig = LastWordState.ROUND_CONFIG[round.round];
+        el.solveToggle.disabled = false;
+        el.solveForm.className = 'solveForm hidden';
+        setStatus('New puzzle dealt. Guess a consonant, buy a vowel, or SOLVE.');
+        // Fresh round: Skippy resets to CONFIDENT (strikes 0, not solved) and
+        // his panic-line/idle-chatter state resets clean, independent of
+        // whatever happened last round.
+        panicState.line = null;
+        panicState.entered5 = false;
+        showOnly('game');
+        renderPlayingState();
+        skippyChatterBubble.hide();
+        idleChatter.resetIdle();
+    }
+
+    function goToRound(roundNumber) {
+        if (roundNumber === 1) {
+            showOnly('categorySelect');
+            return;
+        }
+        if (roundNumber === 3) {
+            var offered = LastWordSession.offerCategoryChoices(
+                LastWordContent.listCategories(puzzles), session.categoriesUsed, 3
+            );
+            el.roundOfferTitle.textContent = ROUND_LABELS[3] + ': choose a category';
+            el.roundOfferList.innerHTML = '';
+            offered.forEach(function (category) {
+                var button = document.createElement('button');
+                button.textContent = category;
+                button.onclick = function () {
+                    beginRoundPlay(LastWordSession.dealRound(session, puzzles, 3, category));
+                };
+                el.roundOfferList.appendChild(button);
+            });
+            showOnly('roundOffer');
+            return;
+        }
+
+        pendingCategory = LastWordSession.pickAutoCategory(LastWordContent.listCategories(puzzles), session.categoriesUsed);
+        el.transitionTitle.textContent = ROUND_LABELS[roundNumber];
+        el.transitionBody.textContent = (roundNumber === 2 ? 'Dealer picks: ' : 'Wildcard: ') + pendingCategory;
+        el.transitionContinue.onclick = function () {
+            beginRoundPlay(LastWordSession.dealRound(session, puzzles, roundNumber, pendingCategory));
+        };
+        showOnly('transition');
+    }
+
+    // ---------------------------------------------------------------------
+    // Final Hangman (M1D)
+    // ---------------------------------------------------------------------
+
+    function beginFinal() {
+        var dealResult = LastWordSession.dealFinal(session, puzzles);
+        session = dealResult.session;
+        finalPuzzle = dealResult.puzzle;
+        finalState = session.finalState;
+        pendingOpeningCount = null;
+        pendingOpeningLetters = [];
+
+        el.finalIntroCategory.textContent = finalPuzzle.category;
+        el.finalIntroScore.textContent = String(session.cumulativeScore);
+        renderBoardInto(el.finalIntroBoard, finalPuzzle, finalState); // fully blank — nothing revealed yet
+
+        renderOpeningCountButtons();
+        el.finalOpeningPicker.className = 'hidden';
+        el.finalOpeningChoice.className = '';
+
+        showOnly('finalIntro');
+    }
+
+    function renderOpeningCountButtons() {
+        el.finalOpeningCountButtons.innerHTML = '';
+        [0, 1, 2, 3].forEach(function (count) {
+            var cost = LastWordFinal.openingCostFor(count);
+            var button = document.createElement('button');
+            button.textContent = count === 0 ? '0 letters (free)' : count + ' letter' + (count > 1 ? 's' : '') + ' (' + cost + ')';
+            if (cost > session.cumulativeScore) {
+                button.disabled = true;
+            }
+            button.onclick = function () { chooseOpeningCount(count); };
+            el.finalOpeningCountButtons.appendChild(button);
+        });
+    }
+
+    function chooseOpeningCount(count) {
+        pendingOpeningCount = count;
+        pendingOpeningLetters = [];
+
+        if (count === 0) {
+            commitOpeningChoice();
+            return;
+        }
+
+        el.finalOpeningPickerPrompt.textContent = 'Choose ' + count + ' letter' + (count > 1 ? 's' : '') + ' (' + LastWordFinal.openingCostFor(count) + ' points)';
+        renderOpeningLetterGrid();
+        el.finalOpeningPicker.className = '';
+    }
+
+    function renderOpeningLetterGrid() {
+        el.finalOpeningLetterGrid.innerHTML = '';
+        for (var i = 65; i <= 90; i++) {
+            var letter = String.fromCharCode(i);
+            var button = document.createElement('button');
+            button.textContent = letter;
+            var alreadyPicked = pendingOpeningLetters.indexOf(letter) !== -1;
+            if (alreadyPicked) {
+                button.disabled = true;
+                button.classList.add('correct');
+            } else if (pendingOpeningLetters.length >= pendingOpeningCount) {
+                button.disabled = true;
+            }
+            button.onclick = function (ltr) {
+                return function () { pickOpeningLetter(ltr); };
+            }(letter);
+            el.finalOpeningLetterGrid.appendChild(button);
+        }
+    }
+
+    function pickOpeningLetter(letter) {
+        if (pendingOpeningLetters.length >= pendingOpeningCount) return;
+        if (pendingOpeningLetters.indexOf(letter) !== -1) return;
+        pendingOpeningLetters.push(letter);
+        if (pendingOpeningLetters.length === pendingOpeningCount) {
+            commitOpeningChoice();
+            return;
+        }
+        renderOpeningLetterGrid();
+    }
+
+    function commitOpeningChoice() {
+        var result = LastWordFinal.purchaseOpening(finalState, finalPuzzle, pendingOpeningLetters, session.cumulativeScore);
+        if (!result.changed) {
+            // Should not happen (the count buttons are pre-disabled when unaffordable), but fail safely.
+            renderOpeningCountButtons();
+            el.finalOpeningPicker.className = 'hidden';
+            return;
+        }
+        finalState = result.finalState;
+        beginFinalPlay();
+    }
+
+    function beginFinalPlay() {
+        el.finalSolveToggle.disabled = false;
+        el.finalSolveForm.className = 'solveForm hidden';
+        el.finalStatusLine.textContent = 'Final Hangman — every additional letter costs 250. Solve any time.';
+        finalPanicState.line = null;
+        finalPanicState.entered5 = false;
+        showOnly('finalPlay');
+        renderFinalPlayingState();
+        finalSkippyChatterBubble.hide();
+        finalIdleChatter.resetIdle();
+    }
+
+    function finalAvailableScore() {
+        return session.cumulativeScore - finalState.spentThisFinal;
+    }
+
+    function renderFinalPlayingState() {
+        renderBoardInto(el.finalBoard, finalPuzzle, finalState);
+        renderFinalLetters();
+        el.finalStrikeCount.textContent = String(finalState.strikes);
+        el.finalCategoryLabel.textContent = finalPuzzle.category;
+        el.finalScoreRemaining.textContent = String(finalAvailableScore());
+        finalCurrentSkippyState = renderSkippyOn(el.finalGallows, finalState.strikes, false, finalPanicState);
+    }
+
+    function renderFinalLetters() {
+        el.finalLetters.innerHTML = '';
+        var used = LastWordFinal.usedLetters(finalState);
+        for (var i = 65; i <= 90; i++) {
+            var letter = String.fromCharCode(i);
+            var button = document.createElement('button');
+            button.textContent = letter + ' (250)';
+
+            var alreadyUsed = used.indexOf(letter) !== -1;
+            if (alreadyUsed) {
+                button.disabled = true;
+                var wasCorrect = finalState.revealedLetters.indexOf(letter) !== -1;
+                button.classList.add(wasCorrect ? 'correct' : 'wrong');
+            } else if (LastWordFinal.isFinalOver(finalState)) {
+                button.disabled = true;
+            } else if (!LastWordFinal.canAffordAdditionalLetter(finalAvailableScore())) {
+                button.disabled = true;
+            }
+
+            button.onclick = function (ltr) {
+                return function () { handleFinalLetter(ltr); };
+            }(letter);
+
+            el.finalLetters.appendChild(button);
+        }
+    }
+
+    function handleFinalLetter(letter) {
+        if (LastWordFinal.isFinalOver(finalState)) return;
+        finalIdleChatter.resetIdle();
+        finalSkippyChatterBubble.hide();
+        var result = LastWordFinal.purchaseAdditionalLetter(finalState, finalPuzzle, letter, finalAvailableScore());
+        if (!result.changed) {
+            if (result.reason === 'insufficient-score') el.finalStatusLine.textContent = 'Not enough score remaining to buy a letter (250 needed).';
+            return;
+        }
+        finalState = result.finalState;
+        el.finalStatusLine.textContent = result.present
+            ? 'Bought ' + letter + ' — it was there!'
+            : 'Bought ' + letter + ' — not in the puzzle. (Cost is charged either way, no strike.)';
+
+        // CORE-GAME FIX: reported in Final Hangman specifically (GALILEO
+        // GALILEI fully revealed but not recognized as solved) — a
+        // purchased letter that completes the board must finish Final right
+        // here, not leave the player to retype an already-visible answer.
+        // See js/lastword/auto-solve.js.
+        finalState = LastWordAutoSolve.applyFinalAutoSolve(finalState, finalPuzzle);
+        if (LastWordFinal.isFinalOver(finalState)) {
+            finishFinalRound();
+            return;
+        }
+        renderFinalPlayingState();
+    }
+
+    function submitFinalSolve() {
+        if (finalSolveSubmitting || LastWordFinal.isFinalOver(finalState)) return;
+        var text = el.finalSolveInput.value.trim();
+        if (!text) return;
+
+        finalIdleChatter.resetIdle();
+        finalSkippyChatterBubble.hide();
+        finalSolveSubmitting = true;
+        el.finalSolveSubmit.disabled = true;
+
+        try {
+            var result = LastWordFinal.attemptSolveFinal(finalState, finalPuzzle, text);
+            finalState = result.finalState;
+            el.finalSolveInput.value = '';
+            el.finalStatusLine.textContent = result.correct
+                ? 'Correct! +5000 for the Final.'
+                : 'Not quite — that\'s +2 strikes.';
+        } catch (err) {
+            el.finalStatusLine.textContent = 'Something went wrong submitting that solve — please reload and try again.';
+            if (typeof console !== 'undefined' && console.error) console.error('Last Word Final solve error:', err);
+            return;
+        } finally {
+            finalSolveSubmitting = false;
+            el.finalSolveSubmit.disabled = false;
+        }
+
+        if (LastWordFinal.isFinalOver(finalState)) {
+            finishFinalRound();
+            return;
+        }
+        renderFinalPlayingState();
+    }
+
+    function finishFinalRound() {
+        var scoreEnteringFinal = session.cumulativeScore;
+        finalIdleChatter.stop();
+        finalSkippyChatterBubble.hide();
+        var finishedFinalState = finalState;
+        var solved = finishedFinalState.outcome === 'solved';
+        finalCurrentSkippyState = renderSkippyOn(el.finalGallows, finishedFinalState.strikes, solved, finalPanicState);
+        session = LastWordSession.finishFinal(session, finalState);
+        setTimeout(function () {
+            renderGameComplete(scoreEnteringFinal, finishedFinalState);
+        }, payoffDelayFor(solved));
+    }
+
+    function renderGameComplete(scoreEnteringFinal, finishedFinalState) {
+        var solved = finishedFinalState.outcome === 'solved';
+        var bonus = solved ? LastWordFinal.FINAL_CONFIG.correctSolveBonus : 0;
+        var finalScore = LastWordFinal.computeFinalScore(scoreEnteringFinal, finishedFinalState);
+
+        el.gameCompleteTitle.textContent = solved ? 'Game Complete — Final Solved! 🎉' : 'Game Complete — Final Failed';
+
+        var lines = [];
+        lines.push(line(solved ? 'rrSolved' : 'rrFailed', (solved ? '✅ ' : '❌ ') + 'Answer: ' + finalPuzzle.answer));
+        lines.push(line('', 'Score entering Final: ' + scoreEnteringFinal));
+        lines.push(line('', 'Spent in Final: ' + finishedFinalState.spentThisFinal));
+        lines.push(line('', 'Final bonus: ' + bonus));
+        lines.push(line('', 'FINAL SCORE: ' + finalScore));
+
+        el.gameCompleteBody.innerHTML = '';
+        lines.forEach(function (l) { el.gameCompleteBody.appendChild(l); });
+
+        showOnly('gameComplete');
+    }
+
+    // ---------------------------------------------------------------------
+
+    function startNewSession() {
+        idleChatter.stop();
+        finalIdleChatter.stop();
+        skippyChatterBubble.hide();
+        finalSkippyChatterBubble.hide();
+        session = LastWordState.createSession();
+        finalState = null;
+        finalPuzzle = null;
+        goToRound(1);
+    }
+
+    function bindStaticControls() {
+        el.solveToggle.onclick = function () {
+            var showing = el.solveForm.className.indexOf('hidden') === -1;
+            el.solveForm.className = showing ? 'solveForm hidden' : 'solveForm';
+            if (!showing) el.solveInput.focus();
+            idleChatter.resetIdle();
+        };
+        el.solveSubmit.onclick = submitSolve;
+        el.buyHintButton.onclick = handleBuyHint;
+        el.solveInput.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                submitSolve();
+            }
+        });
+
+        el.finalSolveToggle.onclick = function () {
+            var showing = el.finalSolveForm.className.indexOf('hidden') === -1;
+            el.finalSolveForm.className = showing ? 'solveForm hidden' : 'solveForm';
+            if (!showing) el.finalSolveInput.focus();
+            finalIdleChatter.resetIdle();
+        };
+        el.finalSolveSubmit.onclick = submitFinalSolve;
+        el.finalSolveInput.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                submitFinalSolve();
+            }
+        });
+
+        window.addEventListener('keydown', function (e) {
+            if (e.ctrlKey || e.metaKey || e.altKey) return;
+            if (document.activeElement === el.solveInput || document.activeElement === el.finalSolveInput) return;
+
+            var letter = e.key.toUpperCase();
+            if (!/^[A-Z]$/.test(letter)) return;
+
+            if (finalState && !LastWordFinal.isFinalOver(finalState) && el.finalPlay.className === 'layout') {
+                handleFinalLetter(letter);
+                return;
+            }
+            if (round && !LastWordRound.isRoundOver(round)) {
+                handleLetter(letter);
+            }
+        });
+
+        el.continueAfterRound.onclick = function () {
+            if (LastWordSession.isSessionComplete(session)) {
+                beginFinal();
+            } else {
+                goToRound(session.rounds.length + 1);
+            }
+        };
+
+        el.playAgain.onclick = startNewSession;
+    }
+
+    function renderCategoryList() {
+        var categories = LastWordContent.listCategories(puzzles);
+        el.categoryList.innerHTML = '';
+        categories.forEach(function (category) {
+            var button = document.createElement('button');
+            button.textContent = category;
+            button.onclick = function () {
+                beginRoundPlay(LastWordSession.dealRound(session, puzzles, 1, category));
+            };
+            el.categoryList.appendChild(button);
+        });
+    }
+
+    function boot() {
+        fetch(PUZZLES_URL, { cache: 'no-store' })
+            .then(function (res) {
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                return res.json();
+            })
+            .then(function (doc) {
+                puzzles = LastWordContent.loadPuzzleSet(doc);
+                session = LastWordState.createSession();
+                bindStaticControls();
+                renderCategoryList();
+                showOnly('categorySelect');
+            })
+            .catch(function (err) {
+                el.categoryList.textContent = 'Failed to load puzzle content: ' + err.message;
+            });
+    }
+
+    boot();
+})();
