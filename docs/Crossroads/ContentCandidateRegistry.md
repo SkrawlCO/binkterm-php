@@ -160,6 +160,7 @@ already `LIVE`.
 | Death From Above | — | WATCH / ARCHAEOLOGY | Historical MP artillery/cannon game; insufficient evidence. | 2026-08-31 | More evidence surfaces. |
 | Old Unix archive leads | civ, boa, codewar | WATCH / ARCHAEOLOGY | Bare names to research, not promoted candidates. | 2026-08-31 | Any one of them accumulates real evidence of a playable game. |
 | Bulls & Cows | — | WATCH | Multiplayer rewrite explicitly "in progress" as of Aug-31 — not yet a candidate. | 2026-08-31 | The multiplayer rewrite ships. |
+| snakes.run | Secure Snake Home, eieio.games snake, Nolen Royalty snake | WATCH | **NEW (2026-09-12, Content Hunt v2, Pass A — Charm/Bubble Tea showcase channel).** Real, live, massively-multiplayer snake over SSH (`ssh snakes.run`), thousands of concurrent players, launched Feb 2026, active/blogged technical writeups since. Genuinely fun novelty/spectacle, but license and self-host path are both unconfirmed — no public source repo found; appears to be the author's own hosted-only project. | 2026-09-12 | A public license/source repo is confirmed (self-host path), or Matt explicitly wants a portal-style link-out despite no self-host. |
 
 ## Registry — SHELVED
 
@@ -239,6 +240,10 @@ already `LIVE`.
 | NY2008 | — | REJECTED | Named in the Sep-4 Final Rejects list, "for Curated" specifically — may still suit Game Hall if ever revisited. | 2026-09-04 | Curated: material new fact. Game Hall was never assessed. |
 | Time Port | — | REJECTED | Named in the Sep-4 Final Rejects list, "for Curated" specifically. | 2026-09-04 | Curated: material new fact. Game Hall was never assessed. |
 | Eclectic Avenue | — | REJECTED | Named in the Sep-4 Final Rejects list, "for Curated" specifically. | 2026-09-04 | Curated: material new fact. Game Hall was never assessed. |
+| crib / jack (cribbage-over-SSH) | cribbage.world | REJECTED | **NEW (2026-09-12, Content Hunt v2, Pass C — adjacent-software channel).** Real terminal cribbage client+server, live public server at `cribbage.world:22000`. Hard-excluded: conventional card game. | 2026-09-12 | N/A — hard rule exclusion (conventional card game), not a maturity gate. |
+| bubble-games | christopher-kleine/bubble-games | REJECTED | **NEW (2026-09-12, Content Hunt v2, Pass A — Charm/Bubble Tea showcase channel).** SSH game hub built on Wish+Bubble Tea; currently ships exactly one game (TicTacToe) — conventional filler, too thin to be an Experience. | 2026-09-12 | The hub ships multiple substantive non-conventional games. |
+| Coop Catacombs | AikonCWD/coop-catacombs | REJECTED | **NEW (2026-09-12, Content Hunt v2, Pass A — r/roguelikedev channel).** Genuinely interesting asynchronous-coop roguelike design (messages/traps/items left for other players' runs) — but it is a graphical Windows/Linux/Mac/browser game, not terminal-native; no ASCII/curses execution model evidenced. Fails the terminal-path requirement. | 2026-09-12 | A real terminal/curses build or mode is demonstrated. |
+| spong | fvcalderan/spong | REJECTED | **NEW (2026-09-12, Content Hunt v2, Pass C — adjacent-software channel).** Real Python curses terminal pong, host/client. Thin tech-demo depth, no persistence/progression — a TUI toy, not an Experience. | 2026-09-12 | Materially more depth/content is added upstream. |
 
 ## Registry — NEVER_SURFACE
 
