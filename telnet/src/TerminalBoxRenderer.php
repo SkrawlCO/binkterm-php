@@ -250,6 +250,16 @@ class TerminalBoxRenderer
         return $this->truncateVisibleText($text, $width);
     }
 
+    /**
+     * Zero-width tokens this file's ANSI-aware width/truncation helpers must
+     * treat atomically: SGR colour codes, and an OSC 8 hyperlink open/close
+     * pair (see {@see \BinktermPHP\Terminal\Presentation\TerminalHyperlink}).
+     * Splitting an OSC 8 sequence mid-escape during truncation would send a
+     * malformed control string to the terminal, so it must never be counted
+     * character-by-character the way plain text is.
+     */
+    private const ANSI_TOKEN_RE = '\033\[[0-9;]*m|\033\]8;;[^\033]*\033\\\\';
+
     private function ansiLength(string $text): int
     {
         return $this->visibleTextWidth($this->stripAnsi($text));
@@ -257,19 +267,19 @@ class TerminalBoxRenderer
 
     private function stripAnsi(string $text): string
     {
-        return preg_replace('/\033\[[0-9;]*m/', '', $text) ?? $text;
+        return preg_replace('/' . self::ANSI_TOKEN_RE . '/', '', $text) ?? $text;
     }
 
     private function truncateAnsiLine(string $line, int $width): string
     {
         $result = '';
         $visible = 0;
-        if (!preg_match_all('/\033\[[0-9;]*m|./us', $line, $matches)) {
+        if (!preg_match_all('/' . self::ANSI_TOKEN_RE . '|./us', $line, $matches)) {
             return '';
         }
 
         foreach ($matches[0] as $token) {
-            if (str_starts_with($token, "\033[")) {
+            if (str_starts_with($token, "\033[") || str_starts_with($token, "\033]")) {
                 $result .= $token;
                 continue;
             }

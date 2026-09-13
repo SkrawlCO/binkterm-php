@@ -4,6 +4,7 @@ namespace BinktermPHP\TelnetServer;
 
 use BinktermPHP\BbsDirectory;
 use BinktermPHP\Database;
+use BinktermPHP\Terminal\Presentation\TerminalHyperlink;
 
 /**
  * BbsListHandler — BBS directory browser for the terminal server.
@@ -147,11 +148,34 @@ class BbsListHandler
             $address = $port !== 23 ? "{$host}:{$port}" : $host;
             $fields[] = ['ui.terminalserver.bbslist.detail.telnet', 'Telnet', $address];
         }
-        if (!empty($entry['website'])) {
-            $fields[] = ['ui.terminalserver.bbslist.detail.website', 'Website', $entry['website']];
-        }
-
         $labelWidth = 10;
+
+        if (!empty($entry['website'])) {
+            // The `website` field is only admin-approved (bbs_directory
+            // status='active'), never independently URL-validated on write —
+            // TerminalHyperlink does its own strict validation and falls
+            // back to the identical plain-text value (no OSC 8) on anything
+            // that isn't a clean http/https URL. Label and target are the
+            // same string, so there is no separate visible-vs-actual URL
+            // for a caller to be misled by.
+            //
+            // The line-shell's writeWrapped() word-wraps this row with plain
+            // byte counting (no OSC/ANSI awareness), so TerminalHyperlink is
+            // asked to only wrap when the result provably fits this
+            // connection's known column budget — otherwise no shell's
+            // wrapping could ever need to break the escape sequence
+            // mid-stream. This keeps BbsListHandler shell-agnostic (a width
+            // budget, not a branch on which shell is active).
+            $website     = (string)$entry['website'];
+            $prefixWidth = 2 + $labelWidth + 1 + 1; // '  ' + padded 'Label:' + ' '
+            $margin      = 4;
+
+            $fields[] = [
+                'ui.terminalserver.bbslist.detail.website',
+                'Website',
+                TerminalHyperlink::wrapIfFits($website, $website, $cols - $prefixWidth - $margin),
+            ];
+        }
         foreach ($fields as [$key, $defaultLabel, $value]) {
             if ((string)$value === '') {
                 continue;
