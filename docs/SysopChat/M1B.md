@@ -5,6 +5,21 @@
 > pass; it has not yet been reviewed for accuracy beyond passing its own test
 > suite.
 
+**Status (2026-09-13): code committed/pushed (`ec44efc88`), `sysop_chat_messages`
+migration APPLIED TO PRODUCTION** via the standard runner, 08:39:13 UTC — the
+only pending migration at the time (verified before running). No pending
+migrations remain. No service restart performed or required (all 17
+supervisor programs stayed up, uptimes unchanged throughout — nothing this
+slice touches runs in a long-lived daemon; routes/templates/services load
+per-request). Bounded read-only production proof, no real page created:
+unauthenticated `GET /admin/sysop-chat` and `GET /api/admin/sysop-chat/state`
+both `401`; `SysopChatService::getWaitingPages()` → `[]`,
+`getActiveChat()` → `null`; `DashboardStatsService::getStats()`'s
+`pending_sysop_pages` → `0` for a real admin user id; the admin template
+renders end-to-end with zero exceptions; the ordinary homepage is unaffected;
+no new entries in `server.log`. The Web admin side is live and empty — the
+first real `sysop_pages` row will come from a genuine caller page in M1C.
+
 M1B builds the **admin side** of "Page SysOp" plus the minimal private
 message transport it needs: a waiting-page inbox, accept/decline, a private
 chat panel, and the ephemeral message backend behind it. There is still
