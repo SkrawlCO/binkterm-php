@@ -610,6 +610,7 @@ Vous pouvez envoyer des rappels individuels en utilisant les boutons « Rappeler
     'ui.admin.appearance.term_menu_keys.action.bbslist' => 'Annuaire BBS',
     'ui.admin.appearance.term_menu_keys.action.nodelist' => 'Liste des noeuds',
     'ui.admin.appearance.term_menu_keys.action.localchat' => 'Chat local',
+    'ui.admin.appearance.term_menu_keys.action.page_sysop' => 'Appeler le SysOp',
     'ui.admin.appearance.term_menu_keys.action.quit' => 'Quitter',
     'ui.admin.appearance.term_border.title' => 'Style de bordure',
     'ui.admin.appearance.term_border.help' => 'Choisissez le style de dessin de bo\xeete utilis\xe9 pour les cadres et bordures du serveur terminal. Les styles n\xe9cessitant des caract\xe8res hors du jeu de caract\xe8res s\xe9lectionn\xe9 basculent automatiquement vers un style compatible.',

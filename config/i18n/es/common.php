@@ -5675,6 +5675,7 @@ return [
     'ui.admin.appearance.term_menu_keys.action.bbslist' => 'Directorio BBS',
     'ui.admin.appearance.term_menu_keys.action.nodelist' => 'Lista de nodos',
     'ui.admin.appearance.term_menu_keys.action.localchat' => 'Chat local',
+    'ui.admin.appearance.term_menu_keys.action.page_sysop' => 'Llamar al SysOp',
     'ui.admin.appearance.term_menu_keys.action.quit' => 'Salir',
     'ui.echoareas_import.tab_csv' => 'Archivo CSV',
     'ui.echoareas_import.tab_na' => 'Archivo .NA',

@@ -662,6 +662,7 @@ return [
     'ui.admin.appearance.term_menu_keys.action.bbslist' => 'Каталог BBS',
     'ui.admin.appearance.term_menu_keys.action.nodelist' => 'Список нод',
     'ui.admin.appearance.term_menu_keys.action.localchat' => 'Локальный чат',
+    'ui.admin.appearance.term_menu_keys.action.page_sysop' => 'Вызвать сисопа',
     'ui.admin.appearance.term_menu_keys.action.quit' => 'Выход',
 
     'ui.admin.appearance.term_border.title' => 'Стиль рамки',

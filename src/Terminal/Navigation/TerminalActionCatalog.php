@@ -26,6 +26,10 @@ final class TerminalActionCatalog
             ['id' => 'qwk',          'key' => 'ui.terminalserver.server.menu.qwk',         'fallback' => 'QWK Offline Mail',     'availability' => 'feature:qwk',           'hotkey' => 'k', 'group' => 'messaging', 'terminates' => false],
             ['id' => 'shoutbox',     'key' => 'ui.terminalserver.server.menu.shoutbox',    'fallback' => 'Shoutbox',             'availability' => 'feature:shoutbox',      'hotkey' => 's', 'group' => 'community', 'terminates' => false],
             ['id' => 'localchat',    'key' => 'ui.terminalserver.server.menu.chat',        'fallback' => 'Local Chat',           'availability' => 'feature:chat',          'hotkey' => 'c', 'group' => 'community', 'terminates' => false],
+            // SysOp Chat (M1D): same platform action as the legacy main menu's
+            // 'page_sysop' -- see BbsSession::runPageSysopFlow(). Any
+            // authenticated caller may page; no separate feature flag exists.
+            ['id' => 'page_sysop',   'key' => 'ui.terminalserver.server.menu.page_sysop',  'fallback' => 'Page SysOp',           'availability' => 'authenticated',         'hotkey' => 'o', 'group' => 'community', 'terminates' => false],
             ['id' => 'polls',        'key' => 'ui.terminalserver.server.menu.polls',       'fallback' => 'Polls',                'availability' => 'feature:voting_booth',  'hotkey' => 'p', 'group' => 'community', 'terminates' => false],
             ['id' => 'whosonline',   'key' => 'ui.terminalserver.server.menu.whos_online', 'fallback' => "Who's Online",         'availability' => 'authenticated',         'hotkey' => 'w', 'group' => 'community', 'terminates' => false],
             ['id' => 'doors',        'key' => 'ui.terminalserver.server.menu.doors',       'fallback' => 'Games & Experiences',  'availability' => 'feature:webdoors',      'hotkey' => 'd', 'group' => 'community', 'terminates' => false],

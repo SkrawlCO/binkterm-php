@@ -55,6 +55,7 @@ class AppearanceConfig
         'bbslist'    => 'b',
         'nodelist'   => 'l',
         'localchat'  => 'c',
+        'page_sysop' => 'o',
         'quit'       => 'q',
     ];
 

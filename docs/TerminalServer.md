@@ -545,6 +545,7 @@ Every action in the terminal main menu can be bound to a different single letter
 | B | BBS Directory |
 | L | Node List |
 | C | Local Chat |
+| O | Page SysOp |
 | Q | Quit |
 
 If no custom map is saved the built-in defaults above are used. When a custom map is saved, any action with no assigned key is hidden from the menu and its slot is not rendered — remaining items in that section reflow to fill the gap. When every action in a section (Messaging, Community/Explore, or Files/Settings) is unassigned, the section header itself is suppressed. The `quit` key is always required. Sysops are responsible for ensuring their `mainmenu.ans` art matches whatever keys are configured.

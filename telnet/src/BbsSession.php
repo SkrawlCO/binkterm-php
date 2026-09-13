@@ -184,6 +184,7 @@ class BbsSession
     private ?string $authSessionId = null;
     private ?TerminalEventPoller $sessionEventPoller = null;
     private ?SessionKickHandler $sessionKickHandler = null;
+    private ?SysopChatEventHandler $sysopChatEventHandler = null;
     private float $lastSessionValidityCheckAt = 0.0;
     private bool $sessionTerminated = false;
 
@@ -672,6 +673,7 @@ class BbsSession
             $settingsKey      = $menuKeys['settings']  ?? null;
             $quitKey          = $menuKeys['quit']      ?? null;
             $localchatKey     = BbsConfig::isFeatureEnabled('chat') && isset($menuKeys['localchat']) ? $menuKeys['localchat'] : null;
+            $pageSysopKey     = $menuKeys['page_sysop'] ?? null;
             $shoutboxOption   = $showShoutbox  && isset($menuKeys['shoutbox'])  ? $menuKeys['shoutbox']  : null;
             $bulletinsOption  = $menuKeys['bulletins'] ?? null;
             $pollsOption      = $showPolls     && isset($menuKeys['polls'])     ? $menuKeys['polls']     : null;
@@ -691,6 +693,7 @@ class BbsSession
             $lblEchomail   = $norm($this->t('ui.terminalserver.server.menu.echomail',   'E) Echomail ({count} new)',   ['count' => $dashboardStats['new_echomail']], $locale), 'E');
             $lblQwk        = $norm($this->t('ui.terminalserver.server.menu.qwk',        'K) QWK Offline Mail', [], $locale), 'K');
             $lblChat       = $norm($this->t('ui.terminalserver.server.menu.chat',       'C) Local Chat', [], $locale), 'C');
+            $lblPageSysop  = $norm($this->t('ui.terminalserver.server.menu.page_sysop', 'O) Page SysOp', [], $locale), 'O');
             $lblWhosOnline = $norm($this->t('ui.terminalserver.server.menu.whos_online', "W) Who's Online", [], $locale), 'W');
             $lblShoutbox   = $norm($this->t('ui.terminalserver.server.menu.shoutbox',   'S) Shoutbox', [], $locale), 'S');
             $lblBulletins  = $norm($this->t('ui.terminalserver.server.menu.bulletins',  'U) Bulletins', [], $locale), 'U');
@@ -714,6 +717,7 @@ class BbsSession
             $communityItems = [];
             if ($whosOnlineOption !== null) $communityItems[] = [strtoupper($whosOnlineOption), $lblWhosOnline];
             if ($localchatKey !== null)    $communityItems[] = [strtoupper($localchatKey), $lblChat];
+            if ($pageSysopKey !== null)    $communityItems[] = [strtoupper($pageSysopKey), $lblPageSysop];
             if ($pollsOption !== null)     $communityItems[] = [strtoupper($pollsOption), $lblPolls];
             if ($shoutboxOption !== null)  $communityItems[] = [strtoupper($shoutboxOption), $lblShoutbox];
             if ($doorsOption !== null)     $communityItems[] = [strtoupper($doorsOption), $lblDoors];
@@ -735,6 +739,7 @@ class BbsSession
                 'netmail'    => $netmailKey,    'echomail'   => $echomailKey,
                 'shoutbox'   => $shoutboxOption,'bulletins'  => $bulletinsOption,
                 'polls'      => $pollsOption,   'localchat'  => $localchatKey,
+                'page_sysop' => $pageSysopKey,
                 'interests'  => $interestsOption,'qwk'       => $qwkOption,
                 'doors'      => $doorsOption,   'files'      => $filesOption,
                 'freqrequests' => $freqOption,
@@ -756,6 +761,7 @@ class BbsSession
                 'bulletins'  => [$bulletinsOption, $lblBulletins],
                 'whosonline' => [$whosOnlineOption, $lblWhosOnline],
                 'localchat'  => [$localchatKey, $lblChat],
+                'page_sysop' => [$pageSysopKey, $lblPageSysop],
                 'polls'      => [$pollsOption, $lblPolls],
                 'shoutbox'   => [$shoutboxOption, $lblShoutbox],
                 'doors'      => [$doorsOption, $lblDoors],
@@ -939,6 +945,18 @@ class BbsSession
                 'bulletins'    => $bulletinsHandler,
                 'polls'        => $pollsHandler,
                 'localchat'    => $chatHandler,
+                // SysOp Chat (M1D): same runPageSysopFlow() the legacy main
+                // menu's 'page_sysop' action calls -- one implementation,
+                // bound into both navigation surfaces via a closure adapter,
+                // the same pattern already used for newscan/echomail/whosonline.
+                // Explicit use (&$state), not a terser fn() arrow (which can
+                // only capture by value): the wait/chat loop's idle timers and
+                // NAWS resize tracking live in $state and must keep mutating
+                // the session's real state, not an arrow-fn's frozen snapshot
+                // from before DeclarativeMenuBridge::run() even started.
+                'page_sysop'   => function () use ($conn, &$state, $session): void {
+                    $this->runPageSysopFlow($conn, $state, $session);
+                },
                 'interests'    => $interestsHandler,
                 'qwk'          => $qwkHandler,
                 'doors'        => $doorHandler,
@@ -1120,6 +1138,9 @@ class BbsSession
             } elseif ($action === 'localchat') {
                 $this->log("Menu: {$username} -> Local Chat");
                 $chatHandler->show($conn, $state, $session);
+            } elseif ($action === 'page_sysop') {
+                $this->log("Menu: {$username} -> Page SysOp");
+                $this->runPageSysopFlow($conn, $state, $session);
             } elseif ($action === 'interests') {
                 $this->log("Menu: {$username} -> Interests");
                 $interestsHandler->show($conn, $state, $session);
@@ -2206,9 +2227,13 @@ class BbsSession
             );
             $this->sessionEventPoller->start();
             $this->sessionKickHandler = new SessionKickHandler($sessionId);
+            // M1C: shares this same poller/anchor — one realtime poll per
+            // session, fanned out to both handlers in pumpRealtimeAndCheckSession().
+            $this->sysopChatEventHandler = new SysopChatEventHandler();
         } catch (\Throwable $e) {
             $this->sessionEventPoller = null;
             $this->sessionKickHandler = null;
+            $this->sysopChatEventHandler = null;
             $this->log('Session kick watch unavailable: ' . $e->getMessage());
         }
     }
@@ -2218,7 +2243,12 @@ class BbsSession
      * the head of every idle-aware read primitive.
      *
      *  - fast path: {@see TerminalEventPoller::poll()} (self-throttled to ~2s)
-     *    surfaces a `session.kick` for this exact session id
+     *    surfaces a `session.kick` for this exact session id, AND (M1C) a
+     *    `sysop_chat.*` event for the caller's current page/chat if one is
+     *    active — one poll, one pass over the batch, fanned out to both
+     *    handlers in a fixed order (kick first) so `session.kick` can never be
+     *    starved or reordered behind SysOp Chat handling; {@see SessionKickHandler}
+     *    itself is untouched
      *  - backstop: at most once per {@see SESSION_VALIDITY_CHECK_SECONDS} the
      *    auth session is re-validated against the store, catching an expiry, a
      *    direct DB invalidation, or a kick that raced the poller anchor
@@ -2239,7 +2269,14 @@ class BbsSession
 
         if ($this->sessionEventPoller !== null && $this->sessionKickHandler !== null) {
             try {
-                $this->sessionEventPoller->poll($this->sessionKickHandler);
+                $kickHandler = $this->sessionKickHandler;
+                $sysopChatHandler = $this->sysopChatEventHandler;
+                $this->sessionEventPoller->poll(
+                    static function (string $type, array $payload, int $id) use ($kickHandler, $sysopChatHandler): void {
+                        $kickHandler->handleTerminalEvent($type, $payload, $id);
+                        $sysopChatHandler?->handleTerminalEvent($type, $payload, $id);
+                    }
+                );
             } catch (\Throwable $e) {
                 // A bus hiccup must never disconnect a live caller.
             }
@@ -2266,6 +2303,300 @@ class BbsSession
 
         $this->terminateRevokedSession($conn, $state, $code);
         return true;
+    }
+
+    // ===== M1C: PAGE SYSOP =====
+    //
+    // Available only from BBS-owned navigation the session itself drives —
+    // wired into the main menu ('page_sysop' action) and nowhere inside a
+    // NativeDoor/WebDoor/DOS-door relay loop, which owns its own PTY/session
+    // and never calls back into this flow. See docs/SysopChat/M1C.md.
+    //
+    // Both loops below reuse the existing idle-aware readKeyWithTimeout()
+    // primitive (same one ChatHandler already uses for its own live modal),
+    // which already calls pumpRealtimeAndCheckSession() at its head — so
+    // session.kick keeps working, the idle warning/disconnect deadlines keep
+    // counting, and SysOp Chat events are dispatched through the exact same
+    // single poll as the kick watch (see pumpRealtimeAndCheckSession() above).
+    // A short (1s) caller-supplied timeout, rather than the ~30s worst case
+    // the plain idle-aware wrapper can reach, keeps "Matt just accepted"
+    // feeling prompt without polling the realtime bus itself any harder —
+    // TerminalEventPoller self-throttles to one DB query per ~2s regardless
+    // of how often poll() is called.
+
+    /**
+     * Page SysOp: create a page, wait for Matt to accept/decline, then hand
+     * off into the live chat modal. Returns control to the caller (the main
+     * menu loop, or the declarative navigation bridge) when done — that
+     * caller redraws its own screen normally, the same "logical resume"
+     * every other menu action already relies on.
+     *
+     * Entry point for both dispatch surfaces (legacy main menu and the
+     * declarative navigation bridge). Wraps the real flow ({@see
+     * runPageSysopFlowInner()}) in a catch-all: a bug here must never
+     * propagate as an uncaught exception, because the two callers handle
+     * that completely differently — the legacy menu loop has no surrounding
+     * try/catch at all (an uncaught throw there is a hard disconnect), and
+     * DeclarativeMenuBridge::run() catches any \Throwable from its whole
+     * session loop and falls the *entire remaining session* back to the
+     * legacy menu as a side effect (a real, previously-hit failure mode —
+     * see docs/SysopChat/M1C.md's M1D blocker note). Neither caller should
+     * ever be able to tell that Page SysOp merely encountered a bug in its
+     * own code.
+     */
+    private function runPageSysopFlow($conn, array &$state, string $session): void
+    {
+        try {
+            $this->runPageSysopFlowInner($conn, $state, $session);
+        } catch (\Throwable $e) {
+            $this->log(sprintf(
+                'Page SysOp flow error: %s: %s @ %s:%d',
+                get_class($e),
+                $e->getMessage(),
+                basename($e->getFile()),
+                $e->getLine()
+            ));
+        }
+    }
+
+    private function runPageSysopFlowInner($conn, array &$state, string $session): void
+    {
+        $userId = (int) ($state['user_id'] ?? 0);
+        if ($userId <= 0 || $this->authSessionId === null) {
+            return;
+        }
+        $locale = $state['locale'] ?? $this->systemLocale;
+
+        $pageService = new \BinktermPHP\SysopChatService();
+        $page = $pageService->getCallerPage($userId);
+
+        if ($page !== null && $page['status'] === \BinktermPHP\SysopChatService::STATUS_ACCEPTED) {
+            // Re-entered while already in an active chat (e.g. a stray second
+            // Page SysOp keypress) — go straight back into it.
+            $this->runSysopChatModal($conn, $state, (int) $page['id']);
+            return;
+        }
+
+        if ($page === null) {
+            $surface = $this->isSsh ? 'ssh' : 'telnet';
+            $page = $pageService->createPage($userId, $surface, $this->authSessionId);
+            if ($page === null) {
+                $shell = TerminalShellFactory::create($this, $state);
+                $shell->showAlert(
+                    $conn,
+                    $state,
+                    $this->t('ui.terminalserver.server.sysop_chat.title', 'SysOp Chat', [], $locale),
+                    $this->t('ui.terminalserver.server.sysop_chat.unavailable', 'Unable to page the SysOp right now. Please try again shortly.', [], $locale),
+                    'error'
+                );
+                return;
+            }
+            $this->log("Page SysOp: {$state['username']} paged (page {$page['id']})");
+        }
+
+        $pageId = (int) $page['id'];
+        $this->sysopChatEventHandler?->setExpectedPageId($pageId);
+
+        $this->writeLine($conn, '');
+        $this->writeLine($conn, $this->colorize(
+            $this->t('ui.terminalserver.server.sysop_chat.paging', 'Paging the SysOp...', [], $locale),
+            self::ANSI_CYAN . self::ANSI_BOLD
+        ));
+        $this->writeLine($conn, $this->colorize(
+            $this->t('ui.terminalserver.server.sysop_chat.cancel_hint', 'Press Esc to cancel.', [], $locale),
+            self::ANSI_DIM
+        ));
+
+        $outcome = null;
+        while (true) {
+            [$key, $timedOut, $shouldDisconnect] = $this->readKeyWithTimeout($conn, $state, 1000);
+            if ($shouldDisconnect) {
+                // The socket is going away right now (real drop, idle
+                // timeout, or a kick) — cancel proactively rather than
+                // leaving a waiting page for Matt to accept into a phantom
+                // chat. Safe/idempotent if the page already transitioned.
+                $pageService->cancelPage($pageId, $userId);
+                $outcome = null;
+                break;
+            }
+            if (!$timedOut && $key === 'ESC') {
+                $pageService->cancelPage($pageId, $userId);
+                $outcome = 'cancelled';
+                break;
+            }
+
+            $transition = $this->sysopChatEventHandler?->takePendingTransition();
+            if ($transition !== null) {
+                $outcome = $transition;
+                break;
+            }
+        }
+
+        if ($outcome === null) {
+            // Disconnecting (kick or real drop) — nothing left to draw.
+            $this->sysopChatEventHandler?->setExpectedPageId(null);
+            return;
+        }
+
+        if ($outcome === \BinktermPHP\SysopChatService::EVENT_ACCEPTED) {
+            $this->writeLine($conn, '');
+            $this->writeLine($conn, $this->colorize(
+                $this->t('ui.terminalserver.server.sysop_chat.answered', 'The SysOp has answered your page.', [], $locale),
+                self::ANSI_GREEN . self::ANSI_BOLD
+            ));
+            $this->runSysopChatModal($conn, $state, $pageId);
+            return;
+        }
+
+        $this->sysopChatEventHandler?->setExpectedPageId(null);
+
+        $messageKey = match ($outcome) {
+            'cancelled' => 'ui.terminalserver.server.sysop_chat.page_cancelled',
+            \BinktermPHP\SysopChatService::EVENT_DECLINED => 'ui.terminalserver.server.sysop_chat.declined',
+            \BinktermPHP\SysopChatService::EVENT_EXPIRED => 'ui.terminalserver.server.sysop_chat.no_answer',
+            default => 'ui.terminalserver.server.sysop_chat.page_cancelled',
+        };
+        $messageFallback = match ($outcome) {
+            'cancelled' => 'Page cancelled.',
+            \BinktermPHP\SysopChatService::EVENT_DECLINED => 'The SysOp is not available right now.',
+            \BinktermPHP\SysopChatService::EVENT_EXPIRED => 'No answer — try again later.',
+            default => 'Page cancelled.',
+        };
+
+        $shell = TerminalShellFactory::create($this, $state);
+        $shell->showAlert(
+            $conn,
+            $state,
+            $this->t('ui.terminalserver.server.sysop_chat.title', 'SysOp Chat', [], $locale),
+            $this->t($messageKey, $messageFallback, [], $locale),
+            'info'
+        );
+    }
+
+    /**
+     * The live SysOp Chat modal for an ACCEPTED page. Owns input exclusively
+     * until the caller ends it (/q, Esc, or Ctrl-C), Matt ends it, or the
+     * connection drops.
+     */
+    private function runSysopChatModal($conn, array &$state, int $pageId): void
+    {
+        $userId = (int) ($state['user_id'] ?? 0);
+        $locale = $state['locale'] ?? $this->systemLocale;
+        $msgService = new \BinktermPHP\SysopChatMessageService();
+        $pageService = new \BinktermPHP\SysopChatService();
+
+        $this->sysopChatEventHandler?->setExpectedPageId($pageId);
+
+        $this->writeLine($conn, '');
+        $this->writeLine($conn, $this->colorize(
+            $this->t('ui.terminalserver.server.sysop_chat.header', '--- SysOp Chat --- (type /q to end)', [], $locale),
+            self::ANSI_CYAN . self::ANSI_BOLD
+        ));
+
+        $lastSeenId = 0;
+        $renderCatchUp = function () use ($conn, $msgService, $pageId, $userId, $locale, &$lastSeenId): void {
+            $messages = $msgService->listMessages($pageId, $userId);
+            if ($messages === null) {
+                return;
+            }
+            foreach ($messages as $m) {
+                if ($m['id'] <= $lastSeenId) {
+                    continue;
+                }
+                $this->renderSysopChatLine($conn, $m, $userId, $locale);
+                $lastSeenId = $m['id'];
+            }
+        };
+        $renderCatchUp();
+
+        $editor = new TerminalLineEditor('', 2000, false);
+        $this->redrawSysopChatInput($conn, $editor);
+
+        $endChat = function (int $actingUserId) use ($pageService, $pageId, $conn, $locale, &$editor): void {
+            $pageService->completePage($pageId, $actingUserId);
+            $this->writeLine($conn, '');
+            $this->writeLine($conn, $this->colorize(
+                $this->t('ui.terminalserver.server.sysop_chat.ended', 'Chat ended.', [], $locale),
+                self::ANSI_YELLOW
+            ));
+            $this->sysopChatEventHandler?->setExpectedPageId(null);
+        };
+
+        while (true) {
+            [$key, $timedOut, $shouldDisconnect] = $this->readKeyWithTimeout($conn, $state, 1000);
+            if ($shouldDisconnect) {
+                // Best-effort: end the chat server-side so Matt's admin panel
+                // does not sit on a phantom active chat after a real drop.
+                $pageService->completePage($pageId, $userId);
+                $this->sysopChatEventHandler?->setExpectedPageId(null);
+                return;
+            }
+
+            if (!$timedOut && $key !== null && $key !== '') {
+                $result = $editor->apply($key);
+                if ($result === TerminalLineEditor::RESULT_SUBMIT) {
+                    $line = trim($editor->value());
+                    $editor->setValue('');
+                    if ($line === '/q') {
+                        $endChat($userId);
+                        return;
+                    }
+                    if ($line !== '') {
+                        $sent = $msgService->sendMessage($pageId, $userId, $line);
+                        if ($sent !== null) {
+                            $lastSeenId = max($lastSeenId, $sent['id']);
+                            $this->renderSysopChatLine($conn, $sent, $userId, $locale);
+                        }
+                    }
+                    $this->redrawSysopChatInput($conn, $editor);
+                } elseif ($result === TerminalLineEditor::RESULT_CANCEL) {
+                    $endChat($userId);
+                    return;
+                } else {
+                    $this->redrawSysopChatInput($conn, $editor);
+                }
+            }
+
+            $transition = $this->sysopChatEventHandler?->takePendingTransition();
+            if ($transition === \BinktermPHP\SysopChatService::EVENT_COMPLETED) {
+                $this->writeLine($conn, '');
+                $this->writeLine($conn, $this->colorize(
+                    $this->t('ui.terminalserver.server.sysop_chat.ended', 'Chat ended.', [], $locale),
+                    self::ANSI_YELLOW
+                ));
+                $this->sysopChatEventHandler?->setExpectedPageId(null);
+                return;
+            }
+
+            if ($this->sysopChatEventHandler?->takeHasNewMessage() ?? false) {
+                $renderCatchUp();
+                $this->redrawSysopChatInput($conn, $editor);
+            }
+        }
+    }
+
+    private function renderSysopChatLine($conn, array $message, int $viewerUserId, string $locale): void
+    {
+        $who = ((int) $message['sender_user_id'] === $viewerUserId)
+            ? $this->t('ui.terminalserver.server.sysop_chat.you_label', 'You', [], $locale)
+            : $this->t('ui.terminalserver.server.sysop_chat.sysop_label', 'SysOp', [], $locale);
+
+        // \r\033[K first: the cursor may currently be sitting at the end of
+        // the live input-echo line (redrawSysopChatInput() never terminates
+        // it with a newline, by design, so typing keeps redrawing in place)
+        // -- clear that line and write the message onto it, rather than
+        // concatenating onto whatever it currently shows. Idempotent/safe
+        // when the cursor is already on a fresh blank line (clearing it is a
+        // no-op). Fixes the "> messageYou: message" run-together artifact
+        // observed in M1D human acceptance.
+        $this->safeWrite($conn, "\r\033[K");
+        $this->writeLine($conn, $who . ': ' . $this->encodeForTerminal((string) $message['body']));
+    }
+
+    /** Redraw just the input line: clear it, reprint the prompt + current buffer. */
+    private function redrawSysopChatInput($conn, TerminalLineEditor $editor): void
+    {
+        $this->safeWrite($conn, "\r\033[K> " . $this->encodeForTerminal($editor->value()));
     }
 
     /**

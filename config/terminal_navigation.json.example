@@ -78,6 +78,8 @@
         { "id": "chat",     "label_fallback": "Local Chat", "hotkey": "c", "action": "localchat", "access": "feature:chat" },
         { "id": "mrc",      "label_fallback": "Inter-BBS Chat", "hotkey": "i", "action": "mrc", "access": "authenticated",
           "description_fallback": "MRC -- chat with callers across the network" },
+        { "id": "page_sysop", "label_fallback": "Page SysOp", "hotkey": "o", "action": "page_sysop", "access": "authenticated",
+          "description_fallback": "Ring the SysOp directly for a private live chat." },
         { "id": "shoutbox", "label_fallback": "Shoutbox",   "hotkey": "s", "action": "shoutbox", "access": "feature:shoutbox" },
         { "id": "polls",    "label_fallback": "Polls",      "hotkey": "p", "action": "polls",    "access": "feature:voting_booth" },
         { "id": "who",      "label_fallback": "Who's Online","hotkey": "w", "action": "whosonline" },

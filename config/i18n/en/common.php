@@ -655,6 +655,7 @@ return [
     'ui.admin.appearance.term_menu_keys.action.bbslist' => 'BBS Directory',
     'ui.admin.appearance.term_menu_keys.action.nodelist' => 'Node List',
     'ui.admin.appearance.term_menu_keys.action.localchat' => 'Local Chat',
+    'ui.admin.appearance.term_menu_keys.action.page_sysop' => 'Page SysOp',
     'ui.admin.appearance.term_menu_keys.action.quit' => 'Quit',
     'ui.admin.appearance.term_border.title' => 'Border Style',
     'ui.admin.appearance.term_border.help' => 'Choose the box-drawing style used for frames and borders in the terminal server. Styles that require characters outside the selected character set will automatically fall back to a compatible style.',
