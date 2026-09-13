@@ -111,12 +111,41 @@ mkdir -p \
     /var/www/html/data/logs \
     /var/www/html/data/run \
     /var/www/html/data/inbound \
+    /var/www/html/data/inbound/error \
+    /var/www/html/data/inbound/unprocessed \
     /var/www/html/data/outbound \
     /var/www/html/dosbox-bridge/dos/DROPS \
     /var/www/html/dosbox-bridge/dos/DOORS
 
-chown -R binkterm:binkterm /var/www/html/data /var/www/html/config /var/www/html/dosbox-bridge
+# Guard the chown: on a deployment where the binkterm user/group hasn't been
+# provisioned (e.g. an image built from an older Dockerfile revision, or a
+# host bind-mount whose ownership predates this scheme), `chown -R
+# binkterm:binkterm` fails and -- since this script runs under `set -e` --
+# would abort every step after it, including the chmod immediately below and
+# everything later in this file (i18n sync, ENABLE_* daemon activation, cron
+# generation, ...). Skip it with a warning instead of aborting; the chmod
+# still runs against whatever the current owner is, which is enough for the
+# same-group write access this whole block exists for.
+if id -u binkterm >/dev/null 2>&1; then
+    chown -R binkterm:binkterm /var/www/html/data /var/www/html/config /var/www/html/dosbox-bridge
+else
+    echo "WARNING: 'binkterm' user not found -- skipping chown, leaving existing ownership in place" >&2
+fi
 chmod -R 775 /var/www/html/data /var/www/html/config /var/www/html/dosbox-bridge
+
+# BinkP inbound spool: multiple runtime identities write here (the long-lived
+# www-data-run binkp_server/binkp_scheduler daemons for answerer sessions and
+# inbound packet processing, and whichever unprivileged identity the admin
+# daemon spawns scripts/binkp_poll.php / scripts/process_packets.php as for
+# scheduled/admin-triggered polls -- these do not necessarily share a primary
+# group). The setgid bit ensures a file created by either identity keeps this
+# tree's group (rather than the creator's own primary group), so the other
+# identity can still read/move/delete it afterward. See
+# docs/checkpoints/BinkP_FidoAgora_InboundHang_2026-09-13.md for the incident
+# this specifically fixes -- a file offered by a peer during a scheduled poll
+# silently failed to write and was discarded, frame by frame, until the
+# session timed out.
+chmod 2775 /var/www/html/data/inbound /var/www/html/data/inbound/error /var/www/html/data/inbound/unprocessed
 
 # config/*.json can carry credentials (BinkP uplink passwords in binkp.json,
 # LovlyNet keys in lovlynet.json, ...). The blanket 775 above would leave them

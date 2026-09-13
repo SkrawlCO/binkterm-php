@@ -739,21 +739,241 @@ untouched, as instructed.
   (matching prior memory of "host crontab now runs logrotate hourly")
   diverges from it by omitting `--user` on `docker compose exec`.
 
-## Secondary + newly-discovered items — final status after Part B
+## Secondary + newly-discovered items — status before §11
 
 - Session-timeout-recorded-as-success misclassification: **PARKED**, untouched
 - 90s same-host lock timeout vs. 300s session: **PARKED**, untouched
 - Admin-RPC observability/log-loss: **root-caused precisely and fixed,
   activated in production, and proven live** (§9); underlying file-ownership
-  mismatches (logs *and*, newly found, `data/inbound/`) still require a
-  separate ops decision, not made here
+  mismatches (logs *and*, as found next, `data/inbound/`) still require a
+  separate ops decision for the log files specifically, not made here
 - Unexplained same-uplink retry: **PARKED**, untouched, recurred again live
   during this transaction, still unexplained
-- **NEW, not previously tracked — actual root cause of the original
-  incident, found via Part B's own fallback, reported only, not fixed**:
-  `data/inbound/` (`www-data:www-data`, `755`) is not writable by
+- **The actual root cause of the original incident**, found via Part B's own
+  fallback: `data/inbound/` (`www-data:www-data`, `755`) was not writable by
   `binkterm-admin`, the user every `binkp_poll_sync`-driven scheduled/manual
-  single-uplink poll runs as — so any peer offering an inbound file during
-  such a poll has that file's local write silently fail, its data discarded
-  frame-by-frame, for the full ~300s timeout. This is the same ownership-
-  mismatch class as the two log-file findings above, on a third resource.
+  single-uplink poll runs as. **This is fixed as of §11 below.**
+
+## 11. Root cause fixed: `data/inbound/` writer permissions (2026-09-13, same-day follow-up)
+
+### Decisive confirmation, symmetric across three networks
+
+The recovered protocol traces (via the Part B fallback, §9) showed the
+identical failure for **all three** networks that offered a file during a
+scheduled poll in this session — not just Nick's peer:
+
+| Network | File | Failure |
+|---|---|---|
+| FidoNet `1:154/10` | `a54e0407.sa0` | `Failed to open file for writing` → repeated `Received file data but no active file transfer` |
+| AgoraNet `46:1/100` | `a5407f0e.sa0` | same |
+| TQWNet `1337:3/100` | `0000ff75.saf` | same |
+
+`a54e0407.sa0`/`a5407f0e.sa0` are the exact filenames from Nick's original
+report. TQWNet has no relation to Nick at all — its appearance confirms this
+is **systemic**, affecting any uplink that happens to offer a file during a
+`binkp_poll_sync`-driven poll, not something specific to FidoNet/AgoraNet.
+**H2 (`650774702`) remains a real, independently locally-proven bug worth
+having fixed, but it is confirmed not to be what caused this incident.**
+
+### Runtime identities (read-only, confirmed live)
+
+- `www-data`: `uid=33(www-data) gid=33(www-data) groups=33(www-data)`
+- `binkterm-admin`: `uid=991(binkterm-admin) gid=991(binkterm-admin)
+  groups=991(binkterm-admin),33(www-data)` — **already a secondary member of
+  the `www-data` group**, confirmed via `/etc/group`:
+  `www-data:x:33:binkterm-admin`
+
+### Inbound tree, before
+
+- `data/inbound`: `www-data:www-data`, `755` (`drwxr-xr-x`)
+- `data/inbound/error`: `root:root`, `755` — wrong group entirely, same
+  `root`-touched-it-once class of issue as `binkp_poll.log`/`packets.log`
+- `data/inbound/unprocessed`: `www-data:www-data`, `755`
+- `data/outbound`: `www-data:www-data`, `755` — **not touched**, out of
+  scope for this transaction (inbound-spool only); flagged below as a
+  possible sibling issue worth a future look, not confirmed
+
+### Required writers (established by reading the actual call sites)
+
+- `BinkpSession::handleFileCommand()`/`handleFileData()` — inbound file
+  receipt for **both** answerer sessions (`binkp_server`, long-running,
+  `www-data`) and originator/scheduled polls (`scripts/binkp_poll.php`,
+  spawned per-invocation via `AdminDaemonServer::runCommand()`, which never
+  changes UID — runs as `binkterm-admin`)
+- `scripts/process_packets.php` — moves files into `inbound/error` and
+  `inbound/unprocessed`; also spawned via `runCommand()` (the
+  `process_packets` admin-daemon command), also `binkterm-admin`
+
+So both `www-data` and `binkterm-admin` are **legitimate, necessary**
+writers of all three directories — confirming Model B (shared `www-data`
+group) fits exactly, using a relationship that **already existed live**
+(`binkterm-admin` ∈ `www-data`), not one introduced here.
+
+### Durable source, and a deeper drift discovered along the way
+
+Investigating "what re-applies these permissions on restart/deploy" surfaced
+that this specific deployment is running well behind the current repo:
+
+- The current repo's `Dockerfile` creates a **`binkterm`** system user/group
+  and `docker/entrypoint.sh` intends `chown -R binkterm:binkterm` +
+  `chmod -R 775` across `data/`, `config/`, `dosbox-bridge/` on every
+  container start, with the comment "binkterm owns the files; www-data (in
+  binkterm group) gets write access via 775."
+- **Neither exists on the live container**: `id binkterm` → *no such user*;
+  `/etc/group` has no `binkterm` entry at all, only `binkterm-admin`.
+- **`docker/entrypoint.sh` isn't even what runs on this container.**
+  `docker inspect` shows the actual `Entrypoint`/`Cmd` is
+  `["docker-php-entrypoint"]` / `["/usr/bin/supervisord", "-c",
+  "/etc/supervisor/conf.d/supervisord.conf"]` — the stock PHP image
+  entrypoint straight into `supervisord`, bypassing the repo's own
+  `docker/entrypoint.sh` bootstrap entirely on this deployment.
+- The live `/etc/supervisor/conf.d/supervisord.conf` has `user=binkterm-admin`
+  on `[program:admin_daemon]` — a line that does **not** exist in the
+  current repo's `docker/supervisord.conf` (which has no `user=` override
+  for that program at all, so a fresh build would inherit `[supervisord]`'s
+  own `user=root`, i.e. **run admin_daemon as root** — worse than what's
+  live today).
+- Conclusion: **this container's image predates both of these repo changes**
+  and was never rebuilt to match. Reconciling that full drift (provisioning
+  `binkterm`, deciding whether `admin_daemon` should move to it, rebuilding
+  the image) is a **separate, larger effort, explicitly out of scope here**
+  — flagged for Matt/ChatGPT, not attempted.
+- Given that, and given `data/` is a **host bind-mount**
+  (`/root/binktermphp/app` → `/var/www/html`, confirmed via `docker inspect`
+  Mounts), permissions set directly on the live tree persist across a plain
+  container restart/recreate on the *current* image regardless — nothing in
+  this deployment's actual boot path re-provisions them. The risk window is
+  specifically a **future rebuild** onto the current Dockerfile/entrypoint.sh
+  (or onto a corrected one), which is exactly what the durable repo-level
+  fix below targets.
+
+### Selected permission model
+
+- **Shared group: `www-data`** (Model B) — already established, live,
+  requires no new user/group creation, no membership change.
+- **Directory mode: `2775`** (`rwxrws r-x`) on `data/inbound`,
+  `data/inbound/error`, `data/inbound/unprocessed`.
+- **Setgid: yes**, on all three — without it, a file `binkterm-admin`
+  creates would default to group `binkterm-admin` (its own primary group,
+  not `www-data`), leaving it unreadable/unmovable by `www-data`-run
+  processes afterward. Confirmed working in the write proof below.
+- **Why least privilege**: only the two identities that must write
+  (`www-data` as owner, `binkterm-admin` via group) gain write access;
+  "other" stays `r-x` (no world-write, never `777`); no new privileged
+  identity introduced; `binkterm-admin` gains nothing outside this specific
+  tree — its existing, unrelated read-only access elsewhere is unchanged.
+
+### Live fix (applied)
+
+```
+chgrp www-data data/inbound/error
+chmod 2775 data/inbound data/inbound/error data/inbound/unprocessed
+```
+
+Result:
+```
+drwxrwsr-x 4 www-data www-data data/inbound
+drwxrwsr-x 2 root     www-data data/inbound/error
+drwxrwsr-x 2 www-data www-data data/inbound/unprocessed
+```
+(`error/`'s owner is left as `root` — harmless; only its group changed —
+consistent with the least-invasive-change principle: adjust only what's
+needed for the group-write model to work, not incidental ownership.)
+
+`data/outbound` was deliberately **not** touched (out of scope, per
+instruction — inbound-spool only).
+
+### Durable fix (repo-level, `docker/entrypoint.sh`)
+
+Two changes, both defensive/additive, no behavior change for a deployment
+where `binkterm` already exists:
+
+1. The `chown -R binkterm:binkterm ...` step is now guarded
+   (`if id -u binkterm >/dev/null 2>&1; then ... else warn; fi`) so a
+   deployment missing that user (like this one) no longer aborts the *entire
+   rest of entrypoint.sh* under `set -e` — the `chmod -R 775` right after it,
+   and everything later in the file (i18n sync, `ENABLE_*` daemon
+   activation, cron generation), now still runs regardless.
+2. A new explicit `chmod 2775` for `data/inbound`, `data/inbound/error`, and
+   `data/inbound/unprocessed` specifically — adding the setgid bit these
+   three need for the shared-write model to survive future file creation,
+   independent of which user/group scheme (`binkterm`-based or
+   `www-data`-based) actually ends up owning them on a given deployment.
+
+This does **not** attempt to reconcile the deeper `binkterm` vs.
+`binkterm-admin`/`www-data` drift described above — it makes the inbound
+spool's specific requirement (group-writable, setgid) durable and resilient
+regardless of how that larger question eventually gets resolved.
+
+**Does not take effect on the currently-running container** (its actual
+boot path bypasses this script entirely, per above) — it protects a
+*future* rebuild, and is committed as source, not activated as a live
+change (the live change is the direct `chgrp`/`chmod` above).
+
+### Identity write proof (disposable test files, all removed)
+
+| Identity | `inbound/` | `inbound/error/` | `inbound/unprocessed/` |
+|---|---|---|---|
+| `www-data` | CREATE/WRITE/DELETE: PASS | CREATE/DELETE: PASS | CREATE/DELETE: PASS |
+| `binkterm-admin` | CREATE/WRITE/DELETE: PASS | CREATE/DELETE: PASS | CREATE/DELETE: PASS |
+
+Inherited group confirmed correct: a file created by `binkterm-admin` in
+`data/inbound` came out owned `binkterm-admin:www-data` — group `www-data`
+via setgid, not `binkterm-admin`'s own primary group — exactly the intended
+behavior. No test files left behind (`find ... -iname '.perm_test*'`
+returned empty after cleanup).
+
+### Activation
+
+No process restart was needed or performed: `binkterm-admin`'s membership
+in `www-data` already existed before this fix, so no running process needed
+to acquire a new supplementary group — only the directory metadata changed,
+which applies to the very next filesystem operation regardless of process
+state. `supervisorctl status` confirmed 17/17 RUNNING, unchanged, throughout.
+
+### Natural poll confirmation
+
+**Observed, at the very next scheduled tick (`06:00:xx`), read-only, no
+manual polling.** All three networks that had previously failed now
+succeeded cleanly, symmetric confirmation across all of them:
+
+| Network | File | Bytes received | Duration | Result |
+|---|---|---|---|---|
+| FidoNet `1:154/10` | `a54e0407.sa0` | 57572 (matches Nick's original report exactly) | **0.49s** | `success`, file received in full |
+| AgoraNet `46:1/100` | `a5407f0e.sa0` | 2695 (matches Nick's original report exactly) | **1.18s** | `success`, file received in full |
+| TQWNet `1337:3/100` | (unnamed in the trace) | 121289 | **1.95s** | `success`, file received in full |
+
+Recovered protocol trace for FidoNet, verbatim:
+```
+[1:154/10] Handshake completed successfully
+[1:154/10] Receiving file: a54e0407.sa0 (57572 bytes)
+[1:154/10] File received: a54e0407.sa0 (57572 bytes)
+[1:154/10] Session completed successfully
+[1:154/10] SUCCESS
+[1:154/10]   Files received: a54e0407.sa0
+```
+No `Failed to open file for writing`, no `Received file data but no active
+file transfer`, no 300s hang — compare directly to the identical filename's
+failure trace nine minutes earlier in §9. `binkp_session_log` (DB, read-only
+query) confirms the same numbers: session id `18229` (FidoNet)
+`0.490149s`/`57572` bytes/`success`; id `18230` (AgoraNet) `1.178281s`/`2695`
+bytes/`success`; id `18233` (TQWNet) `1.949927s`/`121289` bytes/`success`.
+`supervisorctl status` confirmed 17/17 RUNNING throughout, no restart
+performed or needed for this confirmation.
+
+### Related log ownership (`binkp_poll.log`, `packets.log`)
+
+**Not fixed in this transaction**, per instruction — the durable mechanism
+identified for those (§10: the host crontab's `docker compose exec` missing
+`--user www-data`) is a different, host-level fix than the container-internal
+group/setgid model used here, and does not "directly and safely apply" to
+the same code path. Left as a separate follow-up, unblocked by the Part B
+UDP fallback already committed (`c0a2d1bdf`), which ensures content isn't
+silently lost from those two files even while their ownership stays wrong.
+
+### Parked, unchanged by this fix
+
+- 90s same-host lock timeout vs. 300s session: **PARKED**
+- Unexplained same-uplink retry: **PARKED**, recurred live again during this
+  transaction
+- Session-timeout-recorded-as-success misclassification: **PARKED**
