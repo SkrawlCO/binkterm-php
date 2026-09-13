@@ -1146,9 +1146,169 @@ still running the pre-S2 code as of this writing; the fix is local-only
 
 ### Parked, unchanged by S2
 
-- Session-timeout-recorded-as-success misclassification: **PARKED**
+- Session-timeout-recorded-as-success misclassification: **fixed in §14**
 - `binkp_poll.log` / `packets.log` ownership: **PARKED**
 - Duplicate logrotate mechanisms: **PARKED**
 - Production entrypoint discrepancy: **PARKED**
 - Per-uplink/global in-flight poll registry: **explicitly deferred**, see
   above — not a defect, a deliberate scope boundary for this slice.
+
+## 14. Post-incident hardening S3 — timeout/abnormal session misclassified as success
+
+Fixes the last of the four originally-parked secondary defects: a BinkP
+session that authenticates, makes no further progress, and breaks out on the
+hard EOB/inactivity timeout was recorded as `success` — the exact shape of
+the incident-night sessions before the inbound-permission root cause was
+found. Local-only; **not activated in production this slice.**
+
+### Return-contract trace (`BinkpSession::processSession()`)
+
+The "wait for session termination" loop (`while ($this->state <
+self::STATE_TERMINATED)`) can end exactly four ways:
+
+| Exit path | Sets `STATE_TERMINATED`? | Previous return | New return |
+|---|---|---|---|
+| Peer-close-first grace period completes (clean) | Yes | `true` | `true` (unchanged) |
+| Peer closes after both sides exchanged M_EOB (clean) | Yes | `true` | `true` (unchanged) |
+| Hard EOB/inactivity timeout expires (abnormal) | **No** | `true` (**BUG**) | `false` |
+| Peer closes before EOB exchange completed (abnormal) | **No** | `true` (**BUG**) | `false` |
+| Uncaught `\Exception` anywhere in the method | N/A (catch block) | `false` | `false` (unchanged) |
+
+Grepping every `STATE_TERMINATED` assignment in the file confirmed only two
+call sites ever set it (the two clean paths above) — every other loop exit
+is a `break` that leaves `$this->state` below `STATE_TERMINATED`. The method
+previously fell through to an unconditional `return true;` after the loop
+regardless of which of the five paths was taken, gated only by which log
+line it wrote (`'Session completed successfully'` vs. `"Session ended
+(final state: {$this->state})"` at WARNING level) — the log already knew
+the difference; the return value didn't.
+
+### Fix
+
+- **File**: `src/Binkp/Protocol/BinkpSession.php`, `processSession()`'s
+  post-loop block.
+- The final `return true;` is now conditional on
+  `$this->state === self::STATE_TERMINATED`. When true: unchanged
+  `'Session completed successfully'` log + `return true`. Otherwise: log
+  changed to `"Session ended abnormally without reaching clean termination
+  (final state: {$this->state})"` (WARNING, unchanged level) + `return
+  false`. No other line in the method changed — the loop's own timeout
+  values, thresholds, and the `max(30, ...)` floor are untouched, per
+  instruction not to alter the configured timeout.
+- **Caller messages** improved for clarity now that `false` covers this new
+  case, not just a hard protocol/file error: `BinkpClient::connect()`'s
+  `throw new \Exception('Session processing failed')` and
+  `BinkpServer.php`'s `endSession('failed', 'Session processing failed')`
+  both now read `'Session ended abnormally without reaching clean
+  termination (e.g. a hard EOB/inactivity timeout or premature disconnect -
+  see protocol log)'`. Both call sites already treated `false` as failure
+  before this change — this only changes the message text, not the control
+  flow.
+- **Status recorded**: `failed` (not a new `timeout` value) — the schema
+  comment on `binkp_session_log.status` and every existing reader
+  (`SessionLogger`'s success/failed stats query, `templates/binkp.twig`'s
+  `status === 'failed'` check, `Scheduler::processAdvertisingCampaigns()`'s
+  unrelated `status === 'failed'`/`'success'` checks) only recognize
+  `'active'`, `'success'`, `'failed'`, `'rejected'`. Per instruction not to
+  invent a status value existing readers can't understand, the specific
+  reason (timeout vs. premature disconnect) goes into the existing
+  free-text `error_message` column via the improved caller messages above,
+  not into `status` itself.
+
+### Caller / retry-safety review
+
+Both call sites of `processSession()` were checked for what `false`
+triggers:
+
+- `BinkpClient::connect()` (originator/outbound): throws `\Exception`,
+  caught by its own `finally`/`catch (\Throwable $e)` block, which calls
+  `endSession('failed', ...)` and re-throws. The re-thrown exception
+  propagates to `scripts/binkp_poll.php`'s top-level `catch (Exception $e)`
+  (prints error, `exit(1)`) or `Scheduler::processScheduledPolls()` /
+  `pollIfOutbound()`'s `catch (\Exception $e)` (logs `"...poll failed for
+  {$address}: ..."`, continues to the next uplink). **Neither performs any
+  retry** — the uplink simply waits for its next normal scheduled tick,
+  exactly like any other pre-existing poll failure. This is unrelated to
+  and does not reopen the S2 RPC-blind-redial fix (that was about one
+  `sendCommand()` call re-dispatching itself; this is a session's own
+  outcome, one layer up, already handled by existing non-retrying failure
+  paths on both call sites).
+- `BinkpServer.php`'s answerer path (inbound, per-connection fork): calls
+  `endSession('failed', ...)` and logs an ERROR. It never redials anything
+  (it doesn't dial out at all — it's the inbound listener), so there is no
+  retry surface here either.
+- **Conclusion: no unsafe automatic retry introduced.** Not stopped/reported
+  per Step 6's escape hatch — there was nothing to escalate.
+
+### Local proof
+
+- **Clean paths preserved**: re-ran the existing
+  `tests/Unit/BinkpOriginatorReceiveWindowIncidentTest.php` (Cases A and B,
+  both genuinely reach `STATE_TERMINATED` via the grace-period-close path)
+  unmodified — both still assert and get `processSession() === true`. 3
+  tests, 22 assertions, PASS — proves the fix does not touch the happy
+  path.
+- **Abnormal timeout, new test**:
+  `tests/Unit/BinkpSessionAbnormalTimeoutTest.php` — a mock peer
+  (`socket_create_pair(AF_UNIX, ...)` + `pcntl_fork()`, no real network)
+  that authenticates nothing and stays completely silent (never sends a
+  frame, never closes) for longer than the session's hard timeout. Proves:
+  `processSession()` returns `false` (not `true`); the wait is genuinely
+  bounded by the production `max(30, ...)` floor (~29-32s observed, not the
+  original 300s); the timeout is still logged (unchanged diagnostic text);
+  the new distinct "ended abnormally" log line fires instead of "completed
+  successfully". 1 test, 7 assertions, PASS, ~31s wall time.
+  - Note on timing: the hard EOB/inactivity timeout floor
+    (`max(30, (int) $config->getBinkpTimeout())` in `processSession()`) is
+    existing, unmodified production behavior — per instruction not to
+    change the configured timeout value, this test's mock peer must stay
+    silent for the full ~30s floor rather than a sub-second window. Still
+    fully deterministic and bounded, and two orders of magnitude short of
+    the original 300-second incident duration.
+  - The exception-catch path (`catch (\Exception $e) { ...; return false;
+    }`) is unchanged by this diff (confirmed by inspection/diff review) and
+    was not re-tested.
+- Collateral: `AdminDaemonClientRetryPolicyTest`,
+  `BinkpHostLockStrictnessTest`, `AdminDaemonUdpLogFallbackTest`,
+  `BinkpCramAuthLoggingTest`, `BinkpServerSocketOwnershipTest` — all still
+  green (20 tests total across this slice's new + collateral files, 84
+  assertions, 0 failures).
+
+### Activation
+
+**Not performed this slice** — per instruction, stopping for review before
+any restart. All processes are still running pre-S3 code as of this
+writing; the fix is local-only (diff + tests), not yet live.
+
+At activation time (not done here), the process-responsibility check done
+for S2 applies again: `Scheduler.php`/`binkp_scheduler.php` never
+instantiate `BinkpSession` directly (only a comment references it) - every
+outbound poll runs as a fresh `scripts/binkp_poll.php` process spawned by
+the admin daemon, which loads current on-disk code every time regardless of
+`binkp_scheduler`'s own restart state. `binkp_server.php`, however, IS
+long-lived and directly instantiates `BinkpSession` in-process for every
+inbound connection (`BinkpServer::handleConnectionSync()`), so it is the
+one process that would need restarting to pick up this fix - to be verified
+against the actual supervisor process list at activation time, not assumed
+here.
+
+### Files changed (S3)
+
+- `src/Binkp/Protocol/BinkpSession.php` — `processSession()`'s post-loop
+  return now conditional on `STATE_TERMINATED`.
+- `src/Binkp/Protocol/BinkpClient.php` — clearer exception message for the
+  `processSession() === false` case (message text only).
+- `src/Binkp/Protocol/BinkpServer.php` — clearer `endSession()` error
+  message for the same case (message text only).
+- `tests/Unit/BinkpSessionAbnormalTimeoutTest.php` — new.
+- `docs/checkpoints/BinkP_FidoAgora_InboundHang_2026-09-13.md` — this
+  section.
+
+### Parked, unchanged by S3
+
+- `binkp_poll.log` / `packets.log` ownership: **PARKED**
+- Duplicate logrotate mechanisms: **PARKED**
+- Production entrypoint discrepancy: **PARKED**
+- Per-uplink/global in-flight poll registry: **PARKED**
+- S2's long-poll natural confirmation (no naturally-occurring long poll was
+  observed in that slice's window): **PARKED**
