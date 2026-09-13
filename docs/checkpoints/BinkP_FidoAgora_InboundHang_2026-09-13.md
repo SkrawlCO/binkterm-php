@@ -1306,9 +1306,362 @@ here.
 
 ### Parked, unchanged by S3
 
-- `binkp_poll.log` / `packets.log` ownership: **PARKED**
-- Duplicate logrotate mechanisms: **PARKED**
+- `binkp_poll.log` / `packets.log` ownership: **fixed in §15**
+- Duplicate logrotate mechanisms: **fixed in §15**
 - Production entrypoint discrepancy: **PARKED**
 - Per-uplink/global in-flight poll registry: **PARKED**
 - S2's long-poll natural confirmation (no naturally-occurring long poll was
   observed in that slice's window): **PARKED**
+
+## 15. Post-incident hardening S4 — log ownership + duplicate logrotate paths
+
+Fixes the last two originally-parked secondary defects together: `data/logs/
+binkp_poll.log` and `data/logs/packets.log` were `root:root` while their
+actual runtime writers are non-root, and two independent, uncoordinated
+logrotate mechanisms existed. **Live infrastructure change (filesystem +
+host crontab), no application code changed, nothing committed/pushed** (this
+slice is filesystem/host-config only — see Files Changed below).
+
+### Inventory (read-only, these 5 logs only)
+
+| Log | Owner:Group (before) | Mode | Actual writer(s) |
+|---|---|---|---|
+| `admin_daemon.log` | `binkterm-admin:binkterm-admin` | 644 | `admin_daemon.php` (supervisor `user=binkterm-admin`) — **already correct** |
+| `binkp_scheduler.log` | `www-data:www-data` | 644 | `binkp_scheduler.php` (supervisor `user=www-data`) — **already correct** |
+| `binkp_server.log` | `www-data:www-data` | 644 | `binkp_server.php` (supervisor `user=www-data`) — **already correct** |
+| `binkp_poll.log` | `root:root` | 644 | `scripts/binkp_poll.php`, always spawned as a child of `admin_daemon.php` via `proc_open()` (inherits the parent's uid) → **binkterm-admin**. Also written by manual/CLI-only tools (`freq_pickup.php`, `admin_client.php`, not scheduled anywhere) — occasional, whatever the invoking shell user is, not a design constraint. **MISMATCH** |
+| `packets.log` | `root:root` | 644 | `BinkdProcessor` (`src/BinkdProcessor.php`), which is used from multiple contexts: `scripts/process_packets.php` (spawned by `admin_daemon.php`, same proc_open-inherits model → **binkterm-admin**), `BinkpSession.php` used in-process by both `BinkpClient` (originator, spawned as binkterm-admin) AND `BinkpServer`'s answerer path (supervisor `user=www-data`, long-lived, in-process), and web-request paths (`MessageHandler.php`, under php-fpm workers configured `user = www-data`). **Genuinely multi-writer: www-data AND binkterm-admin, both regularly. MISMATCH** |
+
+`data/logs/` itself: `root:www-data`, mode `775` (no setgid) before this fix.
+`binkterm-admin`'s groups are `binkterm-admin,www-data` (confirmed via `id`)
+— it has been a `www-data` group member since the earlier `data/inbound` fix
+investigation, unchanged since.
+
+Many *other* logs in the same directory (`mrc_daemon.log`, `doot_app.log`,
+`openglad_relay.log`, `telnetd.log`, `sshd.log`, etc.) are also `root:root`
+despite some of their owning processes' supervisor entries declaring
+`user=www-data` — this is a wider, pre-existing pattern in the directory.
+**Out of scope per instruction** ("Do not inventory unrelated app logs") —
+noted here only so it isn't mistaken for something this fix addresses.
+`telnet`/`ssh_daemon` have no supervisor `user=` line at all and do
+genuinely run as root, which is why their own logs being `root:root` is
+correct, not a defect.
+
+### Both logrotate paths, traced independently (not assumed from the earlier broken one)
+
+**Project-native**: `/etc/cron.d/binkterm` (static, `COPY`'d into the image
+per its own header comment) — `0 0 * * 0 www-data cd /var/www/html && php
+scripts/logrotate.php --keep=52 >> data/logs/logrotate.log 2>&1`. Weekly,
+runs as `www-data` (confirmed: file is genuinely static/present in the live
+container, not templated). This is the intended, documented mechanism.
+
+**Host root crontab**: `7 * * * * cd /root/binktermphp && docker compose
+exec -T binkterm-app php scripts/logrotate.php --keep=5 --max-size=10M >>
+/root/binktermphp/app/data/logs/logrotate.log 2>&1`. Hourly. **Verified
+independently, not assumed dead like the earlier broken `binkp_poll.php
+--all` line** (same crontab, different entry — that one *is* still present
+and still genuinely broken/dead, see below): its redirect target
+(`data/logs/logrotate.log`) exists and is writable, so a live manual
+`docker compose exec -T binkterm-app php scripts/logrotate.php --dry-run
+--keep=5 --max-size=10M` was run to confirm real behavior — **exit 0, ran
+cleanly**. The log file's own content showed one real successful rotation
+(`Rotated binkp_scheduler.log -> binkp_scheduler.log.0.gz`, Sep 12 03:07)
+immediately followed by a run of `service "binkterm-app" refers to
+undefined secret galactic_bloodshed_provisiond_token: invalid compose
+project` failures — a **transient, unrelated** breakage in
+`/root/binktermphp/docker-compose.yml` (edited Sep 12 03:17, ten minutes
+after that last success) from an entirely different subsystem's secret
+reference, since resolved (confirmed via `docker compose config`, exit 0,
+no errors, at the time of this investigation) — not a BinkTerm defect and
+not touched here. **Conclusion: this entry is a real, live, currently-
+functional duplicate rotation mechanism**, running hourly as root (`docker
+compose exec` defaults to the image's `Config.User`, which is empty/root
+for this image — confirmed via `docker inspect` and a direct `id` check)
+with a different policy (`--keep=5 --max-size=10M`) than the project-native
+one (`--keep=52`, weekly).
+
+For completeness (not re-litigated, already established in S1): the
+*other* host cron line touching BinkP,
+`*/15 * * * * ... binkp_poll.php --all >> .../app/storage/logs/binkp_poll.log
+2>&1`, remains genuinely dead (`storage/logs/` still does not exist) and is
+unrelated to logrotate — left alone, not this slice's concern either.
+
+### Root cause
+
+`scripts/logrotate.php`'s rotation is copy-then-truncate-**in-place**
+(`copy($logPath, $rotated)` then `fopen($logPath, 'c+'); ftruncate($fh, 0)`)
+— it never deletes/recreates the log file, so **rotation itself cannot
+explain root ownership**, confirmed by direct inspection and by the
+isolated rotation proof below (a rotation run *as root* against
+correctly-owned test files left their ownership/mode completely
+unchanged). The exact original moment `binkp_poll.log`/`packets.log` were
+first created as `root:root` could not be forensically pinned down from
+available evidence (predates the logs retained on this host) — most likely
+a stray manual root-context invocation (e.g. an operator running
+`docker compose exec` without `-u` to test `binkp_poll.php`/
+`process_packets.php` directly) at some point in the past. Once created
+root-owned, nothing since has corrected it, and every subsequent legitimate
+non-root write attempt has been failing (pre-Part-B: silently; post-Part-B:
+falling back to `admin_daemon.log`) ever since — this is exactly the
+`binkp_poll.log`-targeted "UDP logger failed to persist message" warning
+flood observed continuously since Part B's activation.
+
+Separately, and regardless of whether it caused the *current* mismatch, the
+duplicate hourly root-run logrotate entry is a real, independent policy
+violation of "one rotation mechanism, running as the correct identity" and
+is removed per Step 3's instruction on its own merits — including as a
+latent risk (any future change to `logrotate.php` that stopped preserving
+ownership on rotation would immediately reintroduce this exact defect if
+run as root).
+
+### Single source of truth
+
+**Selected: the project-native `/etc/cron.d/binkterm` weekly, `www-data`-run
+rotation.** It is current, working, documented, and runs under a correct
+runtime identity already present on every sibling BinkP log. The duplicate
+host root crontab entry was removed.
+
+### Per-log ownership model (durable)
+
+| Log | Owner | Group | Mode | Rationale |
+|---|---|---|---|---|
+| `admin_daemon.log` | `binkterm-admin` | `binkterm-admin` | 644 | unchanged, single writer |
+| `binkp_scheduler.log` | `www-data` | `www-data` | 644 | unchanged, single writer |
+| `binkp_server.log` | `www-data` | `www-data` | 644 | unchanged, single writer |
+| `binkp_poll.log` | `binkterm-admin` | `binkterm-admin` | 644 | single regular writer (binkterm-admin); no group-write needed |
+| `packets.log` | `www-data` | `www-data` | **664** | genuinely multi-writer (www-data AND binkterm-admin); group-write lets binkterm-admin append via its existing `www-data` group membership — no new group created, no chmod 777, no broad recursive chown |
+
+### Live fix
+
+```
+chown binkterm-admin:binkterm-admin data/logs/binkp_poll.log
+chown www-data:www-data             data/logs/packets.log
+chmod 0664                          data/logs/packets.log
+```
+
+### Durable fix
+
+```
+chmod 2775 data/logs
+```
+
+Setgid on the directory means any *future* file created inside (by any
+user) inherits group `www-data` automatically rather than the creating
+process's own primary group — reduces (does not eliminate; mode bits are
+still whatever the creating process's umask produces) the chance of a
+future re-creation event reproducing this exact class of mismatch. Existing
+files' modes were not touched by this step; only the two identified
+mismatches were individually corrected above.
+
+Plus removing the duplicate host root crontab logrotate entry (see below) so
+only the one, correctly-scoped, `www-data`-run mechanism ever rotates these
+files going forward.
+
+`docker/entrypoint.sh` was deliberately **not** touched this slice — the
+production entrypoint discrepancy (this script is not what actually starts
+the live container; see §11) is explicitly parked and out of scope here per
+instruction not to broaden into deployment-entrypoint redesign. The setgid
+directory fix and per-file ownership are live filesystem state on the host
+bind mount, which — like the `data/inbound` fix in §11 — persists across
+container restarts on its own, independent of which entrypoint script (if
+any) the container actually runs.
+
+### Host crontab change
+
+Backed up before editing: `/root/L33TEST_host_crontab_backup_pre-S4_<timestamp>.txt`
+(full prior crontab, host-local, outside the repo). Removed exactly one
+line via `crontab -l | grep -v "scripts/logrotate.php --keep=5 --max-size=10M" | crontab -`;
+diffed old vs. new to confirm only that one line changed. Remaining host
+crontab entries (`backup_forum.sh`, `rss_poster.php`, the already-dead
+`binkp_poll.php --all` line, `database_maintenance.php`) are untouched.
+
+### Write proof (actual runtime identities, disposable single-line markers)
+
+Ran via `docker exec -u <identity> binkterm-app sh -c '...'` directly
+against the real production log files (not temp siblings, since a single
+clearly-tagged marker line is safe and explicitly permitted by instruction
+when "clearly identified" — chose this over a temp-file proxy so the proof
+covers the exact files being fixed, not a stand-in). Each line is prefixed
+`[PERM-TEST ...] - safe to ignore` and left in place (removing it would mean
+truncating/rewriting a production log, explicitly disallowed):
+
+| Identity → target | Result |
+|---|---|
+| `binkterm-admin` → `binkp_poll.log` | **PASS** |
+| `www-data` → `packets.log` | **PASS** |
+| `binkterm-admin` → `packets.log` (group-write path) | **PASS** |
+| `www-data` → `binkp_scheduler.log` (sibling, confirm unaffected) | **PASS** |
+| `www-data` → `binkp_server.log` (sibling, confirm unaffected) | **PASS** |
+
+### Rotation proof (isolated, safe — no incident evidence touched)
+
+Real `scripts/logrotate.php`, invoked with `--logs-dir=/tmp/logrotate_proof_test`
+(an isolated temp directory, never the real `data/logs/`) containing two
+disposable dummy files built with the exact corrected ownership models
+(`binkterm-admin:binkterm-admin 644` and `www-data:www-data 664`), each
+padded past a deliberately tiny `--max-size=1000` threshold to force a real
+rotation (not a dry run). Run as root (the container's default exec user,
+same as the duplicate host cron would have used) to specifically prove
+rotation-as-root does not corrupt ownership:
+
+- Rotation completed (`Rotated binkp_poll.log -> binkp_poll.log.0.gz`,
+  `Rotated packets.log -> packets.log.0.gz`).
+- Recreated (truncated-in-place) `binkp_poll.log`/`packets.log` kept their
+  exact pre-rotation owner/group/mode: `binkterm-admin:binkterm-admin 644`
+  and `www-data:www-data 664`, unchanged.
+- Both intended writers (`binkterm-admin`, `www-data`) appended
+  successfully immediately after rotation, including the group-write path
+  (`binkterm-admin` → `packets.log`).
+- Temp directory removed after the test; nothing left behind.
+
+### Warning-flood check
+
+Observed read-only, no manual traffic, at the next natural scheduled tick
+(`07:15:41`-`07:15:50` UTC, all 7 uplinks including FidoNet `1:154/10` and
+AgoraNet `46:1/100`). **Cleared.** Zero `"UDP logger failed to persist
+message"` warnings for the entire tick, versus 3 per uplink (21 total)
+before this fix at every prior tick since Part B's activation. Confirmed by
+reading `binkp_poll.log` directly afterward: real, current content (down to
+TQWNet's actual file receipt, `0000ff75.su2`, 3969 bytes) is landing
+directly in the file, still correctly owned `binkterm-admin:binkterm-admin
+644`.
+
+### Activation
+
+No service restart performed or required — this slice changed only host
+filesystem ownership/mode and the host crontab; no PHP application code was
+modified, so no daemon holds stale bytecode. `supervisorctl status`
+confirmed 17/17 RUNNING throughout, unchanged.
+
+### Files changed (S4)
+
+No repository files changed. Live infrastructure only:
+
+- `data/logs/binkp_poll.log` — chown `binkterm-admin:binkterm-admin`
+- `data/logs/packets.log` — chown `www-data:www-data`, chmod `0664`
+- `data/logs/` — chmod `2775` (setgid added)
+- Host crontab (`crontab -e` equivalent, non-interactive) — removed the
+  duplicate hourly root-run `scripts/logrotate.php --keep=5 --max-size=10M`
+  line; backup at `/root/L33TEST_host_crontab_backup_pre-S4_<timestamp>.txt`
+- `docs/checkpoints/BinkP_FidoAgora_InboundHang_2026-09-13.md` — this
+  section (the only actual repo file touched)
+
+### Parked, unchanged by S4
+
+- Production entrypoint discrepancy: **PARKED** (deliberately not
+  broadened into here, see "Durable fix" above)
+- Per-uplink/global in-flight poll registry: **PARKED**
+- S2's long-poll natural confirmation: **PARKED**
+- Possible future test-timeout injection cleanup: **PARKED**
+
+## 16. Campaign closeout
+
+The incident is **CLOSED**. This section is a short, accurate summary for
+anyone who does not want to read sections 1-15 in full; it distinguishes
+the primary production root cause from the real-but-secondary defects found
+along the way, and does not inflate any of them beyond their evidence.
+
+**Primary production root cause** (what actually caused Nick's report):
+`data/inbound/` was `www-data:www-data 0755`, but scheduled/admin-driven
+polls run as `binkterm-admin`, which could not create files there. Every
+inbound file offered during such a poll silently failed `fopen()` and its
+data was discarded frame-by-frame for the full configured session timeout
+(300s). Evidence: the exact FidoNet file Nick reported (`a54e0407.sa0`,
+57,572 bytes) and the exact AgoraNet file (`a5407f0e.sa0`, 2,695 bytes)
+both failed this way; TQWNet was independently found affected by the same
+defect, proving it was systemic to the spool, not specific to either
+network. Fixed with a shared-`www-data`-group, setgid inbound-spool model
+(`cae172010`); all three networks subsequently confirmed transferring
+successfully (Fido 0.49s, Agora 1.18s, TQWNet 1.95s/1.95s).
+
+**A separate, real defect found during investigation** (not the primary
+cause): `BinkpFrame::parseFromSocket($socket, true)` could block for the
+full stream timeout on a fragmented frame despite being the "non-blocking"
+code path. Genuinely fixed (`650774702`) with regression tests, but this
+was not what produced Nick's report — the inbound-permission defect above
+was.
+
+**Observability defect**: `binkp_poll.log`/`packets.log` being
+root-owned (see S4 below) meant direct file logging failed for the actual
+non-root writers; the existing UDP-fallback-to-admin-daemon path was
+silently swallowing that secondary failure too, so evidence of the primary
+hang was being lost twice over. Fixed (`c0a2d1bdf`) so a failed write is
+always surfaced into `admin_daemon.log` rather than silently discarded —
+this is what let the primary root cause (§9) actually be found.
+
+**Duplicate-poll defect**: `AdminDaemonClient::sendCommand()` blindly
+retried the side-effecting, non-idempotent `binkp_poll_sync` command after
+an ambiguous RPC read timeout, causing a second, independent poll child to
+be spawned for the same uplink while the first was still alive. Fixed
+(`c4d30f7f9`): `binkp_poll_sync` is no longer retried after dispatch, and
+gets its own `BINKP_TIMEOUT + 60`s response timeout so a legitimately long
+poll can still report back normally.
+
+**Host-lock defect**: `BinkpClient::acquireHostLock()` waited 90s for the
+per-hostname:port lock and then, on timeout, dialed anyway without holding
+it — allowing exactly the same-host concurrent-session collision the lock
+existed to prevent. Fixed (`c4d30f7f9`, same commit): failure to acquire
+the lock now throws `HostLockBusyException` before any socket/network code
+runs; dialing without the lock is no longer possible.
+
+**Status-misclassification defect**: `BinkpSession::processSession()`
+returned `true` (success) even when the session exited via the hard
+EOB/inactivity timeout or a premature disconnect — only an uncaught
+exception produced `false`. Fixed (`588e79454`): the return value is now
+conditional on genuinely reaching `STATE_TERMINATED`; timeout and premature
+disconnect both correctly report failure.
+
+**Log ownership / rotation** (this transaction, S4, filesystem/host-config
+only, no application code): `binkp_poll.log`/`packets.log` were
+`root:root` while their real writers were `binkterm-admin` (both) and also
+`www-data` (`packets.log` only); fixed via targeted `chown`/`chmod` to
+match actual writers, plus `data/logs/` given the setgid bit for future
+creations. A duplicate, hourly, root-run `scripts/logrotate.php` host cron
+entry (independently confirmed live/active, not assumed dead) was removed,
+leaving the project-native weekly `www-data`-run `/etc/cron.d/binkterm`
+rotation as the sole authority. Confirmed via live write proof (both
+identities), an isolated rotation proof (ownership survives rotation even
+when run as root), and a full natural poll tick showing the
+"UDP logger failed to persist message" warning flood completely cleared.
+
+### Full incident commit ledger (branch `experience-lobby-v2`)
+
+| Commit | Subject |
+|---|---|
+| `650774702` | Fix nonblocking BinkP fragmented-frame reads |
+| `c0a2d1bdf` | Preserve failed BinkP poll logs |
+| `cae172010` | Make BinkP inbound-spool group-writable for scheduled polls |
+| `c4d30f7f9` | Prevent duplicate BinkP poll retries |
+| `588e79454` | Mark abnormal BinkP sessions as failed |
+| *(this doc's commit)* | Close BinkP incident log ownership cleanup |
+
+### Parked at closeout (not blockers, not started)
+
+- **Global/per-uplink in-flight poll registry**: theoretical additional
+  protection; not justified yet since S2's strict host lock + no-blind-retry
+  already removed the one demonstrated duplicate-dial mechanism.
+  Disposition: **OBSERVE**, reopen only on evidence of a remaining
+  concurrent-poll collision.
+- **S2 long-poll natural confirmation**: local deterministic proof exists;
+  no naturally-occurring long session arose during any bounded observation
+  window across S2-S4. Disposition: optional future AFK observation, not a
+  blocker.
+- **Production entrypoint discrepancy**: `docker/entrypoint.sh` is not what
+  actually starts the live container (`docker-php-entrypoint` → `supervisord`
+  directly); the `binkterm` user/group it assumes does not exist on this
+  image. Disposition: **PARKED for separate deployment recon**, not touched
+  in this campaign.
+- **`BinkpSessionAbnormalTimeoutTest` ~31s runtime**: an artifact of
+  `processSession()`'s existing, unmodified `max(30, ...)` timeout floor.
+  Disposition: **LOW PRIORITY**, not refactored.
+- **Dead/broken host BinkP cron fossil**: `*/15 * * * * ... binkp_poll.php
+  --all >> .../app/storage/logs/binkp_poll.log 2>&1` — proven (S1) to never
+  actually execute (`storage/logs/` does not exist, so the shell redirect
+  fails before `docker compose exec` runs) and proven (S1) not responsible
+  for the duplicate-poll incident. Still present in the host crontab as of
+  this closeout — S4 removed only the unrelated duplicate *logrotate* line,
+  not this one. Disposition: **PARKED deployment fossil**, left untouched.
+
+**Campaign status: CLOSED.** No further BinkP work is planned as a
+continuation of this incident; any future BinkP change is a new, separately
+scoped task.
