@@ -5,16 +5,24 @@
 > pass; it has not yet been reviewed for accuracy beyond passing its own test
 > suite.
 
-**Status (2026-09-13): code committed/pushed (`badcb187c`), migration deployed
-to `binktermphp_test` only. NOT yet applied to production.** The standard
-migration runner (`scripts/setup.php`/`scripts/upgrade.php`) applies every
-pending migration in one pass, and production had an unrelated pending
-migration ahead of this one (`v20260912102037_geocode_cache_status.sql`,
-PEH-6) that was never reviewed as part of this feature — rather than sweep it
-in as a side effect or hand-roll ad-hoc SQL around the standard runner, that
-decision was deferred back to Matt/ChatGPT. `sysop_pages` does not exist in
-production yet; nothing in this slice runs anywhere until it does and a
-consumer (M1B/M1C) is built.
+**Status (2026-09-13): code committed/pushed (`badcb187c`, `fccf9e630`),
+`sysop_pages` migration APPLIED TO PRODUCTION** via the standard runner
+(`scripts/setup.php` → `scripts/upgrade.php`), applied at 2026-09-13
+08:10:31 UTC alongside the previously-pending, unrelated
+`v20260912102037_geocode_cache_status.sql` (PEH-6). That reconciliation was
+investigated first: production's `geocode_cache.status` column already
+existed (applied out-of-band at some earlier point, all 83 rows already
+correctly backfilled to `success`) but was never recorded in
+`database_migrations` — running the migration was therefore a pure
+bookkeeping no-op on data (confirmed before and after), which the standard
+runner recorded correctly. No pending migrations remain. No service restart
+was required or performed; all 17 supervisor programs stayed up with
+unchanged uptimes throughout.
+
+`sysop_pages` exists in production with zero rows. Nothing in this slice
+runs anywhere yet — there is still no consumer (M1B web admin, M1C
+terminal) wired up, so no caller or admin can reach this feature until
+those slices are built.
 
 M1A is the authoritative backend lifecycle and realtime event contract for
 "Page SysOp." It has **no UI** — no Web admin surface, no terminal menu item,
