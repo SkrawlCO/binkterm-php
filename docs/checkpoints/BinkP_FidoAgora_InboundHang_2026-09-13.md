@@ -1,8 +1,9 @@
 # BinkP Incident Checkpoint — FidoNet/AgoraNet Inbound Hang, 2026-09-13
 
-**Status: H2 fixed locally (source changed, tests green). NOT YET ACTIVATED
-in production — no service has been restarted, no config changed, and
-production has not been contacted to confirm. See §7.**
+**Status: H2 (fragmented-frame parser bug) FIXED, ACTIVATED IN PRODUCTION,
+and COMMITTED/PUSHED (`650774702`, `experience-lobby-v2`). A separate
+observability defect (admin-RPC log loss) has been root-caused precisely
+and fixed LOCALLY ONLY — not yet activated. See §8.**
 
 This file exists to preserve the evidence and reasoning from two read-only
 investigation passes before any fix is attempted, so the diagnosis survives
@@ -81,18 +82,21 @@ in `binkp_server.log`. Both hangs were sessions where L33TEST was the
    90s ceiling, and dialed the same physical host anyway while the first
    session was still alive.
 3. **Admin-daemon RPC loses the detailed session log before a long poll
-   finishes**: for a single-uplink `binkp_poll_sync` admin-daemon command,
-   the protocol logger is routed to stdout (captured by
-   `AdminDaemonServer::runCommand()`) rather than to
-   `data/logs/binkp_poll.log`. `AdminDaemonClient::readResponse()` has no
-   `stream_set_timeout()` of its own and relies on PHP's
+   finishes.** *(Pass-1 hypothesis below was superseded by a precise,
+   locally-proven root cause in §8 — kept here for the record rather than
+   rewritten: the actual mechanism is an ownership/permissions mismatch that
+   silently drops the detailed log for every single-uplink poll regardless
+   of duration, not a race against the RPC timeout.)* Original hypothesis:
+   for a single-uplink `binkp_poll_sync` admin-daemon command, the protocol
+   logger is routed to stdout (captured by `AdminDaemonServer::runCommand()`)
+   rather than to `data/logs/binkp_poll.log`. `AdminDaemonClient::readResponse()`
+   has no `stream_set_timeout()` of its own and relies on PHP's
    `default_socket_timeout` (~60s, retried once ≈120s) — shorter than the
    ~300s the real poll can legitimately take. The scheduler's RPC gives up
    and logs `Admin daemon closed connection` (seen in `binkp_scheduler.log`
    at `04:17:09` and `04:19:09`) before the daemon ever finishes and returns
    the detailed stdout log, so the frame-by-frame detail for exactly these
-   two sessions was generated but never persisted or delivered anywhere. It
-   is not recoverable now.
+   two sessions was generated but never persisted or delivered anywhere.
 4. **Unexplained second same-uplink retry**: session 18164 is a *second*
    outbound dial to `1:154/10` at `04:17:39`, not explained by any second
    cron-scheduled poll entry in `binkp_scheduler.log`. Likely origin is
@@ -397,4 +401,359 @@ requires a decision from Matt/ChatGPT on how to proceed.
 
 ## 7. Secondary defects — still parked
 
-Unchanged from §5 — none of these were touched in this transaction (H2 only).
+Unchanged from §5 — none of these were touched in the H2 transaction.
+
+## 7a. H2 activation confirmation attempt (2026-09-13, post-commit)
+
+After `binkp_server`/`binkp_scheduler` were restarted onto the H2 fix
+(old PIDs 11/9 → new PIDs 98351/98365, all 17 supervisor programs verified
+RUNNING, no other program touched), one natural `*/15 * * * *` scheduled
+cycle to both `1:154/10` and `46:1/100` was observed read-only (no manual
+poll, no traffic generated). Result: **inconclusive for H2 specifically**.
+
+- FidoNet (`1:154/10`): started `05:15:15.334`, ended `05:20:15.045`,
+  duration `299.71s`, `bytes_received=0`, `status=success`.
+- AgoraNet (`46:1/100`): started `05:18:45.302`, ended `05:23:45.095`,
+  duration `299.79s`, `bytes_received=0`, `status=success`.
+- Both same-host collisions recurred exactly as before (parked defects #2/#4):
+  a same-uplink retry for each network was rejected by the peer as
+  `Remote busy` a few minutes into each session.
+- No crashes, no new parser/session exceptions, all 17 supervisor programs
+  stayed healthy throughout.
+- **Why inconclusive**: every *other* uplink polled in the same window
+  (`227:1/1`, `3323:1/100`, `700:100/0`, `1200:1/1`, `1337:3/100`) also shows
+  `bytes_received=0`, yet each completed in well under a minute — so a fast,
+  empty poll is normal and unremarkable. Only the two Nick-hosted networks
+  ran the full ~300s. That is *consistent* with the pre-fix incident shape,
+  but — per explicit instruction not to over-interpret — an empty,
+  content-free poll that legitimately has nothing to exchange with Nick's
+  side this cycle would *also* run close to the full timeout via the
+  ordinary "no active transfer, hard EOB timeout" path, which H2 does not
+  touch. Because the admin-RPC observability gap (defect #3, investigated
+  precisely in §8 below) was *also* independently confirmed to be losing
+  the detailed per-frame log for these exact polls, there was and is no way
+  to tell from this natural cycle alone whether a file was offered and
+  fragmented (which H2 addresses) or nothing was offered at all (which it
+  doesn't). Not a regression signal either way.
+
+## 8. Part B — Admin-RPC observability defect: root-caused precisely and fixed locally
+
+**Scope discipline honored:** this slice touches only the admin-daemon-side
+UDP log persistence fallback. It does **not** touch the 90s host-lock
+timeout, the unexplained same-uplink retry, the success/status
+misclassification, the BinkP protocol state machine, the parser, or
+scheduler cadence — all four remain parked exactly as before (see §5/§7).
+
+### Step 1 — exact lifecycle, traced and empirically confirmed
+
+- `Scheduler::processScheduledPolls()` calls `AdminDaemonClient::binkPollSync($address)`
+  for every scheduled uplink, every cycle.
+- That RPCs `binkp_poll_sync` to `admin_daemon.php`, which (per-connection,
+  in a forked child of the daemon — `AdminDaemonServer::run()` calls
+  `pcntl_fork()` for every accepted client) runs
+  `AdminDaemonServer::runCommand([PHP_BINARY, 'scripts/binkp_poll.php', $upstream])` —
+  a **blocking** `proc_open()` that captures the child's stdout/stderr via
+  pipes and waits for it to exit.
+- `scripts/binkp_poll.php`, for a single-address invocation (no `--all`, no
+  `--no-console`), constructs `new Logger($logFile, ...)` with `$logFile`
+  defaulting to `Config::getLogPath('binkp_poll.log')` — a **fixed, absolute
+  path**, `/var/www/html/data/logs/binkp_poll.log` — independent of cwd/env,
+  confirmed by reading `Config::LOG_PATH`'s definition (`__DIR__ . '/../data/logs'`,
+  a compile-time constant).
+- `Logger::log()` writes to that file with `@file_put_contents(..., FILE_APPEND | LOCK_EX)`
+  on every log call — this is a genuinely working, synchronous, unconditional
+  write attempt on **every** invocation, not something conditionally routed
+  to stdout only. (Pass-1's guess that single-uplink polls route output to
+  stdout instead of the file was **wrong** — corrected in §2 above.)
+- **Empirically confirmed root cause**: `data/logs/binkp_poll.log` is owned
+  `root:root`, mode `644` (verified: `ls -la` on the live file). The
+  `admin_daemon.php` process — and therefore every `scripts/binkp_poll.php`
+  child it spawns via `proc_open`, since `proc_open` never changes UID —
+  runs as `binkterm-admin` (uid 991, gid 991, groups `binkterm-admin`+`www-data`;
+  verified via `id binkterm-admin` inside the live container). That user has
+  only "other" (read-only) permission on a `root`-owned `644` file, so
+  `file_put_contents()` **always fails with permission denied for this
+  specific invocation path** — reproduced directly and safely with zero
+  external traffic by running `php scripts/binkp_poll.php --test
+  --hostname=127.0.0.1 --port=1 <fake-address>` (a pure loopback-refused
+  connection, no DNS, no real network) once as `root` (wrote successfully,
+  confirming the Logger mechanism itself is fine) and once as `binkterm-admin`
+  via `docker exec -u binkterm-admin` (produced zero new bytes in
+  `binkp_poll.log`, confirming the failure is specifically about this UID).
+- On that failure, `Logger::log()` correctly falls back to
+  `AdminDaemonClient::udpLog()` — sending the formatted line as a UDP packet
+  to the admin daemon's own UDP log listener (`AdminDaemonServer::handleUdpLogSocket()`,
+  polled every ~100ms in the daemon's **parent** process's own accept loop,
+  which is never blocked by a forked child's long-running `runCommand()` —
+  confirmed by reading `AdminDaemonServer::run()`: it forks per client
+  connection, so the parent stays free).
+- **The actual loss**: `AdminDaemonClient::udpLog()` returns `true` purely
+  because the `fwrite()` to its own UDP socket succeeded — it has no
+  acknowledgement/delivery-confirmation from the daemon (UDP is fire-and-
+  forget by construction here). On the receiving side,
+  `AdminDaemonServer::appendUdpLog()` (pre-fix) wrote the message with
+  `@file_put_contents($logPath, ..., FILE_APPEND | LOCK_EX)` and **never
+  checked the return value**. Since the daemon runs as the exact same
+  `binkterm-admin` user with the exact same permission problem against the
+  exact same `root`-owned file, this write **also** silently fails — and
+  because `Logger::log()`'s sender-side fallback chain already believed the
+  UDP send "succeeded" (tier 2), its final `error_log()` last-resort (tier 3,
+  already permitted by this project's own logging convention in
+  `src/Binkp/Logger.php`) never fires. The message is lost with **zero
+  trace anywhere** — not in `binkp_poll.log`, not in `admin_daemon.log`, not
+  in `server.log`, not in PHP's error log. This reproduces for **every**
+  single-uplink poll, including fast, fully successful ones (confirmed:
+  `227:1/1`, `3323:1/100`, etc. from the 05:15 natural cycle also produced
+  zero new `binkp_poll.log` content) — it has **no relationship to session
+  duration or the RPC timeout race** described in the original pass-1
+  hypothesis. That race is real (the scheduler's own "poll failed" bookkeeping
+  is still wrong, and remains parked — see defect list), but it is not what
+  destroys the detailed log; the ownership mismatch destroys it
+  unconditionally, on its own, independent of timing.
+
+### Step 2 — why not the "obvious" fixes
+
+- **Aligning the RPC client's read timeout with the ~300s BinkP timeout**:
+  rejected. `AdminDaemonClient` is a general-purpose RPC client used for
+  dozens of unrelated, normally-instant admin operations (config saves,
+  license, templates, weather, etc.) via the exact same `sendCommand()`/
+  `readResponse()` path. Lengthening its timeout globally would make the
+  client hang for minutes on any genuinely stuck admin command, and would
+  make the scheduler's own single-threaded polling loop block for up to
+  300s+ per uplink serially — undesirable for uplinks with fast, healthy
+  polls today. It also would not have fixed anything here: the detailed log
+  is lost due to a permission failure, not because nobody waited long enough
+  to receive it.
+- **Fixing the underlying file ownership** (`chown`/`chmod` on
+  `data/logs/binkp_poll.log`): this is very likely the *real*, permanent fix
+  needed in production, but it is an operational/filesystem change on a live
+  server, explicitly out of scope for "local proof only, no production
+  activation" in this transaction, and isn't something a future fresh
+  install would inherit just from a source commit (a code-level
+  fallback is still worth having regardless of whether ownership gets
+  corrected).
+- **Chosen fix**: close the specific hole where a failure is silently and
+  totally discarded, using the existing logging seam already established by
+  this exact codebase's own convention (`Logger::log()`'s own file → UDP →
+  `error_log()` fallback chain) — make the *receiving* side of the UDP
+  fallback (`AdminDaemonServer::appendUdpLog()`) check its own write result
+  and, on failure, surface both the failure and the actual lost message
+  content through the one channel this daemon process has always reliably
+  been able to write to: **its own `Logger` instance** (`data/logs/admin_daemon.log`,
+  confirmed continuously updating throughout this entire incident,
+  regardless of the `binkp_poll.log` problem). This does not invent a second
+  logging system — it completes the one already there, and needed only a
+  return-value check plus a few lines, no protocol/scheduler/architecture
+  changes.
+
+### Fix design
+
+**Files:**
+- `src/Admin/AdminDaemonServer.php` — `appendUdpLog()` now delegates the
+  actual write to a new small private helper, `writeLogLineOrWarn()`
+  (extracted specifically so it's testable without fighting
+  `Config::getLogPath()`'s hardcoded real path). On a failed write, it calls
+  `$this->logger->warning(...)` with the log file name, the original PID,
+  and the full lost message text in the context array — so the operator can
+  both see that this is happening and recover the actual content from
+  `admin_daemon.log`.
+- `tests/Unit/AdminDaemonUdpLogFallbackTest.php` — new, isolates
+  `writeLogLineOrWarn()` via reflection against a path that is deliberately
+  an existing directory (a portable, user-independent way to force a
+  guaranteed `file_put_contents()` failure without needing to reproduce the
+  real root-vs-`binkterm-admin` ownership mismatch inside a test, and
+  without touching the real `data/logs/` directory at all).
+
+**Exact behavior before:** a write failure in `appendUdpLog()` was
+completely silent — no warning, no fallback, message permanently lost.
+
+**Exact behavior after:** a write failure now produces exactly one
+`WARNING` line in `admin_daemon.log` per lost message, containing the
+target log file name, the original process's PID, and the full original
+log line — recoverable by grepping `admin_daemon.log` instead of being
+gone forever. A successful write is completely unaffected (verified by a
+dedicated test case asserting no warning fires and the content lands
+byte-for-byte).
+
+### Step 3 — local proof
+
+All three cases run via PHPUnit, zero external traffic, zero production
+files touched (a fresh scratch temp directory per test run):
+
+- **Old behavior reproduced**: **YES** — a direct `file_put_contents()`
+  against a path that is a directory (standing in for the real permission
+  failure) returns `false`, confirmed as a genuine write failure.
+- **New behavior**: `writeLogLineOrWarn()` invoked (via reflection) against
+  the same guaranteed-to-fail target with a spy `Logger` injected through
+  `AdminDaemonServer`'s existing constructor parameter (no reflection
+  needed for that part — the constructor already accepts an optional
+  `Logger`). Result: exactly one `warning()` call recorded, containing the
+  log file name, PID, and the verbatim original message.
+- **Output preserved**: **YES** — asserted byte-for-byte equal to the
+  original lost message.
+- **Elapsed**: full 3-test run in **~0.02 seconds** (no delays, no sleeps,
+  no minutes-long waits needed — the failure is immediate and deterministic).
+- **Result**: 3/3 new tests pass; full focused collateral run (15 tests
+  across `BinkpCramAuthLoggingTest`, `BinkpServerSocketOwnershipTest`,
+  `BinkpOriginatorReceiveWindowIncidentTest`, and this new file) — **15/15
+  pass, 63 assertions, no regressions**.
+
+### Activation status
+
+**NOT activated.** `AdminDaemonServer.php` is loaded once at
+`admin_daemon` process start (long-running supervisor program) — this
+change is in the working tree, uncommitted, and would need an
+`admin_daemon` restart to take effect in production. No restart has been
+performed. This fix does **not** address the underlying file-ownership
+mismatch (still requires an ops-level `chown`/`chmod` decision, not made
+here) — it only ensures that, once activated, a future write failure of
+this shape leaves a recoverable trace instead of vanishing.
+
+## 9. Part B activated, 2026-09-13 — fallback proof, and the incident's actual root cause surfaces
+
+`admin_daemon` was restarted onto the fix (PID `7` → `103469`; `binkp_server`/
+`binkp_scheduler` untouched, still the PIDs from H2's activation; 17/17
+supervisor programs verified RUNNING). A pre-activation review added one
+guard not yet documented above: `writeLogLineOrWarn()` skips warning via
+`$this->logger` when the failing target *is* `admin_daemon.log` itself,
+since that would route back through `Logger::log()`'s own UDP-fallback
+chain targeting the same file this handler is already failing to write —
+a latent self-referential loop risk that pre-dated this fix inside
+`Logger`'s own design but was only made reachable at this call site by it.
+Covered by a fourth test case; 16/16 tests green.
+
+**Fallback proof: immediate and unambiguous**, read-only, no manual polling:
+
+- Within a minute of restart, the fallback began firing for `packets.log`
+  (also `root:root`/`644`, the same class of problem) — `process_packets.php`
+  concurrency-guard warnings ("Another instance ... already running.
+  Exiting.") that would previously have vanished without a trace now landed
+  cleanly in `admin_daemon.log`, one warning per lost line, no duplicates,
+  no flood, admin_daemon healthy throughout (confirmed via repeated
+  `supervisorctl status` and log tails).
+- At the next natural `*/15 * * * *` tick (`05:45:xx`), the fallback caught
+  the **complete session narrative for `binkp_poll.log`** across multiple
+  uplinks, including `1:154/10` (FidoNet) — every line "Polling...",
+  "Connecting...", "Handshake completed successfully", etc. — now fully
+  recoverable from `admin_daemon.log` for the first time in this incident's
+  history.
+
+**This is where the fallback did its job and surfaced the incident's actual
+root cause — not H2.** The preserved trace for the `1:154/10` session
+starting `05:45:29` reads, verbatim:
+
+```
+[1:154/10] Handshake completed successfully
+[1:154/10] ERROR: Failed to open file for writing: /var/www/html/data/inbound/a54e0407.sa0
+[1:154/10] WARNING: Received file data but no active file transfer   (repeated many times)
+```
+
+`a54e0407.sa0` is the **exact filename Nick's original incident report
+named**. Confirmed read-only: `data/inbound/` is `drwxr-xr-x`, owned
+`www-data:www-data` — mode `755` grants write **only** to the `www-data`
+user, not its group (`binkterm-admin` is a secondary member of the
+`www-data` group, per `id binkterm-admin`, but group membership only grants
+read+execute here, not write). Every single-uplink scheduled poll runs as
+`binkterm-admin` (same lifecycle as the `binkp_poll.log`/`packets.log`
+findings above — spawned via `admin_daemon.php`'s `binkp_poll_sync`, which
+never changes UID). So: **`binkterm-admin` cannot create a new file in
+`data/inbound/` at all.** `BinkpSession::handleFileCommand()`'s
+`fopen($tmpPath, 'wb')` fails, logs the error, and returns **without**
+setting `$this->currentFile`. Every subsequent DATA frame carrying the
+peer's actual file bytes then hits `handleFileData()`'s
+`if ($this->currentFile && $this->fileHandle)` guard — false — and is
+silently discarded with only a WARNING, repeated for as long as the peer
+keeps streaming. `$hasActiveTransfer` stays false the entire time, so the
+session's ~300s duration is fully explained by the ordinary "no active
+transfer" hard EOB/inactivity timeout ceiling (`binkp.timeout=300`) — not
+by H2's fragmented-read mechanism. **H2 remains a real, independently
+locally-proven bug worth having fixed, but is not what caused this specific
+incident.** The true root cause is a **third instance of the same
+`binkterm-admin`-vs-`www-data` ownership mismatch class**, this time on
+`data/inbound/` rather than a log file, discovered only because Part B's
+fallback finally preserved the frame-by-frame detail that had been
+invisible through the entire investigation up to this point.
+
+Per instruction, this is reported, not fixed: `data/inbound/` permissions
+were **not** touched, `BinkpSession::handleFileCommand()` was **not**
+touched, and this finding is **not** one of the four previously-tracked
+parked defects — it is new and should be tracked as its own item,
+distinct from all four below.
+
+Also observed in the same window: the previously-parked "unexplained
+same-uplink retry" (defect #4) recurred exactly as before — a second dial
+to `1:154/10` began at `05:46:29`, about a minute after `05:45:29` — left
+untouched, as instructed.
+
+## 10. Log ownership / rotation recon (read-only; nothing chmod'd/chown'd)
+
+- `data/logs/binkp_poll.log`: owned `root:root`, mode `644`.
+- Sibling convention: `data/logs/binkp_scheduler.log` and
+  `data/logs/binkp_server.log` are owned `www-data:www-data` — the same
+  user that runs the long-running `binkp_scheduler`/`binkp_server`
+  supervisor daemons that write them continuously, i.e. **each log is
+  owned by whichever process actually writes it**, the project's clear
+  established convention. `data/logs/admin_daemon.log` is owned
+  `binkterm-admin:binkterm-admin` — same pattern, correct for what writes
+  it. `data/logs/packets.log` is **also** `root:root` — the identical
+  class of problem, not unique to `binkp_poll.log`.
+- Expected runtime writer for `binkp_poll.log`: whichever identity actually
+  invokes `scripts/binkp_poll.php` — for scheduled polls (the incident's own
+  case) and interactive admin-terminal syncs, that's `binkterm-admin`
+  (`admin_daemon.php`'s own UID); for the standalone `--all` nightly cron
+  job noted in `admin_daemon.log` history, it's whatever ran the container's
+  own cron.
+- **Creation/rotation source, found precisely:** two *separate*, overlapping
+  logrotate schedules exist. (1) The project's own built-in, documented
+  mechanism: `docker/entrypoint.sh` generates `/etc/cron.d/binkterm` inside
+  the container, which runs `scripts/logrotate.php` **explicitly as
+  `www-data`**, weekly by default (confirmed live: `0 0 * * 0 www-data cd
+  /var/www/html && php scripts/logrotate.php --keep=52 ...`) — and
+  `docs/DOCKER.md` explicitly documents `LOGROTATE_SCHEDULE`/`LOGROTATE_MAX_SIZE`
+  as the supported way to rotate `binkp_poll.log` more often between weekly
+  runs, calling it out by name. (2) A **separate host-level crontab entry**
+  (`7 * * * * cd /root/binktermphp && docker compose exec -T binkterm-app
+  php scripts/logrotate.php --keep=5 --max-size=10M ...`, matching the
+  "BinktermPHP BinkP log hygiene" memory's "host crontab now runs logrotate
+  hourly at :07") layered on top, hourly — and critically, `docker compose
+  exec` here has **no `--user`/`-u` flag**, so it runs as the container's
+  Docker-level default user, confirmed live to be **root** (`docker exec
+  binkterm-app whoami` → `root`; no `USER` directive in the `Dockerfile`).
+  Any log file this second job actually rotates/recreates gets stamped
+  root-owned. `docs/DOCKER.md` even explicitly warns to disable the
+  built-in `ENABLE_LOGROTATE` job if scheduling it externally — advice this
+  particular host customization did not follow, running both.
+- Whether manual `chown` would be durable: **no, not by itself** — the
+  moment the hourly host-level job rotates that file again (crosses the
+  `--max-size=10M` threshold, or `--keep` cycling), the replacement file
+  would again be created as `root` and the mismatch would return. A durable
+  fix has to address the host crontab's missing `--user www-data` (or
+  disabling that redundant external job entirely and relying on the
+  built-in `LOGROTATE_SCHEDULE`/`LOGROTATE_MAX_SIZE` env vars as documented),
+  not just the current file's ownership. **Not performed in this
+  transaction** — recon only, per instruction.
+- **Classification: DEPLOYMENT MISMATCH**, not intentional. The project's
+  own documentation and built-in in-container cron already establish and
+  recommend the correct pattern (`www-data`, via `LOGROTATE_SCHEDULE`/
+  `LOGROTATE_MAX_SIZE`); a separate, later host-level customization
+  (matching prior memory of "host crontab now runs logrotate hourly")
+  diverges from it by omitting `--user` on `docker compose exec`.
+
+## Secondary + newly-discovered items — final status after Part B
+
+- Session-timeout-recorded-as-success misclassification: **PARKED**, untouched
+- 90s same-host lock timeout vs. 300s session: **PARKED**, untouched
+- Admin-RPC observability/log-loss: **root-caused precisely and fixed,
+  activated in production, and proven live** (§9); underlying file-ownership
+  mismatches (logs *and*, newly found, `data/inbound/`) still require a
+  separate ops decision, not made here
+- Unexplained same-uplink retry: **PARKED**, untouched, recurred again live
+  during this transaction, still unexplained
+- **NEW, not previously tracked — actual root cause of the original
+  incident, found via Part B's own fallback, reported only, not fixed**:
+  `data/inbound/` (`www-data:www-data`, `755`) is not writable by
+  `binkterm-admin`, the user every `binkp_poll_sync`-driven scheduled/manual
+  single-uplink poll runs as — so any peer offering an inbound file during
+  such a poll has that file's local write silently fail, its data discarded
+  frame-by-frame, for the full ~300s timeout. This is the same ownership-
+  mismatch class as the two log-file findings above, on a third resource.
