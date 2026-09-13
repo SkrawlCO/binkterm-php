@@ -239,6 +239,13 @@ class DashboardStatsService
             $pendingEchomailModeration = (int)($moderationStmt->fetch()['count'] ?? 0);
         }
 
+        $pendingSysopPages = 0;
+        if ($isAdmin) {
+            // getWaitingPages() also opportunistically expires stale rows, so
+            // this count is never inflated by pages that merely timed out.
+            $pendingSysopPages = count((new SysopChatService($this->db))->getWaitingPages());
+        }
+
         $newEchoareaFilter = $isAdmin ? "" : " AND COALESCE(is_sysop_only, FALSE) = FALSE";
         $newEchoareaCountStmt = $this->db->query("
             SELECT COUNT(*) AS count
@@ -279,6 +286,7 @@ class DashboardStatsService
             'pending_file_approvals' => $pendingFileApprovals,
             'pending_files_max_id' => $pendingFilesMaxId,
             'pending_echomail_moderation' => $pendingEchomailModeration,
+            'pending_sysop_pages' => $pendingSysopPages,
             'online_count' => $auth->getOnlineUserCount(15),
             'unread_bulletins' => $bulletinManager->getUnreadCount($userId),
         ];

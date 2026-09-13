@@ -63,6 +63,7 @@
         }
         .echomail-moderation-menu-link.unread,
         .area-management-menu-link.unread,
+        .sysop-chat-menu-link.unread,
         .admin-menu-link.unread {
             color: #ffc107 !important;
         }
@@ -381,6 +382,7 @@
                                     <ul class="dropdown-menu">
                                         <li><a class="dropdown-item" href="/admin/bbs-directory"><i class="fas fa-server"></i> {{ t('ui.base.admin.bbs_directory', {}, 'common') }}</a></li>
                                         <li><a class="dropdown-item" href="/admin/chat-rooms"><i class="fas fa-comment-dots"></i> {{ t('ui.base.admin.chat_rooms', {}, 'common') }}</a></li>
+                                        <li><a class="dropdown-item sysop-chat-menu-link" href="/admin/sysop-chat"><i class="fas fa-bell"></i> {{ t('ui.base.admin.sysop_chat', {}, 'common') }} <span id="sysopChatWaitingBadge" class="badge bg-danger ms-1" style="display: none;">0</span></a></li>
                                         <li><a class="dropdown-item" href="/admin/ai-bots"><i class="fas fa-robot"></i> {{ t('ui.base.admin.ai_bots', {}, 'common') }}</a></li>
                                         <li><a class="dropdown-item" href="/admin/polls"><i class="fas fa-vote-yea"></i> {{ t('ui.base.admin.polls', {}, 'common') }}</a></li>
                                         <li><a class="dropdown-item" href="/admin/shoutbox"><i class="fas fa-bullhorn"></i> {{ t('ui.base.admin.shoutbox', {}, 'common') }}</a></li>

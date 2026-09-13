@@ -106,6 +106,7 @@ Authentication/CSRF failures use the standard 401/403 structured errors (`error_
   - [Shoutbox](#shoutbox) (2)
   - [Stream](#stream) (2)
   - [Subscriptions](#subscriptions) (4)
+  - [SysOp Chat](#sysop-chat) (6)
   - [System](#system) (1)
   - [Taglines](#taglines) (1)
   - [Test](#test) (1)
@@ -7913,6 +7914,210 @@ Admin action result
 | Status | Description |
 |--------|-------------|
 | 400 | Missing echoarea_id or invalid action |
+| 401 | Authentication required |
+| 403 | Admin access required |
+
+---
+
+### SysOp Chat
+
+M1B — the Web admin side of "Page SysOp" (see `docs/SysopChat/M1B.md`). Every
+route delegates to `BinktermPHP\SysopChatService` / `SysopChatMessageService`;
+none of these perform their own `sysop_pages`/`sysop_chat_messages` SQL. A
+caller-facing "Page SysOp" API does not exist yet (M1C).
+
+| Method | Path | Auth | Summary |
+|--------|------|------|---------|
+| `GET` | [`/api/admin/sysop-chat/state`](#get-apiadminsysop-chatstate) | Yes | Waiting-page inbox plus the single active chat, if any |
+| `POST` | [`/api/admin/sysop-chat/{id}/accept`](#post-apiadminsysop-chatidaccept) | Yes | Accept a waiting page |
+| `POST` | [`/api/admin/sysop-chat/{id}/decline`](#post-apiadminsysop-chatiddecline) | Yes | Decline a waiting page |
+| `POST` | [`/api/admin/sysop-chat/{id}/end`](#post-apiadminsysop-chatidend) | Yes | End the active chat on a page |
+| `GET` | [`/api/admin/sysop-chat/{id}/messages`](#get-apiadminsysop-chatidmessages) | Yes | List a page's ephemeral chat messages |
+| `POST` | [`/api/admin/sysop-chat/{id}/messages`](#post-apiadminsysop-chatidmessages) | Yes | Send a message on the active chat |
+
+#### `GET /api/admin/sysop-chat/state`
+
+**Requires authentication** · admin only
+
+One GET covers both the admin page's initial render and every
+realtime-triggered re-sync: the current waiting-page inbox and the single
+globally-active chat, if any, plus whether the requesting admin is the one
+who accepted it.
+
+**Response** _(JSON)_
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `success` | boolean | Always `true` |
+| `waiting` | array of objects | Currently waiting pages, oldest first |
+| `waiting[].id` | integer | Page ID |
+| `waiting[].caller_user_id` | integer | Caller's user ID |
+| `waiting[].caller_username` | string | Caller's username |
+| `waiting[].surface` | string | `telnet`, `ssh`, `web_terminal`, or `web_ui` |
+| `waiting[].created_at` | string | Page creation time (ISO 8601) |
+| `waiting[].expires_at` | string | When this waiting page expires (ISO 8601) |
+| `active` | object\|null | The single ACCEPTED page, or `null` if none |
+| `active.id` | integer | Page ID |
+| `active.caller_user_id` | integer | Caller's user ID |
+| `active.caller_username` | string | Caller's username |
+| `active.accepted_by_user_id` | integer | Accepting admin's user ID |
+| `active.accepted_by_username` | string | Accepting admin's username |
+| `active.surface` | string | `telnet`, `ssh`, `web_terminal`, or `web_ui` |
+| `is_mine` | boolean | Whether the requesting admin is `active.accepted_by_user_id` (always `false` when `active` is `null`) |
+
+---
+
+#### `POST /api/admin/sysop-chat/{id}/accept`
+
+**Requires authentication** · admin only
+
+Accepts a waiting page. Fails cleanly (no phantom chat) when the page is no
+longer WAITING, has expired, or the caller's own live session is already
+gone; also fails when another page is already the active chat (the M1
+one-active-chat-at-a-time rule).
+
+**Path Parameters**
+
+| Name | Type | Description |
+|------|------|-------------|
+| `id` | integer | Page ID |
+
+**Response** _(JSON)_
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `success` | boolean | `true` on success |
+| `page.id` | integer | Page ID |
+| `page.caller_user_id` | integer | Caller's user ID |
+| `page.surface` | string | `telnet`, `ssh`, `web_terminal`, or `web_ui` |
+
+**Error Responses**
+
+| Status | Description |
+|--------|-------------|
+| 401 | Authentication required |
+| 403 | Admin access required |
+| 409 | Page not available to accept (`errors.sysop_chat.accept_failed`) |
+
+---
+
+#### `POST /api/admin/sysop-chat/{id}/decline`
+
+**Requires authentication** · admin only
+
+**Path Parameters**
+
+| Name | Type | Description |
+|------|------|-------------|
+| `id` | integer | Page ID |
+
+**Response** _(JSON)_
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `success` | boolean | `true` on success |
+
+**Error Responses**
+
+| Status | Description |
+|--------|-------------|
+| 401 | Authentication required |
+| 403 | Admin access required |
+| 409 | Page not waiting (`errors.sysop_chat.decline_failed`) |
+
+---
+
+#### `POST /api/admin/sysop-chat/{id}/end`
+
+**Requires authentication** · admin only
+
+Ends an active chat. Only the caller or the accepting admin may end it; on
+success the page's messages are purged (see `docs/SysopChat/M1B.md`
+"Retention").
+
+**Path Parameters**
+
+| Name | Type | Description |
+|------|------|-------------|
+| `id` | integer | Page ID |
+
+**Response** _(JSON)_
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `success` | boolean | `true` on success |
+
+**Error Responses**
+
+| Status | Description |
+|--------|-------------|
+| 401 | Authentication required |
+| 403 | Admin access required |
+| 409 | Chat not active (`errors.sysop_chat.end_failed`) |
+
+---
+
+#### `GET /api/admin/sysop-chat/{id}/messages`
+
+**Requires authentication** · admin only, and must be a participant (the page's caller or its accepting admin)
+
+**Path Parameters**
+
+| Name | Type | Description |
+|------|------|-------------|
+| `id` | integer | Page ID |
+
+**Response** _(JSON)_
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `success` | boolean | `true` on success |
+| `messages` | array of objects | Ordered oldest-first; empty once purged after chat completion |
+| `messages[].id` | integer | Message ID |
+| `messages[].body` | string | Message text |
+| `messages[].sender_user_id` | integer | Sender's user ID |
+| `messages[].created_at` | string | ISO 8601 |
+
+**Error Responses**
+
+| Status | Description |
+|--------|-------------|
+| 401 | Authentication required |
+| 403 | Admin access required, or not a participant on this page (`errors.sysop_chat.not_participant`) |
+
+---
+
+#### `POST /api/admin/sysop-chat/{id}/messages`
+
+**Requires authentication** · admin only, and must be a participant (the page's caller or its accepting admin)
+
+**Path Parameters**
+
+| Name | Type | Description |
+|------|------|-------------|
+| `id` | integer | Page ID |
+
+**Request Body** _(JSON)_
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `body` | string | Yes | Message text, 1-2000 characters |
+
+**Response** _(JSON)_
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `success` | boolean | `true` on success |
+| `message.id` | integer | Message ID |
+| `message.body` | string | Message text |
+| `message.sender_user_id` | integer | Sender's user ID |
+| `message.created_at` | string | ISO 8601 |
+
+**Error Responses**
+
+| Status | Description |
+|--------|-------------|
+| 400 | Empty/oversized body, page not ACCEPTED, or sender not a participant (`errors.sysop_chat.message_failed`) |
 | 401 | Authentication required |
 | 403 | Admin access required |
 

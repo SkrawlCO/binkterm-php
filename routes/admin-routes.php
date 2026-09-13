@@ -11102,3 +11102,136 @@ SimpleRouter::post('/admin/api/msg', function () {
 
     echo json_encode(['success' => true]);
 });
+
+// ---------------------------------------------------------------------------
+// SysOp Chat — M1B admin side (see docs/SysopChat/M1B.md)
+//
+// The waiting-page inbox, accept/decline, and the admin half of the private
+// chat. Every mutation goes through BinktermPHP\SysopChatService /
+// SysopChatMessageService; nothing here touches sysop_pages or
+// sysop_chat_messages directly. Caller-side (M1C) is not built yet.
+// ---------------------------------------------------------------------------
+
+// SysOp Chat admin page
+SimpleRouter::get('/admin/sysop-chat', function() {
+    RouteHelper::requireAdmin();
+
+    $template = new Template();
+    $template->renderResponse('admin/sysop_chat.twig');
+});
+
+// Waiting inbox + the single active chat, if any (one GET covers the whole
+// page's initial render and every realtime-triggered re-sync).
+SimpleRouter::get('/api/admin/sysop-chat/state', function() {
+    $user = RouteHelper::requireAdmin();
+    header('Content-Type: application/json');
+
+    $userId = (int)($user['user_id'] ?? $user['id'] ?? 0);
+    $svc = new \BinktermPHP\SysopChatService();
+
+    $active = $svc->getActiveChat();
+
+    echo json_encode([
+        'success' => true,
+        'waiting' => $svc->getWaitingPages(),
+        'active'  => $active,
+        'is_mine' => $active !== null && $active['accepted_by_user_id'] === $userId,
+    ]);
+});
+
+SimpleRouter::post('/api/admin/sysop-chat/{id}/accept', function($id) {
+    $user = RouteHelper::requireAdmin();
+    header('Content-Type: application/json');
+
+    $userId = (int)($user['user_id'] ?? $user['id'] ?? 0);
+    $page = (new \BinktermPHP\SysopChatService())->acceptPage((int)$id, $userId);
+
+    if ($page === null) {
+        apiError(
+            'errors.sysop_chat.accept_failed',
+            apiLocalizedText('errors.sysop_chat.accept_failed', 'That page is no longer available to accept.', $user),
+            409
+        );
+        return;
+    }
+
+    echo json_encode(['success' => true, 'page' => $page]);
+})->where(['id' => '[0-9]+']);
+
+SimpleRouter::post('/api/admin/sysop-chat/{id}/decline', function($id) {
+    $user = RouteHelper::requireAdmin();
+    header('Content-Type: application/json');
+
+    $userId = (int)($user['user_id'] ?? $user['id'] ?? 0);
+    $ok = (new \BinktermPHP\SysopChatService())->declinePage((int)$id, $userId);
+
+    if (!$ok) {
+        apiError(
+            'errors.sysop_chat.decline_failed',
+            apiLocalizedText('errors.sysop_chat.decline_failed', 'That page is no longer waiting.', $user),
+            409
+        );
+        return;
+    }
+
+    echo json_encode(['success' => true]);
+})->where(['id' => '[0-9]+']);
+
+SimpleRouter::post('/api/admin/sysop-chat/{id}/end', function($id) {
+    $user = RouteHelper::requireAdmin();
+    header('Content-Type: application/json');
+
+    $userId = (int)($user['user_id'] ?? $user['id'] ?? 0);
+    $ok = (new \BinktermPHP\SysopChatService())->completePage((int)$id, $userId);
+
+    if (!$ok) {
+        apiError(
+            'errors.sysop_chat.end_failed',
+            apiLocalizedText('errors.sysop_chat.end_failed', 'That chat is no longer active.', $user),
+            409
+        );
+        return;
+    }
+
+    echo json_encode(['success' => true]);
+})->where(['id' => '[0-9]+']);
+
+SimpleRouter::get('/api/admin/sysop-chat/{id}/messages', function($id) {
+    $user = RouteHelper::requireAdmin();
+    header('Content-Type: application/json');
+
+    $userId = (int)($user['user_id'] ?? $user['id'] ?? 0);
+    $messages = (new \BinktermPHP\SysopChatMessageService())->listMessages((int)$id, $userId);
+
+    if ($messages === null) {
+        apiError(
+            'errors.sysop_chat.not_participant',
+            apiLocalizedText('errors.sysop_chat.not_participant', 'You are not part of that chat.', $user),
+            403
+        );
+        return;
+    }
+
+    echo json_encode(['success' => true, 'messages' => $messages]);
+})->where(['id' => '[0-9]+']);
+
+SimpleRouter::post('/api/admin/sysop-chat/{id}/messages', function($id) {
+    $user = RouteHelper::requireAdmin();
+    header('Content-Type: application/json');
+
+    $userId = (int)($user['user_id'] ?? $user['id'] ?? 0);
+    $body = (string)(json_decode(file_get_contents('php://input'), true)['body'] ?? '');
+
+    $message = (new \BinktermPHP\SysopChatMessageService())->sendMessage((int)$id, $userId, $body);
+
+    if ($message === null) {
+        apiError(
+            'errors.sysop_chat.message_failed',
+            apiLocalizedText('errors.sysop_chat.message_failed', 'That message could not be sent.', $user),
+            400
+        );
+        return;
+    }
+
+    echo json_encode(['success' => true, 'message' => $message]);
+})->where(['id' => '[0-9]+']);

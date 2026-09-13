@@ -193,10 +193,27 @@
             pendingModeration = 0;
         }
 
+        // SysOp Chat waiting pages: their own badge on the "SysOp Chat" menu
+        // item, folded into the outer gear icon's unread state alongside
+        // moderation — "someone is paging" deserves the same at-a-glance
+        // visibility as pending moderation, not a separate notification path.
+        const sysopChatLinks = document.querySelectorAll('.sysop-chat-menu-link');
+        const sysopChatBadge = document.getElementById('sysopChatWaitingBadge');
+        let pendingSysopPages = parseInt(stats?.pending_sysop_pages || 0, 10) || 0;
+        if (clearTarget === 'sysop-chat' || isPathMatch('/admin/sysop-chat')) {
+            pendingSysopPages = 0;
+        }
+        const hasSysopPages = pendingSysopPages > 0;
+        sysopChatLinks.forEach((link) => link.classList.toggle('unread', hasSysopPages));
+        if (sysopChatBadge) {
+            sysopChatBadge.textContent = String(pendingSysopPages);
+            sysopChatBadge.style.display = hasSysopPages ? '' : 'none';
+        }
+
         const hasModeration = pendingModeration > 0;
         moderationLinks.forEach((link) => link.classList.toggle('unread', hasModeration));
         areaManagementLinks.forEach((link) => link.classList.toggle('unread', hasModeration));
-        adminMenuLinks.forEach((link) => link.classList.toggle('unread', hasModeration));
+        adminMenuLinks.forEach((link) => link.classList.toggle('unread', hasModeration || hasSysopPages));
     }
 
     function updateFileIcon(stats, clearTarget = null) {
@@ -489,6 +506,15 @@
             });
             window.BinkStream.on('file_approvals_changed', function () {
                 scheduleRefresh(500);
+            });
+            // SysOp Chat waiting-page badge (see updateAdminModerationIcon()).
+            // These events only ever reach an admin session (admin-only
+            // broadcast or targeted at the accepting admin), so subscribing
+            // unconditionally here is harmless for a non-admin viewer.
+            ['sysop_chat.request', 'sysop_chat.cancelled', 'sysop_chat.expired', 'sysop_chat.accepted'].forEach(function (type) {
+                window.BinkStream.on(type, function () {
+                    scheduleRefresh(500);
+                });
             });
         }
     }

@@ -2,6 +2,7 @@
 
 namespace BinktermPHP;
 
+use BinktermPHP\Binkp\Logger;
 use BinktermPHP\Realtime\BinkStream;
 use PDO;
 use PDOException;
@@ -71,10 +72,12 @@ class SysopChatService
     private const DEFAULT_TTL_SECONDS = 300;
 
     private PDO $db;
+    private ?SysopChatMessageService $messages;
 
-    public function __construct(?PDO $db = null)
+    public function __construct(?PDO $db = null, ?SysopChatMessageService $messages = null)
     {
         $this->db = $db ?? Database::getInstance()->getPdo();
+        $this->messages = $messages;
     }
 
     // -----------------------------------------------------------------------
@@ -326,6 +329,20 @@ class SysopChatService
             );
         }
 
+        // Ephemeral by design (see docs/SysopChat/M1A.md "Message transport
+        // recon") -- a chat leaves no transcript once it ends. Best-effort:
+        // the page has already, correctly, transitioned to COMPLETED above: a
+        // purge failure must never be reported back as an "end chat" failure
+        // (the caller would then see a false error, or retry into a 409 on an
+        // already-completed page). Mirrors ActiveSessionService's cascade
+        // cleanup -- log it, never let it block or misreport the transition
+        // that already succeeded.
+        try {
+            ($this->messages ??= new SysopChatMessageService($this->db))->purgeForPage($pageId);
+        } catch (\Throwable $e) {
+            $this->log('message purge failed for page ' . $pageId . ': ' . $e->getMessage());
+        }
+
         return true;
     }
 
@@ -380,27 +397,30 @@ class SysopChatService
     /**
      * Admin-facing list of currently waiting pages, oldest first.
      *
-     * @return list<array{id:int,caller_user_id:int,surface:string,created_at:string,expires_at:string}>
+     * @return list<array{id:int,caller_user_id:int,caller_username:string,surface:string,created_at:string,expires_at:string}>
      */
     public function getWaitingPages(): array
     {
         $this->expireStalePages();
 
         $stmt = $this->db->query("
-            SELECT id, caller_user_id, surface, created_at::text AS created_at, expires_at::text AS expires_at
-            FROM sysop_pages
-            WHERE status = '" . self::STATUS_WAITING . "'
-            ORDER BY created_at ASC
+            SELECT p.id, p.caller_user_id, u.username AS caller_username, p.surface,
+                   p.created_at::text AS created_at, p.expires_at::text AS expires_at
+            FROM sysop_pages p
+            JOIN users u ON u.id = p.caller_user_id
+            WHERE p.status = '" . self::STATUS_WAITING . "'
+            ORDER BY p.created_at ASC
         ");
 
         $out = [];
         foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
             $out[] = [
-                'id'             => (int) $row['id'],
-                'caller_user_id' => (int) $row['caller_user_id'],
-                'surface'        => (string) $row['surface'],
-                'created_at'     => (string) $row['created_at'],
-                'expires_at'     => (string) $row['expires_at'],
+                'id'              => (int) $row['id'],
+                'caller_user_id'  => (int) $row['caller_user_id'],
+                'caller_username' => (string) $row['caller_username'],
+                'surface'         => (string) $row['surface'],
+                'created_at'      => (string) $row['created_at'],
+                'expires_at'      => (string) $row['expires_at'],
             ];
         }
         return $out;
@@ -443,14 +463,17 @@ class SysopChatService
     /**
      * The single globally-active (ACCEPTED/CHATTING) page, if any.
      *
-     * @return array{id:int,caller_user_id:int,accepted_by_user_id:int,surface:string}|null
+     * @return array{id:int,caller_user_id:int,caller_username:string,accepted_by_user_id:int,accepted_by_username:string,surface:string}|null
      */
     public function getActiveChat(): ?array
     {
         $stmt = $this->db->query("
-            SELECT id, caller_user_id, accepted_by_user_id, surface
-            FROM sysop_pages
-            WHERE status = '" . self::STATUS_ACCEPTED . "'
+            SELECT p.id, p.caller_user_id, cu.username AS caller_username,
+                   p.accepted_by_user_id, au.username AS accepted_by_username, p.surface
+            FROM sysop_pages p
+            JOIN users cu ON cu.id = p.caller_user_id
+            JOIN users au ON au.id = p.accepted_by_user_id
+            WHERE p.status = '" . self::STATUS_ACCEPTED . "'
             LIMIT 1
         ");
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -460,10 +483,12 @@ class SysopChatService
         }
 
         return [
-            'id'                   => (int) $row['id'],
-            'caller_user_id'       => (int) $row['caller_user_id'],
-            'accepted_by_user_id'  => (int) $row['accepted_by_user_id'],
-            'surface'              => (string) $row['surface'],
+            'id'                    => (int) $row['id'],
+            'caller_user_id'        => (int) $row['caller_user_id'],
+            'caller_username'       => (string) $row['caller_username'],
+            'accepted_by_user_id'   => (int) $row['accepted_by_user_id'],
+            'accepted_by_username'  => (string) $row['accepted_by_username'],
+            'surface'               => (string) $row['surface'],
         ];
     }
 
@@ -535,5 +560,15 @@ class SysopChatService
     {
         $ttl = (int) Config::env('SYSOP_CHAT_PAGE_TTL_SECONDS', (string) self::DEFAULT_TTL_SECONDS);
         return $ttl > 0 ? $ttl : self::DEFAULT_TTL_SECONDS;
+    }
+
+    private function log(string $message): void
+    {
+        try {
+            (new Logger(Config::getLogPath('server.log'), Logger::LEVEL_INFO, false))
+                ->warning('[SysopChatService] ' . $message);
+        } catch (\Throwable $e) {
+            // Logging must never be the thing that breaks a completion.
+        }
     }
 }

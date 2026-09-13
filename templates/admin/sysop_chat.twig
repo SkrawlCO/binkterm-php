@@ -1,0 +1,264 @@
+{% extends "base.twig" %}
+
+{% block title %}{{ t('ui.admin.sysop_chat.page_title', {}, locale, ['common']) }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+        <h1 class="h2"><i class="fas fa-bell me-2"></i>{{ t('ui.admin.sysop_chat.heading', {}, locale, ['common']) }}</h1>
+        <button type="button" class="btn btn-outline-secondary btn-sm" id="sysopChatRefreshBtn">
+            <i class="fas fa-sync-alt me-1"></i>{{ t('ui.common.refresh', {}, locale, ['common']) }}
+        </button>
+    </div>
+
+    <div class="card shadow mb-3">
+        <div class="card-header">
+            <i class="fas fa-hand-paper me-2"></i>{{ t('ui.admin.sysop_chat.waiting_heading', {}, locale, ['common']) }}
+        </div>
+        <div class="card-body">
+            <div id="sysopChatWaitingList">
+                <p class="text-muted mb-0">{{ t('ui.common.loading', {}, locale, ['common']) }}</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="card shadow mb-3" id="sysopChatActiveCard" style="display: none;">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <span><i class="fas fa-comments me-2"></i><span id="sysopChatActiveTitle"></span></span>
+            <button type="button" class="btn btn-sm btn-outline-danger" id="sysopChatEndBtn" style="display: none;">
+                <i class="fas fa-xmark me-1"></i>{{ t('ui.admin.sysop_chat.end_chat', {}, locale, ['common']) }}
+            </button>
+        </div>
+        <div class="card-body">
+            <div id="sysopChatTranscript" class="mb-3" style="max-height: 320px; overflow-y: auto;"></div>
+            <div class="input-group" id="sysopChatComposer" style="display: none;">
+                <input type="text" class="form-control" id="sysopChatMessageInput"
+                       placeholder="{{ t('ui.admin.sysop_chat.message_placeholder', {}, locale, ['common']) }}"
+                       maxlength="2000">
+                <button class="btn btn-primary" type="button" id="sysopChatSendBtn">
+                    <i class="fas fa-paper-plane me-1"></i>{{ t('ui.admin.sysop_chat.send', {}, locale, ['common']) }}
+                </button>
+            </div>
+            <p class="text-muted mb-0" id="sysopChatNotMineNotice" style="display: none;">
+                {{ t('ui.admin.sysop_chat.someone_else_chatting', {}, locale, ['common']) }}
+            </p>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    'use strict';
+
+    var currentUserId = window.currentUserId || 0;
+    var messagePollTimer = null;
+    var lastMessageId = 0;
+
+    function t(key, fallback) {
+        return (window.t ? window.t(key, {}, fallback) : fallback);
+    }
+
+    function escapeHtml(s) {
+        var div = document.createElement('div');
+        div.textContent = String(s == null ? '' : s);
+        return div.innerHTML;
+    }
+
+    function relativeAge(isoString) {
+        var then = new Date(isoString).getTime();
+        if (isNaN(then)) return '';
+        var seconds = Math.max(0, Math.floor((Date.now() - then) / 1000));
+        if (seconds < 60) return seconds + 's';
+        var minutes = Math.floor(seconds / 60);
+        if (minutes < 60) return minutes + 'm';
+        var hours = Math.floor(minutes / 60);
+        return hours + 'h';
+    }
+
+    function apiGet(url) {
+        return fetch(url, { headers: { 'Accept': 'application/json' } }).then(function (r) { return r.json(); });
+    }
+
+    function apiPost(url, body) {
+        return fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify(body || {})
+        }).then(function (r) { return r.json().then(function (data) { return { ok: r.ok, data: data }; }); });
+    }
+
+    function renderWaitingList(waiting) {
+        var container = document.getElementById('sysopChatWaitingList');
+        if (!waiting || waiting.length === 0) {
+            container.innerHTML = '<p class="text-muted mb-0">' + escapeHtml(t('ui.admin.sysop_chat.no_pages_waiting', 'No one is paging right now.')) + '</p>';
+            return;
+        }
+
+        var rows = waiting.map(function (page) {
+            return '<tr>' +
+                '<td>' + escapeHtml(page.caller_username) + '</td>' +
+                '<td><span class="text-muted">' + escapeHtml(page.surface) + '</span></td>' +
+                '<td><span class="text-muted">' + escapeHtml(relativeAge(page.created_at)) + '</span></td>' +
+                '<td class="text-end">' +
+                    '<button class="btn btn-sm btn-success me-1" data-accept="' + page.id + '">' +
+                        '<i class="fas fa-check me-1"></i>' + escapeHtml(t('ui.admin.sysop_chat.accept', 'Accept')) +
+                    '</button>' +
+                    '<button class="btn btn-sm btn-outline-secondary" data-decline="' + page.id + '">' +
+                        escapeHtml(t('ui.admin.sysop_chat.decline', 'Decline')) +
+                    '</button>' +
+                '</td>' +
+            '</tr>';
+        }).join('');
+
+        container.innerHTML = '<table class="table table-sm align-middle mb-0"><tbody>' + rows + '</tbody></table>';
+
+        container.querySelectorAll('[data-accept]').forEach(function (btn) {
+            btn.addEventListener('click', function () { accept(btn.getAttribute('data-accept')); });
+        });
+        container.querySelectorAll('[data-decline]').forEach(function (btn) {
+            btn.addEventListener('click', function () { decline(btn.getAttribute('data-decline')); });
+        });
+    }
+
+    function renderActive(active, isMine) {
+        var card = document.getElementById('sysopChatActiveCard');
+        var title = document.getElementById('sysopChatActiveTitle');
+        var endBtn = document.getElementById('sysopChatEndBtn');
+        var composer = document.getElementById('sysopChatComposer');
+        var notMineNotice = document.getElementById('sysopChatNotMineNotice');
+
+        if (!active) {
+            card.style.display = 'none';
+            stopMessagePolling();
+            return;
+        }
+
+        card.style.display = '';
+        title.textContent = active.caller_username + ' — ' + active.surface;
+
+        if (isMine) {
+            endBtn.style.display = '';
+            composer.style.display = '';
+            notMineNotice.style.display = 'none';
+            startMessagePolling(active.id);
+        } else {
+            endBtn.style.display = 'none';
+            composer.style.display = 'none';
+            notMineNotice.style.display = '';
+            stopMessagePolling();
+        }
+    }
+
+    function renderTranscript(messages) {
+        var box = document.getElementById('sysopChatTranscript');
+        box.innerHTML = messages.map(function (m) {
+            var mine = m.sender_user_id === currentUserId;
+            return '<div class="mb-1 ' + (mine ? 'text-end' : '') + '">' +
+                '<span class="badge ' + (mine ? 'bg-primary' : 'bg-secondary') + '">' + escapeHtml(m.body) + '</span>' +
+            '</div>';
+        }).join('');
+        box.scrollTop = box.scrollHeight;
+        if (messages.length > 0) {
+            lastMessageId = messages[messages.length - 1].id;
+        }
+    }
+
+    var activePageId = null;
+
+    function refresh() {
+        apiGet('/api/admin/sysop-chat/state').then(function (data) {
+            if (!data || !data.success) return;
+            renderWaitingList(data.waiting);
+            activePageId = data.active ? data.active.id : null;
+            renderActive(data.active, data.is_mine);
+        });
+    }
+
+    function accept(id) {
+        apiPost('/api/admin/sysop-chat/' + id + '/accept', {}).then(function (res) {
+            if (!res.ok) {
+                alert((res.data && res.data.error) || t('ui.admin.sysop_chat.caller_gone', 'That caller is no longer here.'));
+            }
+            refresh();
+        });
+    }
+
+    function decline(id) {
+        apiPost('/api/admin/sysop-chat/' + id + '/decline', {}).then(function () { refresh(); });
+    }
+
+    function endChat() {
+        if (!activePageId) return;
+        apiPost('/api/admin/sysop-chat/' + activePageId + '/end', {}).then(function () {
+            document.getElementById('sysopChatTranscript').innerHTML = '';
+            refresh();
+        });
+    }
+
+    function sendMessage() {
+        var input = document.getElementById('sysopChatMessageInput');
+        var body = input.value.trim();
+        if (!body || !activePageId) return;
+        apiPost('/api/admin/sysop-chat/' + activePageId + '/messages', { body: body }).then(function (res) {
+            if (res.ok) {
+                input.value = '';
+                pollMessages();
+            }
+        });
+    }
+
+    function pollMessages() {
+        if (!activePageId) return;
+        apiGet('/api/admin/sysop-chat/' + activePageId + '/messages').then(function (data) {
+            if (data && data.success) {
+                renderTranscript(data.messages);
+            }
+        });
+    }
+
+    function startMessagePolling(pageId) {
+        if (messagePollTimer && activePageId === pageId) return;
+        stopMessagePolling();
+        pollMessages();
+        messagePollTimer = setInterval(pollMessages, 4000);
+    }
+
+    function stopMessagePolling() {
+        if (messagePollTimer) {
+            clearInterval(messagePollTimer);
+            messagePollTimer = null;
+        }
+    }
+
+    document.getElementById('sysopChatRefreshBtn').addEventListener('click', refresh);
+    document.getElementById('sysopChatEndBtn').addEventListener('click', endChat);
+    document.getElementById('sysopChatSendBtn').addEventListener('click', sendMessage);
+    document.getElementById('sysopChatMessageInput').addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); sendMessage(); }
+    });
+
+    if (window.BinkStream) {
+        ['sysop_chat.request', 'sysop_chat.cancelled', 'sysop_chat.expired', 'sysop_chat.accepted', 'sysop_chat.completed'].forEach(function (type) {
+            window.BinkStream.on(type, refresh);
+        });
+        window.BinkStream.on('sysop_chat.message', function (data) {
+            if (data && activePageId && data.page_id === activePageId) {
+                pollMessages();
+            }
+        });
+    }
+
+    // Belt-and-braces: a full navigation already tears down this whole JS
+    // context (and its timer with it), but pagehide also fires when the
+    // browser suspends the page into the back/forward cache instead of
+    // destroying it -- stop polling either way so a bfcache-restored tab
+    // never resumes with a second timer alongside whatever the restore path
+    // starts, and never keeps polling a page nobody is looking at.
+    window.addEventListener('pagehide', stopMessagePolling);
+
+    refresh();
+})();
+</script>
+{% endblock %}

@@ -113,7 +113,8 @@
         .btn-fidonet { background-color: {{ appearance.branding.accent_color | e }}; border-color: {{ appearance.branding.accent_color | e }}; }
         {% endif %}
         .file-menu-icon.unread,
-        .file-menu-link.unread {
+        .file-menu-link.unread,
+        .sysop-chat-menu-link.unread {
             color: #ffc107 !important;
         }
     </style>
@@ -212,6 +213,7 @@
                                 <ul class="dropdown-menu">
                                     <li><a class="dropdown-item" href="/admin/chat-rooms"><i class="fas fa-comment-dots"></i> {{ t('ui.base.admin.chat_rooms', {}, 'common') }}</a></li>
                                     <li><a class="dropdown-item" href="/admin/mrc-settings"><i class="fas fa-satellite-dish"></i> {{ t('ui.base.admin.mrc_settings', {}, 'common') }}</a></li>
+                                    <li><a class="dropdown-item sysop-chat-menu-link" href="/admin/sysop-chat"><i class="fas fa-bell"></i> {{ t('ui.base.admin.sysop_chat', {}, 'common') }} <span id="sysopChatWaitingBadge" class="badge bg-danger ms-1" style="display: none;">0</span></a></li>
                                 </ul>
                             </li>
                             <li><a class="dropdown-item" href="/admin/polls"><i class="fas fa-vote-yea"></i> {{ t('ui.base.admin.polls', {}, 'common') }}</a></li>
