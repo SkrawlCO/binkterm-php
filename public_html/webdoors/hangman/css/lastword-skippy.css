@@ -324,3 +324,48 @@
         padding: 13px 1px;
     }
 }
+
+/* --- Fork #7 ("Picking Sides"): SKIPPY vs. BOB lifetime rivalry --------
+   Deliberately plain: character names + two numbers, no win rate, no
+   losses, no K/D. Shown only at the two non-active-play surfaces (Round 1
+   category-select and the game-complete screen) — never in the active
+   round HUD. No animation, no icons, no "LEADER" text.
+
+   Two INDEPENDENT static (non-animated) modifier classes, both derived by
+   the controller from the current in-memory `rivalry` record — never from
+   DOM state:
+     .lw-rivalry-leading  — whichever side is ahead in the PERSISTED
+       lifetime totals (tie = neither gets it, both stay neutral). Applied
+       everywhere the badge renders, including the plain Round 1
+       category-select screen after a reload — leader color reflects
+       standing totals, not the most recent outcome.
+     .lw-rivalry-just-scored — the game-complete-screen-only "this session
+       just moved this side" emphasis (bold), unchanged from its original
+       Fork #7 behavior. It can coincide with .lw-rivalry-leading (the
+       leader just extended their lead) or not (the trailing side just
+       scored but the other side still leads overall) — both are valid,
+       independent facts about the same two numbers.
+   Skippy's accent reuses the existing positive-delta green (see
+   .lw-score-delta above); Bob's is a neutral warm tone, not a danger red —
+   Bob doing his job is not something going wrong. */
+.lw-rivalry-badge {
+    margin-top: 8px;
+    font-size: 14px;
+    opacity: 0.85;
+    letter-spacing: 0.5px;
+}
+
+.lw-rivalry-skippy, .lw-rivalry-bob {
+    font-weight: 600;
+}
+
+.lw-rivalry-just-scored {
+    font-weight: 700;
+    opacity: 1;
+}
+
+.lw-rivalry-skippy.lw-rivalry-leading,
+.lw-rivalry-skippy.lw-rivalry-just-scored { color: #7ee0a0; }
+
+.lw-rivalry-bob.lw-rivalry-leading,
+.lw-rivalry-bob.lw-rivalry-just-scored { color: #e0c37e; }

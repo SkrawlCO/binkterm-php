@@ -41,6 +41,20 @@
     var GAME_ID = 'hangman'; // Manifest-visible naming is deferred; see M1A report.
     var SESSION_SLOT = 0;
 
+    // Fork #7 ("Picking Sides"): a second, distinct slot for the tiny
+    // lifetime SKIPPY-vs-BOB rivalry record (js/lastword/rivalry.js), kept
+    // deliberately separate from SESSION_SLOT (0, the in-progress-session
+    // resume save this module has always reserved but which the live
+    // controller still does not wire up) so a future activation of session
+    // resume can never collide with, or be overwritten by, rivalry writes.
+    // Same game_id ('hangman') as everything else here: Last Word has no
+    // manifest entry of its own yet, and game_id is a free-text column the
+    // host keys storage rows by (not something manifest registration
+    // gates), so reusing the identity this file already established for
+    // Last Word is the smallest safe choice — inventing a new game_id here
+    // would be unrelated scope, not a persistence requirement.
+    var RIVALRY_SLOT = 1;
+
     /**
      * @param {Function} [fetchImpl] Injectable fetch (defaults to the global
      *   `fetch`, present in the WebDoor iframe's browser context).
@@ -61,12 +75,13 @@
          */
         function saveSession(session, slot) {
             slot = typeof slot === 'number' ? slot : SESSION_SLOT;
+            var kind = slot === RIVALRY_SLOT ? 'lastword-rivalry' : 'lastword-session';
             return doFetch(storageUrl(slot), {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     data: session,
-                    metadata: { kind: 'lastword-session', stateVersion: session && session.stateVersion }
+                    metadata: { kind: kind, stateVersion: session && session.stateVersion }
                 })
             }).then(function (res) {
                 if (!res.ok) {
@@ -112,11 +127,12 @@
         return {
             GAME_ID: GAME_ID,
             SESSION_SLOT: SESSION_SLOT,
+            RIVALRY_SLOT: RIVALRY_SLOT,
             saveSession: saveSession,
             loadSession: loadSession,
             deleteSession: deleteSession
         };
     }
 
-    return { createLastWordStorage: createLastWordStorage };
+    return { createLastWordStorage: createLastWordStorage, RIVALRY_SLOT: RIVALRY_SLOT };
 });

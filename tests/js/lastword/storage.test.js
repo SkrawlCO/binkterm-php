@@ -99,6 +99,37 @@ async function main() {
         assert.strictEqual(result.success, true);
     });
 
+    await check('RIVALRY_SLOT (Fork #7) is a distinct slot from SESSION_SLOT, and saving to it uses the rivalry metadata kind', async () => {
+        const { createLastWordStorage: create, RIVALRY_SLOT } = require('../../../public_html/webdoors/hangman/js/lastword/storage.js');
+        assert.notStrictEqual(RIVALRY_SLOT, 0, 'must not collide with the reserved session-resume slot 0');
+
+        const calls = [];
+        const mockFetch = (url, opts) => {
+            calls.push({ url, opts });
+            return Promise.resolve(jsonResponse(200, { success: true }));
+        };
+        const storage = create(mockFetch);
+        assert.strictEqual(storage.RIVALRY_SLOT, RIVALRY_SLOT);
+
+        await storage.saveSession({ version: 1, skippy: 1, bob: 0 }, RIVALRY_SLOT);
+
+        assert.strictEqual(calls[0].url, '/api/webdoor/storage/' + RIVALRY_SLOT + '?game_id=hangman');
+        const body = JSON.parse(calls[0].opts.body);
+        assert.strictEqual(body.metadata.kind, 'lastword-rivalry');
+    });
+
+    await check('a save to the default (session) slot still uses the original "lastword-session" metadata kind, unchanged by Fork #7', async () => {
+        const calls = [];
+        const mockFetch = (url, opts) => {
+            calls.push({ url, opts });
+            return Promise.resolve(jsonResponse(200, { success: true }));
+        };
+        const storage = createLastWordStorage(mockFetch);
+        await storage.saveSession({ stateVersion: 1 });
+        const body = JSON.parse(calls[0].opts.body);
+        assert.strictEqual(body.metadata.kind, 'lastword-session');
+    });
+
     await check('save -> load round-trips a representative session without structural loss', async () => {
         let stored = null;
         const mockFetch = (url, opts) => {

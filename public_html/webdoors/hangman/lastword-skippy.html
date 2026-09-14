@@ -4,8 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1"/>
     <title>Last Word — SKIPPY (unlisted human-test build)</title>
-    <link rel="stylesheet" href="css/lastword.css?v=skippy19" />
-    <link rel="stylesheet" href="css/lastword-skippy.css?v=skippy19" />
+    <link rel="stylesheet" href="css/lastword.css?v=skippy21" />
+    <link rel="stylesheet" href="css/lastword-skippy.css?v=skippy21" />
 </head>
 <body>
 <!--
@@ -87,6 +87,7 @@
 
 <section id="category-select" class="panel">
     <h2>Round 1 — Warm-Up: choose a category</h2>
+    <div id="rivalryBadge" class="lw-rivalry-badge" aria-live="polite"></div>
     <div id="categoryList" class="category-list" aria-label="Category choices"></div>
 </section>
 
@@ -211,31 +212,34 @@
 <section id="game-complete" class="panel hidden">
     <h2 id="gameCompleteTitle">Game Complete!</h2>
     <div id="gameCompleteBody" class="roundResultBody"></div>
+    <div id="gameCompleteRivalry" class="lw-rivalry-badge" aria-live="polite"></div>
     <button id="playAgain">Play Another Session</button>
 </section>
 
 <!--
-  ?v=skippy19 cache-busts these local scripts/stylesheets. Bump the version
+  ?v=skippy21 cache-busts these local scripts/stylesheets. Bump the version
   token here whenever any of these files change, and verify the live page
   actually received the new version before human testing — Cloudflare
   rewrites this zone's .js/.css Cache-Control to a 4-hour browser TTL (see
   lastword-m1c.html for the full explanation), so a new query string is the
   reliable way to force a genuinely fresh fetch.
 -->
-<script src="js/lastword/content.js?v=skippy19"></script>
-<script src="js/lastword/state.js?v=skippy19"></script>
-<script src="js/lastword/round.js?v=skippy19"></script>
-<script src="js/lastword/final.js?v=skippy19"></script>
-<script src="js/lastword/session.js?v=skippy19"></script>
-<script src="js/lastword/gallows-character.js?v=skippy19"></script>
-<script src="js/lastword/idle-chatter.js?v=skippy19"></script>
-<script src="js/lastword/hint.js?v=skippy19"></script>
-<script src="js/lastword/skippy-memory.js?v=skippy19"></script>
-<script src="js/lastword/situational-awareness.js?v=skippy19"></script>
-<script src="js/lastword/safe-predicament.js?v=skippy19"></script>
-<script src="js/lastword/bob-character.js?v=skippy19"></script>
-<script src="js/lastword/auto-solve.js?v=skippy19"></script>
-<script src="js/lastword/presentation.js?v=skippy19"></script>
-<script src="js/lastword/app-final-skippy.js?v=skippy19"></script>
+<script src="js/lastword/content.js?v=skippy21"></script>
+<script src="js/lastword/state.js?v=skippy21"></script>
+<script src="js/lastword/round.js?v=skippy21"></script>
+<script src="js/lastword/final.js?v=skippy21"></script>
+<script src="js/lastword/session.js?v=skippy21"></script>
+<script src="js/lastword/gallows-character.js?v=skippy21"></script>
+<script src="js/lastword/idle-chatter.js?v=skippy21"></script>
+<script src="js/lastword/hint.js?v=skippy21"></script>
+<script src="js/lastword/skippy-memory.js?v=skippy21"></script>
+<script src="js/lastword/situational-awareness.js?v=skippy21"></script>
+<script src="js/lastword/safe-predicament.js?v=skippy21"></script>
+<script src="js/lastword/bob-character.js?v=skippy21"></script>
+<script src="js/lastword/auto-solve.js?v=skippy21"></script>
+<script src="js/lastword/presentation.js?v=skippy21"></script>
+<script src="js/lastword/rivalry.js?v=skippy21"></script>
+<script src="js/lastword/storage.js?v=skippy21"></script>
+<script src="js/lastword/app-final-skippy.js?v=skippy21"></script>
 </body>
 </html>

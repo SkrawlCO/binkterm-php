@@ -116,6 +116,26 @@
     var solveSubmitting = false;
     var pendingCategory = null; // category the transition screen is about to deal for round 2/4
 
+    // PICKING SIDES (conscious bounded fork #7): tiny LIFETIME (persists
+    // across Play Again / page loads, unlike everything above it) rivalry
+    // tally — see js/lastword/rivalry.js's own header for the full
+    // contract. Starts as a fresh 0/0 record synchronously (so the badge
+    // has something correct to render even before the async load below
+    // resolves, and even if it never resolves at all); loadRivalry()
+    // overwrites it once a real saved record comes back. `lastWordStorage`
+    // is the ONLY place this controller touches BinkTermPHP-specific
+    // persistence — js/lastword/rivalry.js itself has no storage/host
+    // knowledge of any kind. Wrapped in try/catch because
+    // createLastWordStorage() throws when no `fetch` exists at all (never
+    // true in a real WebDoor iframe, but boot must not depend on that).
+    var rivalry = LastWordRivalry.createRivalryRecord();
+    var lastWordStorage = null;
+    try {
+        lastWordStorage = LastWordStorage.createLastWordStorage();
+    } catch (e) {
+        lastWordStorage = null;
+    }
+
     // SKIPPY REMEMBERS (conscious bounded fork #1): session-scoped memory
     // of what the caller has done so far this session — see
     // js/lastword/skippy-memory.js's own header for the full contract.
@@ -160,7 +180,7 @@
 
     var el = {};
     [
-        'category-select', 'categoryList',
+        'category-select', 'categoryList', 'rivalryBadge',
         'round-offer', 'roundOfferTitle', 'roundOfferList',
         'transition', 'transitionTitle', 'transitionBody', 'transitionContinue',
         'game', 'gallows', 'skippyChatterBubble', 'strikeCount', 'roundLabel', 'categoryLabel',
@@ -175,7 +195,7 @@
         'final-play', 'finalGallows', 'finalSkippyChatterBubble', 'finalStrikeCount', 'finalCategoryLabel', 'finalScoreRemaining',
         'finalBoard', 'finalStatusLine', 'finalLetters',
         'finalSolveToggle', 'finalSolveForm', 'finalSolveInput', 'finalSolveSubmit',
-        'game-complete', 'gameCompleteTitle', 'gameCompleteBody', 'playAgain'
+        'game-complete', 'gameCompleteTitle', 'gameCompleteBody', 'gameCompleteRivalry', 'playAgain'
     ].forEach(function (id) {
         var camel = id.replace(/-([a-z])/g, function (_, c) { return c.toUpperCase(); });
         el[camel] = document.getElementById(id);
@@ -803,6 +823,7 @@
 
     function goToRound(roundNumber) {
         if (roundNumber === 1) {
+            renderRivalryBadge(el.rivalryBadge);
             showOnly('categorySelect');
             return;
         }
@@ -1052,6 +1073,17 @@
         var solved = finishedFinalState.outcome === 'solved';
         finalCurrentSkippyState = renderSkippyOn(el.finalGallows, finishedFinalState.strikes, solved, finalPanicState);
         session = LastWordSession.finishFinal(session, finalState);
+
+        // PICKING SIDES: the ONE canonical once-only rivalry seam. This
+        // function is only ever reached via the two isFinalOver()-guarded
+        // call sites right after a Final actually ends (an explicit solve
+        // or an auto-solve both converge here identically), so exactly one
+        // outcome -> exactly one increment, applied in-memory synchronously
+        // (never lost even if the save below fails) before the fire-and-
+        // forget persist that must never block this completion path.
+        rivalry = LastWordRivalry.applyOutcome(rivalry, finishedFinalState.outcome);
+        persistRivalry();
+
         setTimeout(function () {
             renderGameComplete(scoreEnteringFinal, finishedFinalState);
         }, payoffDelayFor(solved));
@@ -1073,6 +1105,13 @@
 
         el.gameCompleteBody.innerHTML = '';
         lines.forEach(function (l) { el.gameCompleteBody.appendChild(l); });
+
+        // PICKING SIDES: `rivalry` was already incremented back in
+        // finishFinalRound(), before this function's setTimeout delay even
+        // started — so this just displays the already-current totals with
+        // a restrained one-time emphasis on whichever side this session
+        // just moved.
+        renderRivalryBadge(el.gameCompleteRivalry, solved ? 'skippy' : 'bob');
 
         showOnly('gameComplete');
     }
@@ -1164,6 +1203,91 @@
         });
     }
 
+    // --- PICKING SIDES: rivalry render/load/save --------------------------
+
+    /**
+     * Render "SKIPPY n — BOB n" into `target` from the current in-memory
+     * `rivalry` record. Two independent, static (non-animated) modifiers:
+     *
+     * - LEADER color always derives from the current PERSISTED totals
+     *   (rivalry.skippy vs. rivalry.bob), never from `justScoredSide` or
+     *   any other "most recent outcome" signal — a tie leaves both names
+     *   neutral, and this applies identically on the plain Round 1
+     *   category-select badge (including right after a reload that just
+     *   loaded a real saved lead) and on the game-complete screen.
+     * - `justScoredSide` ('skippy'/'bob'/omitted) is the SEPARATE,
+     *   game-complete-screen-only "this session just moved this side"
+     *   emphasis — unchanged from Fork #7's original behavior. It can
+     *   coincide with the leader (extending a lead) or not (the trailing
+     *   side just scored but the other side still leads overall); both
+     *   are valid and shown as what they are.
+     *
+     * Character names, two integers, nothing else (no win rate, no
+     * losses, no "LEADER" text, no icon).
+     */
+    function renderRivalryBadge(target, justScoredSide) {
+        if (!target) return;
+        target.innerHTML = '';
+        var leader = rivalry.skippy > rivalry.bob ? 'skippy' : (rivalry.bob > rivalry.skippy ? 'bob' : null);
+        var skippySpan = document.createElement('span');
+        skippySpan.className = 'lw-rivalry-skippy'
+            + (leader === 'skippy' ? ' lw-rivalry-leading' : '')
+            + (justScoredSide === 'skippy' ? ' lw-rivalry-just-scored' : '');
+        skippySpan.textContent = 'SKIPPY ' + rivalry.skippy;
+        var bobSpan = document.createElement('span');
+        bobSpan.className = 'lw-rivalry-bob'
+            + (leader === 'bob' ? ' lw-rivalry-leading' : '')
+            + (justScoredSide === 'bob' ? ' lw-rivalry-just-scored' : '');
+        bobSpan.textContent = 'BOB ' + rivalry.bob;
+        target.appendChild(skippySpan);
+        target.appendChild(document.createTextNode(' — '));
+        target.appendChild(bobSpan);
+    }
+
+    /**
+     * Fire-and-forget load of the caller's saved rivalry record. `rivalry`
+     * already defaults to a fresh 0/0 record (declared above), so if this
+     * never resolves, resolves with no save yet (loadSession's own 404 ->
+     * null), or fails outright, gameplay and the badge are already correct
+     * either way — this can only ever improve on that default, never block
+     * it. A load failure gets one quiet console diagnostic, not an alarming
+     * modal, matching how boot()'s own puzzle-load failure is the only
+     * place this build shows the player an actual error.
+     */
+    function loadRivalry() {
+        if (!lastWordStorage) return;
+        lastWordStorage.loadSession(LastWordStorage.RIVALRY_SLOT)
+            .then(function (raw) {
+                rivalry = LastWordRivalry.sanitizeRivalryRecord(raw);
+                renderRivalryBadge(el.rivalryBadge);
+            })
+            .catch(function (err) {
+                if (typeof console !== 'undefined' && console.warn) {
+                    console.warn('Last Word: rivalry load failed, starting this page session from 0/0.', err);
+                }
+            });
+    }
+
+    /**
+     * Fire-and-forget persist of the current in-memory `rivalry` record.
+     * Called exactly once, right after applyOutcome() at the one canonical
+     * Final-completion seam (finishFinalRound()) — never awaited, so a
+     * slow or failing save can never delay or block session completion.
+     * On failure, the just-updated `rivalry` value is simply KEPT in
+     * memory for the rest of this page session (matches on-screen totals
+     * for the remainder of this visit) and quietly logged — never a
+     * blocking/alarming failure.
+     */
+    function persistRivalry() {
+        if (!lastWordStorage) return;
+        lastWordStorage.saveSession(rivalry, LastWordStorage.RIVALRY_SLOT)
+            .catch(function (err) {
+                if (typeof console !== 'undefined' && console.warn) {
+                    console.warn('Last Word: rivalry save failed; keeping the updated total for this page session only.', err);
+                }
+            });
+    }
+
     function boot() {
         fetch(PUZZLES_URL, { cache: 'no-store' })
             .then(function (res) {
@@ -1175,6 +1299,8 @@
                 session = LastWordState.createSession();
                 bindStaticControls();
                 renderCategoryList();
+                renderRivalryBadge(el.rivalryBadge);
+                loadRivalry();
                 showOnly('categorySelect');
             })
             .catch(function (err) {

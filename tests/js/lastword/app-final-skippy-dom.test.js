@@ -64,7 +64,7 @@ function makeElement(id) {
 }
 
 const IDS = [
-    'category-select', 'categoryList',
+    'category-select', 'categoryList', 'rivalryBadge',
     'round-offer', 'roundOfferTitle', 'roundOfferList',
     'transition', 'transitionTitle', 'transitionBody', 'transitionContinue',
     'game', 'gallows', 'skippyChatterBubble', 'strikeCount', 'roundLabel', 'categoryLabel',
@@ -79,7 +79,7 @@ const IDS = [
     'final-play', 'finalGallows', 'finalSkippyChatterBubble', 'finalStrikeCount', 'finalCategoryLabel', 'finalScoreRemaining',
     'finalBoard', 'finalStatusLine', 'finalLetters',
     'finalSolveToggle', 'finalSolveForm', 'finalSolveInput', 'finalSolveSubmit',
-    'game-complete', 'gameCompleteTitle', 'gameCompleteBody', 'playAgain'
+    'game-complete', 'gameCompleteTitle', 'gameCompleteBody', 'gameCompleteRivalry', 'playAgain'
 ];
 
 /** A manually-advanced fake clock — no real delays, deterministic ordering. */
@@ -130,8 +130,20 @@ function stateOf(el) {
  * string app-final-skippy.js reads once at load to pick its Predicament —
  * the same mechanism the real page uses, exercised here without a real
  * browser location.
+ *
+ * `storageOpts` (Fork #7, "Picking Sides") controls the mock
+ * /api/webdoor/storage/{slot} responses the sandbox's `fetch` answers
+ * rivalry-slot requests with, independent of the puzzles.json response:
+ *   - initialRivalry: the record a GET on the rivalry slot returns (default
+ *     none -> 404, i.e. no save yet)
+ *   - loadShouldFail / saveShouldFail: make that one HTTP call fail (500)
+ * `fetchCalls` (on the resolved object) records every fetch call made, and
+ * `storageState.rivalry` reflects whatever the sandbox last PUT to the
+ * rivalry slot — both let a test assert on persistence without re-parsing
+ * app internals.
  */
-function bootApp(rngFallback, locationSearch) {
+function bootApp(rngFallback, locationSearch, storageOpts) {
+    storageOpts = storageOpts || {};
     const elements = {};
     IDS.forEach((id) => { elements[id] = makeElement(id); elements[id].width = 260; elements[id].height = 260; });
 
@@ -142,13 +154,46 @@ function bootApp(rngFallback, locationSearch) {
     const fakeMath = Object.create(Math);
     fakeMath.random = rng;
 
+    const fetchCalls = [];
+    const storageState = { rivalry: storageOpts.initialRivalry !== undefined ? storageOpts.initialRivalry : null };
+
+    function fakeFetch(url, opts) {
+        fetchCalls.push({ url: String(url), opts: opts || {} });
+        if (String(url).indexOf('/api/webdoor/storage/1?') === 0) { // RIVALRY_SLOT
+            if (opts && opts.method === 'PUT') {
+                if (storageOpts.saveShouldFail) {
+                    return Promise.resolve({ ok: false, status: 500, json: () => Promise.resolve({}) });
+                }
+                storageState.rivalry = JSON.parse(opts.body).data;
+                return Promise.resolve({ ok: true, json: () => Promise.resolve({ success: true, slot: 1 }) });
+            }
+            // GET
+            if (storageOpts.loadShouldFail) {
+                return Promise.resolve({ ok: false, status: 500, json: () => Promise.resolve({}) });
+            }
+            if (storageState.rivalry === null) {
+                return Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve({}) });
+            }
+            return Promise.resolve({ ok: true, json: () => Promise.resolve({ slot: 1, data: storageState.rivalry }) });
+        }
+        // Anything else (SESSION_SLOT 0, unused by this build) is untouched
+        // by this fork — fall through to the puzzles.json response, exactly
+        // as every pre-existing test in this file already relies on.
+        return Promise.resolve({ ok: true, json: () => Promise.resolve(JSON.parse(puzzlesJson)) });
+    }
+
     const sandbox = {
         console,
         Math: fakeMath,
         URLSearchParams,
-        document: { getElementById: (id) => elements[id], createElement: (tag) => makeElement('(' + tag + ')'), activeElement: null },
+        document: {
+            getElementById: (id) => elements[id],
+            createElement: (tag) => makeElement('(' + tag + ')'),
+            createTextNode: (text) => ({ nodeType: 3, textContent: text }),
+            activeElement: null
+        },
         location: { search: locationSearch || '' },
-        fetch: () => Promise.resolve({ ok: true, json: () => Promise.resolve(JSON.parse(puzzlesJson)) }),
+        fetch: fakeFetch,
         addEventListener: function () {},
         setTimeout: clock.setTimeout,
         clearTimeout: clock.clearTimeout
@@ -157,12 +202,12 @@ function bootApp(rngFallback, locationSearch) {
     sandbox.self = sandbox;
     const context = vm.createContext(sandbox);
 
-    ['content.js', 'state.js', 'round.js', 'final.js', 'session.js', 'gallows-character.js', 'idle-chatter.js', 'hint.js', 'skippy-memory.js', 'situational-awareness.js', 'safe-predicament.js', 'bob-character.js', 'auto-solve.js', 'presentation.js', 'app-final-skippy.js'].forEach((f) => {
+    ['content.js', 'state.js', 'round.js', 'final.js', 'session.js', 'gallows-character.js', 'idle-chatter.js', 'hint.js', 'skippy-memory.js', 'situational-awareness.js', 'safe-predicament.js', 'bob-character.js', 'auto-solve.js', 'presentation.js', 'rivalry.js', 'storage.js', 'app-final-skippy.js'].forEach((f) => {
         const file = path.join(ROOT, 'js/lastword', f);
         vm.runInContext(fs.readFileSync(file, 'utf8'), context, { filename: f });
     });
 
-    return new Promise((resolve) => setImmediate(() => setImmediate(() => resolve({ elements, context, clock, rng }))));
+    return new Promise((resolve) => setImmediate(() => setImmediate(() => resolve({ elements, context, clock, rng, fetchCalls, storageState }))));
 }
 
 function clickByText(container, text) {
@@ -1404,6 +1449,292 @@ async function check(name, fn) {
         assert.strictEqual(elements['round-result'].className, 'panel hidden', 'hold duration must be unchanged by Fork #6');
         clock.advance(1);
         assert.strictEqual(elements['round-result'].className, 'panel');
+    });
+
+    // -----------------------------------------------------------------
+    // FORK #7 ("PICKING SIDES"): SKIPPY vs. BOB lifetime rivalry
+    // -----------------------------------------------------------------
+
+    /** Reads "SKIPPY n" / "BOB n" and any just-scored emphasis off a rendered rivalry badge element. */
+    function readRivalryBadge(target) {
+        const skippySpan = target._children.find((c) => c.className && c.className.indexOf('lw-rivalry-skippy') === 0 || c.className === 'lw-rivalry-skippy' || (c.className || '').indexOf('lw-rivalry-skippy') !== -1);
+        const bobSpan = target._children.find((c) => (c.className || '').indexOf('lw-rivalry-bob') !== -1);
+        return {
+            skippyText: skippySpan ? skippySpan.textContent : null,
+            bobText: bobSpan ? bobSpan.textContent : null,
+            skippyEmphasized: skippySpan ? skippySpan.className.indexOf('lw-rivalry-just-scored') !== -1 : false,
+            bobEmphasized: bobSpan ? bobSpan.className.indexOf('lw-rivalry-just-scored') !== -1 : false,
+            skippyLeading: skippySpan ? skippySpan.className.indexOf('lw-rivalry-leading') !== -1 : false,
+            bobLeading: bobSpan ? bobSpan.className.indexOf('lw-rivalry-leading') !== -1 : false
+        };
+    }
+
+    function solveCurrentRoundAndContinue(elements, clock, puzzlesDoc) {
+        const candidates = dealtPuzzleCandidates(elements.board, puzzlesDoc, elements.categoryLabel.textContent);
+        elements.solveToggle.click();
+        elements.solveInput.value = candidates[0].answer;
+        elements.solveSubmit.click();
+        clock.advance(SAVED_PAYOFF_DELAY_MS);
+        elements.continueAfterRound.click();
+    }
+
+    /** Solves all four ordinary rounds cleanly and enters Final with 0 free opening letters. */
+    function playToFinal(elements, clock, puzzlesDoc) {
+        clickByText(elements.categoryList, 'Movies & TV');
+        solveCurrentRoundAndContinue(elements, clock, puzzlesDoc); // R1 -> transition to R2
+        elements.transitionContinue.click();
+        solveCurrentRoundAndContinue(elements, clock, puzzlesDoc); // R2 -> R3 offer
+        clickByText(elements.roundOfferList, elements.roundOfferList._children[0].textContent);
+        solveCurrentRoundAndContinue(elements, clock, puzzlesDoc); // R3 -> transition to R4
+        elements.transitionContinue.click();
+        solveCurrentRoundAndContinue(elements, clock, puzzlesDoc); // R4 -> session complete -> final-intro
+        clickByText(elements.finalOpeningCountButtons, '0 letters (free)'); // -> final-play
+    }
+
+    function finishFinalViaExplicitSolve(elements, clock, puzzlesDoc) {
+        const candidates = dealtPuzzleCandidates(elements.finalBoard, puzzlesDoc, elements.finalCategoryLabel.textContent);
+        elements.finalSolveToggle.click();
+        elements.finalSolveInput.value = candidates[0].answer;
+        elements.finalSolveSubmit.click();
+        clock.advance(SAVED_PAYOFF_DELAY_MS);
+    }
+
+    function finishFinalViaAutoSolve(elements, clock, puzzlesDoc) {
+        const candidates = dealtPuzzleCandidates(elements.finalBoard, puzzlesDoc, elements.finalCategoryLabel.textContent);
+        const letters = Array.from(new Set(candidates[0].answer.toUpperCase().replace(/[^A-Z]/g, '').split('')));
+        letters.forEach((letter) => clickByText(elements.finalLetters, letter + ' (250)'));
+        clock.advance(SAVED_PAYOFF_DELAY_MS);
+    }
+
+    function finishFinalViaStrikeout(elements, clock) {
+        elements.finalSolveToggle.click();
+        for (let i = 0; i < 3; i++) { // 2 strikes/wrong x 3 = 6 = MAX_STRIKES
+            elements.finalSolveInput.value = 'ZZZZZZZZZZZZZZZZZZ NOT THE ANSWER';
+            elements.finalSolveSubmit.click();
+        }
+        clock.advance(DEFEAT_PAYOFF_DELAY_MS);
+    }
+
+    await check('a fresh boot with no saved rivalry record starts the badge at SKIPPY 0 — BOB 0', async () => {
+        const { elements } = await bootApp();
+        const badge = readRivalryBadge(elements.rivalryBadge);
+        assert.strictEqual(badge.skippyText, 'SKIPPY 0');
+        assert.strictEqual(badge.bobText, 'BOB 0');
+    });
+
+    await check('a valid saved rivalry record loads and renders on the category-select badge', async () => {
+        const { elements } = await bootApp(0.5, '', { initialRivalry: { version: 1, skippy: 7, bob: 3 } });
+        const badge = readRivalryBadge(elements.rivalryBadge);
+        assert.strictEqual(badge.skippyText, 'SKIPPY 7');
+        assert.strictEqual(badge.bobText, 'BOB 3');
+    });
+
+    await check('malformed/missing values in a saved rivalry record sanitize safely to 0 rather than crashing or displaying garbage', async () => {
+        const { elements } = await bootApp(0.5, '', { initialRivalry: { version: 1, skippy: 'oops', bob: -5 } });
+        const badge = readRivalryBadge(elements.rivalryBadge);
+        assert.strictEqual(badge.skippyText, 'SKIPPY 0');
+        assert.strictEqual(badge.bobText, 'BOB 0');
+    });
+
+    await check('a rivalry load failure does not block boot or gameplay — the game starts normally at 0/0', async () => {
+        const { elements } = await bootApp(0.5, '', { loadShouldFail: true });
+        assert.strictEqual(elements['category-select'].className, 'panel', 'boot must still reach category-select');
+        assert.ok(elements.categoryList._children.length > 0, 'categories must still be offered');
+        const badge = readRivalryBadge(elements.rivalryBadge);
+        assert.strictEqual(badge.skippyText, 'SKIPPY 0');
+        assert.strictEqual(badge.bobText, 'BOB 0');
+    });
+
+    await check('an explicitly-solved Final increments Skippy exactly once, and persists it', async () => {
+        const { elements, clock, storageState } = await bootApp(0.5);
+        const puzzlesDoc = JSON.parse(fs.readFileSync(path.join(ROOT, 'lastword/puzzles.json'), 'utf8'));
+        playToFinal(elements, clock, puzzlesDoc);
+        finishFinalViaExplicitSolve(elements, clock, puzzlesDoc);
+
+        assert.strictEqual(elements['game-complete'].className, 'panel');
+        const badge = readRivalryBadge(elements.gameCompleteRivalry);
+        assert.strictEqual(badge.skippyText, 'SKIPPY 1');
+        assert.strictEqual(badge.bobText, 'BOB 0');
+        assert.strictEqual(badge.skippyEmphasized, true, 'the side that just scored gets the restrained emphasis');
+        assert.strictEqual(badge.bobEmphasized, false);
+        assert.deepStrictEqual(storageState.rivalry, { version: 1, skippy: 1, bob: 0 }, 'must actually persist to the mock storage slot');
+    });
+
+    await check('an auto-solved Final (board fully revealed via purchased letters, no typed SOLVE) increments Skippy exactly once', async () => {
+        const { elements, clock, storageState } = await bootApp(0.5);
+        const puzzlesDoc = JSON.parse(fs.readFileSync(path.join(ROOT, 'lastword/puzzles.json'), 'utf8'));
+        playToFinal(elements, clock, puzzlesDoc);
+        finishFinalViaAutoSolve(elements, clock, puzzlesDoc);
+
+        assert.strictEqual(elements['game-complete'].className, 'panel');
+        const badge = readRivalryBadge(elements.gameCompleteRivalry);
+        assert.strictEqual(badge.skippyText, 'SKIPPY 1');
+        assert.strictEqual(badge.bobText, 'BOB 0');
+        assert.deepStrictEqual(storageState.rivalry, { version: 1, skippy: 1, bob: 0 });
+    });
+
+    await check('a struck-out Final increments Bob exactly once — never Skippy', async () => {
+        const { elements, clock, storageState } = await bootApp(0.5);
+        const puzzlesDoc = JSON.parse(fs.readFileSync(path.join(ROOT, 'lastword/puzzles.json'), 'utf8'));
+        playToFinal(elements, clock, puzzlesDoc);
+        finishFinalViaStrikeout(elements, clock);
+
+        assert.strictEqual(elements['game-complete'].className, 'panel');
+        const badge = readRivalryBadge(elements.gameCompleteRivalry);
+        assert.strictEqual(badge.skippyText, 'SKIPPY 0');
+        assert.strictEqual(badge.bobText, 'BOB 1');
+        assert.strictEqual(badge.bobEmphasized, true);
+        assert.strictEqual(badge.skippyEmphasized, false);
+        assert.deepStrictEqual(storageState.rivalry, { version: 1, skippy: 0, bob: 1 });
+    });
+
+    await check('an ordinary round loss (struck out mid-session, session continues) awards no rivalry point at all', async () => {
+        const { elements, clock, storageState, fetchCalls } = await bootApp(0);
+        clickByText(elements.categoryList, 'Movies & TV');
+        loseCurrentRoundViaStrikes(elements); // round 1 struck out — session must still continue, not end
+        clock.advance(DEFEAT_PAYOFF_DELAY_MS);
+
+        assert.strictEqual(storageState.rivalry, null, 'no rivalry write from an ordinary round incident');
+        assert.ok(!fetchCalls.some((c) => c.url.indexOf('/api/webdoor/storage/1?') === 0 && c.opts.method === 'PUT'),
+            'no PUT to the rivalry slot must happen before Final is ever reached');
+        const badge = readRivalryBadge(elements.rivalryBadge);
+        assert.strictEqual(badge.skippyText, 'SKIPPY 0');
+        assert.strictEqual(badge.bobText, 'BOB 0');
+    });
+
+    await check('Play Again resets gameplay but preserves the just-earned lifetime rivalry total', async () => {
+        const { elements, clock } = await bootApp(0.5);
+        const puzzlesDoc = JSON.parse(fs.readFileSync(path.join(ROOT, 'lastword/puzzles.json'), 'utf8'));
+        playToFinal(elements, clock, puzzlesDoc);
+        finishFinalViaExplicitSolve(elements, clock, puzzlesDoc);
+
+        elements.playAgain.click(); // startNewSession() -> goToRound(1) -> categorySelect
+
+        assert.strictEqual(elements['category-select'].className, 'panel');
+        const badge = readRivalryBadge(elements.rivalryBadge);
+        assert.strictEqual(badge.skippyText, 'SKIPPY 1', 'lifetime rivalry must survive a fresh gameplay session');
+        assert.strictEqual(badge.bobText, 'BOB 0');
+    });
+
+    await check('a duplicate completion attempt (calling the guarded Final handlers again after completion) cannot double-count', async () => {
+        const { elements, clock, storageState, fetchCalls } = await bootApp(0.5);
+        const puzzlesDoc = JSON.parse(fs.readFileSync(path.join(ROOT, 'lastword/puzzles.json'), 'utf8'));
+        playToFinal(elements, clock, puzzlesDoc);
+        finishFinalViaExplicitSolve(elements, clock, puzzlesDoc);
+
+        // Both real call sites guard on isFinalOver() and no-op once the
+        // Final has already ended — simulate a caller clicking again after
+        // completion (e.g. a stray duplicate event) and prove it changes nothing.
+        elements.finalSolveInput.value = 'ANYTHING';
+        elements.finalSolveSubmit.click();
+        clickByText(elements.finalLetters, 'A (250)');
+
+        const putCallsToRivalrySlot = fetchCalls.filter((c) => c.url.indexOf('/api/webdoor/storage/1?') === 0 && c.opts.method === 'PUT');
+        assert.strictEqual(putCallsToRivalrySlot.length, 1, 'exactly one persisted write for the whole session');
+        assert.deepStrictEqual(storageState.rivalry, { version: 1, skippy: 1, bob: 0 });
+    });
+
+    await check('a rivalry save failure does not block session completion, and the in-memory total for this page session is still updated and shown', async () => {
+        const { elements, clock, storageState } = await bootApp(0.5, '', { saveShouldFail: true });
+        const puzzlesDoc = JSON.parse(fs.readFileSync(path.join(ROOT, 'lastword/puzzles.json'), 'utf8'));
+        playToFinal(elements, clock, puzzlesDoc);
+        finishFinalViaExplicitSolve(elements, clock, puzzlesDoc);
+
+        assert.strictEqual(elements['game-complete'].className, 'panel', 'completion must proceed even though the save failed');
+        const badge = readRivalryBadge(elements.gameCompleteRivalry);
+        assert.strictEqual(badge.skippyText, 'SKIPPY 1', 'in-memory total for this page session reflects the increment regardless of save failure');
+        assert.strictEqual(storageState.rivalry, null, 'the mock store itself never actually received the failed write');
+    });
+
+    await check('the active round HUD is not touched by rivalry rendering — the category-select badge is untouched during live gameplay', async () => {
+        const { elements } = await bootApp(0.5);
+        const before = elements.rivalryBadge.innerHTML;
+        clickByText(elements.categoryList, 'Movies & TV'); // enter active round play
+        clickByText(elements.letters, 'Q'); // an ordinary in-round action
+        assert.strictEqual(elements.rivalryBadge.innerHTML, before,
+            'rivalry rendering must only happen at category-select/game-complete, never during active play');
+    });
+
+    await check('PORTABILITY: no storage/fetch/DOM CODE coupling appears in the pure rivalry.js module (mentioning the portability rule in a doc comment is fine; calling fetch/DOM/storage APIs is not)', () => {
+        const source = fs.readFileSync(path.join(ROOT, 'js/lastword/rivalry.js'), 'utf8');
+        ['fetch(', 'document.', 'window.', 'localStorage', '/api/webdoor', 'XMLHttpRequest', 'require(\'./storage'].forEach((needle) => {
+            assert.ok(source.indexOf(needle) === -1, 'rivalry.js must not reference "' + needle + '"');
+        });
+    });
+
+    // -----------------------------------------------------------------
+    // FORK #7 FOLLOW-UP: rivalry LEADER color derives from persisted
+    // totals (not the most recent outcome), on both surfaces.
+    // -----------------------------------------------------------------
+
+    await check('0-0 renders both names neutral (no leader) on the category-select badge', async () => {
+        const { elements } = await bootApp(0.5, '', { initialRivalry: { version: 1, skippy: 0, bob: 0 } });
+        const badge = readRivalryBadge(elements.rivalryBadge);
+        assert.strictEqual(badge.skippyLeading, false);
+        assert.strictEqual(badge.bobLeading, false);
+    });
+
+    await check('a Skippy lead loaded from persistence colors SKIPPY (and only Skippy) on the category-select badge', async () => {
+        const { elements } = await bootApp(0.5, '', { initialRivalry: { version: 1, skippy: 5, bob: 2 } });
+        const badge = readRivalryBadge(elements.rivalryBadge);
+        assert.strictEqual(badge.skippyLeading, true, 'persisted lead must receive leader styling on the category screen, not just game-complete');
+        assert.strictEqual(badge.bobLeading, false);
+    });
+
+    await check('a Bob lead loaded from persistence colors BOB (and only Bob) with the warm accent, never Skippy\'s green', async () => {
+        const { elements } = await bootApp(0.5, '', { initialRivalry: { version: 1, skippy: 2, bob: 6 } });
+        const badge = readRivalryBadge(elements.rivalryBadge);
+        assert.strictEqual(badge.bobLeading, true);
+        assert.strictEqual(badge.skippyLeading, false);
+    });
+
+    await check('a tie after nonzero totals renders both names neutral, same as 0-0', async () => {
+        const { elements } = await bootApp(0.5, '', { initialRivalry: { version: 1, skippy: 4, bob: 4 } });
+        const badge = readRivalryBadge(elements.rivalryBadge);
+        assert.strictEqual(badge.skippyLeading, false);
+        assert.strictEqual(badge.bobLeading, false);
+    });
+
+    await check('leader color derives from the PERSISTED totals, not from the most recent outcome: Bob just scoring the winning point over an already-trailing Skippy still colors Bob (leader and just-scored coincide)', async () => {
+        const { elements, clock } = await bootApp(0.5, '', { initialRivalry: { version: 1, skippy: 1, bob: 3 } });
+        const puzzlesDoc = JSON.parse(fs.readFileSync(path.join(ROOT, 'lastword/puzzles.json'), 'utf8'));
+        playToFinal(elements, clock, puzzlesDoc);
+        finishFinalViaStrikeout(elements, clock); // -> skippy 1, bob 4
+
+        const badge = readRivalryBadge(elements.gameCompleteRivalry);
+        assert.strictEqual(badge.bobText, 'BOB 4');
+        assert.strictEqual(badge.bobLeading, true);
+        assert.strictEqual(badge.bobEmphasized, true, 'the existing just-scored emphasis must remain intact');
+        assert.strictEqual(badge.skippyLeading, false);
+        assert.strictEqual(badge.skippyEmphasized, false);
+    });
+
+    await check('leader color derives from the PERSISTED totals, not from the most recent outcome: the trailing side scoring does NOT flip leader color to them if the other side is still ahead overall', async () => {
+        const { elements, clock } = await bootApp(0.5, '', { initialRivalry: { version: 1, skippy: 3, bob: 1 } });
+        const puzzlesDoc = JSON.parse(fs.readFileSync(path.join(ROOT, 'lastword/puzzles.json'), 'utf8'));
+        playToFinal(elements, clock, puzzlesDoc);
+        finishFinalViaStrikeout(elements, clock); // -> skippy 3, bob 2 — Bob just scored, Skippy still leads overall
+
+        const badge = readRivalryBadge(elements.gameCompleteRivalry);
+        assert.strictEqual(badge.skippyText, 'SKIPPY 3');
+        assert.strictEqual(badge.bobText, 'BOB 2');
+        assert.strictEqual(badge.skippyLeading, true, 'Skippy still leads 3-2 overall, so Skippy (not Bob) keeps the leader color');
+        assert.strictEqual(badge.bobLeading, false);
+        assert.strictEqual(badge.bobEmphasized, true, 'Bob is still the side that just scored THIS session — that emphasis is independent of who leads overall');
+        assert.strictEqual(badge.skippyEmphasized, false);
+    });
+
+    await check('the just-scored completion emphasis remains intact and coincides with leader color when the leader extends their own lead', async () => {
+        const { elements, clock } = await bootApp(0.5);
+        const puzzlesDoc = JSON.parse(fs.readFileSync(path.join(ROOT, 'lastword/puzzles.json'), 'utf8'));
+        playToFinal(elements, clock, puzzlesDoc);
+        finishFinalViaExplicitSolve(elements, clock, puzzlesDoc); // fresh 0-0 -> skippy 1, bob 0
+
+        const badge = readRivalryBadge(elements.gameCompleteRivalry);
+        assert.strictEqual(badge.skippyEmphasized, true, 'original just-scored treatment is unchanged');
+        assert.strictEqual(badge.skippyLeading, true, 'and Skippy now also leads, so both classes apply to the same span');
+        assert.strictEqual(badge.bobEmphasized, false);
+        assert.strictEqual(badge.bobLeading, false);
     });
 
     console.log(passed + ' passed');
