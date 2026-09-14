@@ -4,8 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1"/>
     <title>Last Word — SKIPPY (unlisted human-test build)</title>
-    <link rel="stylesheet" href="css/lastword.css?v=skippy7" />
-    <link rel="stylesheet" href="css/lastword-skippy.css?v=skippy7" />
+    <link rel="stylesheet" href="css/lastword.css?v=skippy8" />
+    <link rel="stylesheet" href="css/lastword-skippy.css?v=skippy8" />
 </head>
 <body>
 <!--
@@ -41,6 +41,11 @@
   own header) before app-final-skippy.js. No new DOM elements — the
   session-aware opening reaction reuses the existing
   #skippyChatterBubble/#finalSkippyChatterBubble speech bubbles.
+
+  CONSCIOUS BOUNDED FORK #2 ("SKIPPY IS WATCHING"): also loads
+  js/lastword/situational-awareness.js (round-scoped, in-memory only —
+  see its own header) before app-final-skippy.js. Still no new DOM
+  elements — mid-round reactions reuse the same #skippyChatterBubble.
 -->
 <header>
     <h1>LAST WORD</h1>
@@ -177,23 +182,24 @@
 </section>
 
 <!--
-  ?v=skippy7 cache-busts these local scripts/stylesheets. Bump the version
+  ?v=skippy8 cache-busts these local scripts/stylesheets. Bump the version
   token here whenever any of these files change, and verify the live page
   actually received the new version before human testing — Cloudflare
   rewrites this zone's .js/.css Cache-Control to a 4-hour browser TTL (see
   lastword-m1c.html for the full explanation), so a new query string is the
   reliable way to force a genuinely fresh fetch.
 -->
-<script src="js/lastword/content.js?v=skippy7"></script>
-<script src="js/lastword/state.js?v=skippy7"></script>
-<script src="js/lastword/round.js?v=skippy7"></script>
-<script src="js/lastword/final.js?v=skippy7"></script>
-<script src="js/lastword/session.js?v=skippy7"></script>
-<script src="js/lastword/gallows-character.js?v=skippy7"></script>
-<script src="js/lastword/idle-chatter.js?v=skippy7"></script>
-<script src="js/lastword/hint.js?v=skippy7"></script>
-<script src="js/lastword/skippy-memory.js?v=skippy7"></script>
-<script src="js/lastword/auto-solve.js?v=skippy7"></script>
-<script src="js/lastword/app-final-skippy.js?v=skippy7"></script>
+<script src="js/lastword/content.js?v=skippy8"></script>
+<script src="js/lastword/state.js?v=skippy8"></script>
+<script src="js/lastword/round.js?v=skippy8"></script>
+<script src="js/lastword/final.js?v=skippy8"></script>
+<script src="js/lastword/session.js?v=skippy8"></script>
+<script src="js/lastword/gallows-character.js?v=skippy8"></script>
+<script src="js/lastword/idle-chatter.js?v=skippy8"></script>
+<script src="js/lastword/hint.js?v=skippy8"></script>
+<script src="js/lastword/skippy-memory.js?v=skippy8"></script>
+<script src="js/lastword/situational-awareness.js?v=skippy8"></script>
+<script src="js/lastword/auto-solve.js?v=skippy8"></script>
+<script src="js/lastword/app-final-skippy.js?v=skippy8"></script>
 </body>
 </html>

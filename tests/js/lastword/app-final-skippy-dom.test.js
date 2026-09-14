@@ -149,7 +149,7 @@ function bootApp(rngFallback) {
     sandbox.self = sandbox;
     const context = vm.createContext(sandbox);
 
-    ['content.js', 'state.js', 'round.js', 'final.js', 'session.js', 'gallows-character.js', 'idle-chatter.js', 'hint.js', 'skippy-memory.js', 'auto-solve.js', 'app-final-skippy.js'].forEach((f) => {
+    ['content.js', 'state.js', 'round.js', 'final.js', 'session.js', 'gallows-character.js', 'idle-chatter.js', 'hint.js', 'skippy-memory.js', 'situational-awareness.js', 'auto-solve.js', 'app-final-skippy.js'].forEach((f) => {
         const file = path.join(ROOT, 'js/lastword', f);
         vm.runInContext(fs.readFileSync(file, 'utf8'), context, { filename: f });
     });
@@ -857,6 +857,179 @@ async function check(name, fn) {
 
         clickByText(elements.categoryList, 'Movies & TV'); // fresh round 1 of the NEW session
         assert.strictEqual(elements.skippyChatterBubble.hidden, true, 'a brand-new session must not open with a reaction carried over from the last one');
+    });
+
+    // ---- SKIPPY IS WATCHING (conscious bounded fork #2) integration ----
+    //
+    // All of these use rng=0 -> the deterministic Round 1 deal already
+    // self-verified elsewhere in this file: category "Movies & TV" ->
+    // "BACK TO THE FUTURE" (consonants B,C,K,T,H,F,R; T occurs 3x, so
+    // guessing T alone earns 300 points — exactly Round 1's hint cost).
+
+    function earnAtLeast(elements, targetScore) {
+        const consonants = ['T', 'B', 'C', 'K', 'H', 'F', 'R']; // T first: reaches 300 in one guess
+        let ci = 0;
+        while (Number(elements.roundScore.textContent) < targetScore && ci < consonants.length) {
+            clickByText(elements.letters, consonants[ci]);
+            ci++;
+        }
+        assert.ok(Number(elements.roundScore.textContent) >= targetScore,
+            'fixture precondition: could not earn ' + targetScore + ' from this puzzle\'s consonants');
+    }
+
+    await check('five-strike danger reaction fires the moment strikes hit 5 while a hint is affordable, via real play', async () => {
+        const { elements } = await bootApp(0);
+        clickByText(elements.categoryList, 'Movies & TV');
+        earnAtLeast(elements, 300); // guesses T -> +300, exactly Round 1's hint cost
+        assert.strictEqual(elements.skippyChatterBubble.hidden, true, 'no reaction yet — strikes still 0');
+
+        // Miss with rare letters until strikes hits 5 (never touches T/B/C/K/H/F/R, all real answer letters).
+        const missLetters = ['Q', 'X', 'Z', 'J', 'W'];
+        missLetters.forEach((l) => clickByText(elements.letters, l));
+
+        assert.strictEqual(elements.strikeCount.textContent, '5');
+        assert.strictEqual(elements.skippyChatterBubble.hidden, false, 'Skippy should notice: 5 strikes and an affordable hint sitting unused');
+        assert.ok(elements.skippyChatterBubble.textContent.length > 0);
+        // Gameplay itself is untouched by the reaction firing.
+        assert.strictEqual(elements.roundScore.textContent, '300');
+    });
+
+    await check('five-strike danger reaction does NOT fire when the caller cannot afford a hint', async () => {
+        const { elements } = await bootApp(0);
+        clickByText(elements.categoryList, 'Movies & TV');
+        // Deliberately do NOT earn any score first — score stays at 0, below the 300 hint cost.
+        ['Q', 'X', 'Z', 'J', 'W'].forEach((l) => clickByText(elements.letters, l));
+        assert.strictEqual(elements.strikeCount.textContent, '5');
+        assert.strictEqual(elements.skippyChatterBubble.hidden, true, 'strikes=5 alone is not enough — a hint must actually be affordable');
+    });
+
+    await check('five-strike danger reaction fires only ONCE per round (cooldown), even if a later action keeps the condition true', async () => {
+        const { elements } = await bootApp(0);
+        clickByText(elements.categoryList, 'Movies & TV');
+        earnAtLeast(elements, 300);
+        ['Q', 'X', 'Z', 'J', 'W'].forEach((l) => clickByText(elements.letters, l));
+        assert.strictEqual(elements.skippyChatterBubble.hidden, false, 'precondition: danger reaction fired');
+        const firstText = elements.skippyChatterBubble.textContent;
+
+        // A further correct, strike-free action (a real answer letter) —
+        // strikes stays at 5, a hint is still affordable — must NOT re-fire.
+        elements.skippyChatterBubble.hidden = true; // reset the probe
+        elements.skippyChatterBubble.textContent = '';
+        clickByText(elements.letters, 'B');
+        assert.strictEqual(elements.skippyChatterBubble.hidden, true, 'must not repeat within the same round');
+    });
+
+    await check('repeated hint use triggers a reaction only at the intended threshold, not on the first hint', async () => {
+        const { elements } = await bootApp(0);
+        clickByText(elements.categoryList, 'Movies & TV');
+        earnAtLeast(elements, 700); // enough for two 300-point Round 1 hints plus headroom
+
+        elements.buyHintButton.click(); // 1st hint
+        assert.strictEqual(elements.skippyChatterBubble.hidden, true, 'no reaction on the first hint — one hint is normal play');
+
+        elements.buyHintButton.click(); // 2nd hint
+        assert.strictEqual(elements.skippyChatterBubble.hidden, false, 'Skippy notices conspicuous hint dependence on the 2nd hint');
+        assert.ok(elements.skippyChatterBubble.textContent.length > 0);
+    });
+
+    await check('repeated wrong SOLVE attempts trigger a reaction only at the intended threshold, not on the first miss', async () => {
+        const { elements } = await bootApp(0);
+        clickByText(elements.categoryList, 'Movies & TV');
+
+        elements.solveToggle.click();
+        elements.solveInput.value = 'DEFINITELY NOT THE ANSWER';
+        elements.solveSubmit.click(); // 1st wrong solve -> +2 strikes
+        assert.strictEqual(elements.strikeCount.textContent, '2');
+        assert.strictEqual(elements.skippyChatterBubble.hidden, true, 'no reaction on the first wrong solve — one miss is normal');
+
+        elements.solveToggle.click();
+        elements.solveInput.value = 'STILL NOT THE ANSWER EITHER';
+        elements.solveSubmit.click(); // 2nd wrong solve -> +2 strikes
+        assert.strictEqual(elements.strikeCount.textContent, '4');
+        assert.strictEqual(elements.skippyChatterBubble.hidden, false, 'Skippy\'s confidence deteriorates on the 2nd wrong solve');
+        assert.ok(elements.skippyChatterBubble.textContent.length > 0);
+    });
+
+    await check('danger-state (5-strike) idle chatter already uses distinct, more urgent content — no new timing/frequency change needed', async () => {
+        // Proves this fork's 4th situation ("idle chatter should feel more
+        // urgent at 5 strikes") is already satisfied by the existing,
+        // unmodified idle-chatter.js TERRIFIED pool — see
+        // situational-awareness.js's own header for why no new code was
+        // needed for this one.
+        const { elements, clock } = await bootApp(0);
+        clickByText(elements.categoryList, 'Movies & TV');
+        ['Q', 'X', 'Z', 'J', 'W'].forEach((l) => clickByText(elements.letters, l)); // strikes -> 5, TERRIFIED
+        assert.strictEqual(stateOf(elements.gallows), 'TERRIFIED');
+
+        elements.skippyChatterBubble.hidden = true; // clear the five-strike-danger situational bubble first
+        elements.skippyChatterBubble.textContent = '';
+        clock.advance(12001); // idle chatter's own normal first-remark window — unchanged timing
+        assert.strictEqual(elements.skippyChatterBubble.hidden, false);
+        const terrifiedLines = require(path.join(ROOT, 'js/lastword/idle-chatter.js')).IDLE_CHATTER_LINES.TERRIFIED;
+        assert.ok(terrifiedLines.indexOf(elements.skippyChatterBubble.textContent) !== -1,
+            'at 5 strikes, idle chatter should draw from the urgent TERRIFIED pool, same timing as any other state');
+    });
+
+    await check('a situational reaction does not collide/stack with idle chatter — auto-hides on its own schedule, then idle chatter resumes', async () => {
+        const { elements, clock } = await bootApp(0);
+        clickByText(elements.categoryList, 'Movies & TV');
+        earnAtLeast(elements, 300);
+        ['Q', 'X', 'Z', 'J', 'W'].forEach((l) => clickByText(elements.letters, l)); // fires the danger reaction
+        const reactionText = elements.skippyChatterBubble.textContent;
+        assert.ok(reactionText.length > 0);
+
+        clock.advance(9999);
+        assert.strictEqual(elements.skippyChatterBubble.hidden, false);
+        assert.strictEqual(elements.skippyChatterBubble.textContent, reactionText, 'still exactly the situational reaction, nothing appended');
+
+        clock.advance(2); // crosses the reaction's own 10s display window
+        assert.strictEqual(elements.skippyChatterBubble.hidden, true);
+    });
+
+    await check('a new round resets round-local situational awareness — a fresh hint-dependence count starts at zero', async () => {
+        const { elements, clock } = await bootApp(0);
+        const puzzlesDoc = JSON.parse(fs.readFileSync(path.join(ROOT, 'lastword/puzzles.json'), 'utf8'));
+        clickByText(elements.categoryList, 'Movies & TV');
+        earnAtLeast(elements, 700);
+        elements.buyHintButton.click(); // 1st hint, round 1
+        elements.buyHintButton.click(); // 2nd hint, round 1 -> fires hint-dependence
+        assert.strictEqual(elements.skippyChatterBubble.hidden, false, 'precondition: hint-dependence fired in round 1');
+
+        // Finish round 1 via SOLVE and move on to round 2.
+        const candidates = dealtPuzzleCandidates(elements.board, puzzlesDoc, 'Movies & TV');
+        elements.solveToggle.click();
+        elements.solveInput.value = candidates[0].answer;
+        elements.solveSubmit.click();
+        clock.advance(SAVED_PAYOFF_DELAY_MS);
+        elements.continueAfterRound.click();
+        elements.transitionContinue.click(); // round 2 begins
+
+        elements.skippyChatterBubble.hidden = true; // clear round 2's own opening reaction (Fork #1), if any
+        elements.skippyChatterBubble.textContent = '';
+
+        // A single hint in round 2 must NOT immediately trigger hint-dependence — the count reset.
+        earnAtLeast(elements, 450); // Round 2's hint cost is 450
+        elements.buyHintButton.click();
+        assert.strictEqual(elements.skippyChatterBubble.hidden, true, 'round 2\'s hint count must start fresh, not carry over round 1\'s 2 hints');
+    });
+
+    await check('situational reactions never mutate gameplay state — score/strikes/board unaffected by a firing', async () => {
+        const { elements } = await bootApp(0);
+        clickByText(elements.categoryList, 'Movies & TV');
+        function revealedCellCount() {
+            return elements.board._children.filter((cell) => cell.className === 'cell').length;
+        }
+
+        assert.strictEqual(revealedCellCount(), 0, 'sanity: nothing revealed at round start');
+        earnAtLeast(elements, 300); // reveals T on the board — a REAL guess, sanity-checked below
+        const revealedBeforeReaction = revealedCellCount();
+        assert.ok(revealedBeforeReaction > 0, 'sanity: the board DID change from the real T guess');
+
+        ['Q', 'X', 'Z', 'J', 'W'].forEach((l) => clickByText(elements.letters, l)); // fires danger reaction (all misses — reveal nothing further)
+        assert.strictEqual(elements.skippyChatterBubble.hidden, false, 'precondition: reaction fired');
+        assert.strictEqual(elements.strikeCount.textContent, '5', 'strikes reflect only the real misses, nothing extra from the reaction');
+        assert.strictEqual(elements.roundScore.textContent, '300', 'score unaffected by the reaction itself');
+        assert.strictEqual(revealedCellCount(), revealedBeforeReaction, 'the reaction itself reveals nothing — the board is identical to before the (all-miss) guesses that triggered it');
     });
 
     console.log(passed + ' passed');

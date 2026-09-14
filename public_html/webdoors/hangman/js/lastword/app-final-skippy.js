@@ -82,6 +82,26 @@
  * show (or not show) a reaction via the SAME chatter-bubble presenter
  * idle chatter already uses — see those functions for why that alone is
  * enough to guarantee precedence-without-collision.
+ *
+ * CONSCIOUS BOUNDED FORK #2 — "SKIPPY IS WATCHING" (new pure module
+ * js/lastword/situational-awareness.js, not a change to skippy-memory.js
+ * or round.js/state.js): Skippy now also notices a few high-salience
+ * things WHILE a normal round (1-4) is in progress — sitting at 5
+ * strikes with an affordable hint unused, conspicuous repeated hint
+ * purchases, and repeated wrong SOLVE attempts — and reacts mid-round,
+ * not just at the next round's open. See situational-awareness.js's own
+ * header for the full contract (round-scoped only, gone at round end,
+ * still not persistence) and its salience/priority policy (each
+ * situation fires at most once per round; a single deterministic
+ * priority order resolves any tie). Wiring here is: `roundAwareness`
+ * module var (reset per round in beginRoundPlay(), same as Fork #1's
+ * `hintsPurchasedThisRound`), the `canBuyHintNow()`/`checkSituational()`
+ * helpers below, and one `checkSituational(...)` call added to each
+ * round-mutating handler (handleLetter/handleBuyHint/submitSolve) right
+ * before its normal `renderPlayingState()` — reusing the exact same
+ * chatter-bubble presenter Fork #1's opening reactions and idle chatter
+ * already share, so this can't introduce a second bubble or collide with
+ * either. Final Hangman is untouched — this fork is normal-rounds only.
  */
 (function () {
     'use strict';
@@ -104,6 +124,14 @@
     // the round about to finish.
     var skippyMemory = LastWordSkippyMemory.createMemory();
     var hintsPurchasedThisRound = 0;
+
+    // SKIPPY IS WATCHING (conscious bounded fork #2): round-scoped
+    // situational awareness — "I see what you're doing right now", as
+    // opposed to skippyMemory's session-spanning "I remember what you
+    // did". See js/lastword/situational-awareness.js's own header for the
+    // full contract. Reset per-round in beginRoundPlay(), same as
+    // hintsPurchasedThisRound above — gone the instant the round ends.
+    var roundAwareness = LastWordSituationalAwareness.createRoundAwareness();
 
     // Final Hangman state
     var finalState = null;
@@ -276,6 +304,42 @@
         return session.cumulativeScore + round.pointsThisRound;
     }
 
+    // Exactly the same affordability+availability check renderHintButton()
+    // already uses to enable/disable the HINT button — reused here rather
+    // than reinvented, so "you can afford a hint" always means the same
+    // thing to the situational-awareness layer as it does on screen.
+    function canBuyHintNow() {
+        return LastWordHint.hintCandidates(round, puzzle).length > 0 &&
+            LastWordHint.canAffordHint(availableScore(), roundConfig);
+    }
+
+    /**
+     * SKIPPY IS WATCHING: single call site funneling every round-mutating
+     * action into js/lastword/situational-awareness.js's `onAction()` —
+     * see that module's header for the salience/priority policy. Call
+     * this ONLY when the round is still in progress (every call site
+     * below already returns early via finishCurrentRound() when it
+     * isn't), right before the state is re-rendered, so a reaction shows
+     * alongside the fresh board/scoreboard rather than the stale one.
+     */
+    function checkSituational(actionKind) {
+        var result = LastWordSituationalAwareness.onAction(roundAwareness, {
+            kind: actionKind,
+            strikes: round.strikes,
+            isRoundOver: LastWordRound.isRoundOver(round),
+            canBuyHint: canBuyHintNow(),
+            hintCost: LastWordHint.hintCostFor(roundConfig)
+        });
+        roundAwareness = result.awareness;
+        // Same single bubble/timer idle chatter uses — see
+        // beginRoundPlay()'s identical reasoning for Fork #1's opening
+        // reaction: showing here can't collide/stack with idle chatter,
+        // it just takes the one bubble slot for its own display window.
+        if (result.reaction) {
+            skippyChatterBubble.show(result.reaction);
+        }
+    }
+
     function renderBoardInto(containerEl, puzzleObj, stateObj) {
         var cells = LastWordRound.buildDisplayBoard(puzzleObj, stateObj);
         containerEl.innerHTML = '';
@@ -420,6 +484,7 @@
             finishCurrentRound();
             return;
         }
+        checkSituational('hintPurchased');
         renderPlayingState();
     }
 
@@ -456,6 +521,7 @@
             finishCurrentRound();
             return;
         }
+        checkSituational('other');
         renderPlayingState();
     }
 
@@ -495,6 +561,7 @@
             finishCurrentRound();
             return;
         }
+        checkSituational(result.correct ? 'other' : 'wrongSolveAttempt');
         renderPlayingState();
     }
 
@@ -558,6 +625,7 @@
         panicState.line = null;
         panicState.entered5 = false;
         hintsPurchasedThisRound = 0;
+        roundAwareness = LastWordSituationalAwareness.createRoundAwareness();
         showOnly('game');
         renderPlayingState();
         // SKIPPY REMEMBERS: a session-aware opening reaction (referring to
@@ -870,6 +938,7 @@
         finalPuzzle = null;
         skippyMemory = LastWordSkippyMemory.createMemory();
         hintsPurchasedThisRound = 0;
+        roundAwareness = LastWordSituationalAwareness.createRoundAwareness();
         goToRound(1);
     }
 
