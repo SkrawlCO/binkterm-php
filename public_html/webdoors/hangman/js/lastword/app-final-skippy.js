@@ -133,6 +133,24 @@
     // hintsPurchasedThisRound above — gone the instant the round ends.
     var roundAwareness = LastWordSituationalAwareness.createRoundAwareness();
 
+    // CONSCIOUS FORK #6 ("MAKE THE GAME LAND"): restrained score-change
+    // feedback (js/lastword/presentation.js) needs the previous rendered
+    // value to compute a delta each time renderScoreboard() runs. `null`
+    // means "no baseline yet" — renderScoreboard() treats that as no
+    // change rather than a delta from 0, so the first render of a fresh
+    // round/session never shows a spurious pop. Reset in beginRoundPlay()
+    // (round score, right before that round's first render) and in
+    // startNewSession()/boot() (cumulative score).
+    var prevRoundScore = null;
+    var prevCumulativeScore = null;
+    // The single letter/purchase a normal round-mutating action just
+    // resolved, consumed (and cleared) by the very next renderLetters()
+    // so the pop/shake plays exactly once per action, on exactly the
+    // button that changed. Never set for hint purchases — see
+    // handleBuyHint()'s comment.
+    var lastLetterFeedback = null;
+    var reducedMotion = LastWordPresentation.prefersReducedMotion(typeof window !== 'undefined' ? window : null);
+
     // Final Hangman state
     var finalState = null;
     var finalPuzzle = null;
@@ -146,7 +164,7 @@
         'round-offer', 'roundOfferTitle', 'roundOfferList',
         'transition', 'transitionTitle', 'transitionBody', 'transitionContinue',
         'game', 'gallows', 'skippyChatterBubble', 'strikeCount', 'roundLabel', 'categoryLabel',
-        'cumulativeScore', 'roundScore', 'solveBonus', 'decayHint',
+        'cumulativeScore', 'cumulativeScoreDelta', 'roundScore', 'roundScoreDelta', 'solveBonus', 'decayHint',
         'board', 'statusLine', 'letters', 'valuesHint',
         'solveToggle', 'solveForm', 'solveInput', 'solveSubmit',
         'buyHintButton', 'hintUnavailableReason',
@@ -442,6 +460,11 @@
 
     function renderLetters() {
         el.letters.innerHTML = '';
+        // Consumed once here — see lastLetterFeedback's declaration for why
+        // this is the only place it's read, and why it's cleared right
+        // after so a later, unrelated re-render never replays it.
+        var feedback = lastLetterFeedback;
+        lastLetterFeedback = null;
         for (var i = 65; i <= 90; i++) {
             var letter = String.fromCharCode(i);
             var isVowel = LastWordContent.isVowel(letter);
@@ -457,6 +480,12 @@
                 button.disabled = true;
                 var wasCorrect = round.revealedLetters.indexOf(letter) !== -1;
                 button.classList.add(wasCorrect ? 'correct' : 'wrong');
+                // Proof B: a small complementary pop/shake on top of the
+                // existing (untouched) correct/wrong coloring, only on the
+                // button the just-resolved action touched.
+                if (!reducedMotion && feedback && feedback.letter === letter) {
+                    button.classList.add(feedback.correct ? 'lw-letter-pop-correct' : 'lw-letter-pop-wrong');
+                }
             } else if (LastWordRound.isRoundOver(round)) {
                 button.disabled = true;
             } else if (isVowel && !LastWordRound.canAffordVowel(availableScore(), roundConfig)) {
@@ -483,6 +512,33 @@
         el.valuesHint.textContent = 'Consonants: free, earn ' + roundConfig.consonantValue +
             ' x occurrences. Vowels: cost ' + roundConfig.vowelCost + ', reveal all occurrences.';
         currentSkippyState = renderSkippyOn(el.gallows, round.strikes, false, panicState);
+
+        // Proof A: score changes should register. Compare against the last
+        // value THIS function saw (not against any earlier snapshot) so a
+        // delta is only ever shown once per actual change, then update the
+        // baseline for next time. See prevRoundScore/prevCumulativeScore's
+        // declaration for why `null` suppresses the very first render.
+        if (prevRoundScore !== null) {
+            var roundDelta = round.pointsThisRound - prevRoundScore;
+            var roundMag = LastWordPresentation.classifyScoreDelta(roundDelta, roundConfig);
+            if (roundMag) {
+                LastWordPresentation.presentScoreDelta(
+                    { scoreEl: el.roundScore, deltaEl: el.roundScoreDelta },
+                    roundDelta, roundMag, { reducedMotion: reducedMotion });
+            }
+        }
+        prevRoundScore = round.pointsThisRound;
+
+        if (prevCumulativeScore !== null) {
+            var cumDelta = session.cumulativeScore - prevCumulativeScore;
+            var cumMag = LastWordPresentation.classifyScoreDelta(cumDelta, roundConfig);
+            if (cumMag) {
+                LastWordPresentation.presentScoreDelta(
+                    { scoreEl: el.cumulativeScore, deltaEl: el.cumulativeScoreDelta },
+                    cumDelta, cumMag, { reducedMotion: reducedMotion });
+            }
+        }
+        prevCumulativeScore = session.cumulativeScore;
     }
 
     /**
@@ -532,6 +588,11 @@
      * the purchase counts as one action toward solve-bonus decay for free
      * (see hint.js's header for why). A meaningful player action, same as
      * a letter guess, so it resets the idle-chatter stretch.
+     *
+     * FORK #6: deliberately never sets `lastLetterFeedback` — a guaranteed
+     * hint reveal isn't a right/wrong guess, so it gets no pop/shake (the
+     * round's score-delta feedback still applies to its cost, same as any
+     * other spend).
      */
     function handleBuyHint() {
         if (!round || LastWordRound.isRoundOver(round)) return;
@@ -577,6 +638,7 @@
             setStatus(result.correct
                 ? letter + ' is in the puzzle! +' + (result.occurrences * roundConfig.consonantValue) + ' points.'
                 : letter + ' is not in the puzzle. +1 strike.');
+            lastLetterFeedback = { letter: letter, correct: result.correct };
         } else {
             var vResult = LastWordRound.purchaseVowel(round, puzzle, letter, availableScore(), roundConfig);
             if (!vResult.changed) {
@@ -587,6 +649,7 @@
             setStatus(vResult.present
                 ? 'Bought ' + letter + ' — it was there!'
                 : 'Bought ' + letter + ' — not in the puzzle. (Cost is charged either way.)');
+            lastLetterFeedback = { letter: letter, correct: vResult.present };
         }
 
         // CORE-GAME FIX: see the identical comment in handleBuyHint() above —
@@ -679,6 +742,10 @@
         lines.forEach(function (l) { el.roundResultBody.appendChild(l); });
 
         showOnly('roundResult');
+        // Proof C: replace the previous instant hard cut into this panel
+        // with one short fade — fires once, right here, right after the
+        // accepted payoff hold (finishCurrentRound()'s setTimeout) elapses.
+        LastWordPresentation.revealPanelWithFade(el.roundResult, { reducedMotion: reducedMotion });
     }
 
     function line(cls, text) {
@@ -704,6 +771,12 @@
         hintsPurchasedThisRound = 0;
         roundAwareness = LastWordSituationalAwareness.createRoundAwareness();
         bobIntroducedThisRound = false;
+        // Proof A: seed both baselines from this fresh round's actual
+        // starting values right before its first render, so that render
+        // shows no delta pop (there is nothing to compare yet) and every
+        // render after it compares against a real prior value.
+        prevRoundScore = round.pointsThisRound;
+        prevCumulativeScore = session.cumulativeScore;
         showOnly('game');
         renderPlayingState();
         // SKIPPY REMEMBERS: a session-aware opening reaction (referring to

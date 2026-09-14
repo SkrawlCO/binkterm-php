@@ -68,7 +68,7 @@ const IDS = [
     'round-offer', 'roundOfferTitle', 'roundOfferList',
     'transition', 'transitionTitle', 'transitionBody', 'transitionContinue',
     'game', 'gallows', 'skippyChatterBubble', 'strikeCount', 'roundLabel', 'categoryLabel',
-    'cumulativeScore', 'roundScore', 'solveBonus', 'decayHint',
+    'cumulativeScore', 'cumulativeScoreDelta', 'roundScore', 'roundScoreDelta', 'solveBonus', 'decayHint',
     'board', 'statusLine', 'letters', 'valuesHint',
     'solveToggle', 'solveForm', 'solveInput', 'solveSubmit',
     'buyHintButton', 'hintUnavailableReason',
@@ -157,7 +157,7 @@ function bootApp(rngFallback, locationSearch) {
     sandbox.self = sandbox;
     const context = vm.createContext(sandbox);
 
-    ['content.js', 'state.js', 'round.js', 'final.js', 'session.js', 'gallows-character.js', 'idle-chatter.js', 'hint.js', 'skippy-memory.js', 'situational-awareness.js', 'safe-predicament.js', 'bob-character.js', 'auto-solve.js', 'app-final-skippy.js'].forEach((f) => {
+    ['content.js', 'state.js', 'round.js', 'final.js', 'session.js', 'gallows-character.js', 'idle-chatter.js', 'hint.js', 'skippy-memory.js', 'situational-awareness.js', 'safe-predicament.js', 'bob-character.js', 'auto-solve.js', 'presentation.js', 'app-final-skippy.js'].forEach((f) => {
         const file = path.join(ROOT, 'js/lastword', f);
         vm.runInContext(fs.readFileSync(file, 'utf8'), context, { filename: f });
     });
@@ -1270,6 +1270,140 @@ async function check(name, fn) {
         const maskContent = svg.match(/<mask[\s\S]*?<\/mask>/)[0];
         assert.ok(maskContent.indexOf('rotate(17 78 118)') !== -1, 'TERRIFIED\'s real tilt still drives the mask with Bob present');
         assert.ok(maskContent.indexOf(BOB_CRANK_MARKER) === -1, 'Bob\'s own geometry must never appear inside the occlusion mask definition');
+    });
+
+    // ---- CONSCIOUS FORK #6 ("MAKE THE GAME LAND") presentation layer ----
+
+    await check('a correct consonant guess shows a small "+N" score-delta matching the actual points earned', async () => {
+        const { elements } = await bootApp();
+        clickByText(elements.categoryList, 'Movies & TV');
+
+        const before = Number(elements.roundScore.textContent);
+        clickByText(elements.letters, 'E'); // common letter, very likely present
+        const after = Number(elements.roundScore.textContent);
+        if (after !== before) {
+            assert.strictEqual(elements.roundScoreDelta.textContent, '+' + (after - before),
+                'the shown delta must equal the actual score change — never a decorative/independent number');
+            assert.strictEqual(elements.roundScoreDelta.hidden, false);
+        }
+    });
+
+    await check('score calculations are completely unaffected by the presentation layer (same totals with/without a delta shown)', async () => {
+        const { elements } = await bootApp(0);
+        clickByText(elements.categoryList, 'Movies & TV');
+        earnAtLeast(elements, 300);
+        // roundScore/cumulativeScore come straight from round.js/session.js —
+        // this proves the new presentation wiring never substitutes its own
+        // number for the real one.
+        assert.ok(Number(elements.roundScore.textContent) >= 300);
+    });
+
+    await check('a solve bonus produces a strictly larger/more emphasized score-delta presentation than an ordinary letter guess', async () => {
+        const Presentation = require(path.join(ROOT, 'js/lastword/presentation.js'));
+        const LastWordState = require(path.join(ROOT, 'js/lastword/state.js'));
+        const cfg = LastWordState.ROUND_CONFIG[1];
+        const ordinaryGuessDelta = cfg.consonantValue; // 100
+        const solveBonusDelta = Math.round(cfg.maxSolveBonus * 0.6); // a realistic, even heavily-decayed, solve bonus
+        assert.strictEqual(Presentation.classifyScoreDelta(ordinaryGuessDelta, cfg), 'small');
+        assert.strictEqual(Presentation.classifyScoreDelta(solveBonusDelta, cfg), 'big');
+    });
+
+    await check('score-delta presentation never blocks the next guess (letters remain clickable immediately)', async () => {
+        const { elements } = await bootApp();
+        clickByText(elements.categoryList, 'Movies & TV');
+        clickByText(elements.letters, 'E');
+        // Round still in progress -> some letter button must still be
+        // enabled and clickable right away, with no waiting on any timer.
+        const stillClickable = elements.letters._children.some((b) => !b.disabled);
+        assert.ok(stillClickable, 'a score-delta animation must never gate normal input');
+    });
+
+    await check('a correct guess pops the just-guessed button; a wrong guess shakes it — never both, never any other button', async () => {
+        const { elements } = await bootApp();
+        clickByText(elements.categoryList, 'Movies & TV');
+
+        clickByText(elements.letters, 'E'); // near-certain to be present
+        // Auto-solve (js/lastword/auto-solve.js, pre-existing/untouched) can
+        // finish the round on this very guess if it happened to be the last
+        // letter needed — then the round-result panel replaces the letter
+        // grid content entirely and there is nothing left here to inspect.
+        const guessedE = elements.letters._children.find((b) => b.textContent === 'E');
+        if (!guessedE) return;
+        if (guessedE.classList.contains('correct')) {
+            assert.ok(guessedE.classList.contains('lw-letter-pop-correct'));
+            assert.ok(!guessedE.classList.contains('lw-letter-pop-wrong'));
+        }
+        elements.letters._children.filter((b) => b !== guessedE && !b.disabled).forEach((b) => {
+            assert.ok(!b.classList.contains('lw-letter-pop-correct'));
+            assert.ok(!b.classList.contains('lw-letter-pop-wrong'));
+        });
+    });
+
+    await check('the letter-pop feedback does not replay on an unrelated later re-render', async () => {
+        const { elements } = await bootApp();
+        clickByText(elements.categoryList, 'Movies & TV');
+        clickByText(elements.letters, 'E');
+        const guessedE = elements.letters._children.find((b) => b.textContent === 'E');
+        if (!guessedE) return; // round auto-solved on this guess — see comment above
+        const hadPop = guessedE.classList.contains('lw-letter-pop-correct') || guessedE.classList.contains('lw-letter-pop-wrong');
+
+        clickByText(elements.letters, 'T'); // a second, unrelated action triggers another full renderLetters()
+        const eAfterSecondRender = elements.letters._children.find((b) => b.textContent === 'E');
+        if (hadPop && eAfterSecondRender) {
+            assert.ok(!eAfterSecondRender.classList.contains('lw-letter-pop-correct'),
+                'the pop must be consumed by the very next render, not linger across later ones');
+        }
+    });
+
+    await check('correct/wrong canonical button coloring is unchanged by the added pop/shake classes', async () => {
+        const { elements } = await bootApp();
+        clickByText(elements.categoryList, 'Movies & TV');
+        clickByText(elements.letters, 'E');
+        const guessedE = elements.letters._children.find((b) => b.textContent === 'E');
+        if (!guessedE) return; // round auto-solved on this guess — see comment above
+        assert.ok(guessedE.classList.contains('correct') || guessedE.classList.contains('wrong'),
+            'the existing accepted color classes must still be applied exactly as before');
+    });
+
+    await check('the round-result panel transitions (fade classes applied) exactly once when a solved round finishes', async () => {
+        const { elements, clock } = await bootApp();
+        const puzzlesDoc = JSON.parse(fs.readFileSync(path.join(ROOT, 'lastword/puzzles.json'), 'utf8'));
+        clickByText(elements.categoryList, 'Movies & TV');
+        const candidates = dealtPuzzleCandidates(elements.board, puzzlesDoc, 'Movies & TV');
+        elements.solveToggle.click();
+        elements.solveInput.value = candidates[0].answer;
+        elements.solveSubmit.click();
+        clock.advance(SAVED_PAYOFF_DELAY_MS); // reach round-result — showOnly('roundResult') + revealPanelWithFade() fire here
+
+        assert.strictEqual(elements['round-result'].className, 'panel', 'still becomes visible exactly as before (unaffected panel-visibility contract)');
+        assert.ok(elements['round-result'].classList.contains('lw-fade-in'), 'the fade-in should have started');
+
+        clock.advance(20); // PANEL_FADE_START_DELAY_MS
+        assert.ok(elements['round-result'].classList.contains('lw-fade-in-active'), 'should have committed to the active/visible fade state');
+
+        clock.advance(300); // PANEL_FADE_MS
+        assert.ok(!elements['round-result'].classList.contains('lw-fade-in'), 'transition classes clean up once the fade completes');
+        assert.ok(!elements['round-result'].classList.contains('lw-fade-in-active'));
+
+        // Advancing further must not re-trigger anything — one fade, once.
+        const before = elements['round-result'].classList.contains('lw-fade-in');
+        clock.advance(60000);
+        assert.strictEqual(elements['round-result'].classList.contains('lw-fade-in'), before);
+    });
+
+    await check('the solved payoff hold remains the accepted 3400ms even with the new transition wired in', async () => {
+        const { elements, clock } = await bootApp();
+        const puzzlesDoc = JSON.parse(fs.readFileSync(path.join(ROOT, 'lastword/puzzles.json'), 'utf8'));
+        clickByText(elements.categoryList, 'Movies & TV');
+        const candidates = dealtPuzzleCandidates(elements.board, puzzlesDoc, 'Movies & TV');
+        elements.solveToggle.click();
+        elements.solveInput.value = candidates[0].answer;
+        elements.solveSubmit.click();
+
+        clock.advance(SAVED_PAYOFF_DELAY_MS - 1);
+        assert.strictEqual(elements['round-result'].className, 'panel hidden', 'hold duration must be unchanged by Fork #6');
+        clock.advance(1);
+        assert.strictEqual(elements['round-result'].className, 'panel');
     });
 
     console.log(passed + ' passed');

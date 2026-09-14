@@ -158,3 +158,169 @@
 .hintButton:not(:disabled):hover {
     background: rgba(110, 168, 255, 0.34);
 }
+
+/* ======================================================================
+   CONSCIOUS FORK #6 ("MAKE THE GAME LAND") — restrained game-feel layer.
+   See js/lastword/presentation.js's header for the JS side. Everything
+   below is additive/new on top of the untouched shared css/lastword.css,
+   so M1D/M1C/M1B (which never load this stylesheet) are unaffected.
+   ====================================================================== */
+
+/* --- Proof A: score-change feedback --------------------------------- */
+
+/* The score numbers themselves (#cumulativeScore/#roundScore, from the
+   shared css/lastword.css) get a brief pulse — a quick scale/weight
+   emphasis, not a color change, so it layers under color-blind-safe. */
+@media (prefers-reduced-motion: no-preference) {
+    .lw-score-pulse {
+        display: inline-block;
+        animation: lwScorePulse 260ms ease;
+    }
+    .lw-score-pulse-big {
+        display: inline-block;
+        animation: lwScorePulseBig 420ms ease;
+    }
+}
+
+@keyframes lwScorePulse {
+    0% { transform: scale(1); }
+    35% { transform: scale(1.14); color: #9fe3b8; }
+    100% { transform: scale(1); }
+}
+
+@keyframes lwScorePulseBig {
+    0% { transform: scale(1); }
+    30% { transform: scale(1.32); color: #ffd45c; font-weight: 700; }
+    100% { transform: scale(1); }
+}
+
+/* Transient "+N"/"-N" set by presentScoreDelta(). [hidden] fully removes
+   it between appearances rather than just hiding text, matching the
+   chatter bubble's own convention above.
+
+   HUMAN-GATE CORRECTION: the original single fixed-percentage keyframe
+   (baking entrance+dwell+fade into one animation the whole display
+   duration long) made the number vanish before most callers noticed it.
+   New philosophy — APPEAR QUICKLY, STAY READABLE, LEAVE QUIETLY — splits
+   this into: a quick entrance animation, a plain stationary state (no
+   animation — nothing to miss), then a separate `.lw-score-delta-fading`
+   modifier presentation.js adds only once the JS-timed stationary dwell
+   has actually elapsed, so the fade's own length is a plain CSS
+   transition rather than a fixed point on a fixed-length keyframe timed
+   against a duration that lives in the JS. Small = a beat shorter; big =
+   visibly more important (larger, bolder, held longer) — still no
+   count-up, no confetti, no modal. */
+.lw-score-delta {
+    margin-left: 8px;
+    font-weight: 600;
+    color: #7ee0a0;
+    display: inline-block;
+}
+
+.lw-score-delta-neg { color: #ff9b9b; }
+.lw-score-delta-big { font-size: 1.15em; }
+
+@media (prefers-reduced-motion: no-preference) {
+    .lw-score-delta-small,
+    .lw-score-delta-big {
+        opacity: 1;
+        transform: translateY(0);
+        animation: lwScoreDeltaEnter 150ms ease;
+        transition: opacity 260ms ease, transform 260ms ease;
+    }
+    /* Added by presentScoreDelta() once the stationary dwell is over —
+       a plain fade-and-drift-up, not baked into the entrance keyframe, so
+       it only ever starts once the number has actually been readable. */
+    .lw-score-delta-fading {
+        opacity: 0;
+        transform: translateY(-3px);
+    }
+}
+
+@keyframes lwScoreDeltaEnter {
+    0% { opacity: 0; transform: translateY(3px); }
+    100% { opacity: 1; transform: translateY(0); }
+}
+
+/* Reduced motion: presentScoreDelta() adds this instead of the animated
+   classes above — the number still appears at full opacity and dwells for
+   the same reading time, it just never moves or fades while visible.
+   Motion is what's skipped here, never the information. */
+.lw-score-delta-static {
+    opacity: 1;
+    transform: none;
+}
+
+/* --- Proof B: correct/wrong letter feedback -------------------------- */
+/* Complementary to the existing (untouched) .correct/.wrong coloring from
+   css/lastword.css — a single quick pop/shake on the button that just
+   changed, never on the whole grid, never blocking the next click. */
+@media (prefers-reduced-motion: no-preference) {
+    .lw-letter-pop-correct { animation: lwLetterPopCorrect 220ms ease; }
+    .lw-letter-pop-wrong { animation: lwLetterPopWrong 260ms ease; }
+}
+
+@keyframes lwLetterPopCorrect {
+    0% { transform: scale(1); }
+    45% { transform: scale(1.12); }
+    100% { transform: scale(1); }
+}
+
+@keyframes lwLetterPopWrong {
+    0%, 100% { transform: translateX(0); }
+    20% { transform: translateX(-3px); }
+    40% { transform: translateX(3px); }
+    60% { transform: translateX(-2px); }
+    80% { transform: translateX(2px); }
+}
+
+/* --- Proof C: solved/failed round → round-result transition ---------- */
+/* Applied only to the panel `showOnly()` is revealing (see
+   revealPanelWithFade() in presentation.js) — a short fade/slide standing
+   in for the previous instant hard cut. Reduced-motion callers skip this
+   entirely (presentation.js checks first), so the panel just appears as
+   it always did. */
+@media (prefers-reduced-motion: no-preference) {
+    .lw-fade-in {
+        opacity: 0;
+        transform: translateY(6px);
+        transition: opacity 200ms ease, transform 200ms ease;
+    }
+    .lw-fade-in.lw-fade-in-active {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* --- Mobile-first usability correction -------------------------------- */
+/* Whole-game recon finding: the shared css/lastword.css's ≤480px 9-column
+   letter grid produces ~30px targets, and Final's wider "A (250)"-style
+   labels (`.letters-priced`, added only to #finalLetters in
+   lastword-skippy.html) crowd that same column count. Overriding here
+   (loaded after css/lastword.css, so it wins the cascade) keeps
+   css/lastword.css — and therefore M1D/M1C/M1B — completely untouched.
+   Desktop (>480px) is not touched by either rule below. */
+@media (max-width: 480px) {
+    .letters {
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+        gap: 8px;
+    }
+
+    .letters button {
+        padding: 13px 2px;
+        min-height: 44px;
+        box-sizing: border-box;
+    }
+
+    /* Final's priced buttons ("A (250)") need more width per button than
+       a bare letter does, so this grid gets fewer, wider columns rather
+       than the same 6 — still comfortably ≥44px tall, no overflow. */
+    .letters-priced {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .letters-priced button {
+        font-size: 13px;
+        padding: 13px 1px;
+    }
+}
