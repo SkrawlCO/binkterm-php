@@ -194,6 +194,26 @@
         return LastWordGallowsCharacter.pickStateName(strikes, solved);
     }
 
+    // SKIPPY'S PREDICAMENT (accepted, PASS): which environment/threat
+    // renders around Skippy this session — the accepted gallows (default)
+    // or the accepted suspended-safe Predicament
+    // (js/lastword/safe-predicament.js). Chosen once at page load via
+    // `?predicament=safe` in the URL; defaults to 'gallows' so an ordinary
+    // page load is byte-for-byte the original gallows presentation. This
+    // is presentation only — it never touches round/session/finalState or
+    // any scoring/puzzle/hint/strike rule (see safe-predicament.js's own
+    // header). How a real session will eventually choose/vary its
+    // Predicament in production is intentionally still an open decision —
+    // this is just the mechanism the accepted Predicament plugs into.
+    var activePredicament = (function () {
+        try {
+            var qp = new URLSearchParams(window.location.search).get('predicament');
+            return qp === 'safe' ? 'safe' : 'gallows';
+        } catch (e) {
+            return 'gallows';
+        }
+    }());
+
     /**
      * Render Skippy into `containerEl` for the given strikes/solved facts.
      * `panicHolder` is one of the two { line, entered5 } trackers above,
@@ -201,15 +221,46 @@
      */
     function renderSkippyOn(containerEl, strikes, solved, panicState) {
         var stateName = skippyStateFor(strikes, solved);
-        var opts;
+        var opts = {};
         if (stateName === 'TERRIFIED') {
-            if (!panicState.entered5) {
-                panicState.line = LastWordGallowsCharacter.pickPanicLine(panicState.line);
+            var enteringFresh = !panicState.entered5;
+            if (enteringFresh) {
+                // The one predicament-aware line the suspended-safe adds
+                // (see safe-predicament.js's own comment on it) — only
+                // used when that Predicament is active; the accepted
+                // gallows TERRIFIED pool is untouched otherwise.
+                panicState.line = (activePredicament === 'safe')
+                    ? LastWordSafePredicament.SAFE_TERRIFIED_LINE
+                    : LastWordGallowsCharacter.pickPanicLine(panicState.line);
                 panicState.entered5 = true;
             }
-            opts = { panicLine: panicState.line };
+            opts.panicLine = panicState.line;
+            if (activePredicament === 'safe') {
+                // ONE SKIPPY, ONE ACTIVE SPEECH BUBBLE: the accepted
+                // gallows draws its Strike-5 panic line baked into the SVG
+                // below Skippy; the suspended-safe Predicament instead
+                // routes that same line through the ONE shared transient
+                // chatter-bubble presenter (the same one idle chatter/
+                // SKIPPY REMEMBERS/SKIPPY IS WATCHING already use) — never
+                // both at once. Always suppress the baked bubble while the
+                // safe is active; only attempt to SHOW the routed line on
+                // the fresh strike-5 entry, and only if nothing else (e.g.
+                // a situational-awareness reaction from this same action)
+                // is already occupying the one bubble slot.
+                opts.suppressSpeechBubble = true;
+                if (enteringFresh) {
+                    var bubbleEl = containerEl === el.finalGallows ? el.finalSkippyChatterBubble : el.skippyChatterBubble;
+                    var bubblePresenter = containerEl === el.finalGallows ? finalSkippyChatterBubble : skippyChatterBubble;
+                    if (bubbleEl && bubbleEl.hidden) {
+                        bubblePresenter.show(panicState.line);
+                    }
+                }
+            }
         } else {
             panicState.entered5 = false;
+        }
+        if (activePredicament === 'safe') {
+            opts.apparatus = LastWordSafePredicament.apparatus;
         }
         containerEl.innerHTML = LastWordGallowsCharacter.renderMarkup(stateName, opts);
         return stateName;

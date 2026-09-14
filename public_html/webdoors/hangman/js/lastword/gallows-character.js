@@ -35,6 +35,18 @@
  * the eye language, and every speech bubble's placement/text are all
  * accepted as shipped here.
  *
+ * Predicament: Gallows — this rig/apparatus is Last Word's original,
+ * default environmental threat, preserved exactly as accepted above. Since
+ * the suspended-safe Predicament (js/lastword/safe-predicament.js,
+ * accepted 2026-09-13) proved the six-strike mechanic works independently
+ * of this specific fiction, the gallows is now conceptually "Predicament
+ * #0" rather than Last Word's defining metaphor — Skippy's actual
+ * accepted pose/face/silhouette (this file) is what stays constant across
+ * any Predicament; only the threat surrounding him changes. See
+ * `apparatusFor()`/`contestantSilhouette()`/`DEFAULT_APPARATUS` further
+ * below for the seam that makes that swap possible and this Predicament's
+ * own rig/warningLight/clawArm/trapdoor geometry.
+ *
  * Deliberately pure/DOM-free like js/lastword/state.js: `pickStateName` and
  * `renderMarkup` are plain functions over strings/numbers that return an
  * SVG markup string, so this file is Node-testable without a DOM and stays
@@ -445,121 +457,237 @@
         );
     }
 
+    // HUMAN-GATE CORRECTION #3 ("occlusion root fix"): a thick/filled
+    // silhouette variant of contestant() used ONLY to build a mask cutout
+    // (see apparatusFor() below) — never rendered visibly itself. It takes
+    // the EXACT SAME `opts` object a SCENES function already builds for its
+    // real, visible `contestant(opts)` call (same tilt/leftArm/rightArm/
+    // leftLeg/rightLeg/leg angles — every per-state pose parameter), so the
+    // occlusion shape is derived from the actual current pose, not an
+    // independent approximation: correct by construction for every tilt/
+    // pose Skippy's accepted figure ever takes, with no separate geometry
+    // to keep in sync. Deliberately covers only the parts of him large
+    // and load-bearing enough to matter for occlusion — head, shoulder/
+    // spine/hip bars, arms, legs — using thick round-capped strokes (or a
+    // filled circle for the head) so it fully backs his own much thinner
+    // (2.2-2.5px) visible strokes with a safety margin; hair/eyes/mouth are
+    // thin decorative detail on top of the head and don't need their own
+    // separate coverage beyond the head circle already accounting for them.
+    function contestantSilhouette(opts) {
+        opts = opts || {};
+        var pivotY = 118;
+        var tilt = opts.tilt || 0;
+        var THICK = 15; // generous vs. contestant()'s ~2.2-2.5px visible strokes
+
+        function thickLine(pts) {
+            var d = 'M' + pts[0] + ',' + pts[1];
+            for (var i = 2; i < pts.length; i += 2) { d += ' L' + pts[i] + ',' + pts[i + 1]; }
+            return '<path d="' + d + '" stroke="#000" stroke-width="' + THICK + '" fill="none" ' +
+                'stroke-linecap="round" stroke-linejoin="round"/>';
+        }
+
+        var head = '<circle cx="' + HEAD_CX + '" cy="' + HEAD_CY + '" r="' + (HEAD_R + 5) + '" fill="#000"/>';
+
+        var body = (
+            thickLine([SHOULDER_L, SHOULDER_Y, SHOULDER_R, SHOULDER_Y]) +
+            thickLine([HEAD_CX, SHOULDER_Y, HEAD_CX, HIP_Y]) +
+            thickLine([HIP_L, HIP_Y, HIP_R, HIP_Y])
+        );
+
+        var leftArm = opts.leftArm || [SHOULDER_L, SHOULDER_Y, 54, 108, 46, 128];
+        var rightArm = opts.rightArm || [SHOULDER_R, SHOULDER_Y, 102, 108, 110, 128];
+        var leftLeg = opts.leftLeg || [HIP_L, HIP_Y, 62, 172, 56, 200];
+        var rightLeg = opts.rightLeg || [HIP_R, HIP_Y, 94, 172, 100, 200];
+        var legs = opts.legs !== false ? (thickLine(leftLeg) + thickLine(rightLeg)) : '';
+        var arms = thickLine(leftArm) + thickLine(rightArm);
+
+        return (
+            '<g transform="rotate(' + tilt + ' ' + HEAD_CX + ' ' + pivotY + ')">' +
+            legs + body + arms + head +
+            '</g>'
+        );
+    }
+
     // ---- per-state scenes ------------------------------------------------
     // Every pose should read from head angle + face + stick-body
     // silhouette alone, even with the state label and speech bubble
     // hidden — that was verified human-side during development.
 
+    // CONSCIOUS BOUNDED FORK #3 ("SKIPPY'S PREDICAMENT"): the one small
+    // abstraction point that lets an alternate Predicament (see
+    // safe-predicament.js) reuse Skippy's canonical contestant pose/face/
+    // hair/speech-bubble rendering for every state while swapping out only
+    // the THREAT surrounding him — never who he is. Each SCENES entry below
+    // opens with `apparatusFor(stateName, opts)`, which returns the exact
+    // same rig/warningLight/clawArm/trapdoor markup as before UNLESS the
+    // caller passes `opts.apparatus` (a `function (stateName) -> markup`),
+    // in which case that markup is used instead. No opts.apparatus (the
+    // default, and every call site prior to this fork) reproduces the
+    // original output byte-for-byte — this is additive only.
+    var DEFAULT_APPARATUS = {
+        CONFIDENT: function () { return rigFrame(false) + warningLight('off') + clawArm(0) + trapdoor('hidden'); },
+        CONFUSED: function () { return rigFrame(true) + warningLight('amber') + clawArm(0) + trapdoor('hidden'); },
+        CONCERNED: function () { return rigFrame(true) + warningLight('amber') + clawArm(1) + trapdoor('hidden'); },
+        NERVOUS: function () { return rigFrame(true) + warningLight('amber') + clawArm(2) + trapdoor('seam'); },
+        PLEADING: function () { return rigFrame(true) + warningLight('amber') + clawArm(2) + trapdoor('seam'); },
+        TERRIFIED: function () { return rigFrame(true) + warningLight('red') + clawArm(3) + trapdoor('seam'); },
+        COMEDIC_DEFEAT: function () { return rigFrame(true) + warningLight('off') + clawArm(0) + trapdoor('open'); },
+        SAVED: function () { return rigFrame(false) + warningLight('off') + clawArm(0) + trapdoor('hidden'); }
+    };
+
+    // Fixed literal id (not per-call-generated) — see contestantSilhouette's
+    // own comment above for why that's safe even with multiple
+    // simultaneously-rendered surfaces (round + Final).
+    var POSE_KNOCKOUT_MASK_ID = 'lw-pose-knockout-mask';
+
+    /**
+     * `poseOpts`, when given, is the SAME opts object the calling SCENES
+     * function is about to pass to `contestant(poseOpts)` for the actual
+     * visible figure — see each SCENES entry below. When an alternate
+     * apparatus is active (opts.apparatus set) AND a pose is available
+     * (every state except COMEDIC_DEFEAT, which never draws a figure),
+     * the returned apparatus markup is wrapped in a mask cut to that EXACT
+     * pose's silhouette (contestantSilhouette(poseOpts)) so the alternate
+     * apparatus can never draw through wherever Skippy's actual current
+     * figure stands, whatever pose/tilt that is — see the "painter model"
+     * in the human-gate correction: apparatus, then this knockout, then
+     * the real visible contestant(poseOpts) on top (drawn by the caller
+     * immediately after this returns). The accepted default gallows (no
+     * opts.apparatus) and COMEDIC_DEFEAT (no poseOpts) are both returned
+     * completely unwrapped — byte-identical to every call site before this
+     * correction.
+     */
+    function apparatusFor(stateName, opts, poseOpts) {
+        var raw = (opts && typeof opts.apparatus === 'function')
+            ? opts.apparatus(stateName)
+            : DEFAULT_APPARATUS[stateName]();
+        if (!(opts && opts.apparatus) || !poseOpts) {
+            return raw;
+        }
+        return (
+            '<defs><mask id="' + POSE_KNOCKOUT_MASK_ID + '" maskUnits="userSpaceOnUse" x="0" y="0" width="260" height="260">' +
+            '<rect x="0" y="0" width="260" height="260" fill="#fff"/>' +
+            contestantSilhouette(poseOpts) +
+            '</mask></defs>' +
+            '<g mask="url(#' + POSE_KNOCKOUT_MASK_ID + ')">' + raw + '</g>'
+        );
+    }
+
     var SCENES = {
-        CONFIDENT: function (opts) {
+        CONFIDENT: function (opts, stateName) {
+            var poseOpts = {
+                tilt: -9, // smug lean
+                hair: 'normal',
+                showPocket: opts && opts.showPocket,
+                hairParams: opts && opts.hairParams,
+                // round, relaxed — casual downward pupil glance, not squinting
+                eyes: eye(73, 58, 4.2, 3.6, 0, 1) + eye(89, 58, 4.2, 3.6, 0, 1),
+                mouth: '<path d="M71,72 Q84,79 94,66" stroke="' + INK + '" stroke-width="2.2" fill="none" stroke-linecap="round"/>',
+                // hand cocked on hip, elbow flared out — "I've got this"
+                rightArm: [SHOULDER_R, SHOULDER_Y, 106, 100, 88, 122],
+                rightHandAngle: 200,
+                leftArm: [SHOULDER_L, SHOULDER_Y, 44, 116, 50, 136],
+                leftHandAngle: 110,
+                leftLeg: [HIP_L, HIP_Y, 52, 174, 44, 202], leftFootAngle: 150,
+                rightLeg: [HIP_R, HIP_Y, 100, 174, 110, 202], rightFootAngle: 30
+            };
             return (
-                rigFrame(false) + warningLight('off') + clawArm(0) + trapdoor('hidden') +
-                contestant({
-                    tilt: -9, // smug lean
-                    hair: 'normal',
-                    showPocket: opts && opts.showPocket,
-                    hairParams: opts && opts.hairParams,
-                    // round, relaxed — casual downward pupil glance, not squinting
-                    eyes: eye(73, 58, 4.2, 3.6, 0, 1) + eye(89, 58, 4.2, 3.6, 0, 1),
-                    mouth: '<path d="M71,72 Q84,79 94,66" stroke="' + INK + '" stroke-width="2.2" fill="none" stroke-linecap="round"/>',
-                    // hand cocked on hip, elbow flared out — "I've got this"
-                    rightArm: [SHOULDER_R, SHOULDER_Y, 106, 100, 88, 122],
-                    rightHandAngle: 200,
-                    leftArm: [SHOULDER_L, SHOULDER_Y, 44, 116, 50, 136],
-                    leftHandAngle: 110,
-                    leftLeg: [HIP_L, HIP_Y, 52, 174, 44, 202], leftFootAngle: 150,
-                    rightLeg: [HIP_R, HIP_Y, 100, 174, 110, 202], rightFootAngle: 30
-                })
+                apparatusFor(stateName, opts, poseOpts) +
+                contestant(poseOpts)
             );
         },
-        CONFUSED: function (opts) {
+        CONFUSED: function (opts, stateName) {
+            var poseOpts = {
+                tilt: 15, // craning back hard
+                hair: 'normal',
+                showPocket: opts && opts.showPocket,
+                hairParams: opts && opts.hairParams,
+                // round, wide, pupils cast up toward the apparatus — slightly
+                // uneven sizing keeps the goofy startled asymmetry
+                eyes: eye(71, 56, 4.6, 4.6, 0, -1.6, 1.9) + eye(90, 56, 4, 4, 0, -1.6, 1.7),
+                mouth: '<path d="M72,73 Q81,66 90,73" stroke="' + INK + '" stroke-width="2.2" fill="none" stroke-linecap="round"/>',
+                leftArm: [SHOULDER_L, SHOULDER_Y, 32, 86, 16, 66], leftHandAngle: -110,
+                rightArm: [SHOULDER_R, SHOULDER_Y, 116, 100, 132, 90], rightHandAngle: -10,
+                extras:
+                    '<text x="112" y="22" font-size="16" font-weight="bold" fill="' + INK + '" opacity="0.8">?</text>' +
+                    burst(78, 30, 3, 9, 250, 40, 0.5)
+            };
             return (
-                rigFrame(true) + warningLight('amber') + clawArm(0) + trapdoor('hidden') +
-                contestant({
-                    tilt: 15, // craning back hard
-                    hair: 'normal',
-                    showPocket: opts && opts.showPocket,
-                    hairParams: opts && opts.hairParams,
-                    // round, wide, pupils cast up toward the apparatus — slightly
-                    // uneven sizing keeps the goofy startled asymmetry
-                    eyes: eye(71, 56, 4.6, 4.6, 0, -1.6, 1.9) + eye(90, 56, 4, 4, 0, -1.6, 1.7),
-                    mouth: '<path d="M72,73 Q81,66 90,73" stroke="' + INK + '" stroke-width="2.2" fill="none" stroke-linecap="round"/>',
-                    leftArm: [SHOULDER_L, SHOULDER_Y, 32, 86, 16, 66], leftHandAngle: -110,
-                    rightArm: [SHOULDER_R, SHOULDER_Y, 116, 100, 132, 90], rightHandAngle: -10,
-                    extras:
-                        '<text x="112" y="22" font-size="16" font-weight="bold" fill="' + INK + '" opacity="0.8">?</text>' +
-                        burst(78, 30, 3, 9, 250, 40, 0.5)
-                })
+                apparatusFor(stateName, opts, poseOpts) +
+                contestant(poseOpts)
             );
         },
-        CONCERNED: function (opts) {
+        CONCERNED: function (opts, stateName) {
             // Strike 2 = "Oh shit. This may actually be a problem." Must
             // read distinctly from Strike 1 (CONFUSED = off-balance WTF)
             // and Strike 3 (NERVOUS = compressed/tensing): worried brows,
             // attention snapped toward the apparatus/puzzle, a hand raised
             // to the head — the first sign confidence is slipping, not yet
             // panic.
+            var poseOpts = {
+                tilt: 9, // attention snapping toward the apparatus/puzzle
+                hair: 'normal',
+                showPocket: opts && opts.showPocket,
+                hairParams: opts && opts.hairParams,
+                // worried "tent" brows above (unchanged, distinct from
+                // CONFUSED's uneven ticks and NERVOUS's flat ones) +
+                // round, normal-sized, slightly downcast worried eyes
+                eyes: '<path d="M65,50 L74,45" stroke="' + INK + '" stroke-width="2.2" stroke-linecap="round"/>' +
+                    '<path d="M82,45 L91,50" stroke="' + INK + '" stroke-width="2.2" stroke-linecap="round"/>' +
+                    eye(73, 58, 3.6, 3.6, 0, 0.6) + eye(83, 58, 3.6, 3.6, 0, 0.6),
+                // flat/uncertain mouth that dips slightly — a small frown, not a shrug-smirk
+                mouth: '<path d="M70,74 Q80,80 90,74" stroke="' + INK + '" stroke-width="2.2" fill="none" stroke-linecap="round"/>',
+                // one hand raised to the side of the head — a clear "oh no" gesture
+                rightArm: [SHOULDER_R, SHOULDER_Y, 92, 68, 96, 54], rightHandAngle: 160,
+                leftArm: [SHOULDER_L, SHOULDER_Y, 58, 110, 54, 130], leftHandAngle: 200,
+                leftLeg: [HIP_L, HIP_Y, 66, 174, 62, 202], leftFootAngle: 170,
+                rightLeg: [HIP_R, HIP_Y, 90, 174, 94, 202], rightFootAngle: 10
+            };
             return (
-                rigFrame(true) + warningLight('amber') + clawArm(1) + trapdoor('hidden') +
-                contestant({
-                    tilt: 9, // attention snapping toward the apparatus/puzzle
-                    hair: 'normal',
-                    showPocket: opts && opts.showPocket,
-                    hairParams: opts && opts.hairParams,
-                    // worried "tent" brows above (unchanged, distinct from
-                    // CONFUSED's uneven ticks and NERVOUS's flat ones) +
-                    // round, normal-sized, slightly downcast worried eyes
-                    eyes: '<path d="M65,50 L74,45" stroke="' + INK + '" stroke-width="2.2" stroke-linecap="round"/>' +
-                        '<path d="M82,45 L91,50" stroke="' + INK + '" stroke-width="2.2" stroke-linecap="round"/>' +
-                        eye(73, 58, 3.6, 3.6, 0, 0.6) + eye(83, 58, 3.6, 3.6, 0, 0.6),
-                    // flat/uncertain mouth that dips slightly — a small frown, not a shrug-smirk
-                    mouth: '<path d="M70,74 Q80,80 90,74" stroke="' + INK + '" stroke-width="2.2" fill="none" stroke-linecap="round"/>',
-                    // one hand raised to the side of the head — a clear "oh no" gesture
-                    rightArm: [SHOULDER_R, SHOULDER_Y, 92, 68, 96, 54], rightHandAngle: 160,
-                    leftArm: [SHOULDER_L, SHOULDER_Y, 58, 110, 54, 130], leftHandAngle: 200,
-                    leftLeg: [HIP_L, HIP_Y, 66, 174, 62, 202], leftFootAngle: 170,
-                    rightLeg: [HIP_R, HIP_Y, 90, 174, 94, 202], rightFootAngle: 10
-                })
+                apparatusFor(stateName, opts, poseOpts) +
+                contestant(poseOpts)
             );
         },
-        NERVOUS: function (opts) {
+        NERVOUS: function (opts, stateName) {
+            var poseOpts = {
+                tilt: 0, // compressed rather than leaning
+                hair: 'frazzled',
+                showPocket: opts && opts.showPocket,
+                hairParams: opts && opts.hairParams,
+                // round but tense — flattened/narrowed ovals rather than a
+                // dash, so the eyes still read as open, just tight
+                eyes: eye(73, 57, 3.2, 2.2, 0, 0, 1.4) + eye(89, 57, 3.2, 2.2, 0, 0, 1.4),
+                mouth: '<path d="M72,73 L78,76 L82,72 L87,76 L91,73" stroke="' + INK + '" stroke-width="2.2" fill="none" stroke-linecap="round"/>',
+                leftArm: [SHOULDER_L, SHOULDER_Y + 4, 58, 106, 56, 122], leftHandAngle: 260,
+                rightArm: [SHOULDER_R, SHOULDER_Y + 4, 100, 106, 102, 122], rightHandAngle: 280,
+                leftLeg: [HIP_L, HIP_Y - 6, 68, 158, 66, 180], leftFootAngle: 170,
+                rightLeg: [HIP_R, HIP_Y - 6, 88, 158, 90, 180], rightFootAngle: 10,
+                extras: sweatDrop(92, 54) + tremble(56, 122) + tremble(102, 122)
+            };
             return (
-                rigFrame(true) + warningLight('amber') + clawArm(2) + trapdoor('seam') +
-                contestant({
-                    tilt: 0, // compressed rather than leaning
-                    hair: 'frazzled',
-                    showPocket: opts && opts.showPocket,
-                    hairParams: opts && opts.hairParams,
-                    // round but tense — flattened/narrowed ovals rather than a
-                    // dash, so the eyes still read as open, just tight
-                    eyes: eye(73, 57, 3.2, 2.2, 0, 0, 1.4) + eye(89, 57, 3.2, 2.2, 0, 0, 1.4),
-                    mouth: '<path d="M72,73 L78,76 L82,72 L87,76 L91,73" stroke="' + INK + '" stroke-width="2.2" fill="none" stroke-linecap="round"/>',
-                    leftArm: [SHOULDER_L, SHOULDER_Y + 4, 58, 106, 56, 122], leftHandAngle: 260,
-                    rightArm: [SHOULDER_R, SHOULDER_Y + 4, 100, 106, 102, 122], rightHandAngle: 280,
-                    leftLeg: [HIP_L, HIP_Y - 6, 68, 158, 66, 180], leftFootAngle: 170,
-                    rightLeg: [HIP_R, HIP_Y - 6, 88, 158, 90, 180], rightFootAngle: 10,
-                    extras: sweatDrop(92, 54) + tremble(56, 122) + tremble(102, 122)
-                })
+                apparatusFor(stateName, opts, poseOpts) +
+                contestant(poseOpts)
             );
         },
-        PLEADING: function (opts) {
+        PLEADING: function (opts, stateName) {
+            var poseOpts = {
+                tilt: 26, // folds himself toward the puzzle
+                hair: 'frazzled',
+                showPocket: opts && opts.showPocket,
+                hairParams: opts && opts.hairParams,
+                // big, round, pupils cast up — beseeching puppy-eyes
+                eyes: eye(72, 59, 4.4, 4.8, 0, -1.6, 1.9) + eye(90, 59, 4.4, 4.8, 0, -1.6, 1.9),
+                mouth: '<ellipse cx="81" cy="75" rx="7" ry="6.5" fill="none" stroke="' + INK + '" stroke-width="2.2"/>',
+                leftArm: [SHOULDER_L, SHOULDER_Y, 34, 96, 6, 108], leftHandAngle: -30,
+                rightArm: [SHOULDER_R, SHOULDER_Y, 88, 108, 62, 122], rightHandAngle: 210,
+                // lunging crouch: front leg bent low, back leg trailing
+                leftLeg: [HIP_L, HIP_Y, 56, 166, 42, 184], leftFootAngle: 170,
+                rightLeg: [HIP_R, HIP_Y, 104, 162, 118, 180], rightFootAngle: 350,
+                extras: sweatDrop(96, 50) + sweatDrop(58, 54) + tremble(6, 108) + tremble(62, 122)
+            };
             return (
-                rigFrame(true) + warningLight('amber') + clawArm(2) + trapdoor('seam') +
-                contestant({
-                    tilt: 26, // folds himself toward the puzzle
-                    hair: 'frazzled',
-                    showPocket: opts && opts.showPocket,
-                    hairParams: opts && opts.hairParams,
-                    // big, round, pupils cast up — beseeching puppy-eyes
-                    eyes: eye(72, 59, 4.4, 4.8, 0, -1.6, 1.9) + eye(90, 59, 4.4, 4.8, 0, -1.6, 1.9),
-                    mouth: '<ellipse cx="81" cy="75" rx="7" ry="6.5" fill="none" stroke="' + INK + '" stroke-width="2.2"/>',
-                    leftArm: [SHOULDER_L, SHOULDER_Y, 34, 96, 6, 108], leftHandAngle: -30,
-                    rightArm: [SHOULDER_R, SHOULDER_Y, 88, 108, 62, 122], rightHandAngle: 210,
-                    // lunging crouch: front leg bent low, back leg trailing
-                    leftLeg: [HIP_L, HIP_Y, 56, 166, 42, 184], leftFootAngle: 170,
-                    rightLeg: [HIP_R, HIP_Y, 104, 162, 118, 180], rightFootAngle: 350,
-                    extras: sweatDrop(96, 50) + sweatDrop(58, 54) + tremble(6, 108) + tremble(62, 122)
-                }) +
+                apparatusFor(stateName, opts, poseOpts) +
+                contestant(poseOpts) +
                 // Skippy's face is sacred: placed well below his crouched
                 // pose (his head/hair never reach past y~100 at any tilt,
                 // and this crouch's own feet land above y~192) rather than
@@ -567,7 +695,7 @@
                 speechBubble('BUY. A. VOWEL.', 55, 196, 150, 'up')
             );
         },
-        TERRIFIED: function (opts) {
+        TERRIFIED: function (opts, stateName) {
             // Strike 5 = one mistake left. Not passive fear — actively
             // PLEADING FOR HIS LIFE: crouched/kneeling toward the player,
             // hands clasped and begging, huge eyes, hair at maximum chaos.
@@ -584,38 +712,50 @@
             // even the longest of the 10 rotating panic lines never has
             // to crowd toward his head to fit — the full canvas width is
             // open down there, so every line fits on one row.
+            //
+            // CONSCIOUS BOUNDED FORK #3 ("SKIPPY'S PREDICAMENT") — one more
+            // small additive hook, same shape as `opts.apparatus`:
+            // `opts.suppressSpeechBubble` (default falsy) skips drawing
+            // this baked bubble entirely. Added because an alternate
+            // predicament may want to surface Strike-5 dialogue through a
+            // caller's own single transient speech-bubble presenter
+            // instead (so there is never more than one Skippy speech
+            // bubble visible on screen at once) — see safe-predicament.js.
+            // Omitted (the default, and every call site before this fork)
+            // reproduces the original behavior exactly.
             var line = (opts && opts.panicLine) || PANIC_LINES[0];
             var bw = Math.min(244, Math.max(126, line.length * 7.4 + 26));
             var bx = Math.max(6, Math.min(254 - bw, Math.round((260 - bw) / 2)));
+            var poseOpts = {
+                tilt: 17, // pitched forward, begging toward the player
+                hair: 'electrified',
+                showPocket: opts && opts.showPocket,
+                hairParams: opts && opts.hairParams,
+                eyes: '<circle cx="69" cy="56" r="8" fill="none" stroke="' + INK + '" stroke-width="2.2"/>' +
+                    '<circle cx="69" cy="56" r="2.3" fill="' + INK + '"/>' +
+                    '<circle cx="93" cy="56" r="8" fill="none" stroke="' + INK + '" stroke-width="2.2"/>' +
+                    '<circle cx="93" cy="56" r="2.3" fill="' + INK + '"/>',
+                mouth: '<ellipse cx="81" cy="76" rx="6.5" ry="8" fill="none" stroke="' + INK + '" stroke-width="2.2"/>',
+                // both arms drawn in to a single clasped-hands point — begging, not bracing
+                leftArm: [SHOULDER_L, SHOULDER_Y, 60, 112, 74, 128], leftHandAngle: -60,
+                rightArm: [SHOULDER_R, SHOULDER_Y, 96, 112, 82, 128], rightHandAngle: 240,
+                // crouched/kneeling toward the player — legs folded short, not standing straight
+                leftLeg: [HIP_L, HIP_Y, 56, 160, 52, 178], leftFootAngle: 170,
+                rightLeg: [HIP_R, HIP_Y, 98, 160, 102, 178], rightFootAngle: 10,
+                extras: sweatDrop(98, 40) + sweatDrop(55, 43) + sweatDrop(81, 22) +
+                    tremble(74, 128) + tremble(82, 128) + tremble(52, 178) + tremble(102, 178)
+            };
             return (
-                rigFrame(true) + warningLight('red') + clawArm(3) + trapdoor('seam') +
-                contestant({
-                    tilt: 17, // pitched forward, begging toward the player
-                    hair: 'electrified',
-                    showPocket: opts && opts.showPocket,
-                    hairParams: opts && opts.hairParams,
-                    eyes: '<circle cx="69" cy="56" r="8" fill="none" stroke="' + INK + '" stroke-width="2.2"/>' +
-                        '<circle cx="69" cy="56" r="2.3" fill="' + INK + '"/>' +
-                        '<circle cx="93" cy="56" r="8" fill="none" stroke="' + INK + '" stroke-width="2.2"/>' +
-                        '<circle cx="93" cy="56" r="2.3" fill="' + INK + '"/>',
-                    mouth: '<ellipse cx="81" cy="76" rx="6.5" ry="8" fill="none" stroke="' + INK + '" stroke-width="2.2"/>',
-                    // both arms drawn in to a single clasped-hands point — begging, not bracing
-                    leftArm: [SHOULDER_L, SHOULDER_Y, 60, 112, 74, 128], leftHandAngle: -60,
-                    rightArm: [SHOULDER_R, SHOULDER_Y, 96, 112, 82, 128], rightHandAngle: 240,
-                    // crouched/kneeling toward the player — legs folded short, not standing straight
-                    leftLeg: [HIP_L, HIP_Y, 56, 160, 52, 178], leftFootAngle: 170,
-                    rightLeg: [HIP_R, HIP_Y, 98, 160, 102, 178], rightFootAngle: 10,
-                    extras: sweatDrop(98, 40) + sweatDrop(55, 43) + sweatDrop(81, 22) +
-                        tremble(74, 128) + tremble(82, 128) + tremble(52, 178) + tremble(102, 178)
-                }) +
-                speechBubble(line, bx, 194, bw, 'up')
+                apparatusFor(stateName, opts, poseOpts) +
+                contestant(poseOpts) +
+                ((opts && opts.suppressSpeechBubble) ? '' : speechBubble(line, bx, 194, bw, 'up'))
             );
         },
-        COMEDIC_DEFEAT: function () {
+        COMEDIC_DEFEAT: function (opts, stateName) {
             // No figure at all — he's gone. Trapdoor open, a scribbled puff,
             // foot-tick marks left behind, and the sign.
             return (
-                rigFrame(true) + warningLight('off') + clawArm(0) + trapdoor('open') +
+                apparatusFor(stateName, opts) +
                 '<g stroke="' + INK + '" stroke-width="2" fill="none" opacity="0.6">' +
                 '<path d="M64,222 Q76,206 66,196 M74,220 Q84,208 76,198 M56,218 Q64,210 58,202 ' +
                 'M84,224 Q92,212 82,206"/>' +
@@ -629,26 +769,27 @@
                 '</g>'
             );
         },
-        SAVED: function (opts) {
+        SAVED: function (opts, stateName) {
+            var poseOpts = {
+                tilt: -20, // head thrown all the way back, biggest tilt of the set
+                hair: 'flying',
+                showPocket: opts && opts.showPocket,
+                hairParams: opts && opts.hairParams,
+                eyes: '<path d="M68,57 Q75,50 82,57" stroke="' + INK + '" stroke-width="2.2" fill="none" stroke-linecap="round"/>' +
+                    '<path d="M85,57 Q93,50 100,57" stroke="' + INK + '" stroke-width="2.2" fill="none" stroke-linecap="round"/>',
+                mouth: '<path d="M64,69 Q81,95 98,69" stroke="' + INK + '" stroke-width="2.2" fill="none" stroke-linecap="round"/>',
+                // both arms flung straight overhead
+                leftArm: [SHOULDER_L, SHOULDER_Y, 44, 60, 38, 32], leftHandAngle: -90,
+                rightArm: [SHOULDER_R, SHOULDER_Y, 112, 60, 118, 32], rightHandAngle: -90,
+                // one leg kicked out/up, the other planted — a genuine jump
+                leftLeg: [HIP_L, HIP_Y, 50, 150, 30, 140], leftFootAngle: -20,
+                rightLeg: [HIP_R, HIP_Y, 98, 178, 102, 204], rightFootAngle: 20,
+                extras: burst(78, 26, 7, 20, 200, 160, 0.55) +
+                    burst(30, 34, 3, 11, 210, 60, 0.5) + burst(126, 34, 3, 11, 270, 60, 0.5)
+            };
             return (
-                rigFrame(false) + warningLight('off') + clawArm(0) + trapdoor('hidden') +
-                contestant({
-                    tilt: -20, // head thrown all the way back, biggest tilt of the set
-                    hair: 'flying',
-                    showPocket: opts && opts.showPocket,
-                    hairParams: opts && opts.hairParams,
-                    eyes: '<path d="M68,57 Q75,50 82,57" stroke="' + INK + '" stroke-width="2.2" fill="none" stroke-linecap="round"/>' +
-                        '<path d="M85,57 Q93,50 100,57" stroke="' + INK + '" stroke-width="2.2" fill="none" stroke-linecap="round"/>',
-                    mouth: '<path d="M64,69 Q81,95 98,69" stroke="' + INK + '" stroke-width="2.2" fill="none" stroke-linecap="round"/>',
-                    // both arms flung straight overhead
-                    leftArm: [SHOULDER_L, SHOULDER_Y, 44, 60, 38, 32], leftHandAngle: -90,
-                    rightArm: [SHOULDER_R, SHOULDER_Y, 112, 60, 118, 32], rightHandAngle: -90,
-                    // one leg kicked out/up, the other planted — a genuine jump
-                    leftLeg: [HIP_L, HIP_Y, 50, 150, 30, 140], leftFootAngle: -20,
-                    rightLeg: [HIP_R, HIP_Y, 98, 178, 102, 204], rightFootAngle: 20,
-                    extras: burst(78, 26, 7, 20, 200, 160, 0.55) +
-                        burst(30, 34, 3, 11, 210, 60, 0.5) + burst(126, 34, 3, 11, 270, 60, 0.5)
-                }) +
+                apparatusFor(stateName, opts, poseOpts) +
+                contestant(poseOpts) +
                 // Below him, clear of both his flung-up arms/hair and his
                 // planted/kicked feet — same "never over the face" rule.
                 speechBubble('SAVED!', 85, 196, 90, 'up')
@@ -711,7 +852,7 @@
         return (
             '<svg viewBox="0 0 260 260" width="260" height="260" role="img" ' +
             'aria-label="Contestant status: ' + esc(stateName) + '" data-state="' + esc(stateName) + '">' +
-            build(opts) +
+            build(opts, stateName) +
             '</svg>'
         );
     }
@@ -733,6 +874,18 @@
         // Skippy V1's frozen, human-barbered hair values (see
         // computeHairGeometry's defaults) — exported so tests/tools can
         // assert against them without re-typing the numbers.
-        SKIPPY_HAIR_DEFAULTS: SKIPPY_HAIR_DEFAULTS
+        SKIPPY_HAIR_DEFAULTS: SKIPPY_HAIR_DEFAULTS,
+        // HUMAN-GATE CORRECTION #3: exported so an alternate predicament's
+        // own tests can prove its occlusion is derived from the SAME
+        // per-state pose geometry as the real visible figure, not an
+        // independent approximation. SHOULDER_Y/HIP_Y/HIP_L/HIP_R exported
+        // alongside HEAD_CX (already exported above) so those tests can
+        // assert against the real body landmarks without re-typing them.
+        contestantSilhouette: contestantSilhouette,
+        POSE_KNOCKOUT_MASK_ID: POSE_KNOCKOUT_MASK_ID,
+        SHOULDER_Y: SHOULDER_Y,
+        HIP_Y: HIP_Y,
+        HIP_L: HIP_L,
+        HIP_R: HIP_R
     };
 }));

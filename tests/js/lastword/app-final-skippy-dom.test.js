@@ -124,8 +124,14 @@ function stateOf(el) {
     return m ? m[1] : null;
 }
 
-/** Boots a fresh app-final-skippy.js instance in an isolated vm context. */
-function bootApp(rngFallback) {
+/**
+ * Boots a fresh app-final-skippy.js instance in an isolated vm context.
+ * `locationSearch` (e.g. '?predicament=safe') simulates the URL query
+ * string app-final-skippy.js reads once at load to pick its Predicament —
+ * the same mechanism the real page uses, exercised here without a real
+ * browser location.
+ */
+function bootApp(rngFallback, locationSearch) {
     const elements = {};
     IDS.forEach((id) => { elements[id] = makeElement(id); elements[id].width = 260; elements[id].height = 260; });
 
@@ -139,7 +145,9 @@ function bootApp(rngFallback) {
     const sandbox = {
         console,
         Math: fakeMath,
+        URLSearchParams,
         document: { getElementById: (id) => elements[id], createElement: (tag) => makeElement('(' + tag + ')'), activeElement: null },
+        location: { search: locationSearch || '' },
         fetch: () => Promise.resolve({ ok: true, json: () => Promise.resolve(JSON.parse(puzzlesJson)) }),
         addEventListener: function () {},
         setTimeout: clock.setTimeout,
@@ -149,7 +157,7 @@ function bootApp(rngFallback) {
     sandbox.self = sandbox;
     const context = vm.createContext(sandbox);
 
-    ['content.js', 'state.js', 'round.js', 'final.js', 'session.js', 'gallows-character.js', 'idle-chatter.js', 'hint.js', 'skippy-memory.js', 'situational-awareness.js', 'auto-solve.js', 'app-final-skippy.js'].forEach((f) => {
+    ['content.js', 'state.js', 'round.js', 'final.js', 'session.js', 'gallows-character.js', 'idle-chatter.js', 'hint.js', 'skippy-memory.js', 'situational-awareness.js', 'safe-predicament.js', 'auto-solve.js', 'app-final-skippy.js'].forEach((f) => {
         const file = path.join(ROOT, 'js/lastword', f);
         vm.runInContext(fs.readFileSync(file, 'utf8'), context, { filename: f });
     });
@@ -1030,6 +1038,152 @@ async function check(name, fn) {
         assert.strictEqual(elements.strikeCount.textContent, '5', 'strikes reflect only the real misses, nothing extra from the reaction');
         assert.strictEqual(elements.roundScore.textContent, '300', 'score unaffected by the reaction itself');
         assert.strictEqual(revealedCellCount(), revealedBeforeReaction, 'the reaction itself reveals nothing — the board is identical to before the (all-miss) guesses that triggered it');
+    });
+
+    // -----------------------------------------------------------------
+    // SKIPPY'S PREDICAMENT (accepted, PASS) — the suspended-safe
+    // Predicament, exercised through the real DOM call sites (not just
+    // safe-predicament.js's own pure tests). Selected at boot via
+    // `?predicament=safe` (see bootApp's `locationSearch` param), the same
+    // mechanism the real page reads from its URL — the proof-only compare
+    // toggle used during human-gate review has been removed as accepted-
+    // build residue; this is what's left standing.
+    // -----------------------------------------------------------------
+
+    const SAFE_FILL_MARKER = '#232733'; // safe-predicament.js's SAFE_FILL — unique to the alternate apparatus
+
+    await check('an ordinary page load (no ?predicament param) renders the accepted gallows presentation', async () => {
+        const { elements } = await bootApp(0);
+        clickByText(elements.categoryList, 'Movies & TV');
+        assert.strictEqual(elements.gallows.innerHTML.indexOf(SAFE_FILL_MARKER), -1,
+            'default render must be the accepted gallows, not the safe');
+    });
+
+    await check('?predicament=safe selects the suspended-safe apparatus from page load', async () => {
+        const { elements } = await bootApp(0, '?predicament=safe');
+        clickByText(elements.categoryList, 'Movies & TV');
+        // CONFIDENT/strike 0 deliberately shows only a cable hint, no box
+        // yet (see safe-predicament.js's own header) — take one real wrong
+        // guess so the safe box has actually "entered" before asserting.
+        clickByText(elements.letters, 'Q');
+        assert.strictEqual(elements.strikeCount.textContent, '1', 'sanity: a real miss landed');
+        assert.ok(elements.gallows.innerHTML.indexOf(SAFE_FILL_MARKER) !== -1, 'showing the suspended safe');
+    });
+
+    await check('the predicament changes presentation only — an identical action sequence produces identical score/strikes/round-state whichever predicament is active', async () => {
+        const gallowsRun = await bootApp(0);
+        const safeRun = await bootApp(0, '?predicament=safe');
+        [gallowsRun, safeRun].forEach(({ elements }) => {
+            clickByText(elements.categoryList, 'Movies & TV');
+            earnAtLeast(elements, 300); // identical, deterministic guess sequence in both runs
+        });
+        assert.strictEqual(safeRun.elements.roundScore.textContent, gallowsRun.elements.roundScore.textContent);
+        assert.strictEqual(safeRun.elements.strikeCount.textContent, gallowsRun.elements.strikeCount.textContent);
+        assert.strictEqual(stateOf(safeRun.elements.gallows), stateOf(gallowsRun.elements.gallows),
+            'same strike/solved state name either predicament');
+    });
+
+    await check('the accepted gallows presentation still renders identically when the safe predicament is never selected (regression)', async () => {
+        const { elements } = await bootApp(0);
+        clickByText(elements.categoryList, 'Movies & TV');
+        earnAtLeast(elements, 300);
+        assert.strictEqual(elements.gallows.innerHTML.indexOf(SAFE_FILL_MARKER), -1,
+            'untouched gallows presentation never contains safe-predicament markup');
+    });
+
+    // ---- no double speech in safe mode -------------------------------------
+    // The exact real-play scenario the human-gate correction flagged: a
+    // caller reaches Strike 5 with an affordable hint sitting unused WHILE
+    // the safe predicament is active — situational awareness's five-
+    // strike-danger reaction and Skippy's own Strike-5 panic line would
+    // both want the one speech-bubble slot at the same moment.
+
+    await check('safe mode never presents two Skippy speech bubbles simultaneously at the real Strike-5/danger-reaction collision point', async () => {
+        const { elements } = await bootApp(0, '?predicament=safe');
+        clickByText(elements.categoryList, 'Movies & TV');
+        earnAtLeast(elements, 300); // exactly Round 1's hint cost — an affordable hint will be sitting unused
+
+        ['Q', 'X', 'Z', 'J', 'W'].forEach((l) => clickByText(elements.letters, l)); // -> strikes hit 5
+
+        assert.strictEqual(elements.strikeCount.textContent, '5', 'sanity: really reached strike 5');
+        // The baked-into-the-SVG bubble (gallows-character.js's own
+        // speechBubble group, tail "up") must never be present in safe
+        // mode — that was the second, competing bubble.
+        assert.strictEqual(elements.gallows.innerHTML.indexOf('lw-bubble'), -1,
+            'the safe predicament must suppress the baked SVG speech bubble entirely');
+        // Exactly one bubble is now showing — the single shared HTML
+        // overlay — carrying either the situational reaction or the
+        // safe-specific Strike-5 line (whichever claimed the one slot
+        // first), never neither and never a stale one from earlier.
+        assert.strictEqual(elements.skippyChatterBubble.hidden, false, 'exactly one active bubble is expected here');
+        assert.ok(elements.skippyChatterBubble.textContent.length > 0);
+    });
+
+    await check('safe mode\'s Strike-5 line still reaches the caller via the shared bubble when nothing else claims it first', async () => {
+        const { elements } = await bootApp(0, '?predicament=safe');
+        clickByText(elements.categoryList, 'Movies & TV');
+
+        // Reach strike 5 WITHOUT an affordable hint sitting unused (score
+        // stays at 0), so situational awareness's five-strike-danger never
+        // qualifies (canBuyHint is false) and the one bubble slot is free
+        // for the safe-specific line to claim.
+        ['Q', 'X', 'Z', 'J', 'W'].forEach((l) => clickByText(elements.letters, l));
+
+        assert.strictEqual(elements.strikeCount.textContent, '5');
+        assert.strictEqual(elements.gallows.innerHTML.indexOf('lw-bubble'), -1, 'still no baked SVG bubble in safe mode');
+        assert.strictEqual(elements.skippyChatterBubble.hidden, false, 'the routed Strike-5 line should reach the caller');
+        assert.ok(elements.skippyChatterBubble.textContent.indexOf('COMBINATION') !== -1,
+            'the safe-specific line itself should be the one shown: ' + elements.skippyChatterBubble.textContent);
+    });
+
+    await check('the accepted gallows presentation (safe predicament never selected) is completely unaffected by the double-speech handling', async () => {
+        const { elements } = await bootApp(0);
+        clickByText(elements.categoryList, 'Movies & TV');
+        earnAtLeast(elements, 300);
+        ['Q', 'X', 'Z', 'J', 'W'].forEach((l) => clickByText(elements.letters, l));
+
+        assert.strictEqual(elements.strikeCount.textContent, '5');
+        // The accepted gallows STILL bakes its own bubble — that behavior
+        // was never touched, only the safe predicament's presentation.
+        assert.ok(elements.gallows.innerHTML.indexOf('lw-bubble') !== -1,
+            'accepted gallows keeps its own baked Strike-5 bubble, unaffected by this correction');
+    });
+
+    // ---- pose-derived occlusion --------------------------------------------
+
+    await check('the real rendered Strike 5 safe-mode Skippy carries the pose-derived occlusion mask, through the actual DOM call site', async () => {
+        const { elements } = await bootApp(0, '?predicament=safe');
+        clickByText(elements.categoryList, 'Movies & TV');
+        earnAtLeast(elements, 300);
+        ['Q', 'X', 'Z', 'J', 'W'].forEach((l) => clickByText(elements.letters, l));
+
+        assert.strictEqual(elements.strikeCount.textContent, '5');
+        const svg = elements.gallows.innerHTML;
+        assert.ok(svg.indexOf('lw-pose-knockout-mask') !== -1,
+            'the real render at Strike 5 must carry the occlusion mask, not just the pure module in isolation');
+        // The mask's silhouette is built from TERRIFIED's own real leg/arm
+        // coordinates (rotate(17 78 118), leftLeg starting M70,144) — not a
+        // fixed approximation shape — same proof as the pure module's own
+        // tests, now confirmed through the real DOM render path.
+        const maskContent = svg.match(/<mask[\s\S]*?<\/mask>/)[0];
+        assert.ok(maskContent.indexOf('rotate(17 78 118)') !== -1, 'TERRIFIED\'s real tilt (17) should drive the mask silhouette');
+        assert.ok(maskContent.indexOf('M70,144 L56,160 L52,178') !== -1, 'TERRIFIED\'s real left leg coordinates should be in the mask');
+        assert.ok(maskContent.indexOf('<circle cx="78" cy="60"') !== -1, 'head knockout circle present');
+    });
+
+    await check('COMEDIC_DEFEAT through real play stays unmasked in safe mode — the WHAM impact is fully visible, nothing carved out of it', async () => {
+        const { elements } = await bootApp(0, '?predicament=safe');
+        clickByText(elements.categoryList, 'Movies & TV');
+        ['Q', 'X', 'Z', 'J', 'W', 'Y'].forEach((l) => clickByText(elements.letters, l)); // 6 misses -> struck out
+
+        // finishCurrentRound() paints the terminal pose immediately but
+        // doesn't touch el.strikeCount (that's only refreshed by the normal
+        // in-round renderScoreboard() path) — check the actual painted
+        // state instead.
+        assert.strictEqual(stateOf(elements.gallows), 'COMEDIC_DEFEAT', 'sanity: really struck out');
+        assert.ok(elements.gallows.innerHTML.indexOf('WHAM') !== -1, 'the landed safe\'s impact should be fully visible');
+        assert.strictEqual(elements.gallows.innerHTML.indexOf('lw-pose-knockout-mask'), -1,
+            'COMEDIC_DEFEAT must stay unmasked even in safe mode — no standing figure left to protect');
     });
 
     console.log(passed + ' passed');

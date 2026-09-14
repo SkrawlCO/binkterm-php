@@ -4,8 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1"/>
     <title>Last Word — SKIPPY (unlisted human-test build)</title>
-    <link rel="stylesheet" href="css/lastword.css?v=skippy8" />
-    <link rel="stylesheet" href="css/lastword-skippy.css?v=skippy8" />
+    <link rel="stylesheet" href="css/lastword.css?v=skippy14" />
+    <link rel="stylesheet" href="css/lastword-skippy.css?v=skippy14" />
 </head>
 <body>
 <!--
@@ -46,6 +46,17 @@
   js/lastword/situational-awareness.js (round-scoped, in-memory only —
   see its own header) before app-final-skippy.js. Still no new DOM
   elements — mid-round reactions reuse the same #skippyChatterBubble.
+
+  SKIPPY'S PREDICAMENT (accepted, human-signed-off 2026-09-13): also loads
+  js/lastword/safe-predicament.js, the accepted suspended-safe Predicament
+  (Predicament #1) that swaps in for the accepted gallows (now conceptually
+  "Predicament #0") via gallows-character.js's `opts.apparatus` hook —
+  Skippy himself renders identically either way, including his own pose-
+  derived occlusion of whichever Predicament is active. No new DOM
+  elements. Presentation defaults to the accepted gallows; add
+  `?predicament=safe` to this page's URL to select the suspended safe
+  instead — how a session will eventually choose/vary its Predicament in
+  production is still an open decision, this is just today's mechanism.
 -->
 <header>
     <h1>LAST WORD</h1>
@@ -182,24 +193,25 @@
 </section>
 
 <!--
-  ?v=skippy8 cache-busts these local scripts/stylesheets. Bump the version
+  ?v=skippy14 cache-busts these local scripts/stylesheets. Bump the version
   token here whenever any of these files change, and verify the live page
   actually received the new version before human testing — Cloudflare
   rewrites this zone's .js/.css Cache-Control to a 4-hour browser TTL (see
   lastword-m1c.html for the full explanation), so a new query string is the
   reliable way to force a genuinely fresh fetch.
 -->
-<script src="js/lastword/content.js?v=skippy8"></script>
-<script src="js/lastword/state.js?v=skippy8"></script>
-<script src="js/lastword/round.js?v=skippy8"></script>
-<script src="js/lastword/final.js?v=skippy8"></script>
-<script src="js/lastword/session.js?v=skippy8"></script>
-<script src="js/lastword/gallows-character.js?v=skippy8"></script>
-<script src="js/lastword/idle-chatter.js?v=skippy8"></script>
-<script src="js/lastword/hint.js?v=skippy8"></script>
-<script src="js/lastword/skippy-memory.js?v=skippy8"></script>
-<script src="js/lastword/situational-awareness.js?v=skippy8"></script>
-<script src="js/lastword/auto-solve.js?v=skippy8"></script>
-<script src="js/lastword/app-final-skippy.js?v=skippy8"></script>
+<script src="js/lastword/content.js?v=skippy14"></script>
+<script src="js/lastword/state.js?v=skippy14"></script>
+<script src="js/lastword/round.js?v=skippy14"></script>
+<script src="js/lastword/final.js?v=skippy14"></script>
+<script src="js/lastword/session.js?v=skippy14"></script>
+<script src="js/lastword/gallows-character.js?v=skippy14"></script>
+<script src="js/lastword/idle-chatter.js?v=skippy14"></script>
+<script src="js/lastword/hint.js?v=skippy14"></script>
+<script src="js/lastword/skippy-memory.js?v=skippy14"></script>
+<script src="js/lastword/situational-awareness.js?v=skippy14"></script>
+<script src="js/lastword/safe-predicament.js?v=skippy14"></script>
+<script src="js/lastword/auto-solve.js?v=skippy14"></script>
+<script src="js/lastword/app-final-skippy.js?v=skippy14"></script>
 </body>
 </html>
