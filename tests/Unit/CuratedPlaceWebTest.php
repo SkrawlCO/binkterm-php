@@ -195,6 +195,72 @@ final class CuratedPlaceWebTest extends TestCase
         self::assertStringContainsString('A different curated corner, unrelated to Puzlmastr&#039;s Patch.', $html);
     }
 
+    /**
+     * Slice 2 ("Featured / New in the Patch"): proves the mechanism entirely
+     * in-memory -- one existing member is marked `featured` on the fixture
+     * array only, NEVER on config/crossroads/places.json -- so no fake
+     * caller-facing content ships. When Slice 4 later sets `featured` on a
+     * real member in places.json, this is exactly the path it will take.
+     */
+    public function testFeaturedMemberRendersInFeaturedBandAndOrdinaryMembersExcludeIt(): void
+    {
+        $place = $this->place();
+        foreach ($place['members'] as $i => $member) {
+            if ($member['reference'] === 'blackjack') {
+                $place['members'][$i]['featured'] = true;
+                $place['members'][$i]['featured_presentation'] = [
+                    'eyebrow' => 'EARLY PLAYTEST',
+                    'caption' => 'Play it. Break it. Tell us what you think.',
+                ];
+            }
+        }
+
+        $featured = CuratedPlacePresentation::featuredMembers($place);
+        self::assertCount(1, $featured);
+        self::assertSame('blackjack', $featured[0]['reference']);
+        self::assertSame('EARLY PLAYTEST', $featured[0]['featured_presentation']['eyebrow']);
+        self::assertSame('Play it. Break it. Tell us what you think.', $featured[0]['featured_presentation']['caption']);
+
+        $ordinary = CuratedPlacePresentation::members($place);
+        self::assertSame(
+            ['wordwright', 'hangman', 'parlour', 'tatham/lightup', 'breaklock', 'ordinary-puzzles', 'dokuel', 'everest'],
+            array_column($ordinary, 'reference'),
+            'the featured member is excluded from the ordinary grid; the other 8 keep their original relative order'
+        );
+
+        $html = $this->twig()->render('curated_place.twig', ['place' => $place, 'featured_cards' => $featured, 'member_cards' => $ordinary]);
+        self::assertStringContainsString('curated-place-featured-card', $html);
+        self::assertStringContainsString('EARLY PLAYTEST', $html);
+        self::assertStringContainsString('Play it. Break it. Tell us what you think.', $html);
+        self::assertSame(1, substr_count($html, 'href="/games/blackjack?parent_place_id=puzlmastrs-patch"'),
+            'the featured member launches exactly once -- never duplicated into the ordinary grid below');
+        self::assertStringContainsString('curated-place-header--hero', $html,
+            'the Slice 1 identity header remains intact alongside the Slice 2 featured band');
+    }
+
+    /**
+     * The real, current Puzlmastr's Patch fixture (no member marked
+     * `featured`) must render no featured band at all -- never an empty
+     * decorated region -- and the ordinary grid is the unchanged original 9.
+     */
+    public function testNoFeaturedMembersRendersNoFeaturedBandAndOriginalNineMembers(): void
+    {
+        $place = $this->place();
+        $featured = CuratedPlacePresentation::featuredMembers($place);
+        self::assertSame([], $featured);
+
+        $ordinary = CuratedPlacePresentation::members($place);
+        self::assertSame(
+            ['wordwright', 'hangman', 'blackjack', 'parlour', 'tatham/lightup', 'breaklock', 'ordinary-puzzles', 'dokuel', 'everest'],
+            array_column($ordinary, 'reference')
+        );
+
+        $html = $this->twig()->render('curated_place.twig', ['place' => $place, 'featured_cards' => $featured, 'member_cards' => $ordinary]);
+        self::assertStringNotContainsString('curated-place-featured', $html,
+            'no featured band markup at all when nothing is featured -- not an empty decorated section');
+        self::assertStringContainsString('curated-place-header--hero', $html);
+    }
+
     public function testExistingRootCardsKeepTheirLinksAndRemainInComposition(): void
     {
         $games = [];

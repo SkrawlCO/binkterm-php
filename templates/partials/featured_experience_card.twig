@@ -1,0 +1,26 @@
+{#
+    Featured experience card (Slice 2, "Featured / New in the Patch").
+
+    Wide/horizontal treatment distinguishing a place's featured member(s)
+    from the ordinary grid below it. Reads the SAME game view shape
+    CuratedPlacePresentation::featuredMembers() builds -- title/description/
+    icon/launch all resolve from the member's normal manifest/catalog source,
+    exactly as experience_library_card.twig's cards do; `featured_presentation`
+    only supplies optional presentational extras (an eyebrow label and a short
+    caption) that have no place in the ordinary catalog metadata, never a
+    second source of game metadata.
+#}
+{% set view = game.experience_presentation %}
+{% set presentation = game.featured_presentation|default({}) %}
+<article class="curated-place-featured-card">
+    <img class="curated-place-featured-icon flex-shrink-0" width="56" height="56" src="{{ view.presentation.icon_url|default('/favicon.svg') }}" alt="" onerror="this.src='/favicon.svg'">
+    <div class="curated-place-featured-body">
+        {% if presentation.eyebrow %}<div class="curated-place-featured-eyebrow">{{ presentation.eyebrow }}</div>{% endif %}
+        <h3 class="h5 mb-1"><a href="{{ game.destination_url|default('/experiences/' ~ view.id) }}" class="curated-place-featured-title-link stretched-link">{{ view.name }}</a></h3>
+        <p class="curated-place-featured-description text-muted small mb-0">{{ view.description }}</p>
+        {% if presentation.caption %}<p class="curated-place-featured-caption small mb-0">{{ presentation.caption }}</p>{% endif %}
+    </div>
+    <div class="curated-place-featured-action flex-shrink-0">
+        <span class="experience-card-action-badge experience-card-action-badge--go" aria-hidden="true">{{ t('ui.webdoors.enter', {}, locale, ['common']) }}</span>
+    </div>
+</article>

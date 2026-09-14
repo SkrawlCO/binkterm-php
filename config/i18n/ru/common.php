@@ -3936,6 +3936,7 @@ return [
     'ui.webdoors.all_experiences_description' => 'Полная библиотека впечатлений, доступных вам в веб-интерфейсе.',
     'ui.webdoors.shelf_curated_title' => 'Избранные впечатления',
     'ui.webdoors.shelf_curated_caption' => 'Тщательно выбранные места, которые определяют, чем становится Crossroads.',
+    'ui.webdoors.place_featured_title' => 'Рекомендуем',
     'ui.webdoors.shelf_game_hall_title' => 'Игровой зал',
     'ui.webdoors.shelf_game_hall_caption' => 'Более широкая коллекция игр и знакомой классики BBS.',
     'ui.webdoors.shelf_gateway_title' => 'Шлюзы',

@@ -327,6 +327,7 @@ SimpleRouter::get('/places/{placeId}', function(string $placeId) {
     }
     (new Template())->renderResponse('curated_place.twig', [
         'place' => $place,
+        'featured_cards' => \BinktermPHP\CuratedPlacePresentation::featuredMembers($place),
         'member_cards' => \BinktermPHP\CuratedPlacePresentation::members($place),
     ]);
 });

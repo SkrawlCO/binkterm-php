@@ -87,6 +87,22 @@ final class CuratedPlaceCatalog
                     $resolved[$field] = $member[$field];
                 }
             }
+            // Slice 2 ("Featured / New in the Patch"): an optional, purely
+            // presentational flag + small caption block a board owner can
+            // set per member -- never a second source of game metadata
+            // (title/description/icon/launch keep resolving from the member's
+            // normal manifest/catalog source above; featured_presentation
+            // only carries what the ordinary catalog has no place for, e.g.
+            // a short "EARLY PLAYTEST"-style eyebrow/caption).
+            $resolved['featured'] = ($member['featured'] ?? false) === true;
+            if (is_array($member['featured_presentation'] ?? null)) {
+                $resolved['featured_presentation'] = [
+                    'eyebrow' => is_string($member['featured_presentation']['eyebrow'] ?? null)
+                        ? $member['featured_presentation']['eyebrow'] : null,
+                    'caption' => is_string($member['featured_presentation']['caption'] ?? null)
+                        ? $member['featured_presentation']['caption'] : null,
+                ];
+            }
             $members[] = $resolved;
         }
         $place['members'] = $members;

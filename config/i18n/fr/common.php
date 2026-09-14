@@ -3254,6 +3254,7 @@ Vous pouvez envoyer des rappels individuels en utilisant les boutons « Rappeler
     'ui.webdoors.all_experiences_description' => 'La bibliothèque complète des expériences disponibles sur le web.',
     'ui.webdoors.shelf_curated_title' => 'Expériences sélectionnées',
     'ui.webdoors.shelf_curated_caption' => 'Des lieux choisis avec soin qui incarnent ce que Crossroads veut devenir.',
+    'ui.webdoors.place_featured_title' => 'À la une',
     'ui.webdoors.shelf_game_hall_title' => 'Salle de jeux',
     'ui.webdoors.shelf_game_hall_caption' => 'Une collection plus large de jeux et de classiques BBS.',
     'ui.webdoors.shelf_gateway_title' => 'Passerelles',

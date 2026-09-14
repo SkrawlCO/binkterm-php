@@ -131,26 +131,63 @@ final class CuratedPlacePresentation
         return ['active' => $playerCount > 0, 'player_count' => $playerCount];
     }
 
-    /** Use the authorized runtime's presentation and unchanged launch target. */
+    /**
+     * Use the authorized runtime's presentation and unchanged launch target.
+     * Excludes any member marked `featured` -- see featuredMembers() -- so a
+     * featured member renders exactly once, never duplicated into the
+     * ordinary grid. A place with no featured member behaves exactly as
+     * before (every member passes this filter).
+     */
     public static function members(array $place): array
     {
         $cards = [];
         foreach ($place['members'] as $member) {
-            $experience = $member['experience'];
-            $experience['name'] = $member['title'];
-            $experience['description'] = $member['description'];
-            $experience['surfaces'] = $member['surfaces'];
-            $cards[] = [
-                'reference' => $member['reference'],
-                'destination_url' => isset($member['launch']['url'])
-                    ? $member['launch']['url']
-                        . (str_contains($member['launch']['url'], '?') ? '&' : '?')
-                        . http_build_query(['parent_place_id' => $place['id']])
-                    : null,
-                'show_surfaces' => true,
-                'experience_presentation' => ExperiencePresentation::build($experience, 'web'),
-            ];
+            if (($member['featured'] ?? false) === true) {
+                continue;
+            }
+            $cards[] = self::buildMemberCard($place, $member);
         }
         return $cards;
+    }
+
+    /**
+     * Slice 2 ("Featured / New in the Patch"): the subset of a place's
+     * members marked `featured` in config/crossroads/places.json, in the
+     * same resolved-member order as members() would otherwise produce.
+     * Empty for every place until a board owner actually sets `featured`
+     * on one of its members -- a place with none renders no featured band
+     * at all (see curated_place.twig), not an empty decorated region.
+     */
+    public static function featuredMembers(array $place): array
+    {
+        $cards = [];
+        foreach ($place['members'] as $member) {
+            if (($member['featured'] ?? false) !== true) {
+                continue;
+            }
+            $card = self::buildMemberCard($place, $member);
+            $card['featured_presentation'] = $member['featured_presentation'] ?? [];
+            $cards[] = $card;
+        }
+        return $cards;
+    }
+
+    /** Shared card-view builder for members()/featuredMembers() -- one source of the shape both use. */
+    private static function buildMemberCard(array $place, array $member): array
+    {
+        $experience = $member['experience'];
+        $experience['name'] = $member['title'];
+        $experience['description'] = $member['description'];
+        $experience['surfaces'] = $member['surfaces'];
+        return [
+            'reference' => $member['reference'],
+            'destination_url' => isset($member['launch']['url'])
+                ? $member['launch']['url']
+                    . (str_contains($member['launch']['url'], '?') ? '&' : '?')
+                    . http_build_query(['parent_place_id' => $place['id']])
+                : null,
+            'show_surfaces' => true,
+            'experience_presentation' => ExperiencePresentation::build($experience, 'web'),
+        ];
     }
 }

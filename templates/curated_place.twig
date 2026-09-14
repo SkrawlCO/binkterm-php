@@ -21,6 +21,14 @@
         {% if place.association.context|default('') %}<p class="small text-muted">{{ place.association.context }}</p>{% endif %}
     </header>
     {% endif %}
+    {% if featured_cards is defined and featured_cards|length > 0 %}
+    <section class="curated-place-featured" aria-label="{{ t('ui.webdoors.place_featured_title', {}, locale, ['common']) }}">
+        <div class="curated-place-featured-title">{{ t('ui.webdoors.place_featured_title', {}, locale, ['common']) }}</div>
+        {% for game in featured_cards %}
+            {% include 'partials/featured_experience_card.twig' with {game: game} %}
+        {% endfor %}
+    </section>
+    {% endif %}
     <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-2">
         {% for game in member_cards %}
             {% include 'partials/experience_library_card.twig' with {game: game} %}

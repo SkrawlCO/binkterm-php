@@ -611,6 +611,86 @@
     margin-bottom: 0;
 }
 
+/* ---- Curated place featured band (optional, generic) ------------------ *
+ * Only rendered when a place resolves at least one member with `featured`
+ * set true (config/crossroads/places.json member entry + curated_place.twig)
+ * -- a place with no featured member renders no band at all, not an empty
+ * decorated region. Wide/horizontal cards distinguish this from the ordinary
+ * grid below without making that grid look second-rate: no border/background
+ * change to .experience-library-card, this is purely additive above it.
+ * --pp-featured-accent is a literal warm accent (sunflower gold, matching
+ * the identity header above), scoped to this section only -- never the
+ * shared --experience-accent (site cyan), never a global theme change. */
+.curated-place-featured {
+    --pp-featured-accent: #d9a521; /* sunflower gold */
+    margin-bottom: 1.1rem;
+}
+
+.curated-place-featured-title {
+    color: color-mix(in srgb, var(--pp-featured-accent) 70%, var(--text-color-muted, #6c757d));
+    font-family: "Courier New", monospace;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    margin-bottom: 0.5rem;
+    text-transform: uppercase;
+}
+
+.curated-place-featured-card {
+    align-items: center;
+    background: color-mix(in srgb, var(--pp-featured-accent) 8%, var(--experience-surface));
+    border: 1px solid color-mix(in srgb, var(--pp-featured-accent) 34%, var(--experience-border));
+    border-left: 4px solid var(--pp-featured-accent);
+    border-radius: 8px;
+    display: flex;
+    gap: 1rem;
+    padding: 0.9rem 1.05rem;
+    position: relative;
+}
+
+.curated-place-featured-card + .curated-place-featured-card {
+    margin-top: 0.6rem;
+}
+
+.curated-place-featured-card:hover,
+.curated-place-featured-card:focus-within {
+    border-color: var(--pp-featured-accent);
+    box-shadow: 0 2px 8px color-mix(in srgb, var(--pp-featured-accent) 22%, transparent);
+}
+
+.curated-place-featured-icon {
+    border-radius: 6px;
+}
+
+.curated-place-featured-body {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.curated-place-featured-eyebrow {
+    color: var(--pp-featured-accent);
+    font-family: "Courier New", monospace;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    margin-bottom: 0.15rem;
+    text-transform: uppercase;
+}
+
+.curated-place-featured-title-link {
+    color: inherit;
+    text-decoration: none;
+}
+
+.curated-place-featured-title-link:hover {
+    text-decoration: underline;
+}
+
+.curated-place-featured-caption {
+    color: color-mix(in srgb, var(--pp-featured-accent) 55%, var(--text-color, #1a1a1a));
+    margin-top: 0.15rem;
+}
+
 /* ---- Community Scoreboard: supporting information, not the climax ----- */
 .experience-scoreboard {
     --bs-card-border-color: var(--experience-border);
@@ -671,6 +751,16 @@
     .curated-place-hero-image {
         height: 60px;
         width: 60px;
+    }
+
+    .curated-place-featured-card {
+        flex-wrap: wrap;
+        padding: 0.7rem;
+    }
+
+    .curated-place-featured-icon {
+        height: 40px;
+        width: 40px;
     }
 
     .experience-shelf--curated {

@@ -3932,6 +3932,7 @@ return [
     'ui.webdoors.all_experiences_description' => 'The complete Experience library available to you on the web.',
     'ui.webdoors.shelf_curated_title' => 'Curated Experiences',
     'ui.webdoors.shelf_curated_caption' => 'Carefully chosen places that define what Crossroads is becoming.',
+    'ui.webdoors.place_featured_title' => 'Featured',
     'ui.webdoors.shelf_game_hall_title' => 'Game Hall',
     'ui.webdoors.shelf_game_hall_caption' => 'A wider collection of games and familiar BBS favorites.',
     'ui.webdoors.shelf_gateway_title' => 'Gateways',

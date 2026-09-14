@@ -3912,6 +3912,7 @@ return [
     'ui.webdoors.all_experiences_description' => 'La libreria completa delle esperienze disponibili sul web.',
     'ui.webdoors.shelf_curated_title' => 'Esperienze selezionate',
     'ui.webdoors.shelf_curated_caption' => 'Luoghi scelti con cura che definiscono ciò che Crossroads vuole diventare.',
+    'ui.webdoors.place_featured_title' => 'In evidenza',
     'ui.webdoors.shelf_game_hall_title' => 'Sala giochi',
     'ui.webdoors.shelf_game_hall_caption' => 'Una raccolta più ampia di giochi e classici BBS.',
     'ui.webdoors.shelf_gateway_title' => 'Gateway',
