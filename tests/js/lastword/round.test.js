@@ -11,6 +11,7 @@ const path = require('path');
 const LastWordContent = require('../../../public_html/webdoors/hangman/js/lastword/content.js');
 const LastWordState = require('../../../public_html/webdoors/hangman/js/lastword/state.js');
 const LastWordRound = require('../../../public_html/webdoors/hangman/js/lastword/round.js');
+const LastWordAutoSolve = require('../../../public_html/webdoors/hangman/js/lastword/auto-solve.js');
 
 const puzzlesPath = path.join(
     __dirname, '../../../public_html/webdoors/hangman/lastword/puzzles.json'
@@ -318,6 +319,55 @@ check('a single early, cheap guess before solving still scores less than or comp
     const result = LastWordRound.attemptSolve(round, backToTheFuture, backToTheFuture.answer);
 
     assert.ok(result.roundState.pointsThisRound < 1500);
+});
+
+const commodore64 = LastWordContent.byId(puzzles, 'bbs-retro-0006'); // "COMMODORE 64"
+
+check('digits in an answer (COMMODORE 64) are always-visible display characters, never guessable letters, and never block full reveal', () => {
+    assert.strictEqual(commodore64.answer, 'COMMODORE 64');
+    // Digits must never appear in guessableLetters: the player is never asked
+    // to guess a digit despite having no digit controls in the UI.
+    assert.deepStrictEqual(
+        commodore64.guessableLetters.filter((l) => /[0-9]/.test(l)),
+        []
+    );
+
+    let round = LastWordState.createRoundState(1, commodore64.id, commodore64.category);
+    let board = LastWordRound.buildDisplayBoard(commodore64, round);
+
+    // "6" and "4" (and the space) must be visible from round start, like any
+    // other non-letter display character, before any letters are guessed.
+    const digitIndexes = [];
+    commodore64.answer.split('').forEach((ch, i) => { if (/[0-9]/.test(ch)) digitIndexes.push(i); });
+    assert.ok(digitIndexes.length === 2, 'expected two digit characters in "COMMODORE 64"');
+    digitIndexes.forEach((i) => {
+        assert.strictEqual(board[i].isLetter, false);
+        assert.strictEqual(board[i].revealed, true);
+        assert.strictEqual(board[i].char, commodore64.answer[i]);
+    });
+
+    // Guessing every real letter (but never being asked about the digits)
+    // must be sufficient for auto-solve/full-reveal detection to consider the
+    // board fully revealed.
+    commodore64.guessableLetters.filter(LastWordContent.isConsonant).forEach((letter) => {
+        round = LastWordRound.guessConsonant(round, commodore64, letter).roundState;
+    });
+    commodore64.guessableLetters.filter(LastWordContent.isVowel).forEach((letter) => {
+        round = LastWordRound.purchaseVowel(round, commodore64, letter, 100000).roundState;
+    });
+    assert.ok(LastWordAutoSolve.isFullyRevealed(commodore64, round.revealedLetters));
+
+    // Full-solve comparison must accept the digits typed back correctly...
+    const solved = LastWordRound.attemptSolve(round, commodore64, 'COMMODORE 64');
+    assert.strictEqual(solved.correct, true);
+
+    // ...and buildDisplayBoard must still show the digits (never masked) once
+    // solved, same as every other non-letter display character.
+    board = LastWordRound.buildDisplayBoard(commodore64, solved.roundState);
+    digitIndexes.forEach((i) => {
+        assert.strictEqual(board[i].isLetter, false);
+        assert.strictEqual(board[i].revealed, true);
+    });
 });
 
 console.log(`round.test.js: ${passed} passed`);

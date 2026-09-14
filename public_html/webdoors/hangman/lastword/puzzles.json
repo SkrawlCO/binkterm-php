@@ -61,14 +61,14 @@
       "id": "sayings-0002",
       "category": "Sayings",
       "answer": "BETTER LATE THAN NEVER",
-      "difficulty": "normal",
+      "difficulty": "easy",
       "finalEligible": false
     },
     {
       "id": "sci-tech-0001",
       "category": "Science & Tech",
       "answer": "ARTIFICIAL INTELLIGENCE",
-      "difficulty": "hard",
+      "difficulty": "normal",
       "finalEligible": true
     },
     {
@@ -118,7 +118,7 @@
       "category": "Movies & TV",
       "answer": "STAR WARS",
       "difficulty": "easy",
-      "finalEligible": true
+      "finalEligible": false
     },
     {
       "id": "movies-0004",
@@ -489,7 +489,7 @@
       "category": "Food & Drink",
       "answer": "APPLE PIE",
       "difficulty": "easy",
-      "finalEligible": true
+      "finalEligible": false
     },
     {
       "id": "food-0011",
@@ -503,7 +503,7 @@
       "category": "Food & Drink",
       "answer": "BANANA SPLIT",
       "difficulty": "easy",
-      "finalEligible": true
+      "finalEligible": false
     },
     {
       "id": "food-0013",
@@ -824,7 +824,7 @@
       "id": "sci-tech-0012",
       "category": "Science & Tech",
       "answer": "GENETIC ENGINEERING",
-      "difficulty": "hard",
+      "difficulty": "normal",
       "finalEligible": true
     },
     {
@@ -922,7 +922,7 @@
       "id": "history-0010",
       "category": "History",
       "answer": "THE DECLARATION OF INDEPENDENCE",
-      "difficulty": "hard",
+      "difficulty": "normal",
       "finalEligible": true
     },
     {
@@ -1041,8 +1041,8 @@
       "id": "people-0011",
       "category": "People",
       "answer": "GALILEO GALILEI",
-      "difficulty": "normal",
-      "finalEligible": true
+      "difficulty": "easy",
+      "finalEligible": false
     },
     {
       "id": "people-0012",
@@ -1146,7 +1146,7 @@
       "id": "books-0010",
       "category": "Books & Stories",
       "answer": "THE CATCHER IN THE RYE",
-      "difficulty": "hard",
+      "difficulty": "normal",
       "finalEligible": true
     },
     {
@@ -1181,7 +1181,7 @@
       "id": "books-0015",
       "category": "Books & Stories",
       "answer": "THE THREE LITTLE PIGS",
-      "difficulty": "normal",
+      "difficulty": "easy",
       "finalEligible": false
     },
     {
@@ -1259,7 +1259,7 @@
       "category": "Sports",
       "answer": "GRAND SLAM",
       "difficulty": "easy",
-      "finalEligible": true
+      "finalEligible": false
     },
     {
       "id": "sports-0012",
