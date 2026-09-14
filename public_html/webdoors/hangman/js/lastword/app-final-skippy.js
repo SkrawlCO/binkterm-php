@@ -1121,6 +1121,11 @@
         renderRivalryBadge(el.gameCompleteRivalry, solved ? 'skippy' : 'bob');
 
         showOnly('gameComplete');
+        // SESSION LANDING MICRO-CORRECTION: close the one remaining hard-cut
+        // gap — every other solved/failed transition (renderRoundResult())
+        // already gets this same restrained fade; Game Complete had not.
+        // Same mechanism, same reduced-motion behavior, fires once here.
+        LastWordPresentation.revealPanelWithFade(el.gameComplete, { reducedMotion: reducedMotion });
     }
 
     // ---------------------------------------------------------------------

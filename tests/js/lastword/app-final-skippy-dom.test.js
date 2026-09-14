@@ -1515,6 +1515,93 @@ async function check(name, fn) {
         clock.advance(DEFEAT_PAYOFF_DELAY_MS);
     }
 
+    // -----------------------------------------------------------------
+    // SESSION LANDING MICRO-CORRECTION: game-complete gets the same
+    // accepted Fork #6 panel fade round-result already has. These mirror
+    // the round-result fade tests above exactly, just for the Final ->
+    // game-complete seam, and use manual step-by-step clock.advance()
+    // calls (not the finishFinalVia*() helpers, whose single big advance
+    // would fire and clean up the whole fade before returning).
+    // -----------------------------------------------------------------
+
+    await check('the game-complete panel transitions (fade classes applied) exactly once when Final is solved', async () => {
+        const { elements, clock } = await bootApp(0.5);
+        const puzzlesDoc = JSON.parse(fs.readFileSync(path.join(ROOT, 'lastword/puzzles.json'), 'utf8'));
+        playToFinal(elements, clock, puzzlesDoc);
+        const candidates = dealtPuzzleCandidates(elements.finalBoard, puzzlesDoc, elements.finalCategoryLabel.textContent);
+        elements.finalSolveToggle.click();
+        elements.finalSolveInput.value = candidates[0].answer;
+        elements.finalSolveSubmit.click();
+        clock.advance(SAVED_PAYOFF_DELAY_MS); // reach game-complete — showOnly('gameComplete') + revealPanelWithFade() fire here
+
+        assert.strictEqual(elements['game-complete'].className, 'panel', 'still becomes visible exactly as before (unaffected panel-visibility contract)');
+        assert.ok(elements['game-complete'].classList.contains('lw-fade-in'), 'the fade-in should have started');
+
+        clock.advance(20); // PANEL_FADE_START_DELAY_MS
+        assert.ok(elements['game-complete'].classList.contains('lw-fade-in-active'), 'should have committed to the active/visible fade state');
+
+        clock.advance(300); // PANEL_FADE_MS
+        assert.ok(!elements['game-complete'].classList.contains('lw-fade-in'), 'transition classes clean up once the fade completes');
+        assert.ok(!elements['game-complete'].classList.contains('lw-fade-in-active'));
+
+        // Advancing further must not re-trigger anything — one fade, once.
+        const before = elements['game-complete'].classList.contains('lw-fade-in');
+        clock.advance(60000);
+        assert.strictEqual(elements['game-complete'].classList.contains('lw-fade-in'), before);
+    });
+
+    await check('the game-complete panel also transitions (fade classes applied) exactly once when Final is struck out', async () => {
+        const { elements, clock } = await bootApp(0.5);
+        const puzzlesDoc = JSON.parse(fs.readFileSync(path.join(ROOT, 'lastword/puzzles.json'), 'utf8'));
+        playToFinal(elements, clock, puzzlesDoc);
+        elements.finalSolveToggle.click();
+        for (let i = 0; i < 3; i++) {
+            elements.finalSolveInput.value = 'ZZZZZZZZZZZZZZZZZZ NOT THE ANSWER';
+            elements.finalSolveSubmit.click();
+        }
+        clock.advance(DEFEAT_PAYOFF_DELAY_MS);
+
+        assert.strictEqual(elements['game-complete'].className, 'panel');
+        assert.ok(elements['game-complete'].classList.contains('lw-fade-in'), 'the failed path gets the same fade as the solved path');
+
+        clock.advance(20);
+        assert.ok(elements['game-complete'].classList.contains('lw-fade-in-active'));
+        clock.advance(300);
+        assert.ok(!elements['game-complete'].classList.contains('lw-fade-in'));
+        assert.ok(!elements['game-complete'].classList.contains('lw-fade-in-active'));
+    });
+
+    await check('the solved Final payoff hold into game-complete remains the accepted 3400ms with the new transition wired in', async () => {
+        const { elements, clock } = await bootApp(0.5);
+        const puzzlesDoc = JSON.parse(fs.readFileSync(path.join(ROOT, 'lastword/puzzles.json'), 'utf8'));
+        playToFinal(elements, clock, puzzlesDoc);
+        const candidates = dealtPuzzleCandidates(elements.finalBoard, puzzlesDoc, elements.finalCategoryLabel.textContent);
+        elements.finalSolveToggle.click();
+        elements.finalSolveInput.value = candidates[0].answer;
+        elements.finalSolveSubmit.click();
+
+        clock.advance(SAVED_PAYOFF_DELAY_MS - 1);
+        assert.strictEqual(elements['game-complete'].className, 'panel hidden', 'hold duration must be unchanged by this correction');
+        clock.advance(1);
+        assert.strictEqual(elements['game-complete'].className, 'panel');
+    });
+
+    await check('the failed Final payoff hold into game-complete remains the accepted 1400ms with the new transition wired in', async () => {
+        const { elements, clock } = await bootApp(0.5);
+        const puzzlesDoc = JSON.parse(fs.readFileSync(path.join(ROOT, 'lastword/puzzles.json'), 'utf8'));
+        playToFinal(elements, clock, puzzlesDoc);
+        elements.finalSolveToggle.click();
+        for (let i = 0; i < 3; i++) {
+            elements.finalSolveInput.value = 'ZZZZZZZZZZZZZZZZZZ NOT THE ANSWER';
+            elements.finalSolveSubmit.click();
+        }
+
+        clock.advance(DEFEAT_PAYOFF_DELAY_MS - 1);
+        assert.strictEqual(elements['game-complete'].className, 'panel hidden', 'hold duration must be unchanged by this correction');
+        clock.advance(1);
+        assert.strictEqual(elements['game-complete'].className, 'panel');
+    });
+
     await check('a fresh boot with no saved rivalry record starts the badge at SKIPPY 0 — BOB 0', async () => {
         const { elements } = await bootApp();
         const badge = readRivalryBadge(elements.rivalryBadge);
