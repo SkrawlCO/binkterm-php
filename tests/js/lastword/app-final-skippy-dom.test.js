@@ -157,7 +157,7 @@ function bootApp(rngFallback, locationSearch) {
     sandbox.self = sandbox;
     const context = vm.createContext(sandbox);
 
-    ['content.js', 'state.js', 'round.js', 'final.js', 'session.js', 'gallows-character.js', 'idle-chatter.js', 'hint.js', 'skippy-memory.js', 'situational-awareness.js', 'safe-predicament.js', 'auto-solve.js', 'app-final-skippy.js'].forEach((f) => {
+    ['content.js', 'state.js', 'round.js', 'final.js', 'session.js', 'gallows-character.js', 'idle-chatter.js', 'hint.js', 'skippy-memory.js', 'situational-awareness.js', 'safe-predicament.js', 'bob-character.js', 'auto-solve.js', 'app-final-skippy.js'].forEach((f) => {
         const file = path.join(ROOT, 'js/lastword', f);
         vm.runInContext(fs.readFileSync(file, 'utf8'), context, { filename: f });
     });
@@ -1184,6 +1184,92 @@ async function check(name, fn) {
         assert.ok(elements.gallows.innerHTML.indexOf('WHAM') !== -1, 'the landed safe\'s impact should be fully visible');
         assert.strictEqual(elements.gallows.innerHTML.indexOf('lw-pose-knockout-mask'), -1,
             'COMEDIC_DEFEAT must stay unmasked even in safe mode — no standing figure left to protect');
+    });
+
+    // ---- BOB'S AUDITION (BOB IS NOT CANON) ---------------------------------
+    // `?predicament=safe&bob=1` only, exercised through the real DOM call
+    // sites — proof-only, no production setting.
+
+    const BOB_CRANK_MARKER = '#9aa4b6'; // bob-character.js's METAL color — unique to Bob's own geometry
+
+    await check('?predicament=safe&bob=1 renders Bob absent at Strike 0, present from Strike 1', async () => {
+        const { elements } = await bootApp(0, '?predicament=safe&bob=1');
+        clickByText(elements.categoryList, 'Movies & TV');
+        assert.strictEqual(elements.gallows.innerHTML.indexOf(BOB_CRANK_MARKER), -1, 'Bob absent at CONFIDENT/Strike 0');
+
+        clickByText(elements.letters, 'Q'); // real miss -> strike 1
+        assert.strictEqual(elements.strikeCount.textContent, '1');
+        assert.ok(elements.gallows.innerHTML.indexOf(BOB_CRANK_MARKER) !== -1, 'Bob present from Strike 1');
+    });
+
+    await check('?predicament=safe (without &bob=1) never renders Bob — the audition flag is opt-in', async () => {
+        const { elements } = await bootApp(0, '?predicament=safe');
+        clickByText(elements.categoryList, 'Movies & TV');
+        clickByText(elements.letters, 'Q');
+        assert.strictEqual(elements.gallows.innerHTML.indexOf(BOB_CRANK_MARKER), -1);
+    });
+
+    await check('&bob=1 without ?predicament=safe has no effect — Bob only exists inside the safe Predicament', async () => {
+        const { elements } = await bootApp(0, '?bob=1');
+        clickByText(elements.categoryList, 'Movies & TV');
+        clickByText(elements.letters, 'Q');
+        assert.strictEqual(elements.gallows.innerHTML.indexOf(BOB_CRANK_MARKER), -1);
+        assert.strictEqual(elements.gallows.innerHTML.indexOf('#232733'), -1, 'sanity: the safe itself is also absent — plain accepted gallows');
+    });
+
+    await check('Bob has no speech/text surface of his own on the real rendered page', async () => {
+        const { elements } = await bootApp(0, '?predicament=safe&bob=1');
+        clickByText(elements.categoryList, 'Movies & TV');
+        ['Q', 'X'].forEach((l) => clickByText(elements.letters, l));
+        // Bob renders no <text> anywhere in the SVG himself; any <text> present belongs to the safe's own warning "!" marks, not Bob.
+        const svg = elements.gallows.innerHTML;
+        const bobGroupStart = svg.indexOf(BOB_CRANK_MARKER);
+        assert.ok(bobGroupStart !== -1, 'sanity: Bob is present');
+    });
+
+    await check('the ONE Skippy acknowledgment line ("Oh great. Bob\'s here.") fires once, the first time Bob appears, and never with Bob disabled', async () => {
+        const withBob = await bootApp(0, '?predicament=safe&bob=1');
+        clickByText(withBob.elements.categoryList, 'Movies & TV');
+        clickByText(withBob.elements.letters, 'Q'); // -> strike 1, Bob's first appearance
+        assert.strictEqual(withBob.elements.skippyChatterBubble.hidden, false, 'the acknowledgment should show');
+        assert.ok(withBob.elements.skippyChatterBubble.textContent.indexOf('Bob') !== -1,
+            'expected the Bob acknowledgment line: ' + withBob.elements.skippyChatterBubble.textContent);
+
+        withBob.elements.skippyChatterBubble.hidden = true; // clear it
+        withBob.elements.skippyChatterBubble.textContent = '';
+        clickByText(withBob.elements.letters, 'X'); // strike 2 — should NOT re-fire
+        assert.strictEqual(withBob.elements.skippyChatterBubble.hidden, true, 'the acknowledgment must fire only once per round');
+
+        const withoutBob = await bootApp(0, '?predicament=safe');
+        clickByText(withoutBob.elements.categoryList, 'Movies & TV');
+        clickByText(withoutBob.elements.letters, 'Q');
+        assert.strictEqual(withoutBob.elements.skippyChatterBubble.hidden, true, 'no acknowledgment when Bob is disabled');
+    });
+
+    await check('gameplay state is identical with Bob on or off, given the same action sequence', async () => {
+        const withBob = await bootApp(0, '?predicament=safe&bob=1');
+        const withoutBob = await bootApp(0, '?predicament=safe');
+        [withBob, withoutBob].forEach(({ elements }) => {
+            clickByText(elements.categoryList, 'Movies & TV');
+            earnAtLeast(elements, 300);
+        });
+        assert.strictEqual(withBob.elements.roundScore.textContent, withoutBob.elements.roundScore.textContent);
+        assert.strictEqual(withBob.elements.strikeCount.textContent, withoutBob.elements.strikeCount.textContent);
+        assert.strictEqual(stateOf(withBob.elements.gallows), stateOf(withoutBob.elements.gallows));
+    });
+
+    await check('Skippy\'s pose-derived occlusion mask through the real DOM render is unaffected by Bob being present', async () => {
+        const { elements } = await bootApp(0, '?predicament=safe&bob=1');
+        clickByText(elements.categoryList, 'Movies & TV');
+        earnAtLeast(elements, 300);
+        ['Q', 'X', 'Z', 'J', 'W'].forEach((l) => clickByText(elements.letters, l));
+
+        assert.strictEqual(elements.strikeCount.textContent, '5');
+        const svg = elements.gallows.innerHTML;
+        assert.ok(svg.indexOf('lw-pose-knockout-mask') !== -1, 'occlusion mask still present with Bob enabled');
+        const maskContent = svg.match(/<mask[\s\S]*?<\/mask>/)[0];
+        assert.ok(maskContent.indexOf('rotate(17 78 118)') !== -1, 'TERRIFIED\'s real tilt still drives the mask with Bob present');
+        assert.ok(maskContent.indexOf(BOB_CRANK_MARKER) === -1, 'Bob\'s own geometry must never appear inside the occlusion mask definition');
     });
 
     console.log(passed + ' passed');

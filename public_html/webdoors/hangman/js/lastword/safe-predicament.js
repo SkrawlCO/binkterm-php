@@ -268,13 +268,39 @@
         return apparatusBody(stateName);
     }
 
+    // BOB (human-accepted 2026-09-13 for ROLE/DYNAMIC; his artwork remains
+    // NOT final — see bob-character.js's own header). Optional, fully
+    // removable integration point for js/lastword/bob-character.js:
+    // `makeApparatus(true)` returns an `opts.apparatus`-shaped function
+    // (same single-`stateName`-argument contract as the plain `apparatus`
+    // above) that appends Bob's markup after the safe's own geometry for
+    // whichever states he's present in (see bob-character.js's own
+    // POSE_BY_STATE). Because this still returns exactly one
+    // `opts.apparatus` function, Bob automatically inherits
+    // gallows-character.js's pose-derived occlusion mask right alongside
+    // the rest of the safe — he can never draw through Skippy's actual
+    // figure, with zero changes to that mechanism. Without Bob
+    // (`makeApparatus(false)`, or just using `apparatus` directly — the
+    // default, used everywhere in production today), this file's behavior
+    // and output are 100% unaffected; bob-character.js is never even
+    // required. If a future direction drops Bob, delete bob-character.js
+    // and this one function — nothing else here needs to change.
+    function makeApparatus(includeBob, BobCharacter) {
+        if (!includeBob) { return apparatus; }
+        var Bob = BobCharacter ||
+            (typeof module === 'object' && module.exports ? require('./bob-character.js') : (typeof self !== 'undefined' ? self : this).LastWordBobCharacter);
+        return function (stateName) {
+            return apparatusBody(stateName) + Bob.renderBob(stateName);
+        };
+    }
+
     // One optional, tiny predicament-aware line (the fork's "at most one
     // or two lines" allowance) proving Skippy can recognize what is
     // threatening him specifically, not just that something is. NOT wired
     // into gallows-character.js's own PANIC_LINES pool and NOT used unless
     // a caller explicitly opts in when the safe predicament is active
-    // (see app-final-skippy.js's predicament toggle) — the accepted
-    // gallows TERRIFIED pool is completely unaffected either way.
+    // (see app-final-skippy.js's `?predicament=safe` URL selection) — the
+    // accepted gallows TERRIFIED pool is completely unaffected either way.
     var SAFE_TERRIFIED_LINE = 'THAT SAFE DOESN\'T EVEN HAVE MY COMBINATION!';
 
     /**
@@ -285,7 +311,7 @@
      */
     function renderMarkup(stateName, opts, GallowsCharacter) {
         GallowsCharacter = GallowsCharacter ||
-            (typeof module === 'object' && module.exports ? require('./gallows-character.js') : root.LastWordGallowsCharacter);
+            (typeof module === 'object' && module.exports ? require('./gallows-character.js') : (typeof self !== 'undefined' ? self : this).LastWordGallowsCharacter);
         var merged = {};
         for (var k in (opts || {})) { if (Object.prototype.hasOwnProperty.call(opts, k)) { merged[k] = opts[k]; } }
         merged.apparatus = apparatus;
@@ -304,6 +330,7 @@
         SAVED_CY: SAVED_CY,
         apparatusBody: apparatusBody,
         apparatus: apparatus,
+        makeApparatus: makeApparatus,
         renderMarkup: renderMarkup,
         SAFE_TERRIFIED_LINE: SAFE_TERRIFIED_LINE
     };

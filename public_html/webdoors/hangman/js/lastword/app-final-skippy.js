@@ -205,14 +205,32 @@
     // header). How a real session will eventually choose/vary its
     // Predicament in production is intentionally still an open decision —
     // this is just the mechanism the accepted Predicament plugs into.
-    var activePredicament = (function () {
-        try {
-            var qp = new URLSearchParams(window.location.search).get('predicament');
-            return qp === 'safe' ? 'safe' : 'gallows';
-        } catch (e) {
-            return 'gallows';
-        }
+    var urlParams = (function () {
+        try { return new URLSearchParams(window.location.search); } catch (e) { return null; }
     }());
+    var activePredicament = (urlParams && urlParams.get('predicament') === 'safe') ? 'safe' : 'gallows';
+
+    // BOB (human-accepted 2026-09-13 for ROLE/DYNAMIC; artwork remains NOT
+    // final — see bob-character.js's own header). `?predicament=safe&bob=1`
+    // opts a tiny silent gnome into the Suspended Safe Predicament's own
+    // apparatus (see js/lastword/bob-character.js and
+    // safe-predicament.js's `makeApparatus()`). Only ever takes effect
+    // together with the safe Predicament — Bob has no existence in the
+    // accepted gallows. Still not production-default: if a future
+    // direction drops Bob, delete bob-character.js, this flag, the one
+    // intro-line block below it, and the apparatus-selection line further
+    // down — nothing else changes.
+    var bobEnabled = !!(urlParams && urlParams.get('bob') === '1' && activePredicament === 'safe');
+
+    // The ONE Skippy acknowledgment the fork description allows ("Oh
+    // great. Bob's here." / "BOB.") — shown at most once per round, the
+    // first time Bob is actually visible (i.e. the first strike, since
+    // Strike 0/CONFIDENT deliberately shows no Bob — see bob-character.js's
+    // POSE_BY_STATE). NOT a Bob dialogue system: Bob himself never speaks,
+    // this is Skippy reacting to Bob, through the same single shared
+    // transient chatter bubble every other reaction already uses.
+    var BOB_INTRO_LINE = 'Oh great. Bob\'s here.';
+    var bobIntroducedThisRound = false;
 
     /**
      * Render Skippy into `containerEl` for the given strikes/solved facts.
@@ -222,6 +240,14 @@
     function renderSkippyOn(containerEl, strikes, solved, panicState) {
         var stateName = skippyStateFor(strikes, solved);
         var opts = {};
+        if (bobEnabled && stateName !== 'CONFIDENT' && !bobIntroducedThisRound) {
+            bobIntroducedThisRound = true;
+            var introBubbleEl = containerEl === el.finalGallows ? el.finalSkippyChatterBubble : el.skippyChatterBubble;
+            var introBubblePresenter = containerEl === el.finalGallows ? finalSkippyChatterBubble : skippyChatterBubble;
+            if (introBubbleEl && introBubbleEl.hidden) {
+                introBubblePresenter.show(BOB_INTRO_LINE);
+            }
+        }
         if (stateName === 'TERRIFIED') {
             var enteringFresh = !panicState.entered5;
             if (enteringFresh) {
@@ -260,7 +286,7 @@
             panicState.entered5 = false;
         }
         if (activePredicament === 'safe') {
-            opts.apparatus = LastWordSafePredicament.apparatus;
+            opts.apparatus = bobEnabled ? LastWordSafePredicament.makeApparatus(true) : LastWordSafePredicament.apparatus;
         }
         containerEl.innerHTML = LastWordGallowsCharacter.renderMarkup(stateName, opts);
         return stateName;
@@ -677,6 +703,7 @@
         panicState.entered5 = false;
         hintsPurchasedThisRound = 0;
         roundAwareness = LastWordSituationalAwareness.createRoundAwareness();
+        bobIntroducedThisRound = false;
         showOnly('game');
         renderPlayingState();
         // SKIPPY REMEMBERS: a session-aware opening reaction (referring to
@@ -990,6 +1017,7 @@
         skippyMemory = LastWordSkippyMemory.createMemory();
         hintsPurchasedThisRound = 0;
         roundAwareness = LastWordSituationalAwareness.createRoundAwareness();
+        bobIntroducedThisRound = false;
         goToRound(1);
     }
 
