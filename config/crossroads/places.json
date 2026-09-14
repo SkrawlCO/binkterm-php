@@ -7,6 +7,10 @@
     "description": "A little corner of Crossroads for puzzles, casual games, and things worth puzzling over.",
     "enabled": true,
     "icon": "/img/places/puzlmastrs-patch.png",
+    "hero": {
+      "image": "/img/places/puzlmastrs-patch.png",
+      "alt": "A smiling garden gnome resting beside a sunflower"
+    },
     "association": {
       "caller": "Puzlmastr"
     },

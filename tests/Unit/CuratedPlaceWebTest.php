@@ -142,6 +142,59 @@ final class CuratedPlaceWebTest extends TestCase
         self::assertStringNotContainsString('resume', strtolower($html));
     }
 
+    /**
+     * Slice 1 (PP identity header): the `hero` metadata on the place
+     * definition flows unchanged through CuratedPlaceCatalog (no PHP code
+     * change needed there) into a real, enhanced header — the existing
+     * gnome+sunflower asset, not a hardcoded `place.id == 'puzlmastrs-patch'`
+     * check in the template.
+     */
+    public function testPlaceWithHeroMetadataRendersTheIdentityHeader(): void
+    {
+        $place = $this->place();
+        self::assertSame('/img/places/puzlmastrs-patch.png', $place['hero']['image'] ?? null,
+            'places.json must carry hero.image for Puzlmastr\'s Patch');
+        $icon = getimagesize(dirname(__DIR__, 2) . '/public_html' . $place['hero']['image']);
+        self::assertSame([512, 512, IMAGETYPE_PNG], array_slice($icon, 0, 3),
+            'the hero image must be the real, existing 512x512 identity asset');
+
+        $cards = CuratedPlacePresentation::members($place);
+        $html = $this->twig()->render('curated_place.twig', ['place' => $place, 'member_cards' => $cards]);
+
+        self::assertStringContainsString('curated-place-header--hero', $html);
+        self::assertSame(1, substr_count($html, 'src="/img/places/puzlmastrs-patch.png"'),
+            'the hero image renders exactly once, not duplicated with the (now-superseded) small header icon');
+        self::assertStringContainsString('alt="A smiling garden gnome resting beside a sunflower"', $html);
+        self::assertStringContainsString('<h1>Puzlmastr&#039;s Patch</h1>', $html);
+        self::assertStringContainsString('A little corner of Crossroads for puzzles, casual games, and things worth puzzling over.', $html);
+        // The 9 existing members and their card grid are untouched by Slice 1.
+        self::assertSame(['wordwright', 'hangman', 'blackjack', 'parlour', 'tatham/lightup', 'breaklock', 'ordinary-puzzles', 'dokuel', 'everest'],
+            array_column($cards, 'reference'));
+    }
+
+    /**
+     * The enhanced header is a generic OPTIONAL capability, not special-cased
+     * to Puzlmastr's Patch: a place definition with no `hero` key must
+     * render the exact original plain header, unaffected by Slice 1.
+     */
+    public function testPlaceWithoutHeroMetadataKeepsThePlainHeaderUnchanged(): void
+    {
+        $place = [
+            'id' => 'some-other-place',
+            'name' => 'Some Other Place',
+            'description' => 'A different curated corner, unrelated to Puzlmastr\'s Patch.',
+            'association' => [],
+        ];
+        $html = $this->twig()->render('curated_place.twig', ['place' => $place, 'member_cards' => []]);
+
+        self::assertStringNotContainsString('curated-place-header--hero', $html);
+        self::assertStringNotContainsString('curated-place-hero-image', $html);
+        self::assertStringNotContainsString('puzlmastrs-patch.png', $html);
+        self::assertStringContainsString('<header class="my-4">', $html);
+        self::assertStringContainsString('<h1>Some Other Place</h1>', $html);
+        self::assertStringContainsString('A different curated corner, unrelated to Puzlmastr&#039;s Patch.', $html);
+    }
+
     public function testExistingRootCardsKeepTheirLinksAndRemainInComposition(): void
     {
         $games = [];

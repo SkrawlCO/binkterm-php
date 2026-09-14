@@ -569,6 +569,48 @@
     }
 }
 
+/* ---- Curated place identity header (optional, generic) ---------------- *
+ * Only rendered when a place definition carries a `hero` metadata block
+ * (see config/crossroads/places.json + templates/curated_place.twig) — a
+ * place with no `hero` gets the original plain header, byte-for-byte
+ * unchanged. Warm accent colors are literal (drawn from the identity
+ * artwork itself, e.g. Puzlmastr's Patch's gnome+sunflower badge), never
+ * the shared --experience-accent (site cyan) and never a global theme
+ * change — restrained enough to sit on the existing dark surface without
+ * turning the page into a colored block. */
+.curated-place-header--hero {
+    --hero-accent: #d9a521; /* sunflower gold */
+    --hero-accent-deep: #8a3a2b; /* gnome-hat red */
+    align-items: center;
+    background:
+        linear-gradient(
+            135deg,
+            color-mix(in srgb, var(--hero-accent) 10%, transparent),
+            color-mix(in srgb, var(--hero-accent-deep) 6%, transparent) 65%,
+            transparent
+        );
+    border: 1px solid color-mix(in srgb, var(--hero-accent) 30%, var(--experience-border));
+    border-radius: 10px;
+    display: flex;
+    gap: 1.1rem;
+    padding: 1rem 1.15rem;
+}
+
+.curated-place-hero-image {
+    border-radius: 50%;
+    flex-shrink: 0;
+    height: 96px;
+    width: 96px;
+}
+
+.curated-place-header-text h1 {
+    margin-bottom: 0.15rem;
+}
+
+.curated-place-header-text p:last-child {
+    margin-bottom: 0;
+}
+
 /* ---- Community Scoreboard: supporting information, not the climax ----- */
 .experience-scoreboard {
     --bs-card-border-color: var(--experience-border);
@@ -619,6 +661,16 @@
 
     .crossroads-mark {
         height: 2.1rem;
+    }
+
+    .curated-place-header--hero {
+        gap: 0.75rem;
+        padding: 0.75rem;
+    }
+
+    .curated-place-hero-image {
+        height: 60px;
+        width: 60px;
     }
 
     .experience-shelf--curated {
