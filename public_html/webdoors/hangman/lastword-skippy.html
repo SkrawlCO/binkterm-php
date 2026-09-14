@@ -4,8 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1"/>
     <title>Last Word — SKIPPY (unlisted human-test build)</title>
-    <link rel="stylesheet" href="css/lastword.css?v=skippy6" />
-    <link rel="stylesheet" href="css/lastword-skippy.css?v=skippy6" />
+    <link rel="stylesheet" href="css/lastword.css?v=skippy7" />
+    <link rel="stylesheet" href="css/lastword-skippy.css?v=skippy7" />
 </head>
 <body>
 <!--
@@ -35,6 +35,12 @@
   page loads js/lastword/gallows-character.js + js/lastword/idle-chatter.js
   + js/lastword/hint.js before a Skippy-aware app-final-skippy.js in place
   of app-final.js. Every other panel/id/script is identical to M1D.
+
+  CONSCIOUS BOUNDED FORK #1 ("SKIPPY REMEMBERS"): also loads
+  js/lastword/skippy-memory.js (session-scoped, in-memory only — see its
+  own header) before app-final-skippy.js. No new DOM elements — the
+  session-aware opening reaction reuses the existing
+  #skippyChatterBubble/#finalSkippyChatterBubble speech bubbles.
 -->
 <header>
     <h1>LAST WORD</h1>
@@ -171,22 +177,23 @@
 </section>
 
 <!--
-  ?v=skippy6 cache-busts these local scripts/stylesheets. Bump the version
+  ?v=skippy7 cache-busts these local scripts/stylesheets. Bump the version
   token here whenever any of these files change, and verify the live page
   actually received the new version before human testing — Cloudflare
   rewrites this zone's .js/.css Cache-Control to a 4-hour browser TTL (see
   lastword-m1c.html for the full explanation), so a new query string is the
   reliable way to force a genuinely fresh fetch.
 -->
-<script src="js/lastword/content.js?v=skippy6"></script>
-<script src="js/lastword/state.js?v=skippy6"></script>
-<script src="js/lastword/round.js?v=skippy6"></script>
-<script src="js/lastword/final.js?v=skippy6"></script>
-<script src="js/lastword/session.js?v=skippy6"></script>
-<script src="js/lastword/gallows-character.js?v=skippy6"></script>
-<script src="js/lastword/idle-chatter.js?v=skippy6"></script>
-<script src="js/lastword/hint.js?v=skippy6"></script>
-<script src="js/lastword/auto-solve.js?v=skippy6"></script>
-<script src="js/lastword/app-final-skippy.js?v=skippy6"></script>
+<script src="js/lastword/content.js?v=skippy7"></script>
+<script src="js/lastword/state.js?v=skippy7"></script>
+<script src="js/lastword/round.js?v=skippy7"></script>
+<script src="js/lastword/final.js?v=skippy7"></script>
+<script src="js/lastword/session.js?v=skippy7"></script>
+<script src="js/lastword/gallows-character.js?v=skippy7"></script>
+<script src="js/lastword/idle-chatter.js?v=skippy7"></script>
+<script src="js/lastword/hint.js?v=skippy7"></script>
+<script src="js/lastword/skippy-memory.js?v=skippy7"></script>
+<script src="js/lastword/auto-solve.js?v=skippy7"></script>
+<script src="js/lastword/app-final-skippy.js?v=skippy7"></script>
 </body>
 </html>

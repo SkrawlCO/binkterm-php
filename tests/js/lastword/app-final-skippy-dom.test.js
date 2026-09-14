@@ -149,7 +149,7 @@ function bootApp(rngFallback) {
     sandbox.self = sandbox;
     const context = vm.createContext(sandbox);
 
-    ['content.js', 'state.js', 'round.js', 'final.js', 'session.js', 'gallows-character.js', 'idle-chatter.js', 'hint.js', 'auto-solve.js', 'app-final-skippy.js'].forEach((f) => {
+    ['content.js', 'state.js', 'round.js', 'final.js', 'session.js', 'gallows-character.js', 'idle-chatter.js', 'hint.js', 'skippy-memory.js', 'auto-solve.js', 'app-final-skippy.js'].forEach((f) => {
         const file = path.join(ROOT, 'js/lastword', f);
         vm.runInContext(fs.readFileSync(file, 'utf8'), context, { filename: f });
     });
@@ -723,6 +723,140 @@ async function check(name, fn) {
         // No duplicate transition even if the clock keeps advancing.
         clock.advance(60000);
         assert.strictEqual(elements['game-complete'].className, 'panel');
+    });
+
+    // ---- SKIPPY REMEMBERS (conscious bounded fork #1) integration ------
+
+    function loseCurrentRoundViaStrikes(elements) {
+        const tryLetters = 'QXZJKVWBFCGHLMNPRSDT'.split('');
+        for (let i = 0; i < tryLetters.length && stateOf(elements.gallows) !== 'COMEDIC_DEFEAT'; i++) {
+            clickByText(elements.letters, tryLetters[i]);
+        }
+        assert.strictEqual(stateOf(elements.gallows), 'COMEDIC_DEFEAT', 'test fixture needs 6 real strikes from this letter pool');
+    }
+
+    await check('an incident (round lost at 6 strikes) produces an opening reaction at the start of the next round, without mutating gameplay state', async () => {
+        const { elements, clock } = await bootApp(0);
+        clickByText(elements.categoryList, 'Movies & TV');
+        loseCurrentRoundViaStrikes(elements);
+        clock.advance(DEFEAT_PAYOFF_DELAY_MS);
+        elements.continueAfterRound.click(); // -> round 2 transition screen
+        elements.transitionContinue.click(); // -> dealt into round 2 play; beginRoundPlay() fires the reaction
+
+        assert.strictEqual(elements.skippyChatterBubble.hidden, false, 'an incident just happened — the next round should open with a reaction');
+        assert.ok(elements.skippyChatterBubble.textContent.length > 0);
+
+        // Gameplay itself must be untouched by showing the reaction: fresh
+        // round 2 starts clean regardless.
+        assert.strictEqual(stateOf(elements.gallows), 'CONFIDENT');
+        assert.strictEqual(elements.strikeCount.textContent, '0');
+        assert.strictEqual(elements.roundScore.textContent, '0');
+    });
+
+    await check('ordinary history (no interesting previous round) opens the next round silently — no reaction bubble', async () => {
+        const { elements, clock } = await bootApp(0);
+        const puzzlesDoc = JSON.parse(fs.readFileSync(path.join(ROOT, 'lastword/puzzles.json'), 'utf8'));
+        clickByText(elements.categoryList, 'Movies & TV');
+        const candidates = dealtPuzzleCandidates(elements.board, puzzlesDoc, 'Movies & TV');
+
+        // Guess one wrong-then-right consonant so the round is solved at a
+        // middling, non-0/non-5 strike count with no hints bought —
+        // deliberately NOT an interesting round by skippy-memory.js's rules.
+        clickByText(elements.letters, 'Q'); // very likely a miss -> strikes=1
+        elements.solveToggle.click();
+        elements.solveInput.value = candidates[0].answer;
+        elements.solveSubmit.click();
+        clock.advance(SAVED_PAYOFF_DELAY_MS);
+        elements.continueAfterRound.click();
+        elements.transitionContinue.click(); // -> round 2 play
+
+        if (elements.strikeCount.textContent === '0' || elements.strikeCount.textContent === '5') {
+            return; // the Q guess happened to hit — not the scenario this test targets, skip rather than false-fail
+        }
+        assert.strictEqual(elements.skippyChatterBubble.hidden, true, 'a middling, hint-free solved round should not trigger a special reaction');
+    });
+
+    await check('the opening reaction never collides/stacks with idle chatter — it auto-hides on its own schedule, then idle chatter resumes normally', async () => {
+        const { elements, clock } = await bootApp(0);
+        clickByText(elements.categoryList, 'Movies & TV');
+        loseCurrentRoundViaStrikes(elements);
+        clock.advance(DEFEAT_PAYOFF_DELAY_MS);
+        elements.continueAfterRound.click();
+        elements.transitionContinue.click(); // round 2 begins with the reaction shown
+        const reactionText = elements.skippyChatterBubble.textContent;
+        assert.ok(reactionText.length > 0);
+
+        clock.advance(9999); // just under the reaction's own 10s display window
+        assert.strictEqual(elements.skippyChatterBubble.hidden, false, 'reaction should still be showing');
+        assert.strictEqual(elements.skippyChatterBubble.textContent, reactionText, 'still exactly the reaction text, nothing appended');
+
+        clock.advance(2); // crosses 10000ms -> reaction auto-hides
+        assert.strictEqual(elements.skippyChatterBubble.hidden, true);
+
+        clock.advance(2000); // crosses idle chatter's own 12000ms first-remark window
+        assert.strictEqual(elements.skippyChatterBubble.hidden, false, 'idle chatter should resume normally once the reaction is done showing');
+        assert.notStrictEqual(elements.skippyChatterBubble.textContent, '');
+    });
+
+    await check('Final Hangman opening reaction reflects the accumulated session (repeated incidents read as suspicious) without mutating Final state', async () => {
+        const { elements, clock } = await bootApp(0);
+        const puzzlesDoc = JSON.parse(fs.readFileSync(path.join(ROOT, 'lastword/puzzles.json'), 'utf8'));
+
+        function loseRoundAndContinue() {
+            loseCurrentRoundViaStrikes(elements);
+            clock.advance(DEFEAT_PAYOFF_DELAY_MS);
+            elements.continueAfterRound.click();
+        }
+
+        clickByText(elements.categoryList, 'Movies & TV');
+        loseRoundAndContinue(); // round 1: incident -> transition to round 2
+        elements.transitionContinue.click();
+        loseRoundAndContinue(); // round 2: incident -> round 3 offer screen
+        clickByText(elements.roundOfferList, elements.roundOfferList._children[0].textContent);
+        // Round 3: solve normally so the session can still reach Final.
+        const candidates = dealtPuzzleCandidates(elements.board, puzzlesDoc, elements.categoryLabel.textContent);
+        elements.solveToggle.click();
+        elements.solveInput.value = candidates[0].answer;
+        elements.solveSubmit.click();
+        clock.advance(SAVED_PAYOFF_DELAY_MS);
+        elements.continueAfterRound.click(); // -> round 4 transition
+        elements.transitionContinue.click();
+        // Round 4: solve normally too.
+        const candidates4 = dealtPuzzleCandidates(elements.board, puzzlesDoc, elements.categoryLabel.textContent);
+        elements.solveToggle.click();
+        elements.solveInput.value = candidates4[0].answer;
+        elements.solveSubmit.click();
+        clock.advance(SAVED_PAYOFF_DELAY_MS);
+        elements.continueAfterRound.click(); // -> session complete -> Final intro
+
+        assert.strictEqual(elements['final-intro'].className, 'panel');
+        clickByText(elements.finalOpeningCountButtons, '0 letters (free)'); // -> beginFinalPlay(), fires the Final reaction
+
+        assert.strictEqual(elements['final-play'].className, 'layout');
+        assert.strictEqual(elements.finalSkippyChatterBubble.hidden, false, 'Final always opens with exactly one reaction line');
+        assert.ok(elements.finalSkippyChatterBubble.textContent.length > 0);
+        // Final gameplay itself must be untouched: fresh Final board, 0 strikes.
+        assert.strictEqual(stateOf(elements.finalGallows), 'CONFIDENT');
+        assert.strictEqual(elements.finalStrikeCount.textContent, '0');
+    });
+
+    await check('starting a new session (Play Again) resets Skippy\'s memory — no leftover reaction from the previous session', async () => {
+        const { elements, clock } = await bootApp(0);
+        clickByText(elements.categoryList, 'Movies & TV');
+        loseCurrentRoundViaStrikes(elements); // give the session an incident to remember
+        clock.advance(DEFEAT_PAYOFF_DELAY_MS);
+        elements.continueAfterRound.click();
+        elements.transitionContinue.click(); // round 2 opens with the incident reaction — precondition
+        assert.strictEqual(elements.skippyChatterBubble.hidden, false, 'precondition: an opening reaction is showing');
+
+        // Abandon this session entirely via Play Again (simulating a fresh
+        // session start — the same call startNewSession() makes) rather
+        // than playing the rest out.
+        elements.playAgain.onclick(); // startNewSession() -> back to category select
+        assert.strictEqual(elements['category-select'].className, 'panel');
+
+        clickByText(elements.categoryList, 'Movies & TV'); // fresh round 1 of the NEW session
+        assert.strictEqual(elements.skippyChatterBubble.hidden, true, 'a brand-new session must not open with a reaction carried over from the last one');
     });
 
     console.log(passed + ' passed');

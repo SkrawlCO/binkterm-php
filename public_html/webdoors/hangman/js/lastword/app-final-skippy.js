@@ -65,6 +65,23 @@
  *    existing roundState fields instead of inventing a parallel score
  *    system. Final Hangman is untouched — it keeps its existing
  *    purchase-a-letter-you-choose flow.
+ *
+ * CONSCIOUS BOUNDED FORK #1 — "SKIPPY REMEMBERS" (new pure module
+ * js/lastword/skippy-memory.js, not a change to round.js/state.js/
+ * session.js/final.js): Skippy now carries a small in-memory record of
+ * what the caller has done THIS session (hints bought, rounds solved/
+ * lost/perfected, previous-round facts) and opens the next round — and
+ * once, Final Hangman — with a short reaction line when that history is
+ * interesting. See skippy-memory.js's own header for the full contract
+ * (deliberately NOT persistence — the object lives only in this file's
+ * module-level `skippyMemory` var, created fresh per session). Wiring
+ * here is: `skippyMemory`/`hintsPurchasedThisRound` module vars,
+ * `recordRoundResult()` called in finishCurrentRound() once a round's
+ * outcome/strikes/hint-spend are known, and `pickOpeningReaction()`/
+ * `pickFinalReaction()` called in beginRoundPlay()/beginFinalPlay() to
+ * show (or not show) a reaction via the SAME chatter-bubble presenter
+ * idle chatter already uses — see those functions for why that alone is
+ * enough to guarantee precedence-without-collision.
  */
 (function () {
     'use strict';
@@ -78,6 +95,15 @@
     var roundConfig = null;
     var solveSubmitting = false;
     var pendingCategory = null; // category the transition screen is about to deal for round 2/4
+
+    // SKIPPY REMEMBERS (conscious bounded fork #1): session-scoped memory
+    // of what the caller has done so far this session — see
+    // js/lastword/skippy-memory.js's own header for the full contract.
+    // Created fresh in startNewSession()/boot(); never persisted. Reset
+    // per-round in beginRoundPlay() so it counts only hints bought DURING
+    // the round about to finish.
+    var skippyMemory = LastWordSkippyMemory.createMemory();
+    var hintsPurchasedThisRound = 0;
 
     // Final Hangman state
     var finalState = null;
@@ -381,6 +407,7 @@
             return;
         }
         round = result.roundState;
+        hintsPurchasedThisRound += 1;
         setStatus('Hint: ' + result.letter + ' revealed! (−' + result.cost + ' points, no strike)');
 
         // CORE-GAME FIX: if that reveal happened to complete the board (every
@@ -480,6 +507,15 @@
         // screen switches away, and hold it on screen briefly — see
         // payoffDelayFor()/DEFEAT_PAYOFF_DELAY_MS/SAVED_PAYOFF_DELAY_MS above.
         currentSkippyState = renderSkippyOn(el.gallows, finishedRound.strikes, solved, panicState);
+        // SKIPPY REMEMBERS: record this round's outcome/strikes/hint spend
+        // before the next round's beginRoundPlay() reads it for its
+        // opening reaction. Purely additive bookkeeping — does not affect
+        // session/score.
+        skippyMemory = LastWordSkippyMemory.recordRoundResult(skippyMemory, {
+            outcome: finishedRound.outcome,
+            strikes: finishedRound.strikes,
+            hintsPurchased: hintsPurchasedThisRound
+        });
         session = LastWordSession.finishRound(session, finishedRound);
         setTimeout(function () {
             renderRoundResult(finishedRound);
@@ -521,9 +557,28 @@
         // whatever happened last round.
         panicState.line = null;
         panicState.entered5 = false;
+        hintsPurchasedThisRound = 0;
         showOnly('game');
         renderPlayingState();
-        skippyChatterBubble.hide();
+        // SKIPPY REMEMBERS: a session-aware opening reaction (referring to
+        // what just happened last round) takes precedence over ordinary
+        // idle chatter — it's shown immediately here via the same single
+        // bubble element/timer idle chatter itself uses (makeChatterBubble
+        // above), so there is only ever one bubble on screen; idle
+        // chatter's own first remark can't fire for another 12-20s
+        // (idle-chatter.js), well after this reaction's own
+        // CHATTER_BUBBLE_DISPLAY_MS auto-hide, and any real player action
+        // hides it immediately (handleLetter/handleBuyHint/submitSolve
+        // already call skippyChatterBubble.hide()) — normal idle behavior
+        // resumes right after, unchanged. Returns null (no bubble shown)
+        // on a fresh session's Round 1 and on any round that isn't
+        // otherwise interesting — see skippy-memory.js.
+        var openingReaction = LastWordSkippyMemory.pickOpeningReaction(skippyMemory);
+        if (openingReaction) {
+            skippyChatterBubble.show(openingReaction);
+        } else {
+            skippyChatterBubble.hide();
+        }
         idleChatter.resetIdle();
     }
 
@@ -661,7 +716,12 @@
         finalPanicState.entered5 = false;
         showOnly('finalPlay');
         renderFinalPlayingState();
-        finalSkippyChatterBubble.hide();
+        // SKIPPY REMEMBERS: ONE restrained Final-aware opening reaction,
+        // reflecting the accumulated four-round session — same
+        // precedence-over-idle-chatter reasoning as beginRoundPlay()
+        // above. Unlike the per-round reaction this always returns a
+        // line (see skippy-memory.js's pickFinalReaction header).
+        finalSkippyChatterBubble.show(LastWordSkippyMemory.pickFinalReaction(skippyMemory));
         finalIdleChatter.resetIdle();
     }
 
@@ -808,6 +868,8 @@
         session = LastWordState.createSession();
         finalState = null;
         finalPuzzle = null;
+        skippyMemory = LastWordSkippyMemory.createMemory();
+        hintsPurchasedThisRound = 0;
         goToRound(1);
     }
 
