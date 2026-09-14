@@ -439,3 +439,29 @@
     margin: 6px 0 12px 0;
     opacity: 0.9;
 }
+
+/* ======================================================================
+   SLICE 5 ("caller-path corrections"): intentional exit back to
+   Puzlmastr's Patch. Appears ONLY on #category-select (below the category
+   choices, so it never competes with them) and #game-complete (below
+   Play Another Session, same reasoning) — never during active rounds or
+   Final, never as persistent chrome, so it costs nothing during play and
+   never interacts with the accepted mobile sticky/crop treatment. Plain
+   text-link weight, not a button — discoverable, not competing for
+   attention with the primary actions on either screen.
+   ====================================================================== */
+.lw-return-link {
+    color: #9aa8c2;
+    display: inline-block;
+    font-size: 13px;
+    margin-top: 14px;
+    min-height: 44px;
+    line-height: 44px;
+    text-decoration: none;
+}
+
+.lw-return-link:hover,
+.lw-return-link:focus-visible {
+    color: #c7d0e2;
+    text-decoration: underline;
+}

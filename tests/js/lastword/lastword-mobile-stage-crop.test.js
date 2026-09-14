@@ -118,8 +118,13 @@ check('reduced-motion is irrelevant to this change — no animation/transition w
     assert.strictEqual(block.indexOf('transition'), -1);
 });
 
-check('cache-bust token was bumped', () => {
-    assert.ok(/\?v=skippy25/.test(html), 'expected the lastword-skippy.html asset version to have moved forward');
+check('cache-bust token was bumped at least to the accepted Slice 3B mobile-crop version', () => {
+    // Not pinned to an exact later token -- subsequent slices legitimately
+    // bump this further (see Slice 5's caller-path corrections); this only
+    // proves it never regressed back below the mobile-crop proof's own bump.
+    const match = html.match(/\?v=skippy(\d+)/);
+    assert.ok(match, 'expected a ?v=skippyNN cache-bust token');
+    assert.ok(Number(match[1]) >= 25, 'expected the token to be at or past skippy25 (the mobile-crop proof)');
 });
 
 console.log('lastword-mobile-stage-crop.test.js: ' + passed + ' passed');

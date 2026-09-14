@@ -1,0 +1,66 @@
+{
+  "webdoor_version": "1.0",
+  "game": {
+    "id": "lastword",
+    "name": "Last Word",
+    "description": "Solve the word or phrase before you run out of strikes — earn points, spend them wisely, and watch Skippy and Bob react to every guess.",
+    "version": "0.1.0",
+    "author": "L33TEST",
+    "license": "MIT",
+    "icon": "../hangman/lastword/icon.svg",
+    "entry_point": "../hangman/lastword-skippy.html"
+  },
+  "entrypoint": {
+    "type": "html",
+    "file": "../hangman/lastword-skippy.html"
+  },
+  "runtime": {
+    "language": "javascript",
+    "framework": "vanilla",
+    "requires": {
+      "websocket": false,
+      "cookies": true,
+      "local_storage": false
+    }
+  },
+  "session": {
+    "mode": "host",
+    "persistence": "server",
+    "max_duration_seconds": 86400
+  },
+  "capabilities": {
+    "singleplayer": true,
+    "multiplayer": false,
+    "leaderboards": false,
+    "achievements": false
+  },
+  "storage": {
+    "save_state": {
+      "enabled": true,
+      "scope": "per-user",
+      "format": "json",
+      "max_slots": 1,
+      "auto_save": true
+    }
+  },
+  "api": {
+    "base_path": "/api/webdoor",
+    "endpoints": {
+      "session": "/session",
+      "save": "/save",
+      "load": "/load",
+      "delete": "/delete"
+    }
+  },
+  "ui": {
+    "preferred_width": 900,
+    "preferred_height": 650,
+    "responsive": true,
+    "orientation": "portrait"
+  },
+  "security": {
+    "same_origin_only": true,
+    "csrf_protection": "host",
+    "content_sandbox": true
+  }
+}

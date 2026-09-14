@@ -87,6 +87,18 @@ final class CuratedPlaceCatalog
                     $resolved[$field] = $member[$field];
                 }
             }
+            // Slice 4: an optional explicit launch override -- a member whose
+            // real playable page is not a plain /games/{id} wrapper launch
+            // (e.g. Last Word, a standalone page with its own chrome that a
+            // generic iframe wrapper would fight with) can name its actual
+            // canonical URL directly. Never a substitute for a real
+            // catalog-discoverable experience -- resolveReference() above
+            // must still have succeeded, or this member is not included at
+            // all -- only a presentation-layer override of where its own
+            // "Enter" action points.
+            if (is_string($member['launch_url'] ?? null) && $member['launch_url'] !== '') {
+                $resolved['launch_url'] = $member['launch_url'];
+            }
             // Slice 2 ("Featured / New in the Patch"): an optional, purely
             // presentational flag + small caption block a board owner can
             // set per member -- never a second source of game metadata

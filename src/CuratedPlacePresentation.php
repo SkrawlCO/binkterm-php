@@ -179,13 +179,21 @@ final class CuratedPlacePresentation
         $experience['name'] = $member['title'];
         $experience['description'] = $member['description'];
         $experience['surfaces'] = $member['surfaces'];
-        return [
-            'reference' => $member['reference'],
-            'destination_url' => isset($member['launch']['url'])
+        // Slice 4: an explicit `launch_url` override (see
+        // CuratedPlaceCatalog::getPlace()) is used exactly as given -- the
+        // member's own real canonical URL, no parent_place_id appended --
+        // rather than the derived /games/{id} wrapper launch every other
+        // member still gets.
+        $destinationUrl = is_string($member['launch_url'] ?? null)
+            ? $member['launch_url']
+            : (isset($member['launch']['url'])
                 ? $member['launch']['url']
                     . (str_contains($member['launch']['url'], '?') ? '&' : '?')
                     . http_build_query(['parent_place_id' => $place['id']])
-                : null,
+                : null);
+        return [
+            'reference' => $member['reference'],
+            'destination_url' => $destinationUrl,
             'show_surfaces' => true,
             'experience_presentation' => ExperiencePresentation::build($experience, 'web'),
         ];

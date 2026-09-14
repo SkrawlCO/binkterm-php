@@ -1,7 +1,7 @@
 {% extends 'base.twig' %}
 
 {% block title %}{{ place.name }} - {{ system_name }}{% endblock %}
-{% block head %}<link href="/css/experiences.css" rel="stylesheet">{% endblock %}
+{% block head %}<link href="/css/experiences.css?v=1" rel="stylesheet">{% endblock %}
 {% block content %}
 <div class="container experiences-library py-3 py-md-4">
     <a href="/games#curated-experiences">{{ t('ui.webdoors.shelf_curated_title', {}, locale, ['common']) }}</a>

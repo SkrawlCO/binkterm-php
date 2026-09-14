@@ -45,7 +45,7 @@ final class CuratedPlaceSuppressionTest extends TestCase
         // always supplied for a place card now (see testPlaceCardAggregatesLivePresence).
         self::assertFalse($entries[0]['experience_presentation']['runtime']['active']);
         self::assertSame(0, $entries[0]['experience_presentation']['runtime']['player_count']);
-        self::assertSame(['wordwright', 'hangman', 'blackjack', 'parlour', 'tatham/lightup', 'breaklock', 'ordinary-puzzles', 'dokuel', 'everest'], array_column($definitions[0]['members'], 'reference'));
+        self::assertSame(['lastword', 'wordwright', 'hangman', 'blackjack', 'parlour', 'tatham/lightup', 'breaklock', 'ordinary-puzzles', 'dokuel', 'everest'], array_column($definitions[0]['members'], 'reference'));
     }
 
     public function testDisabledOrNonCuratedPlaceCannotHideAnything(): void

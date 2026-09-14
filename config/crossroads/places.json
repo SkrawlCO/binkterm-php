@@ -16,6 +16,17 @@
     },
     "members": [
       {
+        "reference": "lastword",
+        "title": "Last Word",
+        "primary_presentation": true,
+        "featured": true,
+        "featured_presentation": {
+          "eyebrow": "EARLY PLAYTEST · v0.1",
+          "caption": "Play it. Break it. Tell us what you think."
+        },
+        "launch_url": "/webdoors/hangman/lastword-skippy.html"
+      },
+      {
         "reference": "wordwright",
         "primary_presentation": true
       },

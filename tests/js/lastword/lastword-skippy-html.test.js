@@ -46,6 +46,26 @@ function everythingElse() {
     return stripHtmlComments(html).split(cs).join('');
 }
 
+/** The #game-complete section only. */
+function gameCompleteSection() {
+    const start = html.indexOf('<section id="game-complete"');
+    assert.ok(start !== -1, 'precondition: #game-complete section must exist');
+    const end = html.indexOf('</section>', start);
+    return stripHtmlComments(html.slice(start, end));
+}
+
+/** The active-round HUD (#game) and Final (#final-play) panels, comments stripped. */
+function activePlaySections() {
+    const gameStart = html.indexOf('<main id="game"');
+    const gameEnd = html.indexOf('</main>', gameStart);
+    const finalStart = html.indexOf('<main id="final-play"');
+    const finalEnd = html.indexOf('</main>', finalStart);
+    return {
+        game: stripHtmlComments(html.slice(gameStart, gameEnd)),
+        final: stripHtmlComments(html.slice(finalStart, finalEnd)),
+    };
+}
+
 check('v0.1 / EARLY PLAYTEST identity is present on the category-select (start) screen', () => {
     const section = categorySelectSection();
     assert.ok(section.indexOf('lw-version') !== -1, 'expected a .lw-version element inside #category-select');
@@ -92,6 +112,46 @@ check('the active-round HUD (#game) and Final (#final-play) panels are untouched
     const finalSection = stripHtmlComments(html.slice(finalStart, finalEnd));
     assert.strictEqual(finalSection.indexOf('lw-version'), -1);
     assert.strictEqual(finalSection.indexOf('lw-orientation'), -1);
+});
+
+// ---------------------------------------------------------------------
+// SLICE 5 ("caller-path corrections", Correction B): intentional
+// "Back to Puzlmastr's Patch" exit — category-select and game-complete
+// only, never mid-session, never a dialog, no JS wiring at all (plain
+// anchor -- no gameplay state it could possibly change).
+// ---------------------------------------------------------------------
+
+check('the "Back to Puzlmastr\'s Patch" return link appears on the category-select (start) screen, pointing exactly at /places/puzlmastrs-patch', () => {
+    const section = categorySelectSection();
+    assert.ok(section.indexOf('lw-return-link') !== -1, 'expected a .lw-return-link element inside #category-select');
+    assert.ok(/href="\/places\/puzlmastrs-patch"/.test(section), 'must link exactly to /places/puzlmastrs-patch');
+    assert.ok(/back to puzlmastr/i.test(section), 'expected the "Back to Puzlmastr\'s Patch" wording');
+});
+
+check('the return link also appears on the Game Complete screen, pointing exactly at /places/puzlmastrs-patch', () => {
+    const section = gameCompleteSection();
+    assert.ok(section.indexOf('lw-return-link') !== -1, 'expected a .lw-return-link element inside #game-complete');
+    assert.ok(/href="\/places\/puzlmastrs-patch"/.test(section), 'must link exactly to /places/puzlmastrs-patch');
+});
+
+check('the return link is absent from active normal-round play and from Final active play', () => {
+    const { game, final } = activePlaySections();
+    assert.strictEqual(game.indexOf('lw-return-link'), -1, 'must not appear during active normal rounds');
+    assert.strictEqual(final.indexOf('lw-return-link'), -1, 'must not appear during Final active play');
+});
+
+check('the return link is a plain anchor with no confirmation dialog and no JS wiring', () => {
+    const categorySection = categorySelectSection();
+    const completeSection = gameCompleteSection();
+    [categorySection, completeSection].forEach((section) => {
+        const match = section.match(/<a class="lw-return-link"[^>]*>[^<]*<\/a>/);
+        assert.ok(match, 'expected a single plain <a class="lw-return-link"> element');
+        assert.strictEqual(match[0].indexOf('onclick'), -1, 'no inline JS handler');
+        assert.strictEqual(section.indexOf('confirm('), -1, 'no confirmation dialog');
+    });
+    // No id -> nothing in app-final-skippy.js could be wiring show/hide or
+    // click behavior onto it; it is exactly as inert as the markup shows.
+    assert.strictEqual(/id="[^"]*return[^"]*"/i.test(categorySection + completeSection), false);
 });
 
 console.log('lastword-skippy-html.test.js: ' + passed + ' passed');

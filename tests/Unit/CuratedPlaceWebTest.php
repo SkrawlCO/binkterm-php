@@ -20,7 +20,15 @@ final class PlaceWebFixtureCatalog
     public static function rows(): array
     {
         $rows = [];
-        foreach (['wordwright', 'hangman', 'blackjack', 'parlour', 'tatham', 'breaklock', 'ordinary-puzzles', 'dokuel', 'everest'] as $id) {
+        // Slice 4: Last Word is now a real, additional member of the real
+        // puzlmastrs-patch definition (config/crossroads/places.json) --
+        // this fixture must resolve it too, or every test below that reads
+        // the real place definition through this mock catalog would see a
+        // "Fixture must resolve member lastword" failure. Real end-to-end
+        // integration coverage lives in LastWordPpIntegrationTest.php,
+        // against the REAL GameCatalog; this fixture only needs enough
+        // shape for resolveReference() to succeed.
+        foreach (['lastword', 'wordwright', 'hangman', 'blackjack', 'parlour', 'tatham', 'breaklock', 'ordinary-puzzles', 'dokuel', 'everest'] as $id) {
             $rows[$id] = [
                 'id' => $id, 'name' => $id, 'description' => '', 'category' => 'game',
                 'backend' => ['type' => 'web', 'id' => $id === 'tatham' ? 'tatham-web' : $id],
@@ -82,6 +90,17 @@ final class CuratedPlaceWebTest extends TestCase
             $resolved = CuratedPlaceCatalog::resolveReference($member['reference'], PlaceWebFixtureCatalog::rows(), 'web');
             self::assertNotNull($resolved, 'Fixture must resolve member ' . $member['reference']);
             $resolved['title'] = $member['title'] ?? $resolved['title'];
+            // Mirror CuratedPlaceCatalog::getPlace()'s own per-member field
+            // passthrough (Slice 2/4) so tests using this helper see the
+            // same `featured`/`featured_presentation`/`launch_url` behavior
+            // the real pipeline produces, not a stripped-down reimplementation.
+            $resolved['featured'] = ($member['featured'] ?? false) === true;
+            if (isset($member['featured_presentation'])) {
+                $resolved['featured_presentation'] = $member['featured_presentation'];
+            }
+            if (isset($member['launch_url'])) {
+                $resolved['launch_url'] = $member['launch_url'];
+            }
             return $resolved;
         }, $place['members']);
         return $place;
@@ -205,6 +224,12 @@ final class CuratedPlaceWebTest extends TestCase
     public function testFeaturedMemberRendersInFeaturedBandAndOrdinaryMembersExcludeIt(): void
     {
         $place = $this->place();
+        // Slice 4 made `lastword` a real, always-featured member of the real
+        // place definition -- strip it here so this test stays an isolated
+        // proof of the GENERIC mechanism via one synthetic example, exactly
+        // as originally written. Real lastword-is-featured coverage lives in
+        // LastWordPpIntegrationTest.php.
+        $place['members'] = array_values(array_filter($place['members'], static fn (array $m): bool => $m['reference'] !== 'lastword'));
         foreach ($place['members'] as $i => $member) {
             if ($member['reference'] === 'blackjack') {
                 $place['members'][$i]['featured'] = true;
@@ -239,13 +264,18 @@ final class CuratedPlaceWebTest extends TestCase
     }
 
     /**
-     * The real, current Puzlmastr's Patch fixture (no member marked
-     * `featured`) must render no featured band at all -- never an empty
-     * decorated region -- and the ordinary grid is the unchanged original 9.
+     * A place with no member marked `featured` must render no featured band
+     * at all -- never an empty decorated region -- and the ordinary grid is
+     * the unchanged original 9. Since Slice 4 made `lastword` a real,
+     * always-featured member of the real Puzlmastr's Patch definition, this
+     * test strips it first to still exercise the GENERIC "nothing featured"
+     * path; the real, currently-featured `lastword` case is covered by
+     * LastWordPpIntegrationTest.php.
      */
     public function testNoFeaturedMembersRendersNoFeaturedBandAndOriginalNineMembers(): void
     {
         $place = $this->place();
+        $place['members'] = array_values(array_filter($place['members'], static fn (array $m): bool => $m['reference'] !== 'lastword'));
         $featured = CuratedPlacePresentation::featuredMembers($place);
         self::assertSame([], $featured);
 
