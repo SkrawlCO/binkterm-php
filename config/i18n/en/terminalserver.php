@@ -85,6 +85,7 @@ return [
     'ui.terminalserver.server.menu.doors'              => 'D) Games & Experiences',
     'ui.terminalserver.server.menu.mrc'               => 'I) Inter-BBS Chat',
     'ui.terminalserver.server.menu.quit'              => 'Q) Quit',
+    'ui.terminalserver.server.menu.sylc'              => 'Y) Since Last Call',
 
     // --- Farewell ---
     'ui.terminalserver.server.farewell'                => 'Thank you for visiting, have a great day!',
@@ -703,6 +704,21 @@ return [
     'ui.terminalserver.dashboard.crossroads_others' => '{count} people out there',
     'ui.terminalserver.dashboard.crossroads_others_one' => '1 person out there',
     'ui.terminalserver.dashboard.crossroads_recent_self' => 'Last in {experience}',
+
+    // --- Since Your Last Call (Messaging Evolution) ---
+    'ui.terminalserver.sylc.sidebar_label'    => 'Since Last Call',
+    'ui.terminalserver.sylc.sidebar_personal' => '{count} personal',
+    'ui.terminalserver.sylc.sidebar_areas'    => '{count} area(s)',
+    'ui.terminalserver.sylc.title'            => 'Since Your Last Call',
+    'ui.terminalserver.sylc.personal_heading' => 'For You:',
+    'ui.terminalserver.sylc.ambient_heading'  => 'Around the Board:',
+    'ui.terminalserver.sylc.quiet'            => 'Quiet since your last call.',
+    'ui.terminalserver.sylc.more'             => '(more may be available)',
+    'ui.terminalserver.sylc.type_netmail'     => 'N',
+    'ui.terminalserver.sylc.type_reply'       => 'R',
+    'ui.terminalserver.sylc.continue_prompt'  => 'Press a key to continue.',
+    'ui.terminalserver.sylc.action_continue'  => 'Continue',
+    'ui.terminalserver.sylc.no_previous_visit' => 'No previous call on record yet.',
 
     // --- Interests handler ---
     'ui.terminalserver.interests.title'              => 'Interests',

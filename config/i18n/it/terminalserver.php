@@ -85,6 +85,7 @@ return [
     'ui.terminalserver.server.menu.doors'              => 'D) Giochi door',
     'ui.terminalserver.server.menu.mrc'               => 'I) Inter-BBS Chat',
     'ui.terminalserver.server.menu.quit'              => 'Q) Esci',
+    'ui.terminalserver.server.menu.sylc'              => 'Y) Dalla tua ultima chiamata',
 
     // --- Farewell ---
     'ui.terminalserver.server.farewell'                => 'Grazie per la visita, buona giornata!',
@@ -703,6 +704,21 @@ return [
     'ui.terminalserver.dashboard.crossroads_others' => '{count} persone sono lì',
     'ui.terminalserver.dashboard.crossroads_others_one' => '1 persona è lì',
     'ui.terminalserver.dashboard.crossroads_recent_self' => 'Ultima volta in {experience}',
+
+    // --- Since Your Last Call (Messaging Evolution) ---
+    'ui.terminalserver.sylc.sidebar_label'    => 'Dalla tua ultima chiamata',
+    'ui.terminalserver.sylc.sidebar_personal' => '{count} personale',
+    'ui.terminalserver.sylc.sidebar_areas'    => '{count} area/e',
+    'ui.terminalserver.sylc.title'            => 'Dalla tua ultima chiamata',
+    'ui.terminalserver.sylc.personal_heading' => 'Per te:',
+    'ui.terminalserver.sylc.ambient_heading'  => 'In giro per la bacheca:',
+    'ui.terminalserver.sylc.quiet'            => 'Tranquillo dalla tua ultima chiamata.',
+    'ui.terminalserver.sylc.more'             => '(potrebbero essercene altri)',
+    'ui.terminalserver.sylc.type_netmail'     => 'N',
+    'ui.terminalserver.sylc.type_reply'       => 'R',
+    'ui.terminalserver.sylc.continue_prompt'  => 'Premi un tasto per continuare.',
+    'ui.terminalserver.sylc.action_continue'  => 'Continua',
+    'ui.terminalserver.sylc.no_previous_visit' => 'Nessuna chiamata precedente registrata.',
 
     // --- Interests handler ---
     'ui.terminalserver.interests.title'              => 'Interessi',

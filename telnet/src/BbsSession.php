@@ -586,6 +586,7 @@ class BbsSession
         $shoutboxHandler      = new ShoutboxHandler($this, $this->apiBase);
         $bulletinsHandler     = new BulletinsHandler($this, $this->apiBase);
         $newscanHandler       = new NewscanHandler($this, $this->apiBase, $netmailHandler, $echomailHandler, $bulletinsHandler);
+        $sylcHandler          = new SylcHandler($this);
         $pollsHandler         = new PollsHandler($this, $this->apiBase);
         $doorHandler          = new DoorHandler($this, $this->apiBase);
         $fileHandler          = new FileHandler($this, $this->apiBase, $this->isSsh);
@@ -635,6 +636,7 @@ class BbsSession
         }
 
         $dashboardStats = MailUtils::getDashboardStats($this->apiBase, $session);
+        $sylcSummary    = $sylcHandler->summary($state);
 
         $idleData = $initData['idle'] ?? [];
         if (!empty($idleData['warn_seconds'])) {
@@ -655,7 +657,7 @@ class BbsSession
             ];
         // Computes active menu items, key→action map, and section arrays from current state.
         // Called by both $renderMainMenu (TUI) and the LineShell chooseFromList path.
-        $computeMenuData = function () use (&$state, &$dashboardStats, $menuKeys): array {
+        $computeMenuData = function () use (&$state, &$dashboardStats, &$sylcSummary, $menuKeys): array {
             $locale = $state['locale'];
 
             $showShoutbox   = BbsConfig::isFeatureEnabled('shoutbox');
@@ -685,6 +687,14 @@ class BbsSession
             $bbsListOption    = $showBbsList   && isset($menuKeys['bbslist'])   ? $menuKeys['bbslist']   : null;
             $nodelistOption   = $showNodelist  && isset($menuKeys['nodelist'])  ? $menuKeys['nodelist']  : null;
             $whosOnlineOption = $menuKeys['whosonline'] ?? null;
+            // Fixed, non-sysop-configurable key: unlike the other menu actions
+            // above, "Since Last Call" is not (yet) a customizable
+            // AppearanceConfig::DEFAULT_TERM_MENU_KEYS entry — see
+            // /root/L33TEST_Messaging_Telnet_SYLC_Design_2026-09-14.md's
+            // implementation report for why. Only offered at all when the
+            // caller has previous-visit history (Decision #3: no entry point
+            // exists for a first-ever tracked visit).
+            $sylcOption       = !empty($sylcSummary['available']) ? 'y' : null;
 
             $norm = fn(string $text, string $prefix): string =>
                 $this->normalizeTerminalTextForClient($this->stripMenuHotkeyPrefix($text, $prefix), $state);
@@ -706,6 +716,7 @@ class BbsSession
             $lblSettings   = $norm($this->t('ui.terminalserver.server.menu.settings',   'T) Settings', [], $locale), 'T');
             $lblInterests  = $norm($this->t('ui.terminalserver.server.menu.interests',  'I) Interests', [], $locale), 'I');
             $lblQuit       = $norm($this->t('ui.terminalserver.server.menu.quit',       'Q) Quit', [], $locale), 'Q');
+            $lblSylc       = $norm($this->t('ui.terminalserver.server.menu.sylc',       'Y) Since Last Call', [], $locale), 'Y');
 
             // Two-column section arrays for TUI rendering: [UPPER_KEY, label]
             $messagingItems = [];
@@ -713,6 +724,7 @@ class BbsSession
             if ($echomailKey !== null)     $messagingItems[] = [strtoupper($echomailKey), $lblEchomail];
             if ($qwkOption !== null)       $messagingItems[] = [strtoupper($qwkOption), $lblQwk];
             if ($bulletinsOption !== null) $messagingItems[] = [strtoupper($bulletinsOption), $lblBulletins];
+            if ($sylcOption !== null)      $messagingItems[] = [strtoupper($sylcOption), $lblSylc];
 
             $communityItems = [];
             if ($whosOnlineOption !== null) $communityItems[] = [strtoupper($whosOnlineOption), $lblWhosOnline];
@@ -745,6 +757,7 @@ class BbsSession
                 'freqrequests' => $freqOption,
                 'bbslist'    => $bbsListOption, 'nodelist'   => $nodelistOption,
                 'whosonline' => $whosOnlineOption,'settings' => $settingsKey,
+                'sylc'       => $sylcOption,
                 'quit'       => $quitKey,
             ] as $_action => $_key) {
                 if ($_key !== null) {
@@ -771,6 +784,7 @@ class BbsSession
                 'freqrequests' => [$freqOption, $lblFreq],
                 'settings'   => [$settingsKey, $lblSettings],
                 'interests'  => [$interestsOption, $lblInterests],
+                'sylc'       => [$sylcOption, $lblSylc],
             ] as $_action => [$_key, $_label]) {
                 if ($_key !== null) {
                     $flatItems[] = ['action' => $_action, 'label' => $_label, 'key' => $_key];
@@ -792,7 +806,7 @@ class BbsSession
         };
 
         $keyToAction = [];
-        $renderMainMenu = function () use ($conn, &$state, &$dashboardStats, $config, &$keyToAction, $computeMenuData): void {
+        $renderMainMenu = function () use ($conn, &$state, &$dashboardStats, &$sylcSummary, $config, &$keyToAction, $computeMenuData): void {
             $cols       = $state['cols'] ?? 80;
             $termRows   = $state['rows'] ?? 24;
             $menuWidth  = min(76, $cols - 4);
@@ -919,7 +933,7 @@ class BbsSession
 
             $boxStartRow  = 3;
             $boxBottomRow = 6 + count($rows);
-            $this->renderMenuWidgets($conn, $state, $dashboardStats, $menuLeft, $menuWidth, $boxStartRow, $boxBottomRow, $termRows);
+            $this->renderMenuWidgets($conn, $state, $dashboardStats, $sylcSummary['line'] ?? null, $menuLeft, $menuWidth, $boxStartRow, $boxBottomRow, $termRows);
 
             $this->writeLine($conn, '');
         };
@@ -1121,10 +1135,12 @@ class BbsSession
                 $this->log("Menu: {$username} -> Netmail");
                 $netmailHandler->show($conn, $state, $session);
                 $dashboardStats = MailUtils::getDashboardStats($this->apiBase, $session);
+                $sylcSummary    = $sylcHandler->summary($state);
             } elseif ($action === 'echomail') {
                 $this->log("Menu: {$username} -> Echomail");
                 $echomailHandler->showEchoareas($conn, $state, $session);
                 $dashboardStats = MailUtils::getDashboardStats($this->apiBase, $session);
+                $sylcSummary    = $sylcHandler->summary($state);
             } elseif ($action === 'shoutbox') {
                 $this->log("Menu: {$username} -> Shoutbox");
                 $shoutboxHandler->show($conn, $state, $session, 20);
@@ -1132,6 +1148,10 @@ class BbsSession
                 $this->log("Menu: {$username} -> Bulletins");
                 $bulletinsHandler->show($conn, $state, $session);
                 $dashboardStats = MailUtils::getDashboardStats($this->apiBase, $session);
+                $sylcSummary    = $sylcHandler->summary($state);
+            } elseif ($action === 'sylc') {
+                $this->log("Menu: {$username} -> Since Last Call");
+                $sylcHandler->show($conn, $state, $session);
             } elseif ($action === 'polls') {
                 $this->log("Menu: {$username} -> Polls");
                 $pollsHandler->show($conn, $state, $session);
@@ -1360,7 +1380,7 @@ class BbsSession
      * @param resource $conn
      */
     private function renderMenuWidgets(
-        $conn, array $state, array $stats,
+        $conn, array $state, array $stats, ?string $sylcLine,
         int $menuLeft, int $menuWidth,
         int $boxStartRow, int $boxBottomRow, int $termRows
     ): void {
@@ -1371,7 +1391,7 @@ class BbsSession
         if ($sidebarAvail >= 16) {
             $panelWidth = min(22, $sidebarAvail);
             $this->renderDashboardSidebar(
-                $conn, $state, $stats,
+                $conn, $state, $stats, $sylcLine,
                 $sidebarStart, $panelWidth,
                 $boxStartRow, $boxBottomRow, $termRows
             );
@@ -1379,7 +1399,7 @@ class BbsSession
             // Show bottom bar only if there is at least one spare row below the box
             $promptRow = $boxBottomRow + 2; // blank line + prompt
             if ($termRows > $promptRow) {
-                $this->renderDashboardBottomBar($conn, $state, $stats, $menuLeft, $menuWidth);
+                $this->renderDashboardBottomBar($conn, $state, $stats, $sylcLine, $menuLeft, $menuWidth);
             }
         }
     }
@@ -1458,7 +1478,7 @@ class BbsSession
      * @param resource $conn
      */
     private function renderDashboardSidebar(
-        $conn, array $state, array $stats,
+        $conn, array $state, array $stats, ?string $sylcLine,
         int $startCol, int $panelWidth,
         int $boxStartRow, int $maxRow, int $termRows
     ): void {
@@ -1508,6 +1528,52 @@ class BbsSession
             $lblCrossroads = $this->t('ui.terminalserver.dashboard.label.crossroads', 'Crossroads', [], $locale);
             $widgetEntries[] = 'DIVIDER';
             $widgetEntries[] = ['TEXT', $lblCrossroads . ': ' . $crossroadsText];
+            $rowsUsed += 2;
+        }
+
+        // "Since Last Call" (VISIT STATE, Messaging Evolution) — lowest
+        // priority, dropped first under space pressure, and separated from
+        // the surface-state widgets above (New Netmail/New Echomail, fed by
+        // MailUtils::getDashboardStats()'s users_meta watermark, a distinct
+        // axis) by its own DIVIDER so a caller cannot mistake one for the
+        // other. $sylcLine is already null when there is nothing to show —
+        // first-ever tracked visit or a quiet return — so no extra gating
+        // is needed here beyond the null check itself.
+        //
+        // Responsive to the panel's actual inner width: at the fixed 22-col
+        // panel cap (innerWidth=20) the full "Since Last Call: N personal, N
+        // areas" line does not fit and fitTerminalLabel() hard-clips with no
+        // ellipsis, silently discarding the counts. Rather than touching that
+        // shared, no-ellipsis primitive (used by Crossroads' own composed
+        // line too, out of scope here) or shortening the wording into a
+        // cryptic abbreviation, split the already-composed line on its first
+        // ": " into a label row and a value row — the same two-row shape
+        // every other labeled widget in this panel already uses — only when
+        // it doesn't already fit on one line. This is presentation-only:
+        // TelnetSylcPresenter's composed text is unchanged, as is the 80x24
+        // bottom-bar path (which wraps rather than clips and was already
+        // correct).
+        if ($sylcLine !== null) {
+            $sylcFitsOneLine = $this->terminalTextWidth($sylcLine, $state) <= $innerWidth;
+            $sylcRowsNeeded  = $sylcFitsOneLine ? 1 : 2;
+            if ($rowsUsed + 1 + $sylcRowsNeeded <= $availRows) {
+                $widgetEntries[] = 'DIVIDER';
+                if ($sylcFitsOneLine) {
+                    $widgetEntries[] = ['TEXT', $sylcLine];
+                } else {
+                    // Split "Label: value" into two short rows. Falls back to
+                    // one row (old behavior, still safely clipped by
+                    // fitTerminalLabel downstream) if the composed line ever
+                    // has no ": " separator to split on.
+                    $sepPos = strpos($sylcLine, ': ');
+                    if ($sepPos !== false) {
+                        $widgetEntries[] = ['TEXT', substr($sylcLine, 0, $sepPos + 1)];
+                        $widgetEntries[] = ['TEXT', substr($sylcLine, $sepPos + 2)];
+                    } else {
+                        $widgetEntries[] = ['TEXT', $sylcLine];
+                    }
+                }
+            }
         }
 
         $v      = $chars['v'];
@@ -1578,7 +1644,7 @@ class BbsSession
      * @param resource $conn
      */
     private function renderDashboardBottomBar(
-        $conn, array $state, array $stats,
+        $conn, array $state, array $stats, ?string $sylcLine,
         int $menuLeft, int $menuWidth
     ): void {
         $locale  = $state['locale'];
@@ -1608,6 +1674,15 @@ class BbsSession
         if ($crossroadsText !== null) {
             $lblCrossroads = $this->t('ui.terminalserver.dashboard.label.crossroads', 'Crossroads', [], $locale);
             $parts[] = $this->colorize($lblCrossroads . ': ', self::ANSI_DIM) . $this->colorize($crossroadsText, self::ANSI_BOLD);
+        }
+        // "Since Last Call" (VISIT STATE) — see renderDashboardSidebar()'s
+        // equivalent addition for the full rationale. $sylcLine already
+        // carries its own "Since Last Call: ..." label, so it is rendered as
+        // one uniformly-dim part rather than split label/bold-value like the
+        // widgets above, matching how the sidebar's own 'TEXT' entries (this
+        // one and Crossroads) are already styled.
+        if ($sylcLine !== null) {
+            $parts[] = $this->colorize($sylcLine, self::ANSI_DIM);
         }
 
         $padLen  = $menuLeft + 1; // columns used by left-margin indent

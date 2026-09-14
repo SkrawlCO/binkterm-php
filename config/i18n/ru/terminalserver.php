@@ -85,6 +85,7 @@ return [
     'ui.terminalserver.server.menu.doors' => 'D) Door‑игры',
     'ui.terminalserver.server.menu.mrc' => 'I) Inter-BBS Chat',
     'ui.terminalserver.server.menu.quit' => 'Q) Выход',
+    'ui.terminalserver.server.menu.sylc' => 'Y) С последнего звонка',
 
     // --- Farewell ---
     'ui.terminalserver.server.farewell' => 'Благодарим за визит, желаем отличного дня!',
@@ -705,6 +706,21 @@ return [
     'ui.terminalserver.dashboard.crossroads_others' => '{count} человек сейчас там',
     'ui.terminalserver.dashboard.crossroads_others_one' => '1 человек сейчас там',
     'ui.terminalserver.dashboard.crossroads_recent_self' => 'Последний раз в {experience}',
+
+    // --- Since Your Last Call (Messaging Evolution) ---
+    'ui.terminalserver.sylc.sidebar_label'    => 'С последнего звонка',
+    'ui.terminalserver.sylc.sidebar_personal' => '{count} личных',
+    'ui.terminalserver.sylc.sidebar_areas'    => '{count} эх(и)',
+    'ui.terminalserver.sylc.title'            => 'С вашего последнего звонка',
+    'ui.terminalserver.sylc.personal_heading' => 'Для вас:',
+    'ui.terminalserver.sylc.ambient_heading'  => 'На борде:',
+    'ui.terminalserver.sylc.quiet'            => 'Тихо с вашего последнего звонка.',
+    'ui.terminalserver.sylc.more'             => '(возможно, есть ещё)',
+    'ui.terminalserver.sylc.type_netmail'     => 'Н',
+    'ui.terminalserver.sylc.type_reply'       => 'О',
+    'ui.terminalserver.sylc.continue_prompt'  => 'Нажмите клавишу, чтобы продолжить.',
+    'ui.terminalserver.sylc.action_continue'  => 'Продолжить',
+    'ui.terminalserver.sylc.no_previous_visit' => 'Предыдущих звонков пока не зафиксировано.',
 
     // --- Interests handler ---
     'ui.terminalserver.interests.title' => 'Интересы',

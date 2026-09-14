@@ -169,7 +169,7 @@ final class BbsSessionCrossroadsSignalTest extends TestCase
         // (not binding) -> availRows = min(100,11) - 1 + 1 = 11. Netmail+echomail
         // (rowsUsed=6) + online (+2=8) + bulletins (+1=9) + credits (+2=11) exactly
         // exhausts the 11-row budget, leaving no room for Crossroads (+2=13 > 11).
-        $method->invoke($session, $conn, $state, $stats, 1, 30, 1, 100, 13);
+        $method->invoke($session, $conn, $state, $stats, null, 1, 30, 1, 100, 13);
 
         rewind($conn);
         $output = stream_get_contents($conn);
@@ -177,5 +177,71 @@ final class BbsSessionCrossroadsSignalTest extends TestCase
 
         self::assertStringNotContainsString('Crossroads', $output);
         self::assertStringContainsString('+' . str_repeat('-', 28) . '+', $output);
+    }
+
+    // ---- renderDashboardSidebar(): SYLC responsive split -----------------
+
+    /**
+     * At the panel's fixed narrow cap (innerWidth=20, from the real
+     * min(22, sidebarAvail) rule in renderMenuWidgets()), the composed
+     * "Since Last Call: 2 personal, 3 areas" line (37 visible chars) does not
+     * fit on one row. Rather than let fitTerminalLabel() silently hard-clip
+     * it with no ellipsis, renderDashboardSidebar() splits it into a label
+     * row and a value row — proven here by both rows appearing intact and
+     * un-clipped.
+     */
+    public function testSylcLineSplitsIntoTwoRowsWhenItDoesNotFitOneLine(): void
+    {
+        $conn = fopen('php://memory', 'r+');
+        self::assertIsResource($conn);
+        $session = new BbsSession($conn, 'http://example.invalid', false, false, false, false);
+
+        $method = new ReflectionMethod(BbsSession::class, 'renderDashboardSidebar');
+        $method->setAccessible(true);
+
+        $state = ['locale' => 'en'];
+        $stats = [
+            'unread_netmail' => 0, 'new_echomail' => 0, 'online_count' => 0,
+            'unread_bulletins' => 0, 'credit_balance' => null, 'crossroads' => null,
+        ];
+
+        // panelWidth=22 -> innerWidth=20, matching the real sidebar's fixed cap.
+        $method->invoke($session, $conn, $state, $stats, 'Since Last Call: 2 personal, 3 areas', 1, 22, 1, 100, 24);
+
+        rewind($conn);
+        $output = stream_get_contents($conn);
+        fclose($conn);
+
+        self::assertStringContainsString('Since Last Call:', $output);
+        self::assertStringContainsString('2 personal, 3 areas', $output);
+    }
+
+    /**
+     * A short SYLC line that already fits the panel's inner width renders as
+     * a single row, exactly as before this correction — the split is only
+     * ever applied when genuinely needed.
+     */
+    public function testSylcLineStaysOnOneRowWhenItAlreadyFits(): void
+    {
+        $conn = fopen('php://memory', 'r+');
+        self::assertIsResource($conn);
+        $session = new BbsSession($conn, 'http://example.invalid', false, false, false, false);
+
+        $method = new ReflectionMethod(BbsSession::class, 'renderDashboardSidebar');
+        $method->setAccessible(true);
+
+        $state = ['locale' => 'en'];
+        $stats = [
+            'unread_netmail' => 0, 'new_echomail' => 0, 'online_count' => 0,
+            'unread_bulletins' => 0, 'credit_balance' => null, 'crossroads' => null,
+        ];
+
+        $method->invoke($session, $conn, $state, $stats, 'Since Last Call: 2', 1, 22, 1, 100, 24);
+
+        rewind($conn);
+        $output = stream_get_contents($conn);
+        fclose($conn);
+
+        self::assertStringContainsString('Since Last Call: 2', $output);
     }
 }

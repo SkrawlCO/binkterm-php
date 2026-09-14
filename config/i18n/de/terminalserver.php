@@ -85,6 +85,7 @@ return [
     'ui.terminalserver.server.menu.doors'              => 'D) Türspiele',
     'ui.terminalserver.server.menu.mrc'                => 'I) Inter-BBS Chat',
     'ui.terminalserver.server.menu.quit'               => 'Q) Beenden',
+    'ui.terminalserver.server.menu.sylc'               => 'Y) Seit letztem Anruf',
     'ui.terminalserver.server.menu.files'              => 'F) Dateien',
     'ui.terminalserver.server.menu.freqrequests'       => 'R) Dateianfragen',
     'ui.terminalserver.server.menu.terminal_settings'  => 'T) Terminaleinstellungen',
@@ -703,6 +704,21 @@ return [
     'ui.terminalserver.dashboard.crossroads_others' => '{count} Leute sind gerade da',
     'ui.terminalserver.dashboard.crossroads_others_one' => '1 Person ist gerade da',
     'ui.terminalserver.dashboard.crossroads_recent_self' => 'Zuletzt in {experience}',
+
+    // --- Since Your Last Call (Messaging Evolution) ---
+    'ui.terminalserver.sylc.sidebar_label'    => 'Seit letztem Anruf',
+    'ui.terminalserver.sylc.sidebar_personal' => '{count} persönlich',
+    'ui.terminalserver.sylc.sidebar_areas'    => '{count} Bereich(e)',
+    'ui.terminalserver.sylc.title'            => 'Seit deinem letzten Anruf',
+    'ui.terminalserver.sylc.personal_heading' => 'Für dich:',
+    'ui.terminalserver.sylc.ambient_heading'  => 'Rund ums Board:',
+    'ui.terminalserver.sylc.quiet'            => 'Ruhig seit deinem letzten Anruf.',
+    'ui.terminalserver.sylc.more'             => '(evtl. mehr verfügbar)',
+    'ui.terminalserver.sylc.type_netmail'     => 'N',
+    'ui.terminalserver.sylc.type_reply'       => 'A',
+    'ui.terminalserver.sylc.continue_prompt'  => 'Taste drücken, um fortzufahren.',
+    'ui.terminalserver.sylc.action_continue'  => 'Weiter',
+    'ui.terminalserver.sylc.no_previous_visit' => 'Noch kein vorheriger Anruf verzeichnet.',
 
     // --- Interests handler ---
     'ui.terminalserver.interests.title'              => 'Interessen',
