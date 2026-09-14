@@ -90,6 +90,37 @@ class BbsDirectoryGeocoder
         return hash('sha256', mb_strtolower(trim($location), 'UTF-8'));
     }
 
+    /**
+     * True if this location is already permanently cached as NO_RESULT --
+     * i.e. a prior geocode attempt reached the provider and got a genuine
+     * "no match" answer. Uses the exact same cache key derivation as
+     * geocodeLocation() itself, so it reflects the real cache, not an
+     * approximation. Callers use this to exclude known-unresolvable rows
+     * from consuming a bounded batch slot, without making any outbound
+     * request and without altering the cache.
+     */
+    public function isKnownNoResult(?string $location): bool
+    {
+        $location = trim((string)$location);
+        if ($location === '') {
+            return false;
+        }
+
+        try {
+            $db = $this->getDb();
+            $stmt = $db->prepare("
+                SELECT status
+                FROM geocode_cache
+                WHERE location_key = ?
+                LIMIT 1
+            ");
+            $stmt->execute([$this->buildCacheKey($location)]);
+            return $stmt->fetchColumn() === 'no_result';
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
     private function getCachedResult(string $cacheKey): ?array
     {
         try {
