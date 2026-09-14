@@ -80,6 +80,8 @@ The `(tag, domain)` pair is the logical key. Code that looks up areas by tag mus
 | `credit_balance` | Current credit balance (modified only via `user_transactions`) |
 | `last_login` | Timestamp of most recent login |
 | `referral_code` | For the referral system |
+| `messaging_visit_boundary_at` | Frozen "since your last call" boundary: the exact timestamp of the last renewal in the caller's most recently *closed* visit family. Written only by `BinktermPHP\Messaging\VisitTracker`; null until a caller's first visit family has closed. |
+| `messaging_visit_renewed_at` | Most recent visit-family renewal, open or closed. A gap exceeding `VisitTracker::GRACE_SECONDS` (900s) between renewals closes the family and freezes `messaging_visit_boundary_at`. Distinct from `last_caller_visit_at` (public arrival ticker, coalesced to 30 minutes) and from `user_sessions.last_activity` (per-connection). |
 
 Both `username` and `real_name` are enforced as unique to prevent impersonation. A database trigger fires on insert/update to catch collisions across both columns simultaneously.
 

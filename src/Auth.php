@@ -135,6 +135,7 @@ class Auth
         // session creation (including terminal debug auto-login) stays separate.
         if (in_array($service, ['web', 'telnet', 'ssh'], true)) {
             $this->recordCallerVisit($userId, true);
+            (new \BinktermPHP\Messaging\VisitTracker())->renew($userId);
         }
 
         return [
@@ -197,6 +198,12 @@ class Auth
         // Update last_activity (and ip_address, if known) for online tracking
         if ($user) {
             $this->updateLastActivity($sessionId, $ipAddress);
+            // Every meaningful authenticated request renews the visit family
+            // (Messaging Evolution Slice 1); no throttle — see VisitTracker.
+            $userId = $user['user_id'] ?? $user['id'] ?? null;
+            if ($userId) {
+                (new \BinktermPHP\Messaging\VisitTracker())->renew((int)$userId);
+            }
         }
 
         return $user;
