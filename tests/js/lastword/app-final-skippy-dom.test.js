@@ -70,7 +70,7 @@ const IDS = [
     'game', 'gallows', 'skippyChatterBubble', 'strikeCount', 'roundLabel', 'categoryLabel',
     'cumulativeScore', 'cumulativeScoreDelta', 'roundScore', 'roundScoreDelta', 'solveBonus', 'decayHint',
     'board', 'statusLine', 'letters', 'valuesHint',
-    'solveToggle', 'solveForm', 'solveInput', 'solveSubmit',
+    'solveToggle', 'solveForm', 'solveInput', 'solveSubmit', 'solveRiskHint',
     'buyHintButton', 'hintUnavailableReason',
     'round-result', 'roundResultTitle', 'roundResultBody', 'continueAfterRound',
     'final-intro', 'finalIntroCategory', 'finalIntroScore', 'finalIntroBoard',
@@ -78,7 +78,7 @@ const IDS = [
     'finalOpeningPicker', 'finalOpeningPickerPrompt', 'finalOpeningLetterGrid',
     'final-play', 'finalGallows', 'finalSkippyChatterBubble', 'finalStrikeCount', 'finalCategoryLabel', 'finalScoreRemaining',
     'finalBoard', 'finalStatusLine', 'finalLetters',
-    'finalSolveToggle', 'finalSolveForm', 'finalSolveInput', 'finalSolveSubmit',
+    'finalSolveToggle', 'finalSolveForm', 'finalSolveInput', 'finalSolveSubmit', 'finalSolveRiskHint',
     'game-complete', 'gameCompleteTitle', 'gameCompleteBody', 'gameCompleteRivalry', 'playAgain'
 ];
 

@@ -128,7 +128,8 @@
 }
 
 .actionRow .solveForm,
-#hintUnavailableReason {
+#hintUnavailableReason,
+#solveRiskHint {
     flex-basis: 100%;
     margin: 0;
 }

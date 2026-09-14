@@ -72,6 +72,12 @@
 
     var MAX_STRIKES = LastWordState.MAX_STRIKES;
 
+    // Strikes charged for a wrong SOLVE attempt in a normal round. Named and
+    // exported (Fork #8 "KNOW THE STAKES") so presentation code can display
+    // this risk before the caller commits to SOLVE, instead of duplicating
+    // the literal value.
+    var WRONG_SOLVE_STRIKES = 2;
+
     function isRoundOver(roundState) {
         return roundState.outcome !== null;
     }
@@ -225,7 +231,7 @@
             return { roundState: next, changed: true, correct: true, bonusAwarded: bonus };
         }
 
-        next.strikes += 2;
+        next.strikes += WRONG_SOLVE_STRIKES;
         if (next.strikes >= MAX_STRIKES) {
             next.outcome = 'struck-out';
         }
@@ -259,6 +265,7 @@
         SOLVE_BONUS_DECAY_DIVISOR: SOLVE_BONUS_DECAY_DIVISOR,
         decayPerActionFor: decayPerActionFor,
         MAX_STRIKES: MAX_STRIKES,
+        WRONG_SOLVE_STRIKES: WRONG_SOLVE_STRIKES,
         isRoundOver: isRoundOver,
         actionsTaken: actionsTaken,
         computeSolveBonus: computeSolveBonus,

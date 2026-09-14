@@ -186,7 +186,7 @@
         'game', 'gallows', 'skippyChatterBubble', 'strikeCount', 'roundLabel', 'categoryLabel',
         'cumulativeScore', 'cumulativeScoreDelta', 'roundScore', 'roundScoreDelta', 'solveBonus', 'decayHint',
         'board', 'statusLine', 'letters', 'valuesHint',
-        'solveToggle', 'solveForm', 'solveInput', 'solveSubmit',
+        'solveToggle', 'solveForm', 'solveInput', 'solveSubmit', 'solveRiskHint',
         'buyHintButton', 'hintUnavailableReason',
         'round-result', 'roundResultTitle', 'roundResultBody', 'continueAfterRound',
         'final-intro', 'finalIntroCategory', 'finalIntroScore', 'finalIntroBoard',
@@ -194,7 +194,7 @@
         'finalOpeningPicker', 'finalOpeningPickerPrompt', 'finalOpeningLetterGrid',
         'final-play', 'finalGallows', 'finalSkippyChatterBubble', 'finalStrikeCount', 'finalCategoryLabel', 'finalScoreRemaining',
         'finalBoard', 'finalStatusLine', 'finalLetters',
-        'finalSolveToggle', 'finalSolveForm', 'finalSolveInput', 'finalSolveSubmit',
+        'finalSolveToggle', 'finalSolveForm', 'finalSolveInput', 'finalSolveSubmit', 'finalSolveRiskHint',
         'game-complete', 'gameCompleteTitle', 'gameCompleteBody', 'gameCompleteRivalry', 'playAgain'
     ].forEach(function (id) {
         var camel = id.replace(/-([a-z])/g, function (_, c) { return c.toUpperCase(); });
@@ -531,6 +531,10 @@
             LastWordRound.decayPerActionFor(roundConfig.maxSolveBonus) + ' per letter guessed or bought';
         el.valuesHint.textContent = 'Consonants: free, earn ' + roundConfig.consonantValue +
             ' x occurrences. Vowels: cost ' + roundConfig.vowelCost + ', reveal all occurrences.';
+        // Fork #8 "KNOW THE STAKES": wrong-SOLVE strike risk, visible next to
+        // the SOLVE action before the caller commits. Value is canonical
+        // (LastWordRound.WRONG_SOLVE_STRIKES), not duplicated here.
+        el.solveRiskHint.textContent = 'Wrong solve: +' + LastWordRound.WRONG_SOLVE_STRIKES + ' strikes.';
         currentSkippyState = renderSkippyOn(el.gallows, round.strikes, false, panicState);
 
         // Proof A: score changes should register. Compare against the last
@@ -952,6 +956,9 @@
         el.finalSolveToggle.disabled = false;
         el.finalSolveForm.className = 'solveForm hidden';
         el.finalStatusLine.textContent = 'Final Hangman — every additional letter costs 250. Solve any time.';
+        // Fork #8: same wrong-SOLVE risk line as Rounds 1-4, sourced from
+        // canonical FINAL_CONFIG rather than a duplicated literal.
+        el.finalSolveRiskHint.textContent = 'Wrong solve: +' + LastWordFinal.FINAL_CONFIG.wrongSolveStrikes + ' strikes.';
         finalPanicState.line = null;
         finalPanicState.entered5 = false;
         showOnly('finalPlay');

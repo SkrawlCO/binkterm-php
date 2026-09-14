@@ -167,7 +167,7 @@
             return { finalState: next, changed: true, correct: true };
         }
 
-        next.strikes += 2;
+        next.strikes += FINAL_CONFIG.wrongSolveStrikes;
         if (next.strikes >= MAX_STRIKES) {
             next.outcome = 'struck-out';
         }

@@ -4,8 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1"/>
     <title>Last Word — SKIPPY (unlisted human-test build)</title>
-    <link rel="stylesheet" href="css/lastword.css?v=skippy21" />
-    <link rel="stylesheet" href="css/lastword-skippy.css?v=skippy21" />
+    <link rel="stylesheet" href="css/lastword.css?v=skippy22" />
+    <link rel="stylesheet" href="css/lastword-skippy.css?v=skippy22" />
 </head>
 <body>
 <!--
@@ -138,6 +138,10 @@
         <div class="actionRow">
             <button id="solveToggle" class="solveButton">SOLVE</button>
             <button id="buyHintButton" class="hintButton"></button>
+            <!-- Fork #8 "KNOW THE STAKES": wrong-SOLVE strike risk, visible
+                 before the caller commits — text is set from
+                 LastWordRound.WRONG_SOLVE_STRIKES, not hardcoded here. -->
+            <div class="hint" id="solveRiskHint"></div>
             <div id="solveForm" class="solveForm hidden">
                 <input id="solveInput" type="text" autocomplete="off" spellcheck="false"
                        placeholder="Type the full answer…" aria-label="Solve answer" />
@@ -166,6 +170,11 @@
 
     <div id="finalOpeningChoice">
         <h3>Choose opening help</h3>
+        <!-- Fork #8 "KNOW THE STAKES": short framing so the tradeoff (buy
+             information vs. keep every point) is legible before choosing —
+             not strategy coaching, no recommended count. Static text; the
+             costs on the buttons below come from LastWordFinal.openingCostFor(). -->
+        <p class="hint" id="finalOpeningSubheading">Buy information before Final — or keep every point and start cold.</p>
         <div class="category-list" id="finalOpeningCountButtons" aria-label="Opening help choices"></div>
     </div>
 
@@ -200,6 +209,9 @@
 
         <div class="solveRow">
             <button id="finalSolveToggle" class="solveButton">SOLVE</button>
+            <!-- Fork #8: same wrong-SOLVE risk line as Rounds 1-4, sourced
+                 from LastWordFinal.FINAL_CONFIG.wrongSolveStrikes. -->
+            <div class="hint" id="finalSolveRiskHint"></div>
             <div id="finalSolveForm" class="solveForm hidden">
                 <input id="finalSolveInput" type="text" autocomplete="off" spellcheck="false"
                        placeholder="Type the full answer…" aria-label="Solve answer" />
@@ -217,29 +229,29 @@
 </section>
 
 <!--
-  ?v=skippy21 cache-busts these local scripts/stylesheets. Bump the version
+  ?v=skippy22 cache-busts these local scripts/stylesheets. Bump the version
   token here whenever any of these files change, and verify the live page
   actually received the new version before human testing — Cloudflare
   rewrites this zone's .js/.css Cache-Control to a 4-hour browser TTL (see
   lastword-m1c.html for the full explanation), so a new query string is the
   reliable way to force a genuinely fresh fetch.
 -->
-<script src="js/lastword/content.js?v=skippy21"></script>
-<script src="js/lastword/state.js?v=skippy21"></script>
-<script src="js/lastword/round.js?v=skippy21"></script>
-<script src="js/lastword/final.js?v=skippy21"></script>
-<script src="js/lastword/session.js?v=skippy21"></script>
-<script src="js/lastword/gallows-character.js?v=skippy21"></script>
-<script src="js/lastword/idle-chatter.js?v=skippy21"></script>
-<script src="js/lastword/hint.js?v=skippy21"></script>
-<script src="js/lastword/skippy-memory.js?v=skippy21"></script>
-<script src="js/lastword/situational-awareness.js?v=skippy21"></script>
-<script src="js/lastword/safe-predicament.js?v=skippy21"></script>
-<script src="js/lastword/bob-character.js?v=skippy21"></script>
-<script src="js/lastword/auto-solve.js?v=skippy21"></script>
-<script src="js/lastword/presentation.js?v=skippy21"></script>
-<script src="js/lastword/rivalry.js?v=skippy21"></script>
-<script src="js/lastword/storage.js?v=skippy21"></script>
-<script src="js/lastword/app-final-skippy.js?v=skippy21"></script>
+<script src="js/lastword/content.js?v=skippy22"></script>
+<script src="js/lastword/state.js?v=skippy22"></script>
+<script src="js/lastword/round.js?v=skippy22"></script>
+<script src="js/lastword/final.js?v=skippy22"></script>
+<script src="js/lastword/session.js?v=skippy22"></script>
+<script src="js/lastword/gallows-character.js?v=skippy22"></script>
+<script src="js/lastword/idle-chatter.js?v=skippy22"></script>
+<script src="js/lastword/hint.js?v=skippy22"></script>
+<script src="js/lastword/skippy-memory.js?v=skippy22"></script>
+<script src="js/lastword/situational-awareness.js?v=skippy22"></script>
+<script src="js/lastword/safe-predicament.js?v=skippy22"></script>
+<script src="js/lastword/bob-character.js?v=skippy22"></script>
+<script src="js/lastword/auto-solve.js?v=skippy22"></script>
+<script src="js/lastword/presentation.js?v=skippy22"></script>
+<script src="js/lastword/rivalry.js?v=skippy22"></script>
+<script src="js/lastword/storage.js?v=skippy22"></script>
+<script src="js/lastword/app-final-skippy.js?v=skippy22"></script>
 </body>
 </html>
