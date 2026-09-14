@@ -15,6 +15,9 @@ use BinktermPHP\GameCatalog;
 use BinktermPHP\I18n\LocaleResolver;
 use BinktermPHP\I18n\Translator;
 use BinktermPHP\MessageHandler;
+use BinktermPHP\Messaging\ActivityService;
+use BinktermPHP\Messaging\SylcHydrator;
+use BinktermPHP\Messaging\SylcPulse;
 use BinktermPHP\RouteHelper;
 use BinktermPHP\Template;
 use BinktermPHP\UserCredit;
@@ -484,6 +487,30 @@ SimpleRouter::get('/', function() {
         getServerLogger()->warning('Dashboard Newscan summary failed: ' . $e->getMessage());
     }
 
+    // "Since Your Last Call" — visit-based, distinct from the newscan/unread
+    // summary above (Messaging Evolution Decision 12: read state, surface
+    // state, and visit state stay independent). Composed only when the card
+    // is not hidden; a caller with no previous tracked visit
+    // (ActivityPlan::$hasPreviousVisit === false) gets no card at all — never
+    // a substitute welcome state or a zeroed-out one.
+    $sylcPulse = null;
+    if (SylcPulse::shouldCompose($dashboardLayout)) {
+        try {
+            $activityPlan = (new ActivityService())->plan($user);
+            if ($activityPlan->hasPreviousVisit) {
+                $hydrator = new SylcHydrator();
+                $netmailIds = array_slice($activityPlan->personal['netmailIds'] ?? [], -SylcPulse::MAX_PERSONAL_ROWS);
+                $replyIds = array_slice($activityPlan->personal['replyIds'] ?? [], -SylcPulse::MAX_PERSONAL_ROWS);
+                $netmailRows = $netmailIds ? $hydrator->hydrateNetmail($netmailIds) : [];
+                $replyRows = $replyIds ? $hydrator->hydrateEchomailReplies($replyIds) : [];
+                $sylcPulse = SylcPulse::compose($activityPlan, $netmailRows, $replyRows);
+            }
+        } catch (\Throwable $e) {
+            getServerLogger()->warning('Dashboard SYLC pulse failed: ' . $e->getMessage());
+            $sylcPulse = null;
+        }
+    }
+
     // Compose the Crossroads pulse only when the card is available AND the
     // viewer has not hidden it — one ExperienceState read + one bounded
     // recent-footprint read, reduced by a pure view-model builder. No new
@@ -512,6 +539,7 @@ SimpleRouter::get('/', function() {
 
     $template->renderResponse('dashboard.twig', [
         'newscan_summary' => $newscanSummary,
+        'sylc_pulse' => $sylcPulse,
         'crossroads_available' => $crossroadsAvailable,
         'crossroads_pulse' => $crossroadsPulse,
         'system_news_content' => $systemNewsContent,

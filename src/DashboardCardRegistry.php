@@ -22,6 +22,7 @@ class DashboardCardRegistry
     public static function getAllCards(): array
     {
         return [
+            'since_last_call' => ['label_key' => 'ui.dashboard.card.since_last_call', 'default_zone' => 'main',    'required' => false],
             'unread'         => ['label_key' => 'ui.dashboard.card.unread',         'default_zone' => 'main',    'required' => true],
             'system_news'    => ['label_key' => 'ui.dashboard.card.system_news',    'default_zone' => 'main',    'required' => false],
             'crossroads'     => ['label_key' => 'ui.dashboard.card.crossroads',     'default_zone' => 'main',    'required' => false, 'conditional' => 'crossroads_available'],

@@ -189,4 +189,49 @@ final class DashboardCardRegistryTest extends TestCase
             'first-time insertion lands right after system_news'
         );
     }
+
+    /**
+     * Messaging Evolution Slice 3 — "Since Your Last Call" card.
+     */
+    public function testSinceLastCallCardIsRegisteredAsOptionalMainZone(): void
+    {
+        $card = DashboardCardRegistry::getAllCards()['since_last_call'] ?? null;
+
+        self::assertIsArray($card);
+        self::assertSame('main', $card['default_zone']);
+        self::assertFalse($card['required']);
+        self::assertSame('ui.dashboard.card.since_last_call', $card['label_key']);
+        self::assertArrayNotHasKey('conditional', $card, 'unlike Crossroads, this card has no feature gate — availability is per-request data (hasPreviousVisit), not a registry condition');
+    }
+
+    public function testSinceLastCallSitsAboveMailAndAreasInDefaultMainLayout(): void
+    {
+        $available = DashboardCardRegistry::getAvailableCards(self::NON_ADMIN, []);
+        $layout = DashboardCardRegistry::getDefaultLayout($available);
+
+        $main = $layout['main'];
+        self::assertContains('since_last_call', $main);
+        self::assertContains('unread', $main);
+        self::assertLessThan(
+            array_search('unread', $main, true),
+            array_search('since_last_call', $main, true),
+            'since_last_call should sit above Mail & Areas (unread) in the main column'
+        );
+    }
+
+    public function testSinceLastCallCardCanBeHiddenViaCustomizeDashboard(): void
+    {
+        // The existing hide mechanism doubles as this card's own "dismiss"
+        // affordance (Messaging Evolution Slice 3 design decision: no new
+        // dismissal state, no visit-state mutation).
+        $available = DashboardCardRegistry::getAvailableCards(self::NON_ADMIN, []);
+
+        $merged = DashboardCardRegistry::mergeLayout(
+            ['main' => ['unread', 'system_news'], 'sidebar' => [], 'hidden' => ['since_last_call']],
+            $available
+        );
+
+        self::assertContains('since_last_call', $merged['hidden']);
+        self::assertNotContains('since_last_call', $merged['main']);
+    }
 }

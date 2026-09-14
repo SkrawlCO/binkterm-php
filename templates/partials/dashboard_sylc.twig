@@ -1,0 +1,77 @@
+{#
+    Dashboard "Since Your Last Call" card.
+
+    Rendered only when the `sylc_pulse` view model is non-null — the `/`
+    route composes it via BinktermPHP\Messaging\SylcPulse::compose() only
+    when the caller has a previous, closed visit family
+    (ActivityPlan::$hasPreviousVisit). A first-ever tracked caller has no
+    prior call to summarize, so this card is entirely absent from the DOM on
+    that request — not rendered empty, not substituted with a welcome state.
+
+    Personal relevance (Netmail received, direct Echomail replies) always
+    renders above ambient area activity. Unread state (Mail & Areas, its own
+    card below this one) is a distinct, separately-owned axis and is never
+    duplicated here.
+#}
+<div class="dash-card-wrapper" data-card-id="since_last_call">
+<div class="card">
+    <div class="card-header">
+        <h6 class="mb-0">
+            <i class="fas fa-history me-2" aria-hidden="true"></i>
+            {{ t('ui.dashboard.sylc.title', {}, locale, ['common']) }}
+        </h6>
+    </div>
+    <div class="card-body">
+        {% if sylc_pulse.state == 'quiet' %}
+            <p class="text-muted small mb-0">{{ t('ui.dashboard.sylc.quiet', {}, locale, ['common']) }}</p>
+        {% else %}
+            {% if sylc_pulse.personal|length > 0 %}
+                <div class="fw-semibold small text-uppercase mb-2">{{ t('ui.dashboard.sylc.personal_heading', {}, locale, ['common']) }}</div>
+                <ul class="list-unstyled small mb-0">
+                    {% for item in sylc_pulse.personal %}
+                        {% set href = item.type == 'netmail' ? ('/netmail?message=' ~ item.id) : ('/echomail?message=' ~ item.id) %}
+                        <li class="py-1 border-bottom">
+                            <a class="d-flex align-items-center gap-2 text-decoration-none" href="{{ href }}">
+                                <i class="fas {{ item.type == 'netmail' ? 'fa-envelope' : 'fa-reply' }} text-muted flex-shrink-0" aria-hidden="true"></i>
+                                <span class="visually-hidden">
+                                    {{ item.type == 'netmail' ? t('ui.dashboard.sylc.type_netmail', {}, locale, ['common']) : t('ui.dashboard.sylc.type_reply', {}, locale, ['common']) }}
+                                </span>
+                                <span class="text-truncate flex-grow-1">
+                                    <span class="fw-semibold">{{ item.from_name }}</span>
+                                    {% if item.subject %}&mdash; {{ item.subject }}{% endif %}
+                                </span>
+                            </a>
+                        </li>
+                    {% endfor %}
+                </ul>
+                {% if sylc_pulse.personal_more %}
+                    <p class="text-muted small mt-2 mb-0">{{ t('ui.dashboard.sylc.more_available', {}, locale, ['common']) }}</p>
+                {% endif %}
+            {% endif %}
+
+            {% if sylc_pulse.ambient|length > 0 %}
+                <div class="fw-semibold small text-uppercase mb-2{{ sylc_pulse.personal|length > 0 ? ' mt-3 pt-3 border-top' : '' }}">
+                    {{ t('ui.dashboard.sylc.ambient_heading', {}, locale, ['common']) }}
+                </div>
+                <div class="row g-2">
+                    {% for area in sylc_pulse.ambient %}
+                        <div class="col-sm-6">
+                            <a href="/echomail?echoarea={{ area.tag|url_encode }}{{ area.domain ? '&domain=' ~ area.domain|url_encode : '' }}"
+                               class="d-flex justify-content-between gap-2 text-decoration-none small">
+                                <span class="text-truncate">
+                                    {{ area.tag }}
+                                    {% if area.isLocal %}<span class="text-muted">({{ t('ui.echoareas.local', {}, locale, ['common']) }})</span>{% endif %}
+                                </span>
+                                <strong class="flex-shrink-0">{{ area.sinceBoundaryCount }}</strong>
+                            </a>
+                        </div>
+                    {% endfor %}
+                </div>
+                {% if sylc_pulse.ambient_more %}
+                    <p class="text-muted small mt-2 mb-0">{{ t('ui.dashboard.sylc.more_available', {}, locale, ['common']) }}</p>
+                {% endif %}
+            {% endif %}
+        {% endif %}
+    </div>
+</div>
+</div>{# /dash-card-wrapper since_last_call #}
