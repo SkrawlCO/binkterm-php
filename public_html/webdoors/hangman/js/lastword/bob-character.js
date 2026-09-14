@@ -1,9 +1,12 @@
 /**
  * Last Word — Bob, a Last Word character (audition PASSED 2026-09-13 for
- * ROLE/DYNAMIC — his current artwork below is explicitly NOT final or
- * canonical; see the durable checkpoint memory for the full verdict and a
- * pointer to an external, do-not-copy visual reference for a future
- * bounded Bob character-art polish pass).
+ * ROLE/DYNAMIC; his VISUAL DESIGN passed its own separate human gate the
+ * same day via an isolated character-design lab — Fork #5, "WHO THE FUCK
+ * IS BOB?" — and the accepted hat+beard construction was promoted into
+ * this canonical file below. See the durable checkpoint memory for the
+ * full verdict history and a pointer to an external, do-not-copy visual
+ * reference that was consulted only for broad gnome-construction
+ * principles, never traced or copied).
  *
  * BOB IS NOT YET AN L33TEST-WIDE CHARACTER/MASCOT — that possibility is
  * open but has not been decided. This remains a small, isolated module —
@@ -31,15 +34,30 @@
  * as a status badge. Redrawn ONCE, translated into Skippy's own loose
  * minimalist LINE-ART vocabulary — an unfilled head circle, open
  * shoulder/spine/hip body bars, thin stroked limbs with small foot ticks,
- * an open (unfilled) pointed hat — the same construction grammar
+ * an unfilled pointed hat — the same construction grammar
  * gallows-character.js's contestant() uses, just scaled down to roughly
  * 40-45% of Skippy's own height. No large flat filled-body regions remain;
  * the only color accents are the crank's plain workshop-metal wheel (a
- * prop, not Bob himself) and one small amber checkmark. Given a small
- * SILENT WORK STORY across the safe's accepted strike progression instead
- * of one static pose — see POSE_BY_STATE below — so the comedy reads as
- * contrast (Skippy grows more emotional; Bob grows more professionally
- * satisfied that the job is going fine), not a fixed icon.
+ * prop, not Bob himself), one small amber checkmark, and (as of the visual
+ * promotion below) the hat's own cyan stroke. Given a small SILENT WORK
+ * STORY across the safe's accepted strike progression instead of one
+ * static pose — see POSE_BY_STATE below — so the comedy reads as contrast
+ * (Skippy grows more emotional; Bob grows more professionally satisfied
+ * that the job is going fine), not a fixed icon.
+ *
+ * VISUAL PROMOTION (Fork #5, human-accepted 2026-09-13): the disposable
+ * character-design lab (js/lastword-bob-lab/, kept alongside this file
+ * until canonical Bob passes human testing in the actual game) explored
+ * Bob's silhouette and iterated the hat/beard geometry through several
+ * correction rounds. The accepted result — a complete/closed gnome-hat
+ * outline (`hat()`) and a compact facial beard with a small deliberate gap
+ * beneath the mouth (`beard()`) — is promoted here as real canonical
+ * geometry, integrated directly into `head()` so it renders correctly
+ * across every pose including the tilted ones (NERVOUS's lean, SAVED's
+ * turn), unlike the lab's own string-surgery proof technique. The ONE
+ * approved art-direction change made during this promotion: the hat's
+ * stroke is now cyan (`HAT_CYAN`) — still fully unfilled, no other new
+ * accent colors, face/body/beard/limbs stay plain ink.
  */
 (function (root, factory) {
     if (typeof module === 'object' && module.exports) {
@@ -56,6 +74,11 @@
     var INK = '#dbe4f5';
     var METAL = '#9aa4b6'; // the crank wheel — a workshop prop, not part of Bob's own line art
     var WARNING = '#f5c168'; // the one small checkmark accent, same accent color the safe's own warning marks use
+    // The one approved art-direction accent from the character-lab
+    // promotion (Fork #5, human-accepted 2026-09-13): Bob's hat STROKE
+    // only. Still fully unfilled — no new filled regions, no other new
+    // accent colors, face/body/beard/limbs stay plain INK.
+    var HAT_CYAN = '#00e5ff';
 
     // Fixed perch near the safe's own rigging anchor (safe-predicament.js's
     // ANCHOR_X=175/CEILING_Y=14) but offset clear of it — an independent
@@ -98,21 +121,54 @@
         return lineStroke([x, y, tx, ty], 1.5);
     }
 
+    // Closed, complete gnome-hat silhouette — one side rising to the
+    // point, the other returning from the point back to the brim.
+    // Promoted unchanged from the accepted character-lab candidate
+    // (Fork #5 Round 2, hat FROZEN from Round 3 onward). CYAN stroke is
+    // the one approved art-direction change made during this promotion;
+    // the hat stays fully unfilled.
+    function hat() {
+        var headTop = HEAD_CY - HEAD_R;
+        var baseY = headTop + 2;
+        var leftBaseX = BOB_CX - 9, rightBaseX = BOB_CX + 9;
+        var tipX = BOB_CX + 4, tipY = HAT_TIP_Y - 1;
+        return (
+            '<path d="M' + leftBaseX + ',' + baseY +
+            ' L' + tipX + ',' + tipY +
+            ' Q' + (tipX + 5) + ',' + (tipY + 7) + ' ' + rightBaseX + ',' + baseY +
+            ' L' + leftBaseX + ',' + baseY + ' Z" ' +
+            'stroke="' + HAT_CYAN + '" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>'
+        );
+    }
+
+    // Compact facial beard — final accepted geometry (Fork #5 Round 4):
+    // sits against the lower head arc, a small V ending at the chin, with
+    // a deliberate ~2-3px optical gap beneath the mouth so the two read as
+    // separate features rather than merging into one glyph at enlarged
+    // scale. Plain INK, same as the rest of Bob's face — no new accent.
+    function beard() {
+        var headBottom = HEAD_CY + HEAD_R;
+        var topY = headBottom - 3, bottomY = headBottom, midY = topY + (bottomY - topY) / 2;
+        var leftX = BOB_CX - 3, rightX = BOB_CX + 3;
+        return (
+            '<path d="M' + leftX + ',' + topY +
+            ' Q' + (BOB_CX - 1.5) + ',' + midY + ' ' + BOB_CX + ',' + bottomY +
+            ' Q' + (BOB_CX + 1.5) + ',' + midY + ' ' + rightX + ',' + topY + '" ' +
+            'stroke="' + INK + '" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>'
+        );
+    }
+
     function head() {
         return (
-            // open (unfilled) pointed hat — one slightly bent corner for a
-            // touch of hand-drawn character, matching Skippy's own
-            // "imperfect line geometry" house style
-            '<path d="M' + BOB_CX + ',' + HAT_TIP_Y + ' L' + (BOB_CX - 11) + ',' + (HEAD_CY - HEAD_R + 1) +
-            ' Q' + (BOB_CX - 3) + ',' + (HEAD_CY - HEAD_R - 3) + ' ' + (BOB_CX + 11) + ',' + (HEAD_CY - HEAD_R + 1) + '" ' +
-            'stroke="' + INK + '" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>' +
+            hat() +
             // unfilled head circle — same convention as Skippy's own head
             '<circle cx="' + BOB_CX + '" cy="' + HEAD_CY + '" r="' + HEAD_R + '" fill="none" stroke="' + INK + '" stroke-width="1.6"/>' +
             // two tiny dot eyes, flat neutral mouth — pleasant, extremely simple
             '<circle cx="' + (BOB_CX - 3.5) + '" cy="' + (HEAD_CY - 1) + '" r="1.1" fill="' + INK + '"/>' +
             '<circle cx="' + (BOB_CX + 3.5) + '" cy="' + (HEAD_CY - 1) + '" r="1.1" fill="' + INK + '"/>' +
             '<path d="M' + (BOB_CX - 2.5) + ',' + (HEAD_CY + 4) + ' L' + (BOB_CX + 2.5) + ',' + (HEAD_CY + 4) + '" ' +
-            'stroke="' + INK + '" stroke-width="1" stroke-linecap="round"/>'
+            'stroke="' + INK + '" stroke-width="1" stroke-linecap="round"/>' +
+            beard()
         );
     }
 

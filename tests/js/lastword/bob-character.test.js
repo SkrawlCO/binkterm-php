@@ -216,4 +216,89 @@ check('Skippy\'s own visible figure markup is byte-identical whether or not Bob 
     });
 });
 
+// ---- VISUAL PROMOTION (Fork #5, human-accepted 2026-09-13): canonical hat+beard ----
+
+check('Bob\'s hat is a closed (Z-terminated) path — the accepted complete gnome-hat silhouette', () => {
+    const markup = Bob.renderBob('CONFUSED');
+    assert.ok(/M-?\d+(\.\d+)?,-?\d+(\.\d+)? L-?\d+(\.\d+)?,-?\d+(\.\d+)? Q[\d.,-]+ -?\d+(\.\d+)?,-?\d+(\.\d+)? L-?\d+(\.\d+)?,-?\d+(\.\d+)? Z"/.test(markup),
+        'expected a closed (Z-terminated) hat path in every present state');
+});
+
+check('Bob\'s hat stroke is cyan (#00e5ff) — the one approved art-direction accent from the promotion', () => {
+    ['CONFUSED', 'CONCERNED', 'NERVOUS', 'PLEADING', 'TERRIFIED', 'COMEDIC_DEFEAT', 'SAVED'].forEach((state) => {
+        assert.ok(Bob.renderBob(state).indexOf('#00e5ff') !== -1, state + ': expected the cyan hat stroke');
+    });
+});
+
+check('the hat remains unfilled — cyan stroke, fill="none", no new filled region', () => {
+    const markup = Bob.renderBob('CONFUSED');
+    const hatMatch = markup.match(/<path d="M[^"]*Z" stroke="#00e5ff"[^>]*>/);
+    assert.ok(hatMatch, 'expected to find the cyan hat path element');
+    assert.ok(hatMatch[0].indexOf('fill="none"') !== -1, 'hat must stay unfilled');
+});
+
+check('the fill-count invariant still holds with the cyan hat present — exactly 2 non-"none" fills (the eye dots), hat/beard are strokes only', () => {
+    ['CONFUSED', 'CONCERNED', 'NERVOUS', 'PLEADING', 'TERRIFIED', 'COMEDIC_DEFEAT', 'SAVED'].forEach((state) => {
+        const markup = Bob.renderBob(state);
+        const fills = markup.match(/fill="([^"]+)"/g) || [];
+        const nonNoneFills = fills.filter((f) => f !== 'fill="none"');
+        assert.strictEqual(nonNoneFills.length, 2, state + ': cyan hat promotion must not add any new filled region');
+    });
+});
+
+check('no other new accent color was introduced — face/body/beard/limbs stay plain ink (#dbe4f5), only the hat is cyan', () => {
+    ['CONFUSED', 'CONCERNED', 'NERVOUS', 'PLEADING', 'TERRIFIED', 'COMEDIC_DEFEAT', 'SAVED'].forEach((state) => {
+        const markup = Bob.renderBob(state);
+        const colors = new Set((markup.match(/#[0-9a-f]{6}/gi) || []).map((c) => c.toLowerCase()));
+        colors.forEach((c) => {
+            assert.ok(['#dbe4f5', '#9aa4b6', '#f5c168', '#00e5ff'].indexOf(c) !== -1,
+                state + ': unexpected new color ' + c);
+        });
+    });
+});
+
+check('Bob has a compact beard on his lower face in every present state, sitting below the mouth line and above the shoulder line', () => {
+    ['CONFUSED', 'CONCERNED', 'NERVOUS', 'PLEADING', 'TERRIFIED', 'COMEDIC_DEFEAT', 'SAVED'].forEach((state) => {
+        const markup = Bob.renderBob(state);
+        const headBottom = Bob.HEAD_CY + Bob.HEAD_R;
+        const beardTopY = headBottom - 3;
+        const mouthY = Bob.HEAD_CY + 4;
+        assert.ok(beardTopY > mouthY, 'beard must start below the mouth');
+        // the beard path uses cx-3/cx+3 attachment points against the ink stroke
+        assert.ok(markup.indexOf('M' + (Bob.BOB_CX - 3) + ',' + beardTopY) !== -1, state + ': expected the beard path at the accepted geometry');
+    });
+});
+
+check('the promoted geometry renders correctly (no throw, well-formed) for every tilted pose too — NERVOUS (lean) and SAVED (turn)', () => {
+    ['NERVOUS', 'SAVED'].forEach((state) => {
+        const markup = Bob.renderBob(state);
+        assert.doesNotThrow(() => markup);
+        assert.ok(markup.indexOf('rotate(') !== -1, state + ': should still use its accepted tilt transform');
+        // the hat/beard are now part of head(), which is drawn INSIDE the
+        // same rotated <g> as the rest of the tilted figure -- unlike the
+        // lab's string-surgery proof, canonical geometry integration means
+        // the hat rotates correctly with the head instead of staying
+        // fixed in the outer coordinate space.
+        const rotateGroup = markup.match(/<g transform="rotate\([^)]*\)">([\s\S]*)<\/g>/);
+        assert.ok(rotateGroup, state + ': expected a rotate() group');
+        assert.ok(rotateGroup[1].indexOf('#00e5ff') !== -1, state + ': the cyan hat must be INSIDE the rotated group, not fixed outside it');
+    });
+});
+
+check('canonical bob-character.js has no CODE dependency on the disposable lab (doc comments may mention it by name/history only)', () => {
+    const src = require('fs').readFileSync(
+        require('path').join(__dirname, '../../../public_html/webdoors/hangman/js/lastword/bob-character.js'), 'utf8'
+    );
+    const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+    assert.strictEqual(code.indexOf('lastword-bob-lab'), -1, 'no code (outside comments) should reference the lab path');
+    assert.strictEqual(code.indexOf('LastWordBobLabCandidates'), -1);
+    assert.strictEqual(code.indexOf('correctedCurrent'), -1, 'the lab\'s string-surgery technique must not be used as production architecture');
+});
+
+check('Bob remains silent — still no <text> element anywhere, with the promoted hat+beard present', () => {
+    ALL_STATES.forEach((state) => {
+        assert.strictEqual(Bob.renderBob(state).indexOf('<text'), -1, state);
+    });
+});
+
 console.log(passed + ' passed');
