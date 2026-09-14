@@ -233,32 +233,34 @@
     }
 
     // SKIPPY'S PREDICAMENT (accepted, PASS): which environment/threat
-    // renders around Skippy this session — the accepted gallows (default)
-    // or the accepted suspended-safe Predicament
-    // (js/lastword/safe-predicament.js). Chosen once at page load via
-    // `?predicament=safe` in the URL; defaults to 'gallows' so an ordinary
-    // page load is byte-for-byte the original gallows presentation. This
-    // is presentation only — it never touches round/session/finalState or
-    // any scoring/puzzle/hint/strike rule (see safe-predicament.js's own
-    // header). How a real session will eventually choose/vary its
-    // Predicament in production is intentionally still an open decision —
-    // this is just the mechanism the accepted Predicament plugs into.
+    // renders around Skippy this session — the accepted suspended-safe
+    // Predicament (js/lastword/safe-predicament.js) or the accepted
+    // gallows. This is presentation only — it never touches
+    // round/session/finalState or any scoring/puzzle/hint/strike rule (see
+    // safe-predicament.js's own header).
+    //
+    // SLICE 3B (CALLER READINESS, human-accepted 2026-09-14): the canonical
+    // early-playtest default is now Suspended Safe + Bob — the one
+    // combination human testing has overwhelmingly used and accepted — so a
+    // caller arriving from Puzlmastr's Patch with no query params gets it
+    // automatically. `?predicament=gallows` and `?bob=0` remain explicit
+    // developer/tester overrides (neither Predicament nor Bob was deleted;
+    // only which one loads with no params changed). Any other/unrelated
+    // query param is ignored, never breaks boot.
     var urlParams = (function () {
         try { return new URLSearchParams(window.location.search); } catch (e) { return null; }
     }());
-    var activePredicament = (urlParams && urlParams.get('predicament') === 'safe') ? 'safe' : 'gallows';
+    var activePredicament = (urlParams && urlParams.get('predicament') === 'gallows') ? 'gallows' : 'safe';
 
-    // BOB (human-accepted 2026-09-13 for ROLE/DYNAMIC; artwork remains NOT
-    // final — see bob-character.js's own header). `?predicament=safe&bob=1`
-    // opts a tiny silent gnome into the Suspended Safe Predicament's own
-    // apparatus (see js/lastword/bob-character.js and
-    // safe-predicament.js's `makeApparatus()`). Only ever takes effect
-    // together with the safe Predicament — Bob has no existence in the
-    // accepted gallows. Still not production-default: if a future
-    // direction drops Bob, delete bob-character.js, this flag, the one
-    // intro-line block below it, and the apparatus-selection line further
-    // down — nothing else changes.
-    var bobEnabled = !!(urlParams && urlParams.get('bob') === '1' && activePredicament === 'safe');
+    // BOB (human-accepted 2026-09-13 for ROLE/DYNAMIC, visual design
+    // canonical since Fork #5 — see bob-character.js's own header). Bob
+    // exists only inside the Suspended Safe Predicament (see
+    // js/lastword/bob-character.js and safe-predicament.js's
+    // `makeApparatus()`) — he has no existence in the accepted gallows,
+    // regardless of `?bob=`. Slice 3B: canonical default is enabled
+    // whenever the safe Predicament is active; `?bob=0` explicitly disables
+    // him without needing to also override the Predicament.
+    var bobEnabled = activePredicament === 'safe' && !(urlParams && urlParams.get('bob') === '0');
 
     // The ONE Skippy acknowledgment the fork description allows ("Oh
     // great. Bob's here." / "BOB.") — shown at most once per round, the

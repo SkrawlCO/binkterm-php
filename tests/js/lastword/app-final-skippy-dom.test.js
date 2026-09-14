@@ -251,13 +251,13 @@ async function check(name, fn) {
     console.log('app-final-skippy-dom.test.js');
 
     await check('a fresh round renders Skippy CONFIDENT (strikes 0, not solved)', async () => {
-        const { elements } = await bootApp();
+        const { elements } = await bootApp(undefined, '?predicament=gallows');
         clickByText(elements.categoryList, 'Movies & TV');
         assert.strictEqual(stateOf(elements.gallows), 'CONFIDENT');
     });
 
     await check('each wrong-consonant strike advances Skippy through the correct visual state (0-5)', async () => {
-        const { elements } = await bootApp();
+        const { elements } = await bootApp(undefined, '?predicament=gallows');
         clickByText(elements.categoryList, 'Movies & TV');
 
         const EXPECTED = ['CONFUSED', 'CONCERNED', 'NERVOUS', 'PLEADING', 'TERRIFIED'];
@@ -280,7 +280,7 @@ async function check(name, fn) {
     });
 
     await check('a solved round shows SAVED immediately, then (after the payoff pause) reaches round-result', async () => {
-        const { elements, clock } = await bootApp();
+        const { elements, clock } = await bootApp(undefined, '?predicament=gallows');
         const puzzlesDoc = JSON.parse(fs.readFileSync(path.join(ROOT, 'lastword/puzzles.json'), 'utf8'));
         clickByText(elements.categoryList, 'Movies & TV');
         const candidates = dealtPuzzleCandidates(elements.board, puzzlesDoc, 'Movies & TV');
@@ -300,7 +300,7 @@ async function check(name, fn) {
     });
 
     await check('the SAVED celebration holds for exactly 3400ms (playtest iteration #3: lengthened by 2000ms from the original 1400ms)', async () => {
-        const { elements, clock } = await bootApp();
+        const { elements, clock } = await bootApp(undefined, '?predicament=gallows');
         const puzzlesDoc = JSON.parse(fs.readFileSync(path.join(ROOT, 'lastword/puzzles.json'), 'utf8'));
         clickByText(elements.categoryList, 'Movies & TV');
         const candidates = dealtPuzzleCandidates(elements.board, puzzlesDoc, 'Movies & TV');
@@ -315,7 +315,7 @@ async function check(name, fn) {
     });
 
     await check('COMEDIC_DEFEAT is deliberately left at its original 1400ms hold, unlike SAVED (iteration #3 scope)', async () => {
-        const { elements, clock } = await bootApp();
+        const { elements, clock } = await bootApp(undefined, '?predicament=gallows');
         clickByText(elements.categoryList, 'Movies & TV');
         // Strike out via wrong consonants — try the whole consonant alphabet
         // in rarity order so this works regardless of which puzzle gets
@@ -336,7 +336,7 @@ async function check(name, fn) {
     });
 
     await check('starting round 2 after round 1 resets Skippy to CONFIDENT', async () => {
-        const { elements, clock } = await bootApp();
+        const { elements, clock } = await bootApp(undefined, '?predicament=gallows');
         const puzzlesDoc = JSON.parse(fs.readFileSync(path.join(ROOT, 'lastword/puzzles.json'), 'utf8'));
         clickByText(elements.categoryList, 'Movies & TV');
         const candidates = dealtPuzzleCandidates(elements.board, puzzlesDoc, 'Movies & TV');
@@ -355,7 +355,7 @@ async function check(name, fn) {
     // ---- idle chatter integration --------------------------------------
 
     await check('idle chatter is silent before the first-remark window and appears (visible, unhidden bubble) within it', async () => {
-        const { elements, clock } = await bootApp(0); // rng=0 -> minimum delay each draw
+        const { elements, clock } = await bootApp(0, '?predicament=gallows'); // rng=0 -> minimum delay each draw
         clickByText(elements.categoryList, 'Movies & TV');
 
         assert.strictEqual(elements.skippyChatterBubble.hidden, true, 'bubble starts hidden');
@@ -367,7 +367,7 @@ async function check(name, fn) {
     });
 
     await check('the chatter bubble auto-hides after CHATTER_BUBBLE_DISPLAY_MS = 10000ms (playtest iteration #3: lengthened from 5000ms)', async () => {
-        const { elements, clock } = await bootApp(0);
+        const { elements, clock } = await bootApp(0, '?predicament=gallows');
         clickByText(elements.categoryList, 'Movies & TV');
         clock.advance(12001);
         assert.strictEqual(elements.skippyChatterBubble.hidden, false, 'precondition: bubble shown');
@@ -380,7 +380,7 @@ async function check(name, fn) {
     });
 
     await check('a new remark replaces the still-showing bubble cleanly (no stacking, exactly one bubble element)', async () => {
-        const { elements, clock } = await bootApp(0); // rng=0 -> minimum delay each draw (first=12s, later=20s)
+        const { elements, clock } = await bootApp(0, '?predicament=gallows'); // rng=0 -> minimum delay each draw (first=12s, later=20s)
         clickByText(elements.categoryList, 'Movies & TV');
         clock.advance(12001); // first remark fires
         const first = elements.skippyChatterBubble.textContent;
@@ -399,7 +399,7 @@ async function check(name, fn) {
     });
 
     await check('a meaningful player action (a letter guess) hides the bubble and resets the idle-chatter stretch', async () => {
-        const { elements, clock } = await bootApp(0);
+        const { elements, clock } = await bootApp(0, '?predicament=gallows');
         clickByText(elements.categoryList, 'Movies & TV');
         clock.advance(12001);
         assert.strictEqual(elements.skippyChatterBubble.hidden, false, 'precondition: chatter fired');
@@ -412,7 +412,7 @@ async function check(name, fn) {
     });
 
     await check('idle chatter never mutates gameplay state (score/strikes/outcome unchanged by a firing)', async () => {
-        const { elements, clock } = await bootApp(0);
+        const { elements, clock } = await bootApp(0, '?predicament=gallows');
         clickByText(elements.categoryList, 'Movies & TV');
 
         const before = {
@@ -430,7 +430,7 @@ async function check(name, fn) {
     });
 
     await check('idle chatter stops firing once a round ends, even if the clock keeps advancing', async () => {
-        const { elements, clock } = await bootApp(0);
+        const { elements, clock } = await bootApp(0, '?predicament=gallows');
         const puzzlesDoc = JSON.parse(fs.readFileSync(path.join(ROOT, 'lastword/puzzles.json'), 'utf8'));
         clickByText(elements.categoryList, 'Movies & TV');
         const candidates = dealtPuzzleCandidates(elements.board, puzzlesDoc, 'Movies & TV');
@@ -448,7 +448,7 @@ async function check(name, fn) {
     });
 
     await check('at most 2-3 idle remarks land in one uninterrupted idle stretch, then it goes quiet', async () => {
-        const { elements, clock } = await bootApp(0.99); // biases the per-stretch remark budget toward its max
+        const { elements, clock } = await bootApp(0.99, '?predicament=gallows'); // biases the per-stretch remark budget toward its max
         clickByText(elements.categoryList, 'Movies & TV');
 
         let changes = 0;
@@ -464,7 +464,7 @@ async function check(name, fn) {
     });
 
     await check('within one uninterrupted idle stretch, a remark never immediately repeats the previous one', async () => {
-        const { elements, clock, rng } = await bootApp(0.4);
+        const { elements, clock, rng } = await bootApp(0.4, '?predicament=gallows');
         clickByText(elements.categoryList, 'Movies & TV');
         // Vary the draws so the stretch's (up to 3) remarks are not forced
         // toward the same pool index every time — pickChatterLine's own
@@ -490,7 +490,7 @@ async function check(name, fn) {
     // ---- BUY HINT LETTER integration ------------------------------------
 
     await check('the hint button shows the correct Round 1 cost label, disabled at round start (score 0 < 300) and enabled once affordable', async () => {
-        const { elements } = await bootApp(0); // rng=0 -> pickRandom deals pool[0] deterministically
+        const { elements } = await bootApp(0, '?predicament=gallows'); // rng=0 -> pickRandom deals pool[0] deterministically
         const puzzlesDoc = JSON.parse(fs.readFileSync(path.join(ROOT, 'lastword/puzzles.json'), 'utf8'));
         const expectedPuzzle = puzzlesDoc.puzzles.filter((p) => p.category === 'Movies & TV')[0];
         clickByText(elements.categoryList, 'Movies & TV'); // Round 1
@@ -513,7 +513,7 @@ async function check(name, fn) {
     });
 
     await check('buying a hint reveals a real answer letter, deducts exactly the round-specific cost once, and adds no strike', async () => {
-        const { elements } = await bootApp(0); // rng=0 -> pickRandom deals pool[0] deterministically
+        const { elements } = await bootApp(0, '?predicament=gallows'); // rng=0 -> pickRandom deals pool[0] deterministically
         const puzzlesDoc = JSON.parse(fs.readFileSync(path.join(ROOT, 'lastword/puzzles.json'), 'utf8'));
         const expectedPuzzle = puzzlesDoc.puzzles.filter((p) => p.category === 'Movies & TV')[0];
         clickByText(elements.categoryList, 'Movies & TV');
@@ -542,7 +542,7 @@ async function check(name, fn) {
     });
 
     await check('the hint button becomes disabled with a stated reason once score is insufficient', async () => {
-        const { elements } = await bootApp(0);
+        const { elements } = await bootApp(0, '?predicament=gallows');
         clickByText(elements.categoryList, 'Movies & TV');
         // Round 1 starts with cumulativeScore 0 and pointsThisRound 0 —
         // availableScore() is already below the 300 hint cost.
@@ -563,7 +563,7 @@ async function check(name, fn) {
     // which uses this exact same click sequence).
 
     await check('the hint button is disabled once the round is over', async () => {
-        const { elements } = await bootApp(0);
+        const { elements } = await bootApp(0, '?predicament=gallows');
         const puzzlesDoc = JSON.parse(fs.readFileSync(path.join(ROOT, 'lastword/puzzles.json'), 'utf8'));
         clickByText(elements.categoryList, 'Movies & TV');
         const candidates = dealtPuzzleCandidates(elements.board, puzzlesDoc, 'Movies & TV');
@@ -574,7 +574,7 @@ async function check(name, fn) {
     });
 
     await check('buying a hint is a meaningful action: it hides any showing chatter bubble and resets the idle stretch', async () => {
-        const { elements, clock } = await bootApp(0);
+        const { elements, clock } = await bootApp(0, '?predicament=gallows');
         clickByText(elements.categoryList, 'Movies & TV');
         clock.advance(12001);
         assert.strictEqual(elements.skippyChatterBubble.hidden, false, 'precondition: chatter fired');
@@ -597,7 +597,7 @@ async function check(name, fn) {
     // screen transition, no extra strike/action).
 
     await check('normal round auto-completes after the final CONSONANT reveal (no SOLVE needed)', async () => {
-        const { elements, clock } = await bootApp(0); // rng=0 -> pickRandom deals pool[0] deterministically
+        const { elements, clock } = await bootApp(0, '?predicament=gallows'); // rng=0 -> pickRandom deals pool[0] deterministically
         const puzzlesDoc = JSON.parse(fs.readFileSync(path.join(ROOT, 'lastword/puzzles.json'), 'utf8'));
         const expectedPuzzle = puzzlesDoc.puzzles.filter((p) => p.category === 'Movies & TV')[0]; // BACK TO THE FUTURE
         clickByText(elements.categoryList, 'Movies & TV');
@@ -630,7 +630,7 @@ async function check(name, fn) {
     });
 
     await check('normal round auto-completes after the final VOWEL reveal (no SOLVE needed)', async () => {
-        const { elements, clock } = await bootApp(0);
+        const { elements, clock } = await bootApp(0, '?predicament=gallows');
         const puzzlesDoc = JSON.parse(fs.readFileSync(path.join(ROOT, 'lastword/puzzles.json'), 'utf8'));
         const expectedPuzzle = puzzlesDoc.puzzles.filter((p) => p.category === 'Movies & TV')[0];
         clickByText(elements.categoryList, 'Movies & TV');
@@ -654,7 +654,7 @@ async function check(name, fn) {
     });
 
     await check('normal round auto-completes after the final HINT reveal, awarding the solve bonus exactly once', async () => {
-        const { elements, clock } = await bootApp(0);
+        const { elements, clock } = await bootApp(0, '?predicament=gallows');
         const puzzlesDoc = JSON.parse(fs.readFileSync(path.join(ROOT, 'lastword/puzzles.json'), 'utf8'));
         const expectedPuzzle = puzzlesDoc.puzzles.filter((p) => p.category === 'Movies & TV')[0];
         clickByText(elements.categoryList, 'Movies & TV');
@@ -693,7 +693,7 @@ async function check(name, fn) {
     });
 
     await check('auto-solve adds no extra strike (strikes at round-end match strikes actually earned, none invented)', async () => {
-        const { elements, clock } = await bootApp(0);
+        const { elements, clock } = await bootApp(0, '?predicament=gallows');
         const puzzlesDoc = JSON.parse(fs.readFileSync(path.join(ROOT, 'lastword/puzzles.json'), 'utf8'));
         const expectedPuzzle = puzzlesDoc.puzzles.filter((p) => p.category === 'Movies & TV')[0];
         clickByText(elements.categoryList, 'Movies & TV');
@@ -714,7 +714,7 @@ async function check(name, fn) {
     });
 
     await check('explicit SOLVE still works normally on an incomplete board (auto-solve did not replace it)', async () => {
-        const { elements } = await bootApp(0);
+        const { elements } = await bootApp(0, '?predicament=gallows');
         const puzzlesDoc = JSON.parse(fs.readFileSync(path.join(ROOT, 'lastword/puzzles.json'), 'utf8'));
         clickByText(elements.categoryList, 'Movies & TV');
         const candidates = dealtPuzzleCandidates(elements.board, puzzlesDoc, 'Movies & TV');
@@ -729,7 +729,7 @@ async function check(name, fn) {
     });
 
     await check('Final Hangman auto-completes after the final purchased-letter reveal (the human-reported repro path)', async () => {
-        const { elements, clock } = await bootApp(0);
+        const { elements, clock } = await bootApp(0, '?predicament=gallows');
         const puzzlesDoc = JSON.parse(fs.readFileSync(path.join(ROOT, 'lastword/puzzles.json'), 'utf8'));
 
         function solveCurrentRoundAndContinue() {
@@ -789,7 +789,7 @@ async function check(name, fn) {
     }
 
     await check('an incident (round lost at 6 strikes) produces an opening reaction at the start of the next round, without mutating gameplay state', async () => {
-        const { elements, clock } = await bootApp(0);
+        const { elements, clock } = await bootApp(0, '?predicament=gallows');
         clickByText(elements.categoryList, 'Movies & TV');
         loseCurrentRoundViaStrikes(elements);
         clock.advance(DEFEAT_PAYOFF_DELAY_MS);
@@ -807,7 +807,7 @@ async function check(name, fn) {
     });
 
     await check('ordinary history (no interesting previous round) opens the next round silently — no reaction bubble', async () => {
-        const { elements, clock } = await bootApp(0);
+        const { elements, clock } = await bootApp(0, '?predicament=gallows');
         const puzzlesDoc = JSON.parse(fs.readFileSync(path.join(ROOT, 'lastword/puzzles.json'), 'utf8'));
         clickByText(elements.categoryList, 'Movies & TV');
         const candidates = dealtPuzzleCandidates(elements.board, puzzlesDoc, 'Movies & TV');
@@ -830,7 +830,7 @@ async function check(name, fn) {
     });
 
     await check('the opening reaction never collides/stacks with idle chatter — it auto-hides on its own schedule, then idle chatter resumes normally', async () => {
-        const { elements, clock } = await bootApp(0);
+        const { elements, clock } = await bootApp(0, '?predicament=gallows');
         clickByText(elements.categoryList, 'Movies & TV');
         loseCurrentRoundViaStrikes(elements);
         clock.advance(DEFEAT_PAYOFF_DELAY_MS);
@@ -852,7 +852,7 @@ async function check(name, fn) {
     });
 
     await check('Final Hangman opening reaction reflects the accumulated session (repeated incidents read as suspicious) without mutating Final state', async () => {
-        const { elements, clock } = await bootApp(0);
+        const { elements, clock } = await bootApp(0, '?predicament=gallows');
         const puzzlesDoc = JSON.parse(fs.readFileSync(path.join(ROOT, 'lastword/puzzles.json'), 'utf8'));
 
         function loseRoundAndContinue() {
@@ -894,7 +894,7 @@ async function check(name, fn) {
     });
 
     await check('starting a new session (Play Again) resets Skippy\'s memory — no leftover reaction from the previous session', async () => {
-        const { elements, clock } = await bootApp(0);
+        const { elements, clock } = await bootApp(0, '?predicament=gallows');
         clickByText(elements.categoryList, 'Movies & TV');
         loseCurrentRoundViaStrikes(elements); // give the session an incident to remember
         clock.advance(DEFEAT_PAYOFF_DELAY_MS);
@@ -931,7 +931,7 @@ async function check(name, fn) {
     }
 
     await check('five-strike danger reaction fires the moment strikes hit 5 while a hint is affordable, via real play', async () => {
-        const { elements } = await bootApp(0);
+        const { elements } = await bootApp(0, '?predicament=gallows');
         clickByText(elements.categoryList, 'Movies & TV');
         earnAtLeast(elements, 300); // guesses T -> +300, exactly Round 1's hint cost
         assert.strictEqual(elements.skippyChatterBubble.hidden, true, 'no reaction yet — strikes still 0');
@@ -948,7 +948,7 @@ async function check(name, fn) {
     });
 
     await check('five-strike danger reaction does NOT fire when the caller cannot afford a hint', async () => {
-        const { elements } = await bootApp(0);
+        const { elements } = await bootApp(0, '?predicament=gallows');
         clickByText(elements.categoryList, 'Movies & TV');
         // Deliberately do NOT earn any score first — score stays at 0, below the 300 hint cost.
         ['Q', 'X', 'Z', 'J', 'W'].forEach((l) => clickByText(elements.letters, l));
@@ -957,7 +957,7 @@ async function check(name, fn) {
     });
 
     await check('five-strike danger reaction fires only ONCE per round (cooldown), even if a later action keeps the condition true', async () => {
-        const { elements } = await bootApp(0);
+        const { elements } = await bootApp(0, '?predicament=gallows');
         clickByText(elements.categoryList, 'Movies & TV');
         earnAtLeast(elements, 300);
         ['Q', 'X', 'Z', 'J', 'W'].forEach((l) => clickByText(elements.letters, l));
@@ -973,7 +973,7 @@ async function check(name, fn) {
     });
 
     await check('repeated hint use triggers a reaction only at the intended threshold, not on the first hint', async () => {
-        const { elements } = await bootApp(0);
+        const { elements } = await bootApp(0, '?predicament=gallows');
         clickByText(elements.categoryList, 'Movies & TV');
         earnAtLeast(elements, 700); // enough for two 300-point Round 1 hints plus headroom
 
@@ -986,7 +986,7 @@ async function check(name, fn) {
     });
 
     await check('repeated wrong SOLVE attempts trigger a reaction only at the intended threshold, not on the first miss', async () => {
-        const { elements } = await bootApp(0);
+        const { elements } = await bootApp(0, '?predicament=gallows');
         clickByText(elements.categoryList, 'Movies & TV');
 
         elements.solveToggle.click();
@@ -1009,7 +1009,7 @@ async function check(name, fn) {
         // unmodified idle-chatter.js TERRIFIED pool — see
         // situational-awareness.js's own header for why no new code was
         // needed for this one.
-        const { elements, clock } = await bootApp(0);
+        const { elements, clock } = await bootApp(0, '?predicament=gallows');
         clickByText(elements.categoryList, 'Movies & TV');
         ['Q', 'X', 'Z', 'J', 'W'].forEach((l) => clickByText(elements.letters, l)); // strikes -> 5, TERRIFIED
         assert.strictEqual(stateOf(elements.gallows), 'TERRIFIED');
@@ -1024,7 +1024,7 @@ async function check(name, fn) {
     });
 
     await check('a situational reaction does not collide/stack with idle chatter — auto-hides on its own schedule, then idle chatter resumes', async () => {
-        const { elements, clock } = await bootApp(0);
+        const { elements, clock } = await bootApp(0, '?predicament=gallows');
         clickByText(elements.categoryList, 'Movies & TV');
         earnAtLeast(elements, 300);
         ['Q', 'X', 'Z', 'J', 'W'].forEach((l) => clickByText(elements.letters, l)); // fires the danger reaction
@@ -1040,7 +1040,7 @@ async function check(name, fn) {
     });
 
     await check('a new round resets round-local situational awareness — a fresh hint-dependence count starts at zero', async () => {
-        const { elements, clock } = await bootApp(0);
+        const { elements, clock } = await bootApp(0, '?predicament=gallows');
         const puzzlesDoc = JSON.parse(fs.readFileSync(path.join(ROOT, 'lastword/puzzles.json'), 'utf8'));
         clickByText(elements.categoryList, 'Movies & TV');
         earnAtLeast(elements, 700);
@@ -1067,7 +1067,7 @@ async function check(name, fn) {
     });
 
     await check('situational reactions never mutate gameplay state — score/strikes/board unaffected by a firing', async () => {
-        const { elements } = await bootApp(0);
+        const { elements } = await bootApp(0, '?predicament=gallows');
         clickByText(elements.categoryList, 'Movies & TV');
         function revealedCellCount() {
             return elements.board._children.filter((cell) => cell.className === 'cell').length;
@@ -1096,28 +1096,74 @@ async function check(name, fn) {
     // -----------------------------------------------------------------
 
     const SAFE_FILL_MARKER = '#232733'; // safe-predicament.js's SAFE_FILL — unique to the alternate apparatus
+    const BOB_CRANK_MARKER = '#9aa4b6'; // bob-character.js's METAL color — unique to Bob's own geometry (moved up here in Slice 3B so the default-behavior tests below can use it too)
 
-    await check('an ordinary page load (no ?predicament param) renders the accepted gallows presentation', async () => {
+    // ---- SLICE 3B ("CALLER READINESS"): canonical early-playtest defaults --
+    // A plain page load (no query params) now gets Suspended Safe + Bob --
+    // the combination human testing has overwhelmingly used and accepted --
+    // so a caller arriving from Puzlmastr's Patch never needs magic query
+    // parameters. `?predicament=gallows` and `?bob=0` remain explicit
+    // developer/tester overrides; neither was deleted.
+
+    await check('DEFAULT: an ordinary page load (no params) renders the canonical Suspended Safe presentation with Bob enabled', async () => {
         const { elements } = await bootApp(0);
         clickByText(elements.categoryList, 'Movies & TV');
-        assert.strictEqual(elements.gallows.innerHTML.indexOf(SAFE_FILL_MARKER), -1,
-            'default render must be the accepted gallows, not the safe');
+        clickByText(elements.letters, 'Q'); // real miss -> strike 1 (safe box + Bob both only render from strike 1)
+        assert.strictEqual(elements.strikeCount.textContent, '1', 'sanity: a real miss landed');
+        assert.ok(elements.gallows.innerHTML.indexOf(SAFE_FILL_MARKER) !== -1, 'default must be the Suspended Safe');
+        assert.ok(elements.gallows.innerHTML.indexOf(BOB_CRANK_MARKER) !== -1, 'default must include Bob');
     });
 
-    await check('?predicament=safe selects the suspended-safe apparatus from page load', async () => {
-        const { elements } = await bootApp(0, '?predicament=safe');
+    await check('DEFAULT: unrelated/invalid query params do not break boot and still default to Safe + Bob', async () => {
+        const { elements } = await bootApp(0, '?foo=bar&predicament=&bob=nonsense');
         clickByText(elements.categoryList, 'Movies & TV');
-        // CONFIDENT/strike 0 deliberately shows only a cable hint, no box
-        // yet (see safe-predicament.js's own header) — take one real wrong
-        // guess so the safe box has actually "entered" before asserting.
         clickByText(elements.letters, 'Q');
-        assert.strictEqual(elements.strikeCount.textContent, '1', 'sanity: a real miss landed');
-        assert.ok(elements.gallows.innerHTML.indexOf(SAFE_FILL_MARKER) !== -1, 'showing the suspended safe');
+        assert.ok(elements.gallows.innerHTML.indexOf(SAFE_FILL_MARKER) !== -1, 'still defaults to Safe with garbage params');
+        assert.ok(elements.gallows.innerHTML.indexOf(BOB_CRANK_MARKER) !== -1, 'still defaults to Bob enabled with garbage params');
+    });
+
+    await check('OVERRIDE: ?predicament=gallows selects the accepted gallows presentation, and Bob never appears there', async () => {
+        const { elements } = await bootApp(0, '?predicament=gallows');
+        clickByText(elements.categoryList, 'Movies & TV');
+        clickByText(elements.letters, 'Q');
+        assert.strictEqual(elements.gallows.innerHTML.indexOf(SAFE_FILL_MARKER), -1, 'explicit override must select the gallows, not the safe');
+        assert.strictEqual(elements.gallows.innerHTML.indexOf(BOB_CRANK_MARKER), -1, 'Bob has no existence in the accepted gallows, even unrequested');
+    });
+
+    await check('OVERRIDE: ?predicament=gallows&bob=1 still has no effect — Bob only exists inside the safe Predicament', async () => {
+        const { elements } = await bootApp(0, '?predicament=gallows&bob=1');
+        clickByText(elements.categoryList, 'Movies & TV');
+        clickByText(elements.letters, 'Q');
+        assert.strictEqual(elements.gallows.innerHTML.indexOf(BOB_CRANK_MARKER), -1);
+    });
+
+    await check('OVERRIDE: ?bob=0 disables Bob while the canonical Safe default stays active', async () => {
+        const { elements } = await bootApp(0, '?bob=0');
+        clickByText(elements.categoryList, 'Movies & TV');
+        clickByText(elements.letters, 'Q');
+        assert.ok(elements.gallows.innerHTML.indexOf(SAFE_FILL_MARKER) !== -1, 'Predicament default is unaffected by ?bob=0');
+        assert.strictEqual(elements.gallows.innerHTML.indexOf(BOB_CRANK_MARKER), -1, 'Bob explicitly disabled');
+    });
+
+    await check('EXPLICIT: ?predicament=safe&bob=1 reaches the same result as the default, spelled out explicitly', async () => {
+        const { elements } = await bootApp(0, '?predicament=safe&bob=1');
+        clickByText(elements.categoryList, 'Movies & TV');
+        clickByText(elements.letters, 'Q');
+        assert.ok(elements.gallows.innerHTML.indexOf(SAFE_FILL_MARKER) !== -1);
+        assert.ok(elements.gallows.innerHTML.indexOf(BOB_CRANK_MARKER) !== -1);
+    });
+
+    await check('EXPLICIT: ?predicament=safe&bob=0 selects the safe with Bob explicitly turned off', async () => {
+        const { elements } = await bootApp(0, '?predicament=safe&bob=0');
+        clickByText(elements.categoryList, 'Movies & TV');
+        clickByText(elements.letters, 'Q');
+        assert.ok(elements.gallows.innerHTML.indexOf(SAFE_FILL_MARKER) !== -1);
+        assert.strictEqual(elements.gallows.innerHTML.indexOf(BOB_CRANK_MARKER), -1);
     });
 
     await check('the predicament changes presentation only — an identical action sequence produces identical score/strikes/round-state whichever predicament is active', async () => {
-        const gallowsRun = await bootApp(0);
-        const safeRun = await bootApp(0, '?predicament=safe');
+        const gallowsRun = await bootApp(0, '?predicament=gallows'); // Slice 3B: explicit override, no longer the default
+        const safeRun = await bootApp(0); // canonical default
         [gallowsRun, safeRun].forEach(({ elements }) => {
             clickByText(elements.categoryList, 'Movies & TV');
             earnAtLeast(elements, 300); // identical, deterministic guess sequence in both runs
@@ -1128,8 +1174,8 @@ async function check(name, fn) {
             'same strike/solved state name either predicament');
     });
 
-    await check('the accepted gallows presentation still renders identically when the safe predicament is never selected (regression)', async () => {
-        const { elements } = await bootApp(0);
+    await check('the accepted gallows presentation still renders identically when explicitly selected (regression)', async () => {
+        const { elements } = await bootApp(0, '?predicament=gallows'); // Slice 3B: explicit override, no longer the default
         clickByText(elements.categoryList, 'Movies & TV');
         earnAtLeast(elements, 300);
         assert.strictEqual(elements.gallows.innerHTML.indexOf(SAFE_FILL_MARKER), -1,
@@ -1181,8 +1227,8 @@ async function check(name, fn) {
             'the safe-specific line itself should be the one shown: ' + elements.skippyChatterBubble.textContent);
     });
 
-    await check('the accepted gallows presentation (safe predicament never selected) is completely unaffected by the double-speech handling', async () => {
-        const { elements } = await bootApp(0);
+    await check('the accepted gallows presentation (explicit override) is completely unaffected by the double-speech handling', async () => {
+        const { elements } = await bootApp(0, '?predicament=gallows'); // Slice 3B: explicit override, no longer the default
         clickByText(elements.categoryList, 'Movies & TV');
         earnAtLeast(elements, 300);
         ['Q', 'X', 'Z', 'J', 'W'].forEach((l) => clickByText(elements.letters, l));
@@ -1231,11 +1277,11 @@ async function check(name, fn) {
             'COMEDIC_DEFEAT must stay unmasked even in safe mode — no standing figure left to protect');
     });
 
-    // ---- BOB'S AUDITION (BOB IS NOT CANON) ---------------------------------
-    // `?predicament=safe&bob=1` only, exercised through the real DOM call
-    // sites — proof-only, no production setting.
-
-    const BOB_CRANK_MARKER = '#9aa4b6'; // bob-character.js's METAL color — unique to Bob's own geometry
+    // ---- BOB (visual design canonical since Fork #5; role/dynamic accepted
+    // 2026-09-13) — exercised through the real DOM call sites. Bob is now
+    // part of the canonical Safe default (see the DEFAULT/OVERRIDE tests
+    // above) — these tests cover his behavior across the strike progression
+    // and the explicit ?predicament=safe&bob=1 spelling specifically.
 
     await check('?predicament=safe&bob=1 renders Bob absent at Strike 0, present from Strike 1', async () => {
         const { elements } = await bootApp(0, '?predicament=safe&bob=1');
@@ -1247,20 +1293,10 @@ async function check(name, fn) {
         assert.ok(elements.gallows.innerHTML.indexOf(BOB_CRANK_MARKER) !== -1, 'Bob present from Strike 1');
     });
 
-    await check('?predicament=safe (without &bob=1) never renders Bob — the audition flag is opt-in', async () => {
-        const { elements } = await bootApp(0, '?predicament=safe');
-        clickByText(elements.categoryList, 'Movies & TV');
-        clickByText(elements.letters, 'Q');
-        assert.strictEqual(elements.gallows.innerHTML.indexOf(BOB_CRANK_MARKER), -1);
-    });
-
-    await check('&bob=1 without ?predicament=safe has no effect — Bob only exists inside the safe Predicament', async () => {
-        const { elements } = await bootApp(0, '?bob=1');
-        clickByText(elements.categoryList, 'Movies & TV');
-        clickByText(elements.letters, 'Q');
-        assert.strictEqual(elements.gallows.innerHTML.indexOf(BOB_CRANK_MARKER), -1);
-        assert.strictEqual(elements.gallows.innerHTML.indexOf('#232733'), -1, 'sanity: the safe itself is also absent — plain accepted gallows');
-    });
+    // (Superseded by the Slice 3B DEFAULT/OVERRIDE tests above: `?predicament=safe`
+    // alone now DOES render Bob by default, and `?bob=1` alone now defaults
+    // the Predicament to safe too — `?predicament=gallows&bob=1` is the real
+    // "has no effect" case, covered above.)
 
     await check('Bob has no speech/text surface of his own on the real rendered page', async () => {
         const { elements } = await bootApp(0, '?predicament=safe&bob=1');
@@ -1285,7 +1321,7 @@ async function check(name, fn) {
         clickByText(withBob.elements.letters, 'X'); // strike 2 — should NOT re-fire
         assert.strictEqual(withBob.elements.skippyChatterBubble.hidden, true, 'the acknowledgment must fire only once per round');
 
-        const withoutBob = await bootApp(0, '?predicament=safe');
+        const withoutBob = await bootApp(0, '?predicament=safe&bob=0'); // Slice 3B: bob=0 is now the explicit way to get 'without Bob'
         clickByText(withoutBob.elements.categoryList, 'Movies & TV');
         clickByText(withoutBob.elements.letters, 'Q');
         assert.strictEqual(withoutBob.elements.skippyChatterBubble.hidden, true, 'no acknowledgment when Bob is disabled');
@@ -1293,7 +1329,7 @@ async function check(name, fn) {
 
     await check('gameplay state is identical with Bob on or off, given the same action sequence', async () => {
         const withBob = await bootApp(0, '?predicament=safe&bob=1');
-        const withoutBob = await bootApp(0, '?predicament=safe');
+        const withoutBob = await bootApp(0, '?predicament=safe&bob=0'); // Slice 3B: bob=0 is now the explicit way to get 'without Bob'
         [withBob, withoutBob].forEach(({ elements }) => {
             clickByText(elements.categoryList, 'Movies & TV');
             earnAtLeast(elements, 300);

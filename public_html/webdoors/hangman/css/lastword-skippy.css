@@ -326,6 +326,50 @@
     }
 }
 
+/* --- "KEEP THE CHARACTERS IN THE GAME": mobile sticky/cropped stage ----
+   Real-phone finding (Matt): on the single-column mobile layout (see the
+   shared css/lastword.css's own `@media (max-width: 780px) { .layout {
+   grid-template-columns: 1fr; } }`), the side panel — chatter bubble +
+   Skippy/Bob's full 260px stage + strikes/score text — sits ABOVE the
+   puzzle/keypad in document order. Scrolling down to use the keypad
+   scrolls Skippy/Bob almost entirely out of view; only the bottom edge of
+   the stage remained visible.
+
+   Crop/layout-only fix, same breakpoint as the layout collapse above (this
+   problem only exists once the side panel stacks above the main panel —
+   desktop's 2-column grid is untouched): `.lw-skippy-portrait` (the
+   existing wrapper around the chatter bubble + stage, already
+   `position: relative` for the bubble) becomes `position: sticky; top: 0`
+   with a capped height + `overflow: hidden`, so only its TOP portion stays
+   pinned at the top of the viewport while the rest of the side panel and
+   the puzzle/keypad scroll normally beneath it — no new DOM, no JS, no
+   scroll listener, no change to the stage's own SVG/viewBox.
+
+   160px total = the bubble's existing 46px headroom (untouched — a 1-2
+   line chatter bubble already fits comfortably inside it; this crop adds
+   no new clipping risk there) + ~114px of the stage's native 0-260
+   coordinate space. That covers Skippy's whole head (native y 38-82) plus
+   the start of his shoulders (y 90), and Bob's hat/head/shoulders AND his
+   crank/clipboard activity (native y 4-54) — both characters' faces stay
+   readable and Bob's current action stays visible, at well under a third
+   of the full stage+meta block's original height. Same class is reused
+   unchanged by Final's `#finalGallows` portrait, so Final gets identical
+   behavior for free; the Gallows dev override (a different apparatus drawn
+   inside the same stage element) is unaffected by this wrapper-level crop.
+   Solid `#14161f` (Last Word's own body background) behind it — the stage
+   SVG itself paints no background rect, so without this the scrolling
+   puzzle/keypad content would show through while pinned. */
+@media (max-width: 780px) {
+    .lw-skippy-portrait {
+        position: sticky;
+        top: 0;
+        z-index: 5;
+        max-height: 160px;
+        overflow: hidden;
+        background: #14161f;
+    }
+}
+
 /* --- Fork #7 ("Picking Sides"): SKIPPY vs. BOB lifetime rivalry --------
    Deliberately plain: character names + two numbers, no win rate, no
    losses, no K/D. Shown only at the two non-active-play surfaces (Round 1
@@ -370,3 +414,28 @@
 
 .lw-rivalry-bob.lw-rivalry-leading,
 .lw-rivalry-bob.lw-rivalry-just-scored { color: #e0c37e; }
+
+/* ======================================================================
+   SLICE 3B ("CALLER READINESS"): v0.1 build identity + first-moment
+   orientation. Both live only on #category-select (shown once, before
+   Round 1, never again) — restrained, secondary to the game's own title/
+   category-choice heading, never competing with them. No animation, no
+   dismiss control, no persistence.
+   ====================================================================== */
+
+.lw-version {
+    color: #9aa8c2;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.6px;
+    margin-bottom: 6px;
+    text-transform: uppercase;
+}
+
+.lw-orientation {
+    color: #c7d0e2;
+    font-size: 13px;
+    line-height: 1.4;
+    margin: 6px 0 12px 0;
+    opacity: 0.9;
+}
