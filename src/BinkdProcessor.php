@@ -1573,6 +1573,23 @@ class BinkdProcessor
             }
         }
 
+        // Resolve this message's own conversation root, then cascade it
+        // downward to any orphan just backfilled above (and, transitively,
+        // their own waiting descendants) — see Messaging Evolution Phase 1
+        // (personal relevance), Track B/A of
+        // /root/L33TEST_Messaging_Phase1_Personal_Relevance_Design_2026-09-14.md.
+        // $replyMsgId (non-empty means a REPLY kludge was present) distinguishes
+        // a genuine root (no REPLY kludge at all) from an orphan whose parent
+        // simply hasn't arrived yet (REPLY kludge present, parent lookup above
+        // found nothing) — only the former self-assigns root_id = its own id.
+        if ($newId > 0) {
+            $messageHandlerForRoot = new \BinktermPHP\MessageHandler();
+            $rootId = $messageHandlerForRoot->resolveEchomailRootId($newId, $replyToId, !empty($replyMsgId));
+            if ($rootId !== null) {
+                $messageHandlerForRoot->propagateEchomailRootId($newId, $rootId);
+            }
+        }
+
         if ($newId > 0) {
             // Update message count and cache last-post info for the echolist display.
             $this->db->prepare("

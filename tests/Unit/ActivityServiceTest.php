@@ -267,9 +267,151 @@ final class ActivityServiceTest extends TestCase
     public function testNoNetmailReplyClassificationIsExposed(): void
     {
         // The ActivityPlan/PersonalActivity shape has no netmail-reply field at all.
+        // participatedIds/participatedTruncated (Messaging Evolution Phase 1)
+        // are additive — replyIds/repliesTruncated keep their exact prior meaning.
         $boundary = $this->establishBoundary();
         $plan = $this->service->plan($this->user());
-        self::assertSame(['netmailIds', 'netmailTruncated', 'replyIds', 'repliesTruncated'], array_keys($plan->personal));
+        self::assertSame(
+            ['netmailIds', 'netmailTruncated', 'replyIds', 'repliesTruncated', 'participatedIds', 'participatedTruncated'],
+            array_keys($plan->personal)
+        );
+    }
+
+    public function testSelfReplyToOwnMessageExcludedFromReplies(): void
+    {
+        // Messaging Evolution Phase 1 fix: a caller replying to themselves
+        // is never "someone replied to you".
+        $boundary = $this->establishBoundary();
+        $this->insertEchomail(705, ['user_id' => 1, 'date_received' => $this->since(30)]);
+        $this->insertEchomail(706, ['reply_to_id' => 705, 'user_id' => 1, 'date_received' => $this->since(1)]);
+        $plan = $this->service->plan($this->user());
+        self::assertSame([], $plan->personal['replyIds']);
+    }
+
+    public function testFtnImportedReplyWithNullUserIdStillCountsAsReplyToMe(): void
+    {
+        // NULL-safe self-exclusion regression guard: `em.user_id != ?`
+        // alone would silently exclude a FTN-imported reply (user_id NULL)
+        // because SQL's `NULL != x` is NULL, not TRUE. Confirms the
+        // `(em.user_id IS NULL OR em.user_id != ?)` form is actually in
+        // place, not the naive one.
+        $boundary = $this->establishBoundary();
+        $this->insertEchomail(707, ['user_id' => 1, 'date_received' => $this->since(30)]);
+        $this->insertEchomail(708, ['reply_to_id' => 707, 'user_id' => null, 'from_name' => 'Remote Sender', 'date_received' => $this->since(1)]);
+        $plan = $this->service->plan($this->user());
+        self::assertSame([708], $plan->personal['replyIds']);
+    }
+
+    // ----- PERSONAL: PARTICIPATED CONVERSATION ACTIVITY (Phase 1) -----
+
+    /** Sets root_id the same way MessageHandler::resolveEchomailRootId()/propagateEchomailRootId() would. */
+    private function setRootId(int $messageId, int $rootId): void
+    {
+        $this->db->prepare('UPDATE echomail SET root_id = ? WHERE id = ?')->execute([$rootId, $messageId]);
+    }
+
+    public function testIndirectActivityInParticipatedConversationIncluded(): void
+    {
+        // Matt starts topic A (root, id 720). Puzl replies to Matt (721,
+        // direct reply). Bard then replies to Puzl (722) -- NOT a direct
+        // reply to Matt, but IS activity in a conversation Matt participated in.
+        $boundary = $this->establishBoundary();
+        $this->insertEchomail(720, ['user_id' => 1, 'reply_to_id' => null, 'date_received' => $this->since(60)]);
+        $this->setRootId(720, 720);
+        $this->insertEchomail(721, ['user_id' => 2, 'reply_to_id' => 720, 'date_received' => $this->since(10)]);
+        $this->setRootId(721, 720);
+        $this->insertEchomail(722, ['user_id' => 2, 'reply_to_id' => 721, 'date_received' => $this->since(1)]);
+        $this->setRootId(722, 720);
+
+        $plan = $this->service->plan($this->user());
+        self::assertSame([721], $plan->personal['replyIds']); // direct reply to Matt's own root
+        self::assertSame([722], $plan->personal['participatedIds']); // indirect, same conversation
+    }
+
+    public function testCallerAuthoredNewActivityExcludedFromParticipation(): void
+    {
+        // Matt's own later post inside his own conversation must not
+        // notify Matt about himself.
+        $boundary = $this->establishBoundary();
+        $this->insertEchomail(723, ['user_id' => 1, 'reply_to_id' => null, 'date_received' => $this->since(60)]);
+        $this->setRootId(723, 723);
+        $this->insertEchomail(724, ['user_id' => 1, 'reply_to_id' => 723, 'date_received' => $this->since(1)]);
+        $this->setRootId(724, 723);
+
+        $plan = $this->service->plan($this->user());
+        self::assertSame([], $plan->personal['participatedIds']);
+    }
+
+    public function testUnrelatedConversationExcludedFromParticipation(): void
+    {
+        $boundary = $this->establishBoundary();
+        // Matt's own conversation (no new activity here).
+        $this->insertEchomail(725, ['user_id' => 1, 'reply_to_id' => null, 'date_received' => $this->since(60)]);
+        $this->setRootId(725, 725);
+        // A completely separate conversation Matt never touched.
+        $this->insertEchomail(726, ['user_id' => 2, 'reply_to_id' => null, 'date_received' => $this->since(30)]);
+        $this->setRootId(726, 726);
+        $this->insertEchomail(727, ['user_id' => 2, 'reply_to_id' => 726, 'date_received' => $this->since(1)]);
+        $this->setRootId(727, 726);
+
+        $plan = $this->service->plan($this->user());
+        self::assertSame([], $plan->personal['participatedIds']);
+    }
+
+    public function testDirectReplyNotDoubleCountedAsParticipation(): void
+    {
+        $boundary = $this->establishBoundary();
+        $this->insertEchomail(728, ['user_id' => 1, 'reply_to_id' => null, 'date_received' => $this->since(60)]);
+        $this->setRootId(728, 728);
+        $this->insertEchomail(729, ['user_id' => 2, 'reply_to_id' => 728, 'date_received' => $this->since(1)]);
+        $this->setRootId(729, 728);
+
+        $plan = $this->service->plan($this->user());
+        self::assertSame([729], $plan->personal['replyIds']);
+        self::assertSame([], $plan->personal['participatedIds']); // never appears in both lists
+    }
+
+    public function testMultipleBranchesAllCountAsParticipation(): void
+    {
+        $boundary = $this->establishBoundary();
+        $this->insertEchomail(730, ['user_id' => 1, 'reply_to_id' => null, 'date_received' => $this->since(60)]);
+        $this->setRootId(730, 730);
+        // Two independent branches off the root, neither a direct reply to Matt's root... wait,
+        // both ARE direct replies to Matt's root (730), so they land in replyIds.
+        // Add a further reply on one branch to exercise genuine indirect participation.
+        $this->insertEchomail(731, ['user_id' => 2, 'reply_to_id' => 730, 'date_received' => $this->since(40)]);
+        $this->setRootId(731, 730);
+        $this->insertEchomail(732, ['user_id' => 3, 'reply_to_id' => 730, 'date_received' => $this->since(30)]);
+        $this->setRootId(732, 730);
+        $this->insertEchomail(733, ['user_id' => 2, 'reply_to_id' => 731, 'date_received' => $this->since(1)]);
+        $this->setRootId(733, 730);
+        $this->insertEchomail(734, ['user_id' => 3, 'reply_to_id' => 732, 'date_received' => $this->since(1)]);
+        $this->setRootId(734, 730);
+
+        $plan = $this->service->plan($this->user());
+        $participated = $plan->personal['participatedIds'];
+        sort($participated);
+        self::assertSame([733, 734], $participated);
+    }
+
+    public function testRootAuthoredAndReplyAuthoredBothCountAsParticipation(): void
+    {
+        // Matt did not start the root -- he merely replied somewhere inside
+        // it (user 2's root). A further reply on a DIFFERENT branch (to the
+        // root itself, authored by user 2, not by Matt) is not a direct
+        // reply to Matt, but must still count as participation, since Matt
+        // authored something (736) inside this same conversation.
+        $boundary = $this->establishBoundary();
+        $this->insertEchomail(735, ['user_id' => 2, 'reply_to_id' => null, 'date_received' => $this->since(60)]);
+        $this->setRootId(735, 735);
+        $this->insertEchomail(736, ['user_id' => 1, 'reply_to_id' => 735, 'date_received' => $this->since(45)]);
+        $this->setRootId(736, 735);
+        $this->insertEchomail(738, ['user_id' => 3, 'reply_to_id' => 735, 'date_received' => $this->since(1)]);
+        $this->setRootId(738, 735);
+
+        $plan = $this->service->plan($this->user());
+        self::assertSame([], $plan->personal['replyIds']); // 738 replies to 735 (user 2's message), not Matt's
+        self::assertSame([738], $plan->personal['participatedIds']); // but Matt participated (736) in this conversation
     }
 
     // ----- AMBIENT -----

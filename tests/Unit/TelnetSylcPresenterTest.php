@@ -163,6 +163,65 @@ final class TelnetSylcPresenterTest extends TestCase
         self::assertContains('reply', $types);
     }
 
+    // ----- PARTICIPATED CONVERSATION ACTIVITY (Phase 1) -----
+
+    public function testSidebarLineCountIncludesParticipatedActivity(): void
+    {
+        $plan = $this->plan(
+            ['netmailIds' => [], 'netmailTruncated' => false, 'replyIds' => [], 'repliesTruncated' => false, 'participatedIds' => [1, 2], 'participatedTruncated' => false],
+            ['areas' => [], 'areasTruncated' => false]
+        );
+        self::assertSame('Since Last Call: 2 personal', TelnetSylcPresenter::sidebarLine($plan, $this->t()));
+    }
+
+    public function testDetailDirectReplyOutranksParticipatedActivityUnderCap(): void
+    {
+        // Two direct-reply candidates plus one thread-activity candidate;
+        // MAX_PERSONAL_ROWS = 2 means the thread row must be crowded out by
+        // the two direct replies, never the reverse.
+        $plan = $this->plan(
+            ['netmailIds' => [1, 2], 'netmailTruncated' => false, 'replyIds' => [], 'repliesTruncated' => false, 'participatedIds' => [3], 'participatedTruncated' => false],
+            null
+        );
+        $detail = TelnetSylcPresenter::detail(
+            $plan,
+            [$this->netmailRow(1, '30'), $this->netmailRow(2, '20')],
+            [],
+            $this->t(),
+            [$this->netmailRow(3, '1')] // most recent, but must not bump a direct item
+        );
+        self::assertCount(2, $detail['personal']);
+        self::assertSame(['netmail', 'netmail'], array_column($detail['personal'], 'type'));
+        self::assertTrue($detail['personalMore']);
+    }
+
+    public function testDetailParticipatedActivityShownWhenRoomRemains(): void
+    {
+        $plan = $this->plan(
+            ['netmailIds' => [1], 'netmailTruncated' => false, 'replyIds' => [], 'repliesTruncated' => false, 'participatedIds' => [2], 'participatedTruncated' => false],
+            null
+        );
+        $detail = TelnetSylcPresenter::detail(
+            $plan,
+            [$this->netmailRow(1, '30')],
+            [],
+            $this->t(),
+            [$this->netmailRow(2, '1')]
+        );
+        self::assertSame(['netmail', 'thread'], array_column($detail['personal'], 'type'));
+    }
+
+    public function testDetailBackwardCompatibleWithoutParticipatedArgument(): void
+    {
+        // Pre-Phase-1 4-argument call shape must keep working unchanged.
+        $plan = $this->plan(
+            ['netmailIds' => [1], 'netmailTruncated' => false, 'replyIds' => [], 'repliesTruncated' => false],
+            null
+        );
+        $detail = TelnetSylcPresenter::detail($plan, [$this->netmailRow(1, '1')], [], $this->t());
+        self::assertCount(1, $detail['personal']);
+    }
+
     public function testDetailLongSubjectIsEllipsized(): void
     {
         $longSubject = str_repeat('X', 100);

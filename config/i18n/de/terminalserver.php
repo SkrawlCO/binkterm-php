@@ -716,6 +716,7 @@ return [
     'ui.terminalserver.sylc.more'             => '(evtl. mehr verfügbar)',
     'ui.terminalserver.sylc.type_netmail'     => 'N',
     'ui.terminalserver.sylc.type_reply'       => 'A',
+    'ui.terminalserver.sylc.type_thread'      => 'G',
     'ui.terminalserver.sylc.continue_prompt'  => 'Taste drücken, um fortzufahren.',
     'ui.terminalserver.sylc.action_continue'  => 'Weiter',
     'ui.terminalserver.sylc.no_previous_visit' => 'Noch kein vorheriger Anruf verzeichnet.',

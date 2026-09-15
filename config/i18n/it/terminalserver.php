@@ -716,6 +716,7 @@ return [
     'ui.terminalserver.sylc.more'             => '(potrebbero essercene altri)',
     'ui.terminalserver.sylc.type_netmail'     => 'N',
     'ui.terminalserver.sylc.type_reply'       => 'R',
+    'ui.terminalserver.sylc.type_thread'      => 'F',
     'ui.terminalserver.sylc.continue_prompt'  => 'Premi un tasto per continuare.',
     'ui.terminalserver.sylc.action_continue'  => 'Continua',
     'ui.terminalserver.sylc.no_previous_visit' => 'Nessuna chiamata precedente registrata.',

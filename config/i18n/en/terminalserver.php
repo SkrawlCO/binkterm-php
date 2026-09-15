@@ -716,6 +716,7 @@ return [
     'ui.terminalserver.sylc.more'             => '(more may be available)',
     'ui.terminalserver.sylc.type_netmail'     => 'N',
     'ui.terminalserver.sylc.type_reply'       => 'R',
+    'ui.terminalserver.sylc.type_thread'      => 'T',
     'ui.terminalserver.sylc.continue_prompt'  => 'Press a key to continue.',
     'ui.terminalserver.sylc.action_continue'  => 'Continue',
     'ui.terminalserver.sylc.no_previous_visit' => 'No previous call on record yet.',

@@ -16,6 +16,8 @@ return [
     'ui.dashboard.sylc.more_available' => 'Il pourrait y en avoir plus.',
     'ui.dashboard.sylc.type_netmail' => 'Netmail',
     'ui.dashboard.sylc.type_reply' => 'Réponse',
+    'ui.dashboard.sylc.label_reply' => 'Réponse pour vous',
+    'ui.dashboard.sylc.label_thread' => 'Nouveau dans une conversation à laquelle vous avez participé',
     'ui.recent_callers.title' => 'Visiteurs récents',
     'ui.recent_callers.empty' => 'Aucun visiteur récent pour le moment.',
     'time.soon' => 'Bientôt',

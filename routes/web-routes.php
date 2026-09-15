@@ -501,9 +501,11 @@ SimpleRouter::get('/', function() {
                 $hydrator = new SylcHydrator();
                 $netmailIds = array_slice($activityPlan->personal['netmailIds'] ?? [], -SylcPulse::MAX_PERSONAL_ROWS);
                 $replyIds = array_slice($activityPlan->personal['replyIds'] ?? [], -SylcPulse::MAX_PERSONAL_ROWS);
+                $participatedIds = array_slice($activityPlan->personal['participatedIds'] ?? [], -SylcPulse::MAX_PERSONAL_ROWS);
                 $netmailRows = $netmailIds ? $hydrator->hydrateNetmail($netmailIds) : [];
                 $replyRows = $replyIds ? $hydrator->hydrateEchomailReplies($replyIds) : [];
-                $sylcPulse = SylcPulse::compose($activityPlan, $netmailRows, $replyRows);
+                $participatedRows = $participatedIds ? $hydrator->hydrateEchomailParticipated($participatedIds) : [];
+                $sylcPulse = SylcPulse::compose($activityPlan, $netmailRows, $replyRows, $participatedRows);
             }
         } catch (\Throwable $e) {
             getServerLogger()->warning('Dashboard SYLC pulse failed: ' . $e->getMessage());

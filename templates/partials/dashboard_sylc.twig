@@ -8,10 +8,14 @@
     prior call to summarize, so this card is entirely absent from the DOM on
     that request — not rendered empty, not substituted with a welcome state.
 
-    Personal relevance (Netmail received, direct Echomail replies) always
-    renders above ambient area activity. Unread state (Mail & Areas, its own
-    card below this one) is a distinct, separately-owned axis and is never
-    duplicated here.
+    Personal relevance (Netmail received, direct Echomail replies, and —
+    Messaging Evolution Phase 1 — broader activity in a conversation the
+    caller participated in) always renders above ambient area activity.
+    Direct relevance (netmail/reply) always precedes participation activity
+    within the personal list itself — SylcPulse::compose() enforces this
+    ordering, this template only renders whatever order it returns. Unread
+    state (Mail & Areas, its own card below this one) is a distinct,
+    separately-owned axis and is never duplicated here.
 #}
 <div class="dash-card-wrapper" data-card-id="since_last_call">
 <div class="card">
@@ -30,15 +34,20 @@
                 <ul class="list-unstyled small mb-0">
                     {% for item in sylc_pulse.personal %}
                         {% set href = item.type == 'netmail' ? ('/netmail?message=' ~ item.id) : ('/echomail?message=' ~ item.id) %}
+                        {% set icon = item.type == 'netmail' ? 'fa-envelope' : (item.type == 'reply' ? 'fa-reply' : 'fa-comments') %}
+                        {% set outcomeLabel = item.type == 'reply' ? t('ui.dashboard.sylc.label_reply', {}, locale, ['common']) : (item.type == 'thread' ? t('ui.dashboard.sylc.label_thread', {}, locale, ['common']) : '') %}
                         <li class="py-1 border-bottom">
                             <a class="d-flex align-items-center gap-2 text-decoration-none" href="{{ href }}">
-                                <i class="fas {{ item.type == 'netmail' ? 'fa-envelope' : 'fa-reply' }} text-muted flex-shrink-0" aria-hidden="true"></i>
-                                <span class="visually-hidden">
-                                    {{ item.type == 'netmail' ? t('ui.dashboard.sylc.type_netmail', {}, locale, ['common']) : t('ui.dashboard.sylc.type_reply', {}, locale, ['common']) }}
-                                </span>
+                                <i class="fas {{ icon }} text-muted flex-shrink-0" aria-hidden="true"></i>
+                                {% if item.type == 'netmail' %}
+                                    <span class="visually-hidden">{{ t('ui.dashboard.sylc.type_netmail', {}, locale, ['common']) }}</span>
+                                {% endif %}
                                 <span class="text-truncate flex-grow-1">
                                     <span class="fw-semibold">{{ item.from_name }}</span>
                                     {% if item.subject %}&mdash; {{ item.subject }}{% endif %}
+                                    {% if outcomeLabel %}
+                                        <span class="badge bg-light text-muted border fw-normal ms-1">{{ outcomeLabel }}</span>
+                                    {% endif %}
                                 </span>
                             </a>
                         </li>

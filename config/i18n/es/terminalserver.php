@@ -712,6 +712,7 @@ return [
     'ui.terminalserver.sylc.more'             => '(puede haber más)',
     'ui.terminalserver.sylc.type_netmail'     => 'N',
     'ui.terminalserver.sylc.type_reply'       => 'R',
+    'ui.terminalserver.sylc.type_thread'      => 'H',
     'ui.terminalserver.sylc.continue_prompt'  => 'Pulsa una tecla para continuar.',
     'ui.terminalserver.sylc.action_continue'  => 'Continuar',
     'ui.terminalserver.sylc.no_previous_visit' => 'Aún no hay una llamada anterior registrada.',

@@ -16,6 +16,8 @@ return [
     'ui.dashboard.sylc.more_available' => 'Es könnte mehr geben.',
     'ui.dashboard.sylc.type_netmail' => 'Netmail',
     'ui.dashboard.sylc.type_reply' => 'Antwort',
+    'ui.dashboard.sylc.label_reply' => 'Antwort an dich',
+    'ui.dashboard.sylc.label_thread' => 'Neu in einem Gespräch, an dem du beteiligt bist',
     'ui.recent_callers.title' => 'Letzte Besucher',
     'ui.recent_callers.empty' => 'Noch keine letzten Besucher.',
     // Relative time strings used by app.js formatting helpers.

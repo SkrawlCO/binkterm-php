@@ -2037,6 +2037,17 @@ class MessageHandler
         $messageId = $insertedRow ? (int)$insertedRow['id'] : 0;
 
         if ($messageId > 0) {
+            // A locally-composed reply always targets an already-visible,
+            // already-persisted message (the caller replied to a message they
+            // could read), so there is no "parent not found yet" case here —
+            // unlike BinkdProcessor/QwkInbound, which resolve/backfill
+            // root_id across out-of-order FTN/QWK arrival (see Track B of
+            // /root/L33TEST_Messaging_Phase1_Personal_Relevance_Design_2026-09-14.md).
+            $rootId = $this->resolveEchomailRootId($messageId, $replyToId, false);
+            if ($rootId !== null) {
+                $this->propagateEchomailRootId($messageId, $rootId);
+            }
+
             if (!$skipCredits) {
                 $creditsRules = $this->getCreditsRules();
                 if ($creditsRules['enabled'] && $creditsRules['echomail_reward'] > 0) {
@@ -2075,6 +2086,115 @@ class MessageHandler
         }
 
         return $messageId > 0;
+    }
+
+    /**
+     * Resolve and persist `echomail.root_id` for a just-inserted message —
+     * the shared conversation-root primitive Messaging Evolution Phase 1
+     * (personal relevance) uses to answer "did user U participate anywhere
+     * in this conversation" in O(1), instead of a recursive ancestry walk
+     * per request. See Track B of
+     * /root/L33TEST_Messaging_Phase1_Personal_Relevance_Design_2026-09-14.md.
+     *
+     * Deliberately mirrors `reply_to_id` itself: a message whose parent is
+     * not yet known (out-of-order arrival) is left with `root_id = NULL`
+     * rather than guessed at, and is corrected later — by
+     * {@see propagateEchomailRootId()}, called once the real ancestor
+     * eventually arrives — exactly like `reply_to_id`'s own existing
+     * backfill-on-late-parent-arrival mechanism (see `BinkdProcessor`'s
+     * "Backfill reply_to_id for any messages that arrived before their
+     * parent" block, which this deliberately reuses the same event for).
+     *
+     * @param int $messageId The just-inserted message's own id.
+     * @param int|null $replyToId The reply_to_id value actually stored for
+     *     this message (null if this insert found no parent).
+     * @param bool $hasUnresolvedParentReference True when this message
+     *     carries a reply reference (e.g. a REPLY kludge, or a QWK
+     *     external-reply pointer) whose target could not be found at
+     *     insert time — i.e. `$replyToId === null` here is an unresolved
+     *     orphan, NOT a genuine root. Passing false (the default; always
+     *     correct for a locally-composed reply, which can only ever target
+     *     an already-persisted message) means a null `$replyToId` is a
+     *     genuine root and self-assigns `root_id`.
+     * @return int|null The resolved root id, or null if resolution must
+     *     wait for a still-missing ancestor.
+     */
+    public function resolveEchomailRootId(int $messageId, ?int $replyToId, bool $hasUnresolvedParentReference = false): ?int
+    {
+        if ($replyToId === null) {
+            if ($hasUnresolvedParentReference) {
+                // Orphan: this message references a parent that hasn't
+                // arrived yet. Leave root_id NULL — resolved later, when
+                // the real parent arrives and its own resolution cascades
+                // down to this row via propagateEchomailRootId().
+                return null;
+            }
+
+            // Genuine root (no reply reference at all): root of its own
+            // conversation.
+            $stmt = $this->db->prepare('UPDATE echomail SET root_id = ? WHERE id = ?');
+            $stmt->execute([$messageId, $messageId]);
+            return $messageId;
+        }
+
+        $parentStmt = $this->db->prepare('SELECT root_id FROM echomail WHERE id = ?');
+        $parentStmt->execute([$replyToId]);
+        $parentRootId = $parentStmt->fetchColumn();
+
+        if ($parentRootId === false || $parentRootId === null) {
+            // Parent exists but its own root is not resolved yet (a rarer,
+            // deeper out-of-order case — the parent itself is still
+            // mid-chain, waiting on a still-missing ancestor). Leave this
+            // message's root_id NULL too; it will be reached by the same
+            // downward propagation once the real ancestor resolves.
+            return null;
+        }
+
+        $rootId = (int)$parentRootId;
+        $stmt = $this->db->prepare('UPDATE echomail SET root_id = ? WHERE id = ?');
+        $stmt->execute([$rootId, $messageId]);
+
+        return $rootId;
+    }
+
+    /**
+     * Cascade a newly-resolved `root_id` downward to any descendant of
+     * `$anchorMessageId` (reachable via the `reply_to_id` chain, arbitrarily
+     * deep) whose `root_id` is still NULL — e.g. orphans that were just
+     * backfilled to point at `$anchorMessageId` in the same insert event
+     * (see the `reply_to_id` backfill block in `BinkdProcessor`/
+     * `Qwk\QwkInbound`), and any of *their* own waiting descendants in turn.
+     *
+     * A single bounded recursive CTE, not a per-request recursive read —
+     * this only ever runs at the specific write/backfill events where a
+     * root actually became known, per the approved Phase 1 design's
+     * explicit instruction not to introduce recursive ancestry work into
+     * every caller request.
+     *
+     * @return int Number of rows updated.
+     */
+    public function propagateEchomailRootId(int $anchorMessageId, int $rootId): int
+    {
+        $stmt = $this->db->prepare("
+            WITH RECURSIVE descendants AS (
+                SELECT id, 0 AS depth
+                FROM echomail
+                WHERE reply_to_id = ? AND root_id IS NULL
+
+                UNION ALL
+
+                SELECT em.id, d.depth + 1
+                FROM echomail em
+                JOIN descendants d ON em.reply_to_id = d.id
+                WHERE em.root_id IS NULL AND d.depth < 100
+            )
+            UPDATE echomail
+            SET root_id = ?
+            WHERE id IN (SELECT id FROM descendants)
+        ");
+        $stmt->execute([$anchorMessageId, $rootId]);
+
+        return $stmt->rowCount();
     }
 
     /**

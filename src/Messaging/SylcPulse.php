@@ -46,36 +46,63 @@ final class SylcPulse
      * @param array{id:int,from_name:string,subject:?string,date_received:string}[] $replyRows
      *     {@see SylcHydrator::hydrateEchomailReplies()} result for (at most)
      *     the most recent MAX_PERSONAL_ROWS of `$plan->personal['replyIds']`.
+     * @param array{id:int,from_name:string,subject:?string,date_received:string}[] $participatedRows
+     *     {@see SylcHydrator::hydrateEchomailParticipated()} result for (at
+     *     most) the most recent MAX_PERSONAL_ROWS of
+     *     `$plan->personal['participatedIds']` — Messaging Evolution Phase 1.
      * @return array{
      *     state: 'quiet'|'active',
-     *     personal: list<array{type:'netmail'|'reply',id:int,from_name:string,subject:?string,date_received:string}>,
+     *     personal: list<array{type:'netmail'|'reply'|'thread',id:int,from_name:string,subject:?string,date_received:string}>,
      *     personal_more: bool,
      *     ambient: list<array{echoareaId:int,tag:string,domain:string,isLocal:bool,sinceBoundaryCount:int}>,
      *     ambient_more: bool,
      * }
      */
-    public static function compose(ActivityPlan $plan, array $netmailRows, array $replyRows): array
+    public static function compose(ActivityPlan $plan, array $netmailRows, array $replyRows, array $participatedRows = []): array
     {
-        $personalSource = $plan->personal ?? ['netmailIds' => [], 'netmailTruncated' => false, 'replyIds' => [], 'repliesTruncated' => false];
+        $personalSource = $plan->personal ?? [
+            'netmailIds' => [], 'netmailTruncated' => false,
+            'replyIds' => [], 'repliesTruncated' => false,
+            'participatedIds' => [], 'participatedTruncated' => false,
+        ];
         $ambientSource  = $plan->ambient  ?? ['areas' => [], 'areasTruncated' => false];
 
-        $items = [];
+        // Direct personal relevance (netmail received, direct replies)
+        // outranks broader conversation activity (human-approved
+        // precedence, Messaging Evolution Phase 1) — the two are
+        // deliberately NOT merged into one recency-sorted pool.
+        // `$directItems` is sorted most-recent-first and always fills the
+        // row budget before any `$threadItems` row is considered, so a
+        // direct reply can never be crowded out by, or confused with,
+        // broader participation activity.
+        $directItems = [];
         foreach ($netmailRows as $row) {
-            $items[] = ['type' => 'netmail'] + $row;
+            $directItems[] = ['type' => 'netmail'] + $row;
         }
         foreach ($replyRows as $row) {
-            $items[] = ['type' => 'reply'] + $row;
+            $directItems[] = ['type' => 'reply'] + $row;
         }
         // Most recent first — both id lists arrive oldest-first from
         // ActivityService, and only a small tail of each was hydrated, so
         // sorting this already-small candidate set is cheap and exact.
-        usort($items, static fn (array $a, array $b): int => $b['date_received'] <=> $a['date_received']);
+        usort($directItems, static fn (array $a, array $b): int => $b['date_received'] <=> $a['date_received']);
 
-        $personalTotal = count($personalSource['netmailIds']) + count($personalSource['replyIds']);
+        $threadItems = [];
+        foreach ($participatedRows as $row) {
+            $threadItems[] = ['type' => 'thread'] + $row;
+        }
+        usort($threadItems, static fn (array $a, array $b): int => $b['date_received'] <=> $a['date_received']);
+
+        $items = array_merge($directItems, $threadItems);
+
+        $personalTotal = count($personalSource['netmailIds'])
+            + count($personalSource['replyIds'])
+            + count($personalSource['participatedIds'] ?? []);
         $personal = array_slice($items, 0, self::MAX_PERSONAL_ROWS);
         $personalMore = $personalTotal > count($personal)
             || !empty($personalSource['netmailTruncated'])
-            || !empty($personalSource['repliesTruncated']);
+            || !empty($personalSource['repliesTruncated'])
+            || !empty($personalSource['participatedTruncated']);
 
         $areas = $ambientSource['areas'];
         usort($areas, static fn (array $a, array $b): int => $b['sinceBoundaryCount'] <=> $a['sinceBoundaryCount']);

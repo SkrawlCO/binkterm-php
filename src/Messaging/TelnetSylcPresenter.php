@@ -82,30 +82,50 @@ final class TelnetSylcPresenter
      * @param array{id:int,from_name:string,subject:?string,date_received:string}[] $netmailRows
      * @param array{id:int,from_name:string,subject:?string,date_received:string}[] $replyRows
      * @param callable(string,string,array):string $t translate(key, fallback, params)
+     * @param array{id:int,from_name:string,subject:?string,date_received:string}[] $participatedRows
+     *     Messaging Evolution Phase 1 — broader "conversation you
+     *     participated in" activity, hydrated via
+     *     {@see \BinktermPHP\Messaging\SylcHydrator::hydrateEchomailParticipated()}.
+     *     Appended last (default `[]`) to keep the pre-Phase-1 4-argument
+     *     call shape source-compatible.
      * @return array{
      *     quiet: bool,
-     *     personal: list<array{type:'netmail'|'reply',label:string}>,
+     *     personal: list<array{type:'netmail'|'reply'|'thread',label:string}>,
      *     personalMore: bool,
      *     ambient: list<array{tag:string,count:int}>,
      *     ambientMore: bool,
      * }
      */
-    public static function detail(ActivityPlan $plan, array $netmailRows, array $replyRows, callable $t): array
+    public static function detail(ActivityPlan $plan, array $netmailRows, array $replyRows, callable $t, array $participatedRows = []): array
     {
-        $items = [];
+        // Direct personal relevance outranks broader conversation activity
+        // (human-approved precedence, Messaging Evolution Phase 1) — direct
+        // items always fill the compact row budget before any thread-activity
+        // row is considered, mirroring SylcPulse's Web-side precedence
+        // exactly.
+        $directItems = [];
         foreach ($netmailRows as $row) {
-            $items[] = ['type' => 'netmail'] + $row;
+            $directItems[] = ['type' => 'netmail'] + $row;
         }
         foreach ($replyRows as $row) {
-            $items[] = ['type' => 'reply'] + $row;
+            $directItems[] = ['type' => 'reply'] + $row;
         }
-        usort($items, static fn (array $a, array $b): int => $b['date_received'] <=> $a['date_received']);
+        usort($directItems, static fn (array $a, array $b): int => $b['date_received'] <=> $a['date_received']);
+
+        $threadItems = [];
+        foreach ($participatedRows as $row) {
+            $threadItems[] = ['type' => 'thread'] + $row;
+        }
+        usort($threadItems, static fn (array $a, array $b): int => $b['date_received'] <=> $a['date_received']);
+
+        $items = array_merge($directItems, $threadItems);
 
         $personalTotal = self::personalCount($plan);
         $shown = array_slice($items, 0, self::MAX_PERSONAL_ROWS);
         $personalMore = $personalTotal > count($shown)
             || !empty($plan->personal['netmailTruncated'] ?? false)
-            || !empty($plan->personal['repliesTruncated'] ?? false);
+            || !empty($plan->personal['repliesTruncated'] ?? false)
+            || !empty($plan->personal['participatedTruncated'] ?? false);
 
         $personal = [];
         foreach ($shown as $item) {
@@ -141,6 +161,8 @@ final class TelnetSylcPresenter
 
     private static function personalCount(ActivityPlan $plan): int
     {
-        return count($plan->personal['netmailIds'] ?? []) + count($plan->personal['replyIds'] ?? []);
+        return count($plan->personal['netmailIds'] ?? [])
+            + count($plan->personal['replyIds'] ?? [])
+            + count($plan->personal['participatedIds'] ?? []);
     }
 }

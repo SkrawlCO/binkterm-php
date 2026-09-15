@@ -16,6 +16,8 @@ return [
     'ui.dashboard.sylc.more_available' => 'Возможно, есть ещё.',
     'ui.dashboard.sylc.type_netmail' => 'Нетмейл',
     'ui.dashboard.sylc.type_reply' => 'Ответ',
+    'ui.dashboard.sylc.label_reply' => 'Ответ вам',
+    'ui.dashboard.sylc.label_thread' => 'Новое в переписке, в которой вы участвовали',
     'ui.recent_callers.title' => 'Недавние посетители',
     'ui.recent_callers.empty' => 'Недавних посетителей пока нет.',
     // Relative time strings used by app.js formatting helpers.

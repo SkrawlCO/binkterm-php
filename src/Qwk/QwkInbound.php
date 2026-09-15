@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace BinktermPHP\Qwk;
 
 use BinktermPHP\Database;
+use BinktermPHP\MessageHandler;
 use BinktermPHP\QwkNet\Message;
 use BinktermPHP\QwkNet\Packet;
 use BinktermPHP\QwkNet\Parser;
@@ -47,11 +48,22 @@ class QwkInbound
 
     private PDO $db;
     private Parser $parser;
+    private ?MessageHandler $messageHandler = null;
 
     public function __construct(?PDO $db = null, ?Parser $parser = null)
     {
         $this->db = $db ?? Database::getInstance()->getPdo();
         $this->parser = $parser ?? new Parser();
+    }
+
+    /**
+     * Lazily-created — only Messaging Evolution Phase 1's root_id
+     * resolution/propagation actually needs this; every other method in
+     * this class works directly against $this->db, unchanged.
+     */
+    private function messageHandler(): MessageHandler
+    {
+        return $this->messageHandler ??= new MessageHandler();
     }
 
     /**
@@ -148,6 +160,21 @@ class QwkInbound
                 $replyToId = $this->resolveReplyTo($mailboxId, $conference, $message->externalReplyId);
                 $echomailId = $this->insertEchomail($echoareaId, $expectedBbsId, $message, $replyToId);
                 $this->insertSidecar($echomailId, $packetId, $mailboxId, $conference, $dedupeKey, $message);
+
+                // Resolve this message's conversation root the same way
+                // BinkdProcessor does for FTN — see Messaging Evolution
+                // Phase 1 (personal relevance), Track B of
+                // /root/L33TEST_Messaging_Phase1_Personal_Relevance_Design_2026-09-14.md.
+                // An external-reply pointer that resolveReplyTo() could not
+                // find yet is an unresolved orphan, not a genuine root.
+                $rootId = $this->messageHandler()->resolveEchomailRootId(
+                    $echomailId,
+                    $replyToId,
+                    $message->externalReplyId !== null && $replyToId === null
+                );
+                if ($rootId !== null) {
+                    $this->messageHandler()->propagateEchomailRootId($echomailId, $rootId);
+                }
 
                 $summary['imported']++;
                 if ($replyToId !== null) {
@@ -420,7 +447,20 @@ class QwkInbound
                 UPDATE echomail SET reply_to_id = ? WHERE id = ? AND reply_to_id IS NULL
             ');
             $updated->execute([$parentId, $childId]);
-            $linked += $updated->rowCount();
+            if ($updated->rowCount() > 0) {
+                $linked++;
+
+                // The child's reply_to_id was just resolved late — its
+                // root_id must be (re-)resolved from the parent's, and
+                // cascaded to any of the child's own waiting descendants.
+                // See Messaging Evolution Phase 1 (personal relevance),
+                // Track B of
+                // /root/L33TEST_Messaging_Phase1_Personal_Relevance_Design_2026-09-14.md.
+                $rootId = $this->messageHandler()->resolveEchomailRootId($childId, $parentId, false);
+                if ($rootId !== null) {
+                    $this->messageHandler()->propagateEchomailRootId($childId, $rootId);
+                }
+            }
         }
 
         return $linked;

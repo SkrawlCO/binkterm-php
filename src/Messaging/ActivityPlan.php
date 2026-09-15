@@ -23,7 +23,16 @@ namespace BinktermPHP\Messaging;
 final class ActivityPlan
 {
     /**
-     * @param array{netmailIds:int[],netmailTruncated:bool,replyIds:int[],repliesTruncated:bool}|null $personal
+     * `replyIds` = direct replies to a message the caller themselves
+     * authored (unchanged since Slice 2). `participatedIds` = Messaging
+     * Evolution Phase 1's addition: broader activity in a conversation the
+     * caller has participated in (authored the root or any reply within
+     * it), excluding anything already in `replyIds` — a direct reply is
+     * never double-counted as participation. See
+     * /root/L33TEST_Messaging_Phase1_Personal_Relevance_Design_2026-09-14.md
+     * (Track D/E) for the full design rationale.
+     *
+     * @param array{netmailIds:int[],netmailTruncated:bool,replyIds:int[],repliesTruncated:bool,participatedIds:int[],participatedTruncated:bool}|null $personal
      * @param array{areas:list<array{echoareaId:int,tag:string,domain:string,isLocal:bool,sinceBoundaryCount:int}>,areasTruncated:bool}|null $ambient
      * @param array{netmailUnread:int,bulletinUnread:int} $unread
      */

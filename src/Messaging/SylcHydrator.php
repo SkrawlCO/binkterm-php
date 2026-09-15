@@ -47,6 +47,20 @@ class SylcHydrator
         return $this->hydrate('echomail', $ids);
     }
 
+    /**
+     * Same generic Echomail hydration as {@see hydrateEchomailReplies()} —
+     * there is no reply-specific logic in {@see hydrate()} to duplicate, so
+     * this is a distinctly-named entrypoint for Messaging Evolution Phase
+     * 1's `participatedIds`, not a second implementation.
+     *
+     * @param int[] $ids
+     * @return list<array{id:int,from_name:string,subject:?string,date_received:string}>
+     */
+    public function hydrateEchomailParticipated(array $ids): array
+    {
+        return $this->hydrate('echomail', $ids);
+    }
+
     /** @param int[] $ids */
     private function hydrate(string $table, array $ids): array
     {

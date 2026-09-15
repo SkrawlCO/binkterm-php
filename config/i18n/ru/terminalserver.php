@@ -718,6 +718,7 @@ return [
     'ui.terminalserver.sylc.more'             => '(возможно, есть ещё)',
     'ui.terminalserver.sylc.type_netmail'     => 'Н',
     'ui.terminalserver.sylc.type_reply'       => 'О',
+    'ui.terminalserver.sylc.type_thread'      => 'Т',
     'ui.terminalserver.sylc.continue_prompt'  => 'Нажмите клавишу, чтобы продолжить.',
     'ui.terminalserver.sylc.action_continue'  => 'Продолжить',
     'ui.terminalserver.sylc.no_previous_visit' => 'Предыдущих звонков пока не зафиксировано.',

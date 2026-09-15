@@ -25,6 +25,11 @@ final class SylcPulseTest extends TestCase
         return ['id' => $id, 'from_name' => 'Replier ' . $id, 'subject' => 'Re: Subject ' . $id, 'date_received' => $this->ago($minutesAgo)];
     }
 
+    private function threadRow(int $id, string $minutesAgo): array
+    {
+        return ['id' => $id, 'from_name' => 'Participant ' . $id, 'subject' => 'Thread ' . $id, 'date_received' => $this->ago($minutesAgo)];
+    }
+
     private function area(int $id, string $tag, int $count, bool $isLocal = false): array
     {
         return ['echoareaId' => $id, 'tag' => $tag, 'domain' => '', 'isLocal' => $isLocal, 'sinceBoundaryCount' => $count];
@@ -191,6 +196,68 @@ final class SylcPulseTest extends TestCase
         $result = SylcPulse::compose($plan, $netmail, $reply);
         self::assertSame([2, 1], array_column($result['personal'], 'id'));
         self::assertSame(['reply', 'netmail'], array_column($result['personal'], 'type'));
+    }
+
+    // ----- PARTICIPATED CONVERSATION ACTIVITY (Phase 1) -----
+
+    public function testDirectReplyOutranksParticipatedActivityUnderCap(): void
+    {
+        // Messaging Evolution Phase 1 precedence: even though the thread
+        // item is more recent, direct personal relevance (netmail/reply)
+        // must fill the row budget first — the two pools are never merged
+        // into one recency sort.
+        $plan = $this->plan(
+            ['netmailIds' => [], 'netmailTruncated' => false, 'replyIds' => [1], 'repliesTruncated' => false, 'participatedIds' => [2], 'participatedTruncated' => false],
+            null
+        );
+        $result = SylcPulse::compose($plan, [], [$this->replyRow(1, '30')], [$this->threadRow(2, '1')]);
+        self::assertSame(['reply', 'thread'], array_column($result['personal'], 'type'));
+        self::assertSame([1, 2], array_column($result['personal'], 'id'));
+    }
+
+    public function testParticipatedActivityDistinctTypeFromDirectReply(): void
+    {
+        $plan = $this->plan(
+            ['netmailIds' => [], 'netmailTruncated' => false, 'replyIds' => [], 'repliesTruncated' => false, 'participatedIds' => [2], 'participatedTruncated' => false],
+            null
+        );
+        $result = SylcPulse::compose($plan, [], [], [$this->threadRow(2, '1')]);
+        self::assertSame('active', $result['state']);
+        self::assertSame(['thread'], array_column($result['personal'], 'type'));
+    }
+
+    public function testParticipatedActivityAloneStillYieldsActiveState(): void
+    {
+        // Participated activity alone (no netmail/reply/ambient) must still
+        // be recognized as "something happened", not folded into quiet.
+        $plan = $this->plan(
+            ['netmailIds' => [], 'netmailTruncated' => false, 'replyIds' => [], 'repliesTruncated' => false, 'participatedIds' => [3], 'participatedTruncated' => false],
+            ['areas' => [], 'areasTruncated' => false]
+        );
+        $result = SylcPulse::compose($plan, [], [], [$this->threadRow(3, '1')]);
+        self::assertSame('active', $result['state']);
+    }
+
+    public function testParticipatedTruncationFlagPropagates(): void
+    {
+        $plan = $this->plan(
+            ['netmailIds' => [], 'netmailTruncated' => false, 'replyIds' => [], 'repliesTruncated' => false, 'participatedIds' => [2], 'participatedTruncated' => true],
+            null
+        );
+        $result = SylcPulse::compose($plan, [], [], [$this->threadRow(2, '1')]);
+        self::assertTrue($result['personal_more']);
+    }
+
+    public function testComposeBackwardCompatibleWithoutParticipatedArgument(): void
+    {
+        // Pre-Phase-1 3-argument call shape must keep working unchanged.
+        $plan = $this->plan(
+            ['netmailIds' => [1], 'netmailTruncated' => false, 'replyIds' => [], 'repliesTruncated' => false],
+            null
+        );
+        $result = SylcPulse::compose($plan, [$this->netmailRow(1, '1')], []);
+        self::assertSame('active', $result['state']);
+        self::assertCount(1, $result['personal']);
     }
 
     // ----- CONTRACT -----

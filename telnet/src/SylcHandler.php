@@ -126,10 +126,12 @@ final class SylcHandler
 
         $netmailIds = array_slice($plan->personal['netmailIds'] ?? [], -TelnetSylcPresenter::MAX_PERSONAL_ROWS);
         $replyIds = array_slice($plan->personal['replyIds'] ?? [], -TelnetSylcPresenter::MAX_PERSONAL_ROWS);
+        $participatedIds = array_slice($plan->personal['participatedIds'] ?? [], -TelnetSylcPresenter::MAX_PERSONAL_ROWS);
         $netmailRows = $netmailIds ? $this->hydrator()->hydrateNetmail($netmailIds) : [];
         $replyRows = $replyIds ? $this->hydrator()->hydrateEchomailReplies($replyIds) : [];
+        $participatedRows = $participatedIds ? $this->hydrator()->hydrateEchomailParticipated($participatedIds) : [];
 
-        $detail = TelnetSylcPresenter::detail($plan, $netmailRows, $replyRows, $t);
+        $detail = TelnetSylcPresenter::detail($plan, $netmailRows, $replyRows, $t, $participatedRows);
 
         if ($detail['quiet']) {
             $shell->showAlert(
@@ -148,9 +150,11 @@ final class SylcHandler
         if ($detail['personal'] !== []) {
             $lines[] = $t('ui.terminalserver.sylc.personal_heading', 'For You:', []);
             foreach ($detail['personal'] as $item) {
-                $tag = $item['type'] === 'netmail'
-                    ? $t('ui.terminalserver.sylc.type_netmail', 'N', [])
-                    : $t('ui.terminalserver.sylc.type_reply', 'R', []);
+                $tag = match ($item['type']) {
+                    'netmail' => $t('ui.terminalserver.sylc.type_netmail', 'N', []),
+                    'reply'   => $t('ui.terminalserver.sylc.type_reply', 'R', []),
+                    default   => $t('ui.terminalserver.sylc.type_thread', 'T', []),
+                };
                 $lines[] = '  [' . $tag . '] ' . $item['label'];
             }
             if ($detail['personalMore']) {

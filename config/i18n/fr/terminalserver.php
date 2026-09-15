@@ -674,6 +674,7 @@ return [
     'ui.terminalserver.sylc.more'             => '(peut-être plus disponible)',
     'ui.terminalserver.sylc.type_netmail'     => 'N',
     'ui.terminalserver.sylc.type_reply'       => 'R',
+    'ui.terminalserver.sylc.type_thread'      => 'F',
     'ui.terminalserver.sylc.continue_prompt'  => 'Appuyez sur une touche pour continuer.',
     'ui.terminalserver.sylc.action_continue'  => 'Continuer',
     'ui.terminalserver.sylc.no_previous_visit' => 'Aucun appel précédent enregistré pour le moment.',
